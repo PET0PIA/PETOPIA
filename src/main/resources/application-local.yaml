@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    # docker-compose.yaml 의 mysql 서비스 기준 (petopia_db / petopia_user)
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:petopia_db}?characterEncoding=UTF-8&serverTimezone=Asia/Seoul&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:petopia_user}
+    password: ${DB_PASSWORD:userpassword123!}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 10
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # docker-compose 의 redis-server --requirepass 값과 동일해야 한다.
+      password: ${REDIS_PASSWORD:rootpassword123!}
+      timeout: 3s
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 3s
+
+logging:
+  level:
+    # 매퍼 인터페이스가 이 패키지 아래에 있으므로 실행 SQL이 함께 찍힌다.
+    com.ms.petopia: debug

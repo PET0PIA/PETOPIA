@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: petopia
+
+  profiles:
+    # 프로필을 지정하지 않고 실행하면 local로 동작한다. (IDE 실행, 테스트 포함)
+    default: local
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: petopia-hikari
+      connection-timeout: 3000
+      max-lifetime: 1740000
+
+  flyway:
+    # 스키마 변경은 전부 src/main/resources/db/migration 의 SQL 파일로만 한다.
+    # 주의: Flyway는 기동 시점에 DB에 접속한다. MyBatis만 있을 때와 달리
+    # DB가 떠 있지 않으면 애플리케이션과 @SpringBootTest 가 함께 실패한다.
+    enabled: true
+    locations: classpath:db/migration
+    # 이미 적용된 SQL 파일이 수정되면 체크섬이 어긋나 기동을 막는다. 절대 끄지 않는다.
+    validate-on-migrate: true
+    # 낮은 버전이 뒤늦게 머지되어 순서가 뒤집히는 것을 막는다.
+    out-of-order: false
+    # SQL 안의 ${...} 를 Flyway가 치환하려다 깨지는 사고를 막는다.
+    placeholder-replacement: false
+
+mybatis:
+  # 매퍼 XML 위치. src/main/resources/mapper 아래 하위 디렉터리까지 모두 스캔한다.
+  mapper-locations: classpath:mapper/**/*.xml
+  # XML의 resultType/parameterType에 FQCN 대신 클래스 이름만 써도 되게 한다.
+  type-aliases-package: com.ms.petopia
+  configuration:
+    # DB의 snake_case 컬럼을 DTO의 camelCase 필드로 매핑한다.
+    map-underscore-to-camel-case: true
+    # 조회 결과가 없는 컬럼도 key가 null로 담기게 한다. (Map 반환 시 컬럼 누락 방지)
+    call-setters-on-nulls: true
+    default-statement-timeout: 3
+    jdbc-type-for-null: NULL
+
+logging:
+  pattern:
+    # HttpLoggingFilter가 MDC에 담아둔 requestId를 기본 콘솔 패턴에 끼워 넣는다.
+    correlation: "[%X{requestId:-        }] "

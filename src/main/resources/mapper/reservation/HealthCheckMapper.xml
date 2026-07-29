@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.HealthCheckMapper">
+
+    <!--
+        DUAL은 MySQL이 "FROM 절이 필요한 문법"을 맞추기 위해 제공하는 더미 테이블이다.
+        실제 테이블을 읽지 않으므로 스키마가 비어 있어도, 권한이 최소여도 성공한다.
+        - 커넥션 획득    : 쿼리가 리턴되면 HikariCP -> MySQL 경로가 살아있는 것
+        - 스키마/계정 확인: DATABASE(), USER()로 의도한 DB를 보고 있는지 확인
+        - 타임존 확인    : NOW()와 애플리케이션 시각을 비교
+        resultType의 DbHealth는 type-aliases-package(com.ms.petopia) 덕분에 클래스명만으로 쓴다.
+    -->
+    <select id="selectDbHealth" resultType="DbHealth">
+        SELECT 1             AS ok
+             , NOW()         AS db_now
+             , DATABASE()    AS db_name
+             , VERSION()     AS db_version
+             , CONNECTION_ID() AS connection_id
+             , USER()        AS db_user
+          FROM DUAL
+    </select>
+
+    <!--
+        #{}는 PreparedStatement 파라미터로 바인딩된다. (${}와 달리 SQL로 치환되지 않는다)
+        넘긴 문자열이 그대로 돌아오면 드라이버 바인딩까지 정상이라는 뜻이다.
+    -->
+    <select id="selectEcho" resultType="string">
+        SELECT #{value} AS echo
+          FROM DUAL
+    </select>
+
+</mapper>

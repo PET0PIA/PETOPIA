@@ -1,0 +1,343 @@
+{
+  "info": {
+    "name": "Petopia - Reservation HealthCheck",
+    "description": "로깅 필터 / DB(MyBatis, DUAL) / Redis 연결 점검용 컬렉션.\n\n실행 전 준비\n1. `docker compose up -d` 로 mysql, redis 기동\n2. `./gradlew bootRun` 으로 애플리케이션 기동 (기본 8080)\n\n컬렉션 변수 `baseUrl` 을 바꾸면 다른 서버로 그대로 쏠 수 있다.\n각 요청에는 응답을 검증하는 테스트 스크립트가 들어 있어 Runner 로 한 번에 돌릴 수 있다.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string",
+      "description": "대상 서버 주소. 운영 점검 시 이 값만 바꾼다."
+    }
+  ],
+  "item": [
+    {
+      "name": "01. 전체 점검 (DB + Redis)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Request-Id",
+            "value": "postman-{{$randomUUID}}",
+            "type": "text",
+            "disabled": true,
+            "description": "활성화하면 이 값이 그대로 로그의 requestId 와 응답 헤더에 쓰인다. 비활성화 시 서버가 8자리 ID를 발급한다."
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/reservation/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "reservation", "health"]
+        },
+        "description": "DB 와 Redis 를 함께 점검한다. 하나라도 실패하면 503 을 내려준다."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "",
+              "pm.test('HTTP 상태가 up 여부와 일치한다 (정상 200 / 장애 503)', () => {",
+              "    pm.expect(pm.response.code).to.eql(body.up ? 200 : 503);",
+              "});",
+              "",
+              "pm.test('DB, Redis 두 구성요소가 모두 응답에 담긴다', () => {",
+              "    const names = body.components.map(c => c.name);",
+              "    pm.expect(names).to.include.members(['mysql', 'redis']);",
+              "});",
+              "",
+              "pm.test('모든 구성요소가 정상이다', () => {",
+              "    const down = body.components.filter(c => !c.up).map(c => `${c.name} → ${c.message}`);",
+              "    pm.expect(down, down.join(' / ')).to.be.an('array').that.is.empty;",
+              "});",
+              "",
+              "pm.test('응답 헤더의 X-Request-Id 와 바디의 requestId 가 같다 (로그 추적용)', () => {",
+              "    pm.expect(body.requestId).to.eql(pm.response.headers.get('X-Request-Id'));",
+              "});",
+              "",
+              "const db = body.components.find(c => c.name === 'mysql');",
+              "if (db && db.up) {",
+              "    console.log(`DB: ${db.details.dbName} / ${db.details.dbVersion} / connectionId=${db.details.connectionId} / ${db.latencyMs}ms`);",
+              "    console.log(`시각 비교 - DB: ${db.details.dbNow} / APP: ${db.details.appNow}`);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. DB 점검 (DUAL)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/reservation/health/db",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "reservation", "health", "db"]
+        },
+        "description": "SELECT 1 ... FROM DUAL 로 커넥션을 확인한다.\n업무 테이블에 의존하지 않으므로 스키마가 비어 있어도 성공해야 한다.\n\ndetails 에서 확인할 것\n- dbName: 의도한 스키마를 보고 있는가 (local/운영 혼선 방지)\n- dbNow vs appNow: 타임존 설정이 맞는가\n- connectionId: 반복 호출 시 값이 바뀌면 커넥션 풀이 순환 중\n- bindingEcho: #{} 파라미터 바인딩까지 정상인가"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const db = pm.response.json().components[0];",
+              "",
+              "pm.test('DB 점검에 성공한다', () => {",
+              "    pm.expect(db.up, db.message).to.be.true;",
+              "    pm.expect(pm.response.code).to.eql(200);",
+              "});",
+              "",
+              "pm.test('파라미터 바인딩(#{}) 결과가 그대로 돌아온다', () => {",
+              "    pm.expect(db.details.bindingEcho).to.eql('petopia');",
+              "});",
+              "",
+              "pm.test('접속한 스키마가 petopia_db 다', () => {",
+              "    pm.expect(db.details.dbName).to.eql('petopia_db');",
+              "});",
+              "",
+              "pm.test('DB 시각과 애플리케이션 시각 차이가 60초 이내다 (타임존 확인)', () => {",
+              "    const diff = Math.abs(new Date(db.details.dbNow) - new Date(db.details.appNow)) / 1000;",
+              "    pm.expect(diff, `차이 ${diff}초 - 타임존 설정을 확인할 것`).to.be.below(60);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Redis 점검 (SET/GET/DEL)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/reservation/health/redis",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "reservation", "health", "redis"]
+        },
+        "description": "PING 이 아니라 실제로 값을 쓰고 되읽는다. 쓰기 권한과 TTL 설정까지 확인된다.\n점검 키는 petopia:healthcheck: 접두사를 쓰고 호출 직후 삭제된다."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const redis = pm.response.json().components[0];",
+              "",
+              "pm.test('Redis 점검에 성공한다', () => {",
+              "    pm.expect(redis.up, redis.message).to.be.true;",
+              "    pm.expect(pm.response.code).to.eql(200);",
+              "});",
+              "",
+              "pm.test('TTL 이 설정된 전용 접두사 키를 사용한다', () => {",
+              "    pm.expect(redis.details.key).to.include('petopia:healthcheck:');",
+              "    pm.expect(redis.details.ttlSeconds).to.be.above(0);",
+              "});",
+              "",
+              "pm.test('응답이 3초 안에 온다 (timeout 설정 3s)', () => {",
+              "    pm.expect(redis.latencyMs).to.be.below(3000);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. 로그 레벨 확인",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/reservation/health/logs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "reservation", "health", "logs"]
+        },
+        "description": "TRACE ~ ERROR 를 한 번씩 출력한다. 서버 콘솔에서 확인할 것\n- 각 줄 앞에 [requestId] 가 찍히는가 (logging.pattern.correlation)\n- 프로필별 레벨이 적용됐는가 (local=debug → trace 만 false / release=info → debug 도 false)\n- ERROR 로그에 스택트레이스가 함께 출력되는가"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "",
+              "pm.test('활성 레벨 목록을 돌려준다', () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(body).to.include.keys('trace', 'debug', 'info', 'warn', 'error');",
+              "});",
+              "",
+              "pm.test('INFO 이상은 항상 켜져 있다', () => {",
+              "    pm.expect(body.info).to.be.true;",
+              "    pm.expect(body.warn).to.be.true;",
+              "    pm.expect(body.error).to.be.true;",
+              "});",
+              "",
+              "console.log(`활성 레벨 - trace:${body.trace} debug:${body.debug} info:${body.info}`);",
+              "console.log(`이 요청의 requestId: ${body.requestId} — 서버 로그에서 이 값으로 검색할 것`);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. 바디 로깅 / 마스킹 확인 (echo)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer test-token-should-be-masked",
+            "type": "text",
+            "description": "서버 로그에서 Authorization=**** 로 마스킹되어야 한다."
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"코코\",\n  \"type\": \"DOG\",\n  \"password\": \"secret1234\",\n  \"accessToken\": \"abc.def.ghi\",\n  \"note\": \"이 값은 마스킹 대상이 아니라 그대로 로그에 남는다\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/reservation/health/echo",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "reservation", "health", "echo"]
+        },
+        "description": "보낸 바디를 그대로 돌려준다. 두 가지를 동시에 확인한다.\n\n1) 필터가 로깅하려고 바디를 읽어도 @RequestBody 에 온전히 도착하는가\n   → 응답에 password 원본값이 그대로 있으면 정상 (CachedBodyHttpServletRequest 동작)\n2) 서버 로그에서 password / accessToken / Authorization 이 **** 로 가려지는가\n   → 응답은 원본, 로그만 마스킹되는 것이 정상이다."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const sent = JSON.parse(pm.request.body.raw);",
+              "const received = pm.response.json();",
+              "",
+              "pm.test('필터가 바디를 소비하지 않아 Controller 까지 온전히 도착한다', () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(received).to.eql(sent);",
+              "});",
+              "",
+              "pm.test('한글이 깨지지 않는다 (UTF-8)', () => {",
+              "    pm.expect(received.name).to.eql('코코');",
+              "});",
+              "",
+              "pm.test('응답 바디는 마스킹되지 않는다 (마스킹은 로그에만 적용)', () => {",
+              "    pm.expect(received.password).to.eql('secret1234');",
+              "});",
+              "",
+              "console.log('서버 콘솔에서 확인할 것: BODY 줄의 password/accessToken 이 \"****\" 이고 HEAD 줄의 Authorization 이 **** 인가');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. 에러 응답 - CommonException (400)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/reservation/health/error?type=common",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "reservation", "health", "error"],
+          "query": [
+            {
+              "key": "type",
+              "value": "common",
+              "description": "common = 의도한 비즈니스 예외 (WARN 로그 + 4xx)"
+            }
+          ]
+        },
+        "description": "GlobalExceptionHandler 의 CommonException 처리 경로를 확인한다.\n로그는 스택트레이스 없이 WARN 한 줄로 남아야 한다."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "",
+              "pm.test('400 과 에러코드 C001 을 돌려준다', () => {",
+              "    pm.response.to.have.status(400);",
+              "    pm.expect(body.code).to.eql('C001');",
+              "    pm.expect(body.status).to.eql(400);",
+              "});",
+              "",
+              "pm.test('예외에 담긴 상세 메세지가 그대로 노출된다', () => {",
+              "    pm.expect(body.message).to.include('점검용 예외');",
+              "});",
+              "",
+              "pm.test('요청 경로와 발생 시각이 함께 담긴다', () => {",
+              "    pm.expect(body.path).to.eql('/api/reservation/health/error');",
+              "    pm.expect(body.timestamp).to.be.a('string');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. 에러 응답 - 미처리 예외 (500)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/reservation/health/error?type=runtime",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "reservation", "health", "error"],
+          "query": [
+            {
+              "key": "type",
+              "value": "runtime",
+              "description": "runtime = 처리되지 않은 예외 (ERROR 로그 + 스택트레이스 + 500)"
+            }
+          ]
+        },
+        "description": "잡히지 않은 예외의 처리 경로를 확인한다.\n로그에는 스택트레이스가 남지만, 응답에는 내부 메세지가 노출되면 안 된다."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "",
+              "pm.test('500 과 에러코드 C999 를 돌려준다', () => {",
+              "    pm.response.to.have.status(500);",
+              "    pm.expect(body.code).to.eql('C999');",
+              "});",
+              "",
+              "pm.test('내부 예외 메세지가 응답으로 새어나가지 않는다', () => {",
+              "    pm.expect(body.message).to.eql('서버 내부 오류가 발생했습니다.');",
+              "    pm.expect(JSON.stringify(body)).to.not.include('IllegalStateException');",
+              "});",
+              "",
+              "pm.test('스택트레이스가 응답에 포함되지 않는다', () => {",
+              "    pm.expect(body).to.not.have.property('trace');",
+              "    pm.expect(body).to.not.have.property('stackTrace');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

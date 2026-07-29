@@ -1,0 +1,28 @@
+# docker-compose.yml (로컬 개발용)
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: petopia-mysql-local
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword123!
+      MYSQL_DATABASE: petopia_db
+      MYSQL_USER: petopia_user
+      MYSQL_PASSWORD: userpassword123!
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+
+  redis:
+    image: redis:7-alpine
+    container_name: petopia-redis-local
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass rootpassword123!
+    environment:
+      TZ: Asia/Seoul

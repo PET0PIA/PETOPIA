@@ -1,0 +1,44 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### 환경변수 / 시크릿 ###
+# .env에는 운영 DB/Redis 비밀번호가 들어가므로 커밋하지 않는다.
+# 어떤 키가 필요한지는 .env.example 로 관리한다. (값은 전부 비워둔 채 커밋)
+.env
+.env.*
+!.env.example

@@ -1,0 +1,37 @@
+spring:
+  datasource:
+    # 변수 이름과 기본값은 .env / docker-compose.release.yaml 과 정확히 일치시킨다.
+    # 컨테이너와 앱이 서로 다른 DB/계정을 바라보는 사고를 막기 위함이다.
+    # DB_HOST는 .env에 없다. compose가 포트를 호스트로 공개하고 앱은 같은 서버에서
+    # 실행되므로 localhost가 맞다. 앱을 컨테이너로 옮기면 서비스명(mysql)으로 바꿔야 한다.
+    #
+    # 주의: 비밀번호 환경변수가 비어 있어도 기동 자체는 성공한다. MyBatis는 JPA와 달리
+    # 기동 시 커넥션을 열지 않아서, 첫 DB 접근 시점에 PlaceholderResolutionException이 난다.
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_DATABASE:petopia_db}?characterEncoding=UTF-8&serverTimezone=Asia/Seoul&rewriteBatchedStatements=true
+    username: ${DB_USER:petopia_user}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 30
+      keepalive-time: 30000
+
+  data:
+    redis:
+      # REDIS_HOST 역시 .env에 없다. DB_HOST와 같은 이유로 localhost가 기본이다.
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      timeout: 3s
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 16
+          max-idle: 16
+          min-idle: 4
+          max-wait: 3s
+
+logging:
+  level:
+    root: warn
+    # SQL 로그는 남기지 않는다. 파라미터에 개인정보가 섞여 들어갈 수 있다.
+    com.ms.petopia: info

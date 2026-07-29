@@ -1,0 +1,46 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.0'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.ms'
+version = '0.0.1-SNAPSHOT'
+description = 'petopia'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    // MyBatis는 Spring Boot BOM이 버전을 관리하지 않으므로 직접 명시한다. 4.1.0은 Boot 4.1.0 기준으로 빌드됐다.
+    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.1.0'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    // Lettuce 커넥션 풀(spring.data.redis.lettuce.pool)을 쓰려면 별도로 추가해야 한다.
+    implementation 'org.apache.commons:commons-pool2'
+    // Boot 4부터 자동 구성이 모듈별로 쪼개졌다. flyway-core만 넣으면 자동 구성이 없어
+    // 마이그레이션이 조용히 실행되지 않으므로, 반드시 스타터로 넣는다.
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    // Flyway 10부터 DB별 지원도 모듈로 분리됐다. 이 모듈이 없으면 MySQL을 인식하지 못한다.
+    implementation 'org.flywaydb:flyway-mysql'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter-test:4.1.0'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-redis-test'
+    testCompileOnly 'org.projectlombok:lombok'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
