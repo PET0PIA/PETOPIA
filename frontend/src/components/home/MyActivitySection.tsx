@@ -1,0 +1,7 @@
+import { CalendarHeart, ChevronRight, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { businessActivities, currentUser, personalActivities } from "../../mocks/home";
+
+const toneClass = { primary: "bg-primary-soft text-primary", sun: "bg-sun-soft text-ink", leaf: "bg-leaf-soft text-ink" };
+
+export function MyActivitySection() { const activities = currentUser.businessStatus === "APPROVED" ? businessActivities : personalActivities; return <section className="surface overflow-hidden"><div className="flex flex-col gap-4 border-b border-line p-6 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-bold text-primary">안녕하세요, {currentUser.name}님!</p><h2 className="mt-1 text-xl font-extrabold">PETOPIA 활동을 한눈에 확인하세요.</h2></div><Link to="/mypage" className="flex items-center gap-1 text-sm font-bold text-muted hover:text-primary">마이페이지<ChevronRight size={16} /></Link></div><div className="grid divide-y divide-line md:grid-cols-3 md:divide-x md:divide-y-0">{activities.map((activity, index) => <div className="p-6" key={activity.label}><div className="flex items-center gap-3"><span className={`grid size-10 place-items-center rounded-full ${toneClass[activity.tone]}`}>{index === 1 ? <CalendarHeart size={19} /> : <Sparkles size={19} />}</span><span className="text-sm font-bold text-muted">{activity.label}</span></div><strong className="mt-5 block text-2xl font-black">{activity.value}</strong><p className="mt-1 text-sm text-muted">{activity.description}</p></div>)}</div></section>; }

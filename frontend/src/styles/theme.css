@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-page: #FFFDF8;
+  --color-card: #FFFFFF;
+  --color-ink: #302C28;
+  --color-muted: #77716A;
+  --color-line: #EBE5DC;
+  --color-primary: #FF6B6B;
+  --color-primary-soft: #FFF0EF;
+  --color-sun: #FFD76A;
+  --color-sun-soft: #FFF8DC;
+  --color-leaf: #79C99A;
+  --color-leaf-soft: #EDF8F1;
+  --radius-card: 20px;
+  --radius-button: 14px;
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { background: var(--color-page); color: var(--color-ink); }
+  body { margin: 0; min-width: 320px; font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif; }
+  button, input, textarea, select { font: inherit; }
+  a { color: inherit; text-decoration: none; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-primary) 45%, white); outline-offset: 2px; }
+}
+
+@layer components {
+  .surface { border: 1px solid var(--color-line); background: var(--color-card); border-radius: var(--radius-card); box-shadow: 0 4px 14px rgb(48 44 40 / 4%); }
+  .page-shell { width: 100%; max-width: 80rem; margin-inline: auto; padding-inline: 1rem; }
+  @media (min-width: 640px) { .page-shell { padding-inline: 1.5rem; } }
+  @media (min-width: 1024px) { .page-shell { padding-inline: 2rem; } }
+}
