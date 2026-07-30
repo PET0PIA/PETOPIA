@@ -1,5 +1,5 @@
 import { CalendarSearch, QrCode, TicketCheck } from "lucide-react";
 import { SectionHeader } from "../common/SectionHeader";
 
-const steps = [{ title: "행사 찾기", text: "관심 있는 지역과 날짜의 펫페어를 찾아요.", icon: CalendarSearch, tone: "bg-primary" }, { title: "티켓 예매하기", text: "원하는 날짜를 골라 티켓을 예매해요.", icon: TicketCheck, tone: "bg-sun" }, { title: "QR로 입장하기", text: "현장에서 QR 티켓을 보여주고 입장해요.", icon: QrCode, tone: "bg-leaf" }];
+const steps = [{ title: "행사 찾기", text: "관심 있는 지역과 날짜의 펫페어를 찾아요.", icon: CalendarSearch, tone: "bg-primary-strong" }, { title: "티켓 예매하기", text: "원하는 날짜를 골라 티켓을 예매해요.", icon: TicketCheck, tone: "bg-sun" }, { title: "QR로 입장하기", text: "현장에서 QR 티켓을 보여주고 입장해요.", icon: QrCode, tone: "bg-leaf" }];
 export function UsageGuideSection() { return <section><SectionHeader title="PETOPIA 이용 방법" description="처음 방문하셔도 어렵지 않아요." /><div className="grid gap-5 md:grid-cols-3">{steps.map(({ title, text, icon: Icon, tone }, index) => <div className="relative flex gap-4 rounded-card bg-card p-5 ring-1 ring-line" key={title}><span className={`grid size-11 shrink-0 place-items-center rounded-full text-sm font-black text-white ${tone}`}>{index + 1}</span><div><Icon size={19} className="mb-3 text-muted" /><h3 className="font-extrabold">{title}</h3><p className="mt-1.5 text-sm leading-6 text-muted">{text}</p></div></div>)}</div></section>; }
