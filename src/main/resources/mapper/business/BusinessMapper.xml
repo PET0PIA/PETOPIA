@@ -24,4 +24,12 @@
         VALUES (#{ownerId}, #{name}, #{ceoName}, #{bizRegNo}, #{startDate}, #{address}, #{phone}, #{website})
     </insert>
     
+    <select id="selectByOwnerId" parameterType="long" resultMap="businessResultMap">
+        SELECT business_id, owner_id, name, ceo_name, biz_reg_no, start_date,
+            address, phone, website, verify_status, created_at
+        FROM business
+        WHERE owner_id = #{ownerId}
+        ORDER BY created_at DESC
+    </select>
+    
 </mapper>
