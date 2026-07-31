@@ -18,8 +18,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -186,6 +188,150 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("아직 공개되지 않은 행사는 예약을 접수하지 않는다")
+    void create_미공개행사_예약접수불가예외를던진다() {
+        assertReservationNotOpen(context -> context.setPublishedAt(null));
+    }
+
+    @Test
+    @DisplayName("취소된 행사는 예약을 접수하지 않는다")
+    void create_취소된행사_예약접수불가예외를던진다() {
+        assertReservationNotOpen(context -> context.setCanceledAt(NOW.minusHours(1)));
+    }
+
+    @Test
+    @DisplayName("예약 기간이 설정되지 않은 행사는 예약을 접수하지 않는다")
+    void create_예약기간미설정_예약접수불가예외를던진다() {
+        assertReservationNotOpen(context -> {
+            context.setReservationStartDate(null);
+            context.setReservationEndDate(null);
+        });
+    }
+
+    @Test
+    @DisplayName("예약 시작일 전이면 예약을 접수하지 않는다")
+    void create_예약시작일전_예약접수불가예외를던진다() {
+        assertReservationNotOpen(context -> context.setReservationStartDate(TODAY.plusDays(1)));
+    }
+
+    @Test
+    @DisplayName("예약 종료일이 지나면 예약을 접수하지 않는다")
+    void create_예약종료일후_예약접수불가예외를던진다() {
+        assertReservationNotOpen(context -> context.setReservationEndDate(TODAY.minusDays(1)));
+    }
+
+    @Test
+    @DisplayName("예약 시작일·종료일 당일은 예약 기간에 포함한다")
+    void create_예약기간경계일_예약을생성한다() {
+        ReservationCreationContext context = reservableContext(0);
+        context.setReservationStartDate(TODAY);
+        context.setReservationEndDate(TODAY);
+        givenDefaultCreationData(context);
+        given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260731ABC12345");
+
+        CreateReservationResponse response = reservationService.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateReservationRequest(VISIT_DATE, null, null)
+        );
+
+        assertThat(response.reservationStatus()).isEqualTo("CONFIRMED");
+        verify(reservationMapper).insertReservation(any(ReservationInsertRow.class));
+    }
+
+    @Test
+    @DisplayName("운영일이 이미 지난 날짜면 방문일을 선택할 수 없다")
+    void create_지난운영일_방문일선택불가예외를던진다() {
+        ReservationCreationContext context = reservableContext(0);
+        context.setOperationDate(TODAY.minusDays(1));
+        given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE)).willReturn(context);
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.RESERVATION_DATE_NOT_AVAILABLE
+        );
+
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
+    @DisplayName("행사는 있지만 해당 방문일 운영일이 없으면 방문일을 선택할 수 없다")
+    void create_행사있음운영일없음_방문일선택불가예외를던진다() {
+        given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE)).willReturn(null);
+        given(reservationMapper.existsFair(FAIR_ID)).willReturn(true);
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.RESERVATION_DATE_NOT_AVAILABLE
+        );
+
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
+    @DisplayName("회원 정보를 찾을 수 없으면 회원 없음 예외를 던진다")
+    void create_회원없음_회원없음예외를던진다() {
+        givenCreationDataWithUser(null);
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.USER_NOT_FOUND
+        );
+
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
+    @DisplayName("비활성 회원은 예약할 수 없다")
+    void create_비활성회원_접근거부예외를던진다() {
+        ReservationUserSnapshot user = activeUser();
+        user.setStatus("INACTIVE");
+        givenCreationDataWithUser(user);
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.ACCESS_DENIED
+        );
+
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
+    @DisplayName("일반 회원이 아닌 계정은 예약할 수 없다")
+    void create_일반회원이아닌계정_접근거부예외를던진다() {
+        ReservationUserSnapshot user = activeUser();
+        user.setRole("EVENT_ADMIN");
+        givenCreationDataWithUser(user);
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.ACCESS_DENIED
+        );
+
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
     @DisplayName("행사가 존재하지 않으면 행사 없음 예외를 던진다")
     void create_행사없음_행사없음예외를던진다() {
         given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE)).willReturn(null);
@@ -224,6 +370,30 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("제약 이름이 최하위 원인에만 있고 소문자여도 중복 예약 예외로 변환한다")
+    void create_원인예외의소문자제약이름_중복예약예외로변환한다() {
+        givenDefaultCreationData(0);
+        given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260731ABC12345");
+        given(reservationMapper.insertReservation(any(ReservationInsertRow.class)))
+                .willThrow(new DuplicateKeyException(
+                        "could not execute statement",
+                        new SQLException(
+                                "Duplicate entry '1-2' for key "
+                                        + "'reservations.uk_reservation_active_user_fair'"
+                        )
+                ));
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.DUPLICATED_RESERVATION
+        );
+    }
+
+    @Test
     @DisplayName("예약번호 유니크 충돌을 활성 예약 중복으로 잘못 변환하지 않는다")
     void create_예약번호유니크충돌_DB예외를그대로던진다() {
         givenDefaultCreationData(0);
@@ -240,9 +410,44 @@ class ReservationServiceTest {
         verify(reservationMapper, never()).insertCreatedHistory(any(), any(), any());
     }
 
+    /**
+     * 예약 접수 기간·공개 여부 검증에서 걸리는지 확인한다.
+     *
+     * <p>검증이 활성 예약 조회보다 먼저 끝나므로 행사 컨텍스트만 스텁한다.
+     */
+    private void assertReservationNotOpen(Consumer<ReservationCreationContext> customizer) {
+        ReservationCreationContext context = reservableContext(0);
+        customizer.accept(context);
+        given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE)).willReturn(context);
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.RESERVATION_NOT_OPEN
+        );
+
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
     private void givenDefaultCreationData(long reservationFee) {
+        givenDefaultCreationData(reservableContext(reservationFee));
+    }
+
+    /** 회원 검증까지 도달시키기 위해 회원 스냅샷만 바꾼 기본 데이터를 준비한다. */
+    private void givenCreationDataWithUser(ReservationUserSnapshot user) {
         given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE))
-                .willReturn(reservableContext(reservationFee));
+                .willReturn(reservableContext(0));
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(false);
+        given(reservationMapper.countCapacityOccupyingReservations(FAIR_ID, VISIT_DATE)).willReturn(10);
+        given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(user);
+    }
+
+    private void givenDefaultCreationData(ReservationCreationContext context) {
+        given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE))
+                .willReturn(context);
         given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(false);
         given(reservationMapper.countCapacityOccupyingReservations(FAIR_ID, VISIT_DATE)).willReturn(10);
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(activeUser());

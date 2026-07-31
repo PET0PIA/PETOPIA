@@ -7,6 +7,10 @@
     <!--
         같은 운영일의 예약 생성 요청을 직렬화하는 잠금 기준점이다.
         정원 확인과 INSERT는 반드시 이 조회와 같은 트랜잭션에서 실행한다.
+
+        잠금 대상을 fair_dates(fd)로 한정한다. 그냥 FOR UPDATE로 두면 조인한 fairs 행까지
+        잠겨서, 같은 행사의 서로 다른 운영일 예약까지 한 줄로 대기한다. 직렬화가 필요한
+        단위는 (fair_id, operation_date)뿐이고 fairs는 읽기만 한다.
     -->
     <select id="selectCreationContextForUpdate" resultType="ReservationCreationContext">
         SELECT f.fair_id
@@ -25,7 +29,7 @@
             ON fd.fair_id = f.fair_id
          WHERE f.fair_id = #{fairId}
            AND fd.operation_date = #{visitDate}
-           FOR UPDATE
+           FOR UPDATE OF fd
     </select>
 
     <select id="existsFair" resultType="boolean">
@@ -64,6 +68,15 @@
              , status
           FROM users
          WHERE user_id = #{userId}
+    </select>
+
+    <select id="isAssignedEventAdmin" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM fair_admin_assignments
+             WHERE fair_id = #{fairId}
+               AND admin_user_id = #{adminUserId}
+        )
     </select>
 
     <insert id="insertReservation"

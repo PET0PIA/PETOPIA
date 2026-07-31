@@ -100,7 +100,7 @@ public class ReservationService {
         try {
             reservationMapper.insertReservation(row);
         } catch (DuplicateKeyException e) {
-            if (isActiveReservationConstraintViolation(e)) {
+            if (ReservationConstraintViolations.isActiveReservationDuplicate(e)) {
                 throw new CommonException(ErrorCode.DUPLICATED_RESERVATION, e);
             }
             throw e;
@@ -170,10 +170,5 @@ public class ReservationService {
                 || request.reservationTermsVersion().isBlank()) {
             throw new CommonException(ErrorCode.RESERVATION_TERMS_REQUIRED);
         }
-    }
-
-    private boolean isActiveReservationConstraintViolation(DuplicateKeyException exception) {
-        return exception.getMessage() != null
-                && exception.getMessage().contains("UK_RESERVATION_ACTIVE_USER_FAIR");
     }
 }

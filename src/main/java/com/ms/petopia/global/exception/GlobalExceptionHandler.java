@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -49,6 +50,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
                 .body(ErrorResponse.of(errorCode, errorCode.getMessage(), request.getRequestURI(), fieldErrors));
+    }
+
+    /**
+     * 필수 헤더·요청 파라미터 누락 등 요청 바인딩 실패.
+     */
+    @ExceptionHandler(ServletRequestBindingException.class)
+    public ResponseEntity<ErrorResponse> handleServletRequestBinding(
+            ServletRequestBindingException e, HttpServletRequest request) {
+
+        ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+        log.warn("[ServletRequestBindingException] uri={}, message={}", request.getRequestURI(), e.getMessage());
+
+        return ResponseEntity
+                .status(errorCode.getHttpStatus())
+                .body(ErrorResponse.of(errorCode, errorCode.getMessage(), request.getRequestURI()));
     }
 
     /**
