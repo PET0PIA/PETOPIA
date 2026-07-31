@@ -35,3 +35,7 @@ logging:
     root: warn
     # SQL 로그는 남기지 않는다. 파라미터에 개인정보가 섞여 들어갈 수 있다.
     com.ms.petopia: info
+
+petopia:
+  reservation:
+    entry-qr-secret: ${ENTRY_QR_SECRET}
