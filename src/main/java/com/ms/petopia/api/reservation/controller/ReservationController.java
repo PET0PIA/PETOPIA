@@ -1,11 +1,17 @@
 package com.ms.petopia.api.reservation.controller;
 
+import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationRequest;
+import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationResponse;
 import com.ms.petopia.api.reservation.dto.CreateReservationRequest;
 import com.ms.petopia.api.reservation.dto.CreateReservationResponse;
+import com.ms.petopia.api.reservation.dto.EntryQrResponse;
+import com.ms.petopia.api.reservation.service.EntryQrService;
+import com.ms.petopia.api.reservation.service.OnsiteReservationService;
 import com.ms.petopia.api.reservation.service.ReservationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,6 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final OnsiteReservationService onsiteReservationService;
+    private final EntryQrService entryQrService;
 
     @PostMapping("/fairs/{fairId}/reservations")
     public ResponseEntity<CreateReservationResponse> createAdvanceReservation(
@@ -29,5 +37,27 @@ public class ReservationController {
         // TODO 인증 도메인 완성 후 X-User-Id 대신 인증 Principal에서 userId를 가져온다.
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(reservationService.create(fairId, userId, request));
+    }
+
+    @PostMapping("/fairs/{fairId}/onsite-reservations")
+    public ResponseEntity<CreateOnsiteReservationResponse> createOnsiteReservation(
+            @PathVariable Long fairId,
+            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long userId,
+            @RequestBody(required = false) CreateOnsiteReservationRequest request
+    ) {
+        // 무료 현장예매는 요청 본문 없이도 생성할 수 있다.
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(onsiteReservationService.create(fairId, userId, request));
+    }
+
+    @GetMapping("/reservations/{reservationId}/entry-qr")
+    public EntryQrResponse getEntryQr(
+            @PathVariable Long reservationId,
+            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long userId
+    ) {
+        return new EntryQrResponse(
+                reservationId,
+                entryQrService.issueForUser(reservationId, userId)
+        );
     }
 }

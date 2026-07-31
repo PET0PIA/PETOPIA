@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.ReservationExpirationMapper">
+
+    <select id="selectDueReservationsForUpdate" resultType="ExpiringReservationRow">
+        SELECT reservation_id
+          FROM reservations
+         WHERE status = 'PENDING_PAYMENT'
+           AND payment_expires_at IS NOT NULL
+           AND payment_expires_at &lt;= #{now}
+         ORDER BY payment_expires_at, reservation_id
+         LIMIT #{limit}
+         FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="expirePendingReservation">
+        UPDATE reservations
+           SET status = 'EXPIRED'
+             , updated_at = #{now}
+         WHERE reservation_id = #{reservationId}
+           AND status = 'PENDING_PAYMENT'
+           AND payment_expires_at IS NOT NULL
+           AND payment_expires_at &lt;= #{now}
+    </update>
+
+    <insert id="insertExpiredHistory">
+        INSERT INTO reservation_histories (
+               reservation_id
+             , action_type
+             , before_data
+             , after_data
+             , changed_by
+             , actor_type
+             , is_admin_action
+             , change_reason
+             , created_at
+        ) VALUES (
+               #{reservationId}
+             , 'PAYMENT_EXPIRED'
+             , JSON_OBJECT('status', 'PENDING_PAYMENT')
+             , JSON_OBJECT('status', 'EXPIRED')
+             , NULL
+             , 'SYSTEM'
+             , FALSE
+             , '결제 제한시간 10분 초과'
+             , #{now}
+        )
+    </insert>
+
+</mapper>
