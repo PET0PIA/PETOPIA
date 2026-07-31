@@ -18,18 +18,31 @@
         <result property="createdAt" column="created_at" />
     </resultMap>
 
+    <!--
+        verify_status, created_at 은 컬럼 목록에서 뺀다.
+        DB의 DEFAULT('PENDING', CURRENT_TIMESTAMP)가 자동으로 채워주기 때문.
+    -->
     <insert id="insertBusiness" parameterType="com.ms.petopia.api.business.domain.Business"
             useGeneratedKeys="true" keyProperty="businessId">
         INSERT INTO business (owner_id, name, ceo_name, biz_reg_no, start_date, address, phone, website)
         VALUES (#{ownerId}, #{name}, #{ceoName}, #{bizRegNo}, #{startDate}, #{address}, #{phone}, #{website})
     </insert>
-    
+
+    <!-- 내 사업자 목록 조회 -->
     <select id="selectByOwnerId" parameterType="long" resultMap="businessResultMap">
         SELECT business_id, owner_id, name, ceo_name, biz_reg_no, start_date,
             address, phone, website, verify_status, created_at
         FROM business
         WHERE owner_id = #{ownerId}
         ORDER BY created_at DESC
+    </select>
+
+    <!-- 사업자 상세 조회. INSERT 직후 완전한 데이터 재조회할 때도 재사용됨 -->
+    <select id="selectById" parameterType="long" resultMap="businessResultMap">
+        SELECT business_id, owner_id, name, ceo_name, biz_reg_no, start_date,
+            address, phone, website, verify_status, created_at
+        FROM business
+        WHERE business_id = #{businessId}
     </select>
     
 </mapper>

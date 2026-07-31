@@ -4,6 +4,7 @@ import com.ms.petopia.api.business.dto.response.BusinessResponse;
 import com.ms.petopia.api.business.service.BusinessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,6 +26,16 @@ public class BusinessController {
 
         return businessService.getMyBusinesses(ownerId);
 
+    }
+
+    // 사업자 상세 조회 (진위확인 상태 포함)
+    @GetMapping("/{businessId}")
+    public BusinessResponse getBusiness(@PathVariable Long businessId) {
+
+        // TODO: 로그인 붙으면 인증 정보에서 추출
+        Long ownerId = 1L;
+
+        return businessService.getBusiness(ownerId, businessId);
     }
 
 }
