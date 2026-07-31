@@ -43,8 +43,8 @@ CREATE TABLE `reservation_payment_confirmations` (
     CONSTRAINT `PK_RESERVATION_PAYMENT_CONFIRMATIONS` PRIMARY KEY (`confirmation_id`),
     CONSTRAINT `UK_RESERVATION_PAYMENT_EVENT` UNIQUE (`event_id`),
     CONSTRAINT `UK_RESERVATION_PAYMENT_RESERVATION` UNIQUE (`reservation_id`),
-    CONSTRAINT `CK_RESERVATION_PAYMENT_AMOUNT` CHECK (`paid_amount` > 0),
-    KEY `idx_reservation_payment_id` (`payment_id`)
+    CONSTRAINT `UK_RESERVATION_PAYMENT_PAYMENT` UNIQUE (`payment_id`),
+    CONSTRAINT `CK_RESERVATION_PAYMENT_AMOUNT` CHECK (`paid_amount` > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
