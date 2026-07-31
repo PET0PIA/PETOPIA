@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.business.mapper.BusinessMapper">
+    
+    <resultMap id="businessResultMap" type="com.ms.petopia.api.business.domain.Business">
+        <id property="businessId" column="business_id" />
+        <result property="ownerId" column="owner_id" />
+        <result property="name" column="name" />
+        <result property="ceoName" column="ceo_name" />
+        <result property="bizRegNo" column="biz_reg_no" />
+        <result property="startDate" column="start_date" />
+        <result property="address" column="address" />
+        <result property="phone" column="phone" />
+        <result property="website" column="website" />
+        <result property="verifyStatus" column="verify_status" />
+        <result property="createdAt" column="created_at" />
+    </resultMap>
+
+    <insert id="insertBusiness" parameterType="com.ms.petopia.api.business.domain.Business"
+            useGeneratedKeys="true" keyProperty="businessId">
+        INSERT INTO business (owner_id, name, ceo_name, biz_reg_no, start_date, address, phone, website)
+        VALUES (#{ownerId}, #{name}, #{ceoName}, #{bizRegNo}, #{startDate}, #{address}, #{phone}, #{website})
+    </insert>
+    
+</mapper>
