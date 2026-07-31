@@ -1,0 +1,12 @@
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { fairAdminNavigation, superAdminNavigation } from "../config/navigation";
+import { FairAdminLayout } from "../layouts/FairAdminLayout";
+import { PublicLayout } from "../layouts/PublicLayout";
+import { SuperAdminLayout } from "../layouts/SuperAdminLayout";
+import { HomePage } from "../pages/home/HomePage";
+import { NotFoundPage, PlaceholderPage } from "../pages/PlaceholderPage";
+
+const publicPages: Record<string, string> = { "/fairs/past": "지난 행사", "/fairs/upcoming": "예정 행사", "/fair-applications/new": "행사 개최 신청", "/fair-applications/me": "내 행사 신청 목록", "/tickets": "티켓 예매", "/businesses": "행사별 참여 기업", "/businesses/new": "사업자 등록 신청", "/businesses/status": "사업자 등록 현황", "/businesses/me": "내 사업자 목록", "/participations/new": "참여 부스 신청", "/participations/me": "참가 신청 현황", "/booths/me": "내 부스 관리", "/mypage": "마이페이지", "/reservations/me": "내 예약 목록", "/notifications": "알림", "/about": "서비스 소개", "/terms": "이용약관", "/privacy": "개인정보 처리방침", "/contact": "문의" };
+
+function AdminFallback({ kind }: { kind: "fair" | "super" }) { const location = useLocation(); const nav = kind === "fair" ? fairAdminNavigation : superAdminNavigation; const title = nav.find((item) => item.path === location.pathname)?.label ?? "관리자 메뉴"; return <PlaceholderPage title={title} admin />; }
+export function AppRouter() { return <BrowserRouter><Routes><Route element={<PublicLayout />}><Route index element={<HomePage />} />{Object.entries(publicPages).map(([path, title]) => <Route key={path} path={path} element={<PlaceholderPage title={title} />} />)}<Route path="*" element={<NotFoundPage />} /></Route><Route path="fair-admin" element={<FairAdminLayout />}><Route index element={<PlaceholderPage title="박람회 관리자" admin />} />{fairAdminNavigation.map((item) => <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />)}<Route path="*" element={<AdminFallback kind="fair" />} /></Route><Route path="admin" element={<SuperAdminLayout />}><Route index element={<PlaceholderPage title="전체 운영 대시보드" admin />} />{superAdminNavigation.filter((item) => item.path !== "/admin").map((item) => <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />)}<Route path="*" element={<AdminFallback kind="super" />} /></Route></Routes></BrowserRouter>; }
