@@ -7,13 +7,21 @@ import com.ms.petopia.api.reservation.dto.GateScanResponse;
 import com.ms.petopia.api.reservation.dto.OnsiteSalesPolicyResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletionResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentContextResponse;
+import com.ms.petopia.api.reservation.dto.ReservationAvailabilityDateResponse;
+import com.ms.petopia.api.reservation.dto.ReservationAvailabilityResponse;
+import com.ms.petopia.api.reservation.dto.ReservationListItemResponse;
+import com.ms.petopia.api.reservation.dto.ReservationListResponse;
+import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateResponse;
 import com.ms.petopia.api.reservation.service.EntryQrService;
 import com.ms.petopia.api.reservation.service.GateEntryService;
 import com.ms.petopia.api.reservation.service.OnsiteReservationService;
 import com.ms.petopia.api.reservation.service.OnsiteSalesPolicyService;
 import com.ms.petopia.api.reservation.service.ReservationPaymentCompletionService;
 import com.ms.petopia.api.reservation.service.ReservationPaymentContextService;
+import com.ms.petopia.api.reservation.service.ReservationAvailabilityService;
+import com.ms.petopia.api.reservation.service.ReservationQueryService;
 import com.ms.petopia.api.reservation.service.ReservationService;
+import com.ms.petopia.api.reservation.service.ReservationVisitDateChangeService;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +35,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -37,6 +47,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -46,6 +57,12 @@ class ReservationHttpControllerTest {
 
     @Mock
     private ReservationService reservationService;
+    @Mock
+    private ReservationQueryService reservationQueryService;
+    @Mock
+    private ReservationAvailabilityService reservationAvailabilityService;
+    @Mock
+    private ReservationVisitDateChangeService visitDateChangeService;
     @Mock
     private OnsiteReservationService onsiteReservationService;
     @Mock
@@ -67,7 +84,10 @@ class ReservationHttpControllerTest {
                         new ReservationController(
                                 reservationService,
                                 onsiteReservationService,
-                                entryQrService
+                                entryQrService,
+                                reservationQueryService,
+                                reservationAvailabilityService,
+                                visitDateChangeService
                         ),
                         new OnsiteSalesAdminController(policyService),
                         new GateEntryController(gateEntryService),
@@ -78,6 +98,78 @@ class ReservationHttpControllerTest {
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void changesConfirmedReservationsVisitDate() throws Exception {
+        given(visitDateChangeService.changeVisitDate(any(), any(), any())).willReturn(
+                new UpdateReservationVisitDateResponse(
+                        30L,
+                        LocalDate.of(2026, 8, 2),
+                        LocalDate.of(2026, 8, 3),
+                        LocalTime.of(10, 0),
+                        LocalTime.of(18, 0),
+                        "CONFIRMED"
+                )
+        );
+
+        mockMvc.perform(patch("/api/v1/reservations/30/visit-date")
+                        .header(TemporaryAuthHeaders.USER_ID, 20)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"visitDate\":\"2026-08-03\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.previousVisitDate").value("2026-08-02"))
+                .andExpect(jsonPath("$.visitDate").value("2026-08-03"))
+                .andExpect(jsonPath("$.reservationStatus").value("CONFIRMED"));
+
+        verify(visitDateChangeService).changeVisitDate(eq(30L), eq(20L), any());
+    }
+
+    @Test
+    void getsReservationAvailabilityForBookingScreen() throws Exception {
+        given(reservationAvailabilityService.getAvailability(10L)).willReturn(
+                new ReservationAvailabilityResponse(
+                        10L,
+                        10_000,
+                        List.of(new ReservationAvailabilityDateResponse(
+                                LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0), 35, true
+                        ))
+                )
+        );
+
+        mockMvc.perform(get("/api/v1/fairs/10/reservation-availability"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reservationFee").value(10_000))
+                .andExpect(jsonPath("$.dates[0].remainingCapacity").value(35))
+                .andExpect(jsonPath("$.dates[0].available").value(true));
+
+        verify(reservationAvailabilityService).getAvailability(10L);
+    }
+
+    @Test
+    void getsCurrentUsersReservations() throws Exception {
+        given(reservationQueryService.getMyReservations(20L, 1, 10)).willReturn(
+                new ReservationListResponse(List.of(
+                        new ReservationListItemResponse(
+                                30L, "서울 펫페어", null,
+                                LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0),
+                                "CONFIRMED", false, true, 10_000,
+                                LocalDateTime.of(2026, 8, 1, 9, 0), null
+                        )
+                ), 1, 10, 11, 2, false)
+        );
+
+        mockMvc.perform(get("/api/v1/reservations/me?page=1&size=10")
+                        .header(TemporaryAuthHeaders.USER_ID, 20))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].fairName").value("서울 펫페어"))
+                .andExpect(jsonPath("$.items[0].entryStartTime").value("10:00:00"))
+                .andExpect(jsonPath("$.items[0].isEnded").value(false))
+                .andExpect(jsonPath("$.items[0].qrAvailable").value(true))
+                .andExpect(jsonPath("$.page").value(1))
+                .andExpect(jsonPath("$.totalPages").value(2));
+
+        verify(reservationQueryService).getMyReservations(20L, 1, 10);
     }
 
     @Test
