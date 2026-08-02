@@ -29,7 +29,7 @@ logging:
     com.ms.petopia: debug
 
 jwt:
-  secret: ${JWT_SECRET:x13XN62sfvmhp/FHGuH8MiCLZFPOda5UcW6+CKe7zTI=}
+  secret: ${JWT_SECRET}
   access-token-expiration: 3600000
   refresh-token-expiration: 1209600000
 

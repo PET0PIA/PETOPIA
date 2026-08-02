@@ -39,6 +39,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = jwtTokenProvider.getUserId(token);
                 String role = jwtTokenProvider.getRole(token);
 
+                // role 클레임이 없는 토큰(예: Refresh Token)이면 인증을 거부한다.
+                // 여기서 막지 않으면 "ROLE_null"이라는 무의미한 권한으로 인증이 통과해버린다.
+                if (role == null || role.isBlank()) {
+                    throw new IllegalArgumentException("role 클레임이 없는 토큰입니다.");
+                }
+
                 // Spring Security가 이해하는 권한 형태로 변환
                 List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
 
