@@ -27,3 +27,8 @@ logging:
   level:
     # 매퍼 인터페이스가 이 패키지 아래에 있으므로 실행 SQL이 함께 찍힌다.
     com.ms.petopia: debug
+
+jwt:
+  secret: ${JWT_SECRET:x13XN62sfvmhp/FHGuH8MiCLZFPOda5UcW6+CKe7zTI=}
+  access-token-expiration: 3600000
+  refresh-token-expiration: 1209600000
