@@ -2,22 +2,32 @@ spring:
   datasource:
     # 변수 이름과 기본값은 .env / docker-compose.release.yaml 과 정확히 일치시킨다.
     # 컨테이너와 앱이 서로 다른 DB/계정을 바라보는 사고를 막기 위함이다.
-    # DB_HOST는 .env에 없다. compose가 포트를 호스트로 공개하고 앱은 같은 서버에서
-    # 실행되므로 localhost가 맞다. 앱을 컨테이너로 옮기면 서비스명(mysql)으로 바꿔야 한다.
     #
-    # 주의: 비밀번호 환경변수가 비어 있어도 기동 자체는 성공한다. MyBatis는 JPA와 달리
-    # 기동 시 커넥션을 열지 않아서, 첫 DB 접근 시점에 PlaceholderResolutionException이 난다.
+    # DB_HOST 는 반드시 설정해야 한다. 운영은 인스턴스 2대로 나뉘어 있어
+    # (A=앱, B=MySQL+Redis) DB 는 다른 호스트다. 값은 인스턴스 B 의 사설 IP다.
+    # 기본값 localhost 로 떨어지면 앱이 자기 자신에게 접속을 시도하며 실패한다.
+    #
+    # 주의: DB_PASSWORD 가 비어 있으면 기동 자체가 실패한다.
+    # Flyway 가 컨텍스트 리프레시 시점에 커넥션을 열기 때문이다.
+    # (MyBatis 만 있을 때는 첫 질의까지 지연됐지만 지금은 아니다.)
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_DATABASE:petopia_db}?characterEncoding=UTF-8&serverTimezone=Asia/Seoul&rewriteBatchedStatements=true
     username: ${DB_USER:petopia_user}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: 30
-      minimum-idle: 30
+      # t3.micro(1GiB) 2대 구성에 맞춘 값이다.
+      # 이전 값은 max=30 / min=30 이었는데, min==max 라 부팅 즉시 MySQL 커넥션
+      # 30개를 열고 영구 유지했다. 커넥션 하나당 DB 쪽에 스레드 하나와
+      # 스레드별 버퍼(sort/join/read, 수백 KB~1MB)가 붙어, 1GiB 인스턴스에서
+      # Redis 와 메모리를 다투는 가장 큰 항목이었다.
+      # DB 가 2 vCPU 이므로 동시 처리량 관점에서도 10이면 충분하다.
+      maximum-pool-size: 10
+      minimum-idle: 2
       keepalive-time: 30000
 
   data:
     redis:
-      # REDIS_HOST 역시 .env에 없다. DB_HOST와 같은 이유로 localhost가 기본이다.
+      # REDIS_HOST 도 반드시 설정해야 한다. DB_HOST 와 같은 이유로,
+      # 값은 인스턴스 B 의 사설 IP다.
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD}
@@ -25,9 +35,13 @@ spring:
       lettuce:
         pool:
           enabled: true
-          max-active: 16
-          max-idle: 16
-          min-idle: 4
+          # Hikari 와 같은 이유로 축소했다(이전 max-active=16 / min-idle=4).
+          # min-idle 을 0 으로 두면 실제로 Redis 를 쓸 때까지 커넥션을 잡지 않는다.
+          # 현재 Redis 사용처는 HealthCheckService 뿐이라 상시 유휴 커넥션이
+          # 필요 없다.
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
           max-wait: 3s
 
 logging:
