@@ -81,13 +81,41 @@ echo "APP_IMAGE=${IMAGE_URI}" >> .env.tmp
 
 # 먼저 파라미터 개수를 받아 둔다. 아래 루프가 읽은 줄 수와 비교해
 # 값에 줄바꿈이 섞였는지 검증하기 위함이다. (자세한 이유는 루프 아래 참고)
-expected_count=$(
+#
+# get-parameters-by-path 는 페이지네이션 API 이고 MaxResults 기본값이 10 이다.
+# 파라미터가 11개가 되는 순간 CLI 가 페이지를 나눠 호출하는데, --query 는
+# 페이지마다 적용되므로 length(Parameters) 가 "10" 이 아니라 "10\n3" 처럼 나온다.
+# 그 값을 [ -ne ] 에 넣으면 "integer expression expected" 로 비교가 상태 2 로 죽고,
+# if 조건 안의 실패는 set -e 가 잡지 않아 본문(배포 중단)을 건너뛰고 그냥 진행한다.
+# 즉 검증이 fail-open 이 된다. 현재 파라미터가 정확히 10개라 한 개만 더 늘면 걸린다.
+#
+# 그래서 줄 단위로 읽어 합산하고, 숫자가 아닌 줄이 하나라도 있으면 중단한다.
+# 페이지가 하나뿐이어도 합계는 그 값 그대로라 두 경우 모두에서 맞다.
+expected_count=0
+# `|| [ -n ... ]` 는 마지막 줄에 개행이 없어도 버리지 않기 위한 관용구다.
+while read -r page_count || [ -n "$page_count" ]; do
+  case "$page_count" in
+    ''|*[!0-9]*)
+      echo "[deploy] 오류: 파라미터 개수 조회 결과가 정수가 아니다: '${page_count}'" >&2
+      exit 1
+      ;;
+  esac
+  expected_count=$((expected_count + page_count))
+done < <(
   aws ssm get-parameters-by-path \
     --path "$SSM_PREFIX" \
     --region "$REGION" \
     --query 'length(Parameters)' \
     --output text
 )
+
+# 프로세스 치환은 종료 코드를 밖으로 전달하지 않는다. aws 호출 자체가 실패하면
+# 루프가 한 번도 돌지 않아 0 이 남으므로, 여기서 끊어야 원인이 분명하다.
+if [ "$expected_count" -eq 0 ]; then
+  echo "[deploy] 오류: ${SSM_PREFIX} 의 파라미터 개수를 받지 못했다." >&2
+  echo "[deploy] 인스턴스 역할의 ssm:GetParametersByPath 권한과 파라미터 경로를 확인한다." >&2
+  exit 1
+fi
 
 param_count=0
 line_count=0
