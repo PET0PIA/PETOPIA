@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.payment.mapper.PaymentMapper">
+
+    <!--
+        map-underscore-to-camel-case: true 설정 덕분에 payment_id -> paymentId 처럼
+        snake_case 컬럼이 PaymentRow의 camelCase 필드로 자동 매핑된다. 별도 resultMap 불필요.
+    -->
+    <select id="selectById" resultType="PaymentRow">
+        SELECT payment_id
+             , payment_type
+             , amount
+             , status
+             , method
+             , paid_at
+             , created_at
+             , fair_id
+             , business_id
+             , payer_user_id
+             , reservation_id
+             , application_id
+          FROM payment
+         WHERE payment_id = #{paymentId}
+    </select>
+
+</mapper>
