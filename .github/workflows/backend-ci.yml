@@ -125,6 +125,57 @@ jobs:
       - name: 빌드 및 테스트
         run: ./gradlew build --console=plain --stacktrace
 
+      # 운영 이미지가 실제로 빌드되는지 확인한다. 푸시는 하지 않는다.
+      # 여기서 잡히는 것들:
+      #   - .dockerignore 의 3단 규칙(* -> !build/libs/*.jar -> *-plain.jar 제외)이
+      #     정말 jar 하나만 남기는지. 둘 남으면 COPY 가 소스 2개를 잡아 실패한다.
+      #   - -Djarmode=tools ... extract --layers 인자 형태가 통하는지.
+      - name: 운영 이미지 빌드
+        run: docker build -t petopia:ci-${{ github.sha }} .
+
+      # 빌드 성공만으로는 이미지가 실제로 뜨는지 알 수 없다.
+      # 이 job 에는 이미 MySQL 과 Redis 가 떠 있으므로, release 프로필로
+      # 컨테이너를 실제 기동해 헬스체크 200 까지 확인한다. AWS 없이
+      # 배포 산출물 전 구간을 검증할 수 있는 유일한 지점이다.
+      #
+      # 확인되는 것: 클래스패스(레이어 분리가 깨지지 않았는지) / ENTRYPOINT /
+      # release 프로필 설정 유효성 / Flyway 연결 / 헬스 엔드포인트 응답.
+      #
+      # --network host 를 쓰는 이유: compose 가 MySQL·Redis 를 러너 호스트의
+      # 포트로 공개하므로, 컨테이너가 127.0.0.1 로 그대로 접근할 수 있다.
+      - name: 이미지 스모크 테스트 (release 프로필 기동 + 헬스체크)
+        run: |
+          set -uo pipefail
+
+          # 이 값들은 CI 전용이다. compose 의 로컬 계정과 일치시킨 것이고,
+          # 러너 안에서만 살다 사라지는 컨테이너에 쓰인다.
+          # ENTRY_QR_SECRET 은 32자 이상이어야 기동한다는 제약만 만족시키면 된다.
+          docker run -d --name petopia-app-ci --network host \
+            -e SPRING_PROFILES_ACTIVE=release \
+            -e DB_HOST=127.0.0.1 -e DB_PORT=3306 \
+            -e DB_DATABASE=petopia_db -e DB_USER=petopia_user \
+            -e DB_PASSWORD='userpassword123!' \
+            -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
+            -e REDIS_PASSWORD='rootpassword123!' \
+            -e ENTRY_QR_SECRET='ci-smoke-test-secret-not-for-production' \
+            petopia:ci-${{ github.sha }}
+
+          deadline=$(( SECONDS + 120 ))
+          until curl -fsS http://127.0.0.1:8080/api/reservation/health > /dev/null 2>&1; do
+            if ! docker ps --format '{{.Names}}' | grep -q '^petopia-app-ci$'; then
+              echo "::error title=이미지 스모크 실패::컨테이너가 죽었다. 아래 로그를 확인한다."
+              exit 1
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error title=이미지 스모크 실패::120초 안에 헬스체크가 200을 반환하지 않았다."
+              exit 1
+            fi
+            echo "앱 기동 대기 중... (${SECONDS}s)"
+            sleep 3
+          done
+          echo "헬스체크 200 확인 (${SECONDS}s)"
+          curl -fsS http://127.0.0.1:8080/api/reservation/health
+
       # if: failure() 는 "이전 단계 중 하나라도 실패했을 때" 다.
       # 준비 대기 실패와 Flyway/커넥션 실패를 이 한 단계가 모두 커버한다.
       - name: 실패 시 컨테이너 로그 덤프
@@ -136,6 +187,16 @@ jobs:
           docker compose logs --tail=300 mysql || true
           echo "----- redis 로그 (마지막 50줄) -----"
           docker compose logs --tail=50 redis || true
+          echo "----- 앱 컨테이너 상태 -----"
+          docker ps -a --filter name=petopia-app-ci || true
+          echo "----- 앱 컨테이너 로그 (마지막 300줄) -----"
+          docker logs --tail=300 petopia-app-ci 2>&1 || true
+
+      # 스모크 테스트가 성공하든 실패하든 정리한다.
+      # --network host 로 8080 을 점유하고 있어 남겨두면 다음 단계에 영향을 준다.
+      - name: 스모크 테스트 컨테이너 정리
+        if: always()
+        run: docker rm -f petopia-app-ci 2>/dev/null || true
 
       - name: 실패 시 테스트 리포트 업로드
         if: failure()
