@@ -1,0 +1,491 @@
+name: Backend CI
+
+# 브랜치 모델
+#   dev  : 통합 브랜치. 기능 PR 이 여기로 들어온다.
+#   main : 릴리즈 브랜치. dev -> main PR 이 릴리즈 게이트이고,
+#          main 에 머지되는 시점이 배포 시점이다.
+#   따라서 dev 로 가는 PR 과 main 으로 가는 릴리즈 PR 을 모두 게이트한다.
+#
+# 이 워크플로가 만드는 체크 이름은 "Backend CI / Backend CI" 다.
+# 브랜치 보호의 필수 체크로 등록한 뒤에는 name / job id 를 바꾸지 않는다.
+# 이름이 바뀌면 등록된 필수 체크가 고아가 되어 PR이 영구 pending 상태로 막힌다.
+
+on:
+  # dev  : 기능 PR 게이트
+  # main : dev -> main 릴리즈 PR 게이트. 배포 전 마지막 검증 지점이다.
+  pull_request:
+    branches: [dev, main]
+  # push 실행의 목적은 두 가지다.
+  #   1) 모든 PR이 읽을 수 있는 공용 Gradle 캐시를 채운다.
+  #      PR ref(refs/pull/N/merge)로 저장한 캐시는 다른 PR이 읽지 못한다.
+  #   2) 실제로 머지된 결과를 검증한다. pull_request 는 PR 시점의 머지 결과라 시간이 지나면 낡는다.
+  #
+  # main push 는 릴리즈 시점이다. deploy job 이 이 이벤트에 needs: backend-ci 로
+  # 붙어 있어, 테스트가 통과하지 않으면 배포가 일어나지 않는다.
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "롤백할 이미지 태그(커밋 SHA). 비우면 현재 커밋을 새로 빌드해 배포한다."
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 같은 PR에 새 커밋이 오면 이전 실행을 취소한다.
+  # push 실행은 취소하지 않는다. dev push 는 공용 캐시를 채우는 역할이고,
+  # main push 는 릴리즈(배포) 시점이므로 중간에 취소되면 안 된다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+# paths 필터를 의도적으로 쓰지 않는다.
+#   워크플로 레벨 paths 로 걸러진 PR은 체크 런이 아예 생성되지 않는다.
+#   이 체크를 필수 체크로 등록하면 frontend/ 만 고친 PR이 "Waiting for status" 로
+#   영구 정지하고, 타임아웃도 자기 회복도 없다. dev 에는 frontend/ 가 실제로 존재한다.
+#   공개 저장소라 Actions 분이 무료이므로 필터로 아낄 비용도 0이다.
+#   훗날 정말 필요하면 job 레벨 if: 로 건너뛴다. skipped 는 필수 체크에서 성공으로 취급된다.
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    # 기본값이 360분(6시간)이다. 테스트가 소켓에서 멈추면 러너를 그만큼 붙잡는다.
+    timeout-minutes: 20
+
+    env:
+      # 컨테이너(TZ=Asia/Seoul)와 JDBC serverTimezone=Asia/Seoul 에 JVM 기본 시간대를 맞춘다.
+      TZ: Asia/Seoul
+
+    steps:
+      - name: 체크아웃
+        uses: actions/checkout@v4
+        with:
+          # 기본값(true)은 GITHUB_TOKEN 을 .git/config 의 extraheader 로 남긴다.
+          # 이 워크플로는 체크아웃 이후 git 을 전혀 쓰지 않으므로 남길 이유가 없다.
+          # (build.gradle 에도 git 기반 버저닝이 없다.)
+          persist-credentials: false
+
+      # MySQL 초기화에 10~20초가 더 걸린다(README §3 참고).
+      # JDK/Gradle 준비보다 앞에 두어 그 시간을 겹치게 한다. 순서가 성능의 핵심이다.
+      #
+      # GitHub Actions services: 블록 대신 저장소의 compose 파일을 쓰는 이유
+      #   - services: 컨테이너는 checkout 보다 먼저 시작된다. 그래서 저장소 안의 어떤 파일도
+      #     참조할 수 없다 (command, my.cnf, 초기화 SQL 전부 불가). volumes: 는 문법상 되지만
+      #     그 시점 워크스페이스가 비어 있어 무의미하다.
+      #   - docker-compose.yaml 의 계정/DB 이름이 application-local.yaml 기본값과 이미 일치한다.
+      #     services: 를 쓰면 그 값들을 워크플로에 복제해야 하고, 두 파일이 어긋나면
+      #     원인을 찾기 어려운 인증 실패로 나타난다.
+      #   - CI가 깨졌을 때 로컬에서 똑같은 두 명령으로 재현된다.
+      #
+      # Docker Hub pull 은 러너에서 간헐적으로 타임아웃한다.
+      #   Get "https://registry-1.docker.io/v2/": context deadline exceeded
+      # 레이트 리밋(toomanyrequests)이 아니라 네트워크 타임아웃이므로 재시도로 넘긴다.
+      # 이미지 이름을 여기에 적어 사전 pull 하는 방법도 있지만, compose 와
+      # 목록이 어긋날 수 있어 실제 명령을 감싸는 쪽을 택했다.
+      - name: 인프라 컨테이너 기동 (MySQL + Redis)
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if docker compose -f docker-compose.yaml up -d --quiet-pull; then
+              echo "인프라 기동 완료 (시도 ${attempt}회)"
+              exit 0
+            fi
+            echo "::warning title=이미지 pull 실패::시도 ${attempt}/3 실패. 15초 후 재시도한다."
+            sleep 15
+          done
+          echo "::error title=인프라 기동 실패::Docker Hub pull 이 3회 모두 실패했다. 레지스트리 장애일 수 있다."
+          exit 1
+
+      # 러너에 Temurin 21 이 이미 있어 tool cache 히트로 1~2초면 끝난다(다운로드 없음).
+      # 러너 기본 JAVA_HOME 은 17 이므로 이 단계가 없으면 Gradle 데몬이 17로 뜬다.
+      # JAVA_HOME 이 21을 가리키면 build.gradle 의 toolchain(21) 이 현재 JVM 으로 충족된다.
+      # settings.gradle 에 foojay resolver 가 없어 Gradle 이 JDK 를 직접 받아올 수 없기 때문에
+      # 이 단계는 선택이 아니라 필수다.
+      - name: JDK 21 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          # cache: gradle 을 쓰지 않는다. 단순 디렉터리 캐시라 무한히 커지고
+          # setup-gradle 의 캐시와 충돌한다.
+
+      - name: Gradle 준비 (캐시 + 래퍼 검증)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # 커밋된 gradle-wrapper.jar 를 공식 배포 체크섬과 대조한다.
+          validate-wrappers: true
+          # PR ref 로 저장한 캐시는 다른 PR이 읽지 못한다. 저장만 하면 시간을 쓰고
+          # 10GB 캐시 한도에서 정작 공용으로 쓰이는 dev 캐시를 밀어낸다.
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      # Hikari connection-timeout 이 3초(application.yaml)다. 준비 전에 Gradle 을 띄우면 그대로 실패한다.
+      #
+      # README §3 의 `mysqladmin ping -upetopia_user ...` 는 -h 가 없어 유닉스 소켓으로 붙는다.
+      # 공식 엔트리포인트의 초기화 단계 임시 서버는 --skip-networking 으로 뜨므로
+      # TCP :3306 이 아직 안 열렸는데도 그 ping 은 성공한다. CI 게이트로 쓸 수 없다.
+      #
+      # 아래 검사는 네 가지를 한 번에 증명한다.
+      #   TCP 리스닝 / petopia_user 존재 / petopia_db 존재 / 권한 부여 완료
+      - name: MySQL 준비 대기
+        run: |
+          set -uo pipefail
+          deadline=$(( SECONDS + 120 ))
+          until docker exec petopia-mysql-local \
+                  mysql --protocol=TCP -h 127.0.0.1 -P 3306 \
+                        -upetopia_user -p'userpassword123!' \
+                        -D petopia_db -e 'SELECT 1' > /dev/null 2>&1; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error title=MySQL 준비 실패::120초 안에 petopia_db 에 접속하지 못했다. 아래 컨테이너 로그를 확인한다."
+              exit 1
+            fi
+            echo "MySQL 대기 중... (${SECONDS}s)"
+            sleep 2
+          done
+          echo "MySQL 준비 완료 (${SECONDS}s)"
+
+      # build = assemble + check 이고 check 는 test 에 의존한다.
+      # 전체 테스트와 bootJar 생성을 한 번에 검증한다. 배포는 하지 않는다.
+      - name: 빌드 및 테스트
+        run: ./gradlew build --console=plain --stacktrace
+
+      # 운영 이미지가 실제로 빌드되는지 확인한다. 푸시는 하지 않는다.
+      # 여기서 잡히는 것들:
+      #   - .dockerignore 의 3단 규칙(* -> !build/libs/*.jar -> *-plain.jar 제외)이
+      #     정말 jar 하나만 남기는지. 둘 남으면 COPY 가 소스 2개를 잡아 실패한다.
+      #   - -Djarmode=tools ... extract --layers 인자 형태가 통하는지.
+      # 베이스 이미지(eclipse-temurin)도 Docker Hub 에서 받으므로 같은
+      # 타임아웃 위험이 있다. 인프라 기동 단계와 같은 이유로 재시도한다.
+      # 재시도는 캐시된 레이어를 재사용하므로 비용이 거의 없다.
+      - name: 운영 이미지 빌드
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if docker build -t petopia:ci-${{ github.sha }} .; then
+              echo "이미지 빌드 완료 (시도 ${attempt}회)"
+              exit 0
+            fi
+            echo "::warning title=이미지 빌드 실패::시도 ${attempt}/3 실패. 15초 후 재시도한다."
+            sleep 15
+          done
+          echo "::error title=이미지 빌드 실패::3회 모두 실패했다. 베이스 이미지 pull 문제인지 Dockerfile 문제인지 위 로그를 확인한다."
+          exit 1
+
+      # 빌드 성공만으로는 이미지가 실제로 뜨는지 알 수 없다.
+      # 이 job 에는 이미 MySQL 과 Redis 가 떠 있으므로, release 프로필로
+      # 컨테이너를 실제 기동해 헬스체크 200 까지 확인한다. AWS 없이
+      # 배포 산출물 전 구간을 검증할 수 있는 유일한 지점이다.
+      #
+      # 확인되는 것: 클래스패스(레이어 분리가 깨지지 않았는지) / ENTRYPOINT /
+      # release 프로필 설정 유효성 / Flyway 연결 / 헬스 엔드포인트 응답.
+      #
+      # --network host 를 쓰는 이유: compose 가 MySQL·Redis 를 러너 호스트의
+      # 포트로 공개하므로, 컨테이너가 127.0.0.1 로 그대로 접근할 수 있다.
+      - name: 이미지 스모크 테스트 (release 프로필 기동 + 헬스체크)
+        run: |
+          set -uo pipefail
+
+          # 이 값들은 CI 전용이다. compose 의 로컬 계정과 일치시킨 것이고,
+          # 러너 안에서만 살다 사라지는 컨테이너에 쓰인다.
+          # ENTRY_QR_SECRET 은 32자 이상이어야 기동한다는 제약만 만족시키면 된다.
+          docker run -d --name petopia-app-ci --network host \
+            -e SPRING_PROFILES_ACTIVE=release \
+            -e DB_HOST=127.0.0.1 -e DB_PORT=3306 \
+            -e DB_DATABASE=petopia_db -e DB_USER=petopia_user \
+            -e DB_PASSWORD='userpassword123!' \
+            -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
+            -e REDIS_PASSWORD='rootpassword123!' \
+            -e ENTRY_QR_SECRET='ci-smoke-test-secret-not-for-production' \
+            petopia:ci-${{ github.sha }}
+
+          deadline=$(( SECONDS + 120 ))
+          until curl -fsS http://127.0.0.1:8080/api/reservation/health > /dev/null 2>&1; do
+            if ! docker ps --format '{{.Names}}' | grep -q '^petopia-app-ci$'; then
+              echo "::error title=이미지 스모크 실패::컨테이너가 죽었다. 아래 로그를 확인한다."
+              exit 1
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error title=이미지 스모크 실패::120초 안에 헬스체크가 200을 반환하지 않았다."
+              exit 1
+            fi
+            echo "앱 기동 대기 중... (${SECONDS}s)"
+            sleep 3
+          done
+          echo "헬스체크 200 확인 (${SECONDS}s)"
+          curl -fsS http://127.0.0.1:8080/api/reservation/health
+
+      # if: failure() 는 "이전 단계 중 하나라도 실패했을 때" 다.
+      # 준비 대기 실패와 Flyway/커넥션 실패를 이 한 단계가 모두 커버한다.
+      - name: 실패 시 컨테이너 로그 덤프
+        if: failure()
+        run: |
+          echo "----- docker compose ps -----"
+          docker compose ps || true
+          echo "----- mysql 로그 (마지막 300줄) -----"
+          docker compose logs --tail=300 mysql || true
+          echo "----- redis 로그 (마지막 50줄) -----"
+          docker compose logs --tail=50 redis || true
+          echo "----- 앱 컨테이너 상태 -----"
+          docker ps -a --filter name=petopia-app-ci || true
+          echo "----- 앱 컨테이너 로그 (마지막 300줄) -----"
+          docker logs --tail=300 petopia-app-ci 2>&1 || true
+
+      # 스모크 테스트가 성공하든 실패하든 정리한다.
+      # --network host 로 8080 을 점유하고 있어 남겨두면 다음 단계에 영향을 준다.
+      - name: 스모크 테스트 컨테이너 정리
+        if: always()
+        run: docker rm -f petopia-app-ci 2>/dev/null || true
+
+      - name: 실패 시 테스트 리포트 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          # run_attempt 가 없으면 "실패한 job 다시 실행" 시 같은 이름의 아티팩트가
+          # 이미 존재해 업로드 자체가 실패한다.
+          name: test-reports-${{ github.run_attempt }}
+          path: |
+            build/reports/tests/test
+            build/test-results/test
+          retention-days: 7
+          # 컴파일 단계에서 실패하면 두 디렉터리가 아예 없다. 이유는 Gradle 로그에 이미 있다.
+          if-no-files-found: ignore
+
+      # deploy job 에 넘길 jar.
+      # deploy 가 소스에서 다시 빌드하지 않고 이 산출물을 쓰는 이유는
+      # Dockerfile 주석과 같다. 테스트를 통과한 바로 그 jar 를 배포해야
+      # "테스트한 것"과 "배포한 것"이 갈라지지 않는다.
+      #
+      # 조건을 event_name 이 아니라 ref 로 거는 이유:
+      # deploy job 은 push 뿐 아니라 workflow_dispatch 로도 돈다.
+      # image_tag 를 비운 채 수동 실행하면 rebuild 경로를 타서 이 아티팩트를
+      # 요구하는데, event_name == 'push' 로 걸어 두면 그때 업로드가 건너뛰어져
+      # "아티팩트를 찾을 수 없음"으로 실패한다.
+      # ref 로 걸면 main 제한은 그대로 유지하면서 두 경로 모두를 덮는다.
+      # (PR 의 ref 는 refs/pull/N/merge 라 여전히 걸러진다)
+      - name: 배포용 jar 업로드
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar-${{ github.sha }}
+          # -plain.jar 는 제외한다. Dockerfile 의 COPY build/libs/*.jar 가
+          # 소스를 하나만 기대하기 때문이다.
+          path: |
+            build/libs/*.jar
+            !build/libs/*-plain.jar
+          retention-days: 1
+          if-no-files-found: error
+
+  # ===========================================================================
+  # 배포 (CD)
+  #
+  # dev -> main 머지 시점이 배포 시점이다.
+  # needs: backend-ci 로 묶여 있어 테스트가 실패하면 이 job 은 실행되지 않는다.
+  # ===========================================================================
+  deploy:
+    name: Deploy to EC2
+    needs: backend-ci
+    # main 에서만 배포한다. PR 과 dev push 에서는 job 자체가 생성되지 않는다.
+    # workflow_dispatch 도 main 으로 제한한다. 다른 브랜치에서 실행하더라도
+    # OIDC 신뢰 정책이 sub 를 refs/heads/main 으로 묶어 두어 AssumeRole 단계에서
+    # 거부되지만, 여기서 먼저 끊는 편이 실패 원인이 분명하다.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      id-token: write   # OIDC 토큰 발급용. 이게 없으면 AssumeRole 이 불가능하다.
+      contents: read    # checkout
+
+    env:
+      AWS_REGION: ap-northeast-2
+
+    steps:
+      # 신규 배포와 롤백을 여기서 가른다.
+      #   image_tag 입력 있음 -> 롤백. 이미 ECR 에 있는 이미지를 다시 띄운다.
+      #   입력 없음           -> 현재 커밋을 빌드해 새 이미지를 올린다.
+      # 태그가 곧 커밋 SHA 이므로, 롤백 시 compose 와 deploy.sh 도 그 SHA 로
+      # 내려받게 되어 이미지와 배포 스크립트의 세대가 어긋나지 않는다.
+      #
+      # image_tag 는 사람이 입력하는 유일한 값이다. 두 가지를 반드시 지킨다.
+      #   1) ${{ }} 로 run 본문에 직접 전개하지 않는다. GitHub Actions 는 스크립트를
+      #      셸에 넘기기 전에 텍스트 치환을 하므로, 값에 따옴표가 섞이면 러너 셸에서
+      #      임의 명령이 실행된다. env 로 넘기면 셸이 파싱하지 않는 환경변수가 된다.
+      #   2) 형식을 검증한다. 태그는 항상 github.sha 라 40자리 소문자 hex 다.
+      #      그 외 값은 애초에 ECR 에 존재할 수 없으므로 여기서 끊는 편이 낫다.
+      #      이 검증 하나로 뒤따르는 ECR 조회 / SSM JSON / EC2 셸까지 전부 안전해진다.
+      #
+      # workflow_dispatch 는 쓰기 권한자만 실행할 수 있지만, 그 권한으로도 main 에
+      # 직접 push 는 못 하게 막아 둘 예정(브랜치 보호)이다. 입력값 주입을 열어 두면
+      # 리뷰 없이 AWS 자격 증명을 쥔 job 에서 코드를 돌릴 수 있어 그 보호가 무의미해진다.
+      - name: 배포 대상 결정
+        id: target
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-}"
+          if [ -n "$TAG" ]; then
+            if ! printf '%s' "$TAG" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error title=잘못된 이미지 태그::image_tag 는 40자리 소문자 hex 커밋 SHA 여야 한다. 받은 값의 길이는 ${#TAG} 다."
+              exit 1
+            fi
+            echo "롤백 배포: ${TAG} (빌드 생략)"
+            echo "sha=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "rebuild=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "신규 배포: ${HEAD_SHA}"
+            echo "sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+            echo "rebuild=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 체크아웃
+        if: steps.target.outputs.rebuild == 'true'
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # backend-ci job 이 올린, 테스트를 통과한 그 jar 를 그대로 받는다.
+      # 소스에서 다시 빌드하지 않는다.
+      - name: 배포용 jar 내려받기
+        if: steps.target.outputs.rebuild == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar-${{ github.sha }}
+          path: build/libs
+
+      - name: AWS 자격 증명 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 이 저장소는 public 이라 Actions 실행 로그도 누구나 볼 수 있다.
+      # ECR 주소에는 AWS 계정 ID 12자리가 들어 있어 그대로 로그에 남는다.
+      # 비밀번호는 아니지만 불필요하게 공개할 이유가 없으므로 마스킹한다.
+      # add-mask 는 이 job 의 이후 모든 출력에 적용되므로, SSM 이 돌려주는
+      # 인스턴스 로그에 섞여 나오는 계정 ID 도 함께 가려진다.
+      - name: 로그에서 AWS 계정 ID 가리기
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "::add-mask::${ACCOUNT_ID}"
+
+      - name: ECR 로그인
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 이미지 빌드 및 푸시
+        if: steps.target.outputs.rebuild == 'true'
+        env:
+          IMAGE_URI: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "푸시 완료: $IMAGE_URI"
+
+      # 롤백일 때는 빌드를 건너뛰므로, 그 태그가 정말 ECR 에 있는지 먼저 확인한다.
+      # 없는 태그로 배포를 시도하면 인스턴스에서 pull 이 실패하고 원인이 멀어진다.
+      - name: 롤백 대상 이미지 존재 확인
+        if: steps.target.outputs.rebuild == 'false'
+        env:
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          DEPLOY_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! aws ecr describe-images \
+                --repository-name "$ECR_REPOSITORY" \
+                --image-ids imageTag="$DEPLOY_SHA" \
+                --region "$AWS_REGION" > /dev/null 2>&1; then
+            echo "::error title=롤백 실패::태그 ${DEPLOY_SHA} 가 ECR 에 없다."
+            exit 1
+          fi
+          echo "확인됨: ${DEPLOY_SHA}"
+
+      # SSM Send-Command 로 인스턴스 A 에서 deploy.sh 를 실행한다.
+      # 인바운드 포트를 열지 않고, 저장된 SSH 키도 없다.
+      #
+      # 내장 waiter(aws ssm wait command-executed)를 쓰지 않는 이유:
+      # 최대 대기가 약 100초라 헬스체크 180초를 못 버티고 먼저 포기한다.
+      # 그래서 직접 폴링한다.
+      - name: SSM 배포 실행
+        env:
+          INSTANCE_ID: ${{ vars.APP_INSTANCE_ID }}
+          IMAGE_URI: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.target.outputs.sha }}
+          DEPLOY_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          # JSON 을 heredoc 문자열 보간으로 만들지 않는다. 값에 " 가 섞이면 JSON 구조가
+          # 깨지고, 원격 명령의 './deploy.sh '\''...'\''' 인용도 함께 탈출된다.
+          # jq 가 JSON 이스케이프를, @sh 가 EC2 셸 인용을 각각 책임진다.
+          # (jq 는 GitHub 호스팅 ubuntu 러너에 기본 설치되어 있다)
+          jq -n \
+            --arg instance "$INSTANCE_ID" \
+            --arg sha      "$DEPLOY_SHA" \
+            --arg image    "$IMAGE_URI" \
+            --arg repo     "$GITHUB_REPOSITORY" \
+            '{
+              InstanceIds: [$instance],
+              DocumentName: "AWS-RunShellScript",
+              Comment: ("petopia deploy " + $sha),
+              TimeoutSeconds: 600,
+              Parameters: {
+                executionTimeout: ["900"],
+                commands: [
+                  "set -euo pipefail",
+                  "mkdir -p /opt/petopia && cd /opt/petopia",
+                  ("curl -fsSL --retry 3 --retry-delay 5 https://raw.githubusercontent.com/"
+                    + $repo + "/" + $sha + "/deploy/deploy.sh -o deploy.sh"),
+                  "chmod +x deploy.sh",
+                  ("./deploy.sh " + ($image | @sh) + " " + ($sha | @sh))
+                ]
+              }
+            }' > /tmp/ssm.json
+
+          CMD_ID=$(aws ssm send-command --cli-input-json file:///tmp/ssm.json \
+                    --region "$AWS_REGION" --query 'Command.CommandId' --output text)
+          echo "SSM 명령 ID: $CMD_ID"
+
+          # 종료 상태가 나올 때까지 폴링한다. 최대 15분.
+          deadline=$(( SECONDS + 900 ))
+          STATUS="Pending"
+          while true; do
+            sleep 10
+            STATUS=$(aws ssm get-command-invocation \
+                      --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+                      --region "$AWS_REGION" --query 'Status' --output text 2>/dev/null || echo "Pending")
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut) break ;;
+            esac
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              STATUS="WorkflowTimeout"
+              break
+            fi
+            echo "진행 중... (${STATUS}, ${SECONDS}s)"
+          done
+
+          echo "----- 인스턴스 표준 출력 -----"
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+            --region "$AWS_REGION" --query 'StandardOutputContent' --output text || true
+          echo "----- 인스턴스 표준 오류 -----"
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+            --region "$AWS_REGION" --query 'StandardErrorContent' --output text || true
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error title=배포 실패::SSM 명령 상태 ${STATUS}. 위 인스턴스 로그를 확인한다."
+            exit 1
+          fi
+          echo "배포 성공: ${IMAGE_URI}"
+
+      - name: 롤백 안내
+        if: failure()
+        run: |
+          echo "::warning title=롤백 방법::Actions 탭에서 이 워크플로를 main 브랜치로 workflow_dispatch 실행하고,"
+          echo "::warning::image_tag 에 직전 성공 커밋 SHA 를 넣으면 그 이미지로 되돌린다."
+          echo "자동 롤백은 없다. 헬스체크 실패 시 앱은 이미 내려가 있을 수 있다."

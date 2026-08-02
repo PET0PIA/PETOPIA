@@ -26,7 +26,30 @@ public enum ErrorCode {
     // ===== Auth =====
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "A001", "인증이 필요합니다."),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "A002", "접근 권한이 없습니다."),
-    INVALID_LOGIN(HttpStatus.UNAUTHORIZED, "A003", "이메일 혹은 비밀번호가 일치하지 않습니다.");
+    INVALID_LOGIN(HttpStatus.UNAUTHORIZED, "A003", "이메일 혹은 비밀번호가 일치하지 않습니다."),
+
+    // ===== Payment =====
+    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
+
+    // ===== Reservation =====
+    RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
+    RESERVATION_DATE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "R002", "예약할 수 없는 방문 날짜입니다."),
+    RESERVATION_NOT_OPEN(HttpStatus.CONFLICT, "R003", "현재 예약을 접수하지 않는 행사입니다."),
+    RESERVATION_SOLD_OUT(HttpStatus.CONFLICT, "R004", "선택한 날짜의 예약이 마감되었습니다."),
+    DUPLICATED_RESERVATION(HttpStatus.CONFLICT, "R005", "이미 활성 예약이 존재합니다."),
+    RESERVATION_TERMS_REQUIRED(HttpStatus.BAD_REQUEST, "R006", "유료 예약의 취소·환불 약관 동의가 필요합니다."),
+    ONSITE_RESERVATION_CLOSED(HttpStatus.CONFLICT, "R007", "현재 현장예매를 접수하지 않습니다."),
+    ONSITE_RESERVATION_PAUSED(HttpStatus.CONFLICT, "R008", "현장예매가 일시 중지되었습니다."),
+    ONSITE_SALES_POLICY_CONFLICT(HttpStatus.CONFLICT, "R009", "현장예매 정책이 다른 관리자에 의해 변경되었습니다."),
+    RESERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "R010", "예약을 찾을 수 없습니다."),
+    RESERVATION_PAYMENT_EXPIRED(HttpStatus.CONFLICT, "R011", "예약의 결제 제한시간이 지났습니다."),
+    RESERVATION_PAYMENT_AMOUNT_MISMATCH(HttpStatus.CONFLICT, "R012", "예약금과 결제금액이 일치하지 않습니다."),
+    RESERVATION_STATUS_CONFLICT(HttpStatus.CONFLICT, "R013", "현재 예약 상태에서는 요청을 처리할 수 없습니다."),
+    RESERVATION_PAYMENT_EVENT_CONFLICT(HttpStatus.CONFLICT, "R014", "이미 다른 결제로 확정된 예약이거나 중복된 결제 이벤트입니다."),
+    ENTRY_QR_NOT_FOUND(HttpStatus.NOT_FOUND, "R015", "유효한 입장 QR을 찾을 수 없습니다."),
+    ENTRY_QR_NOT_AVAILABLE(HttpStatus.CONFLICT, "R016", "현재 사용할 수 없는 입장 QR입니다."),
+    ENTRY_FAIR_MISMATCH(HttpStatus.FORBIDDEN, "R017", "해당 행사의 입장 QR이 아닙니다.")
+    ;
 
     private final HttpStatus httpStatus;
     private final String code;
