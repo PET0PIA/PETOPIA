@@ -309,18 +309,37 @@ jobs:
       #   입력 없음           -> 현재 커밋을 빌드해 새 이미지를 올린다.
       # 태그가 곧 커밋 SHA 이므로, 롤백 시 compose 와 deploy.sh 도 그 SHA 로
       # 내려받게 되어 이미지와 배포 스크립트의 세대가 어긋나지 않는다.
+      #
+      # image_tag 는 사람이 입력하는 유일한 값이다. 두 가지를 반드시 지킨다.
+      #   1) ${{ }} 로 run 본문에 직접 전개하지 않는다. GitHub Actions 는 스크립트를
+      #      셸에 넘기기 전에 텍스트 치환을 하므로, 값에 따옴표가 섞이면 러너 셸에서
+      #      임의 명령이 실행된다. env 로 넘기면 셸이 파싱하지 않는 환경변수가 된다.
+      #   2) 형식을 검증한다. 태그는 항상 github.sha 라 40자리 소문자 hex 다.
+      #      그 외 값은 애초에 ECR 에 존재할 수 없으므로 여기서 끊는 편이 낫다.
+      #      이 검증 하나로 뒤따르는 ECR 조회 / SSM JSON / EC2 셸까지 전부 안전해진다.
+      #
+      # workflow_dispatch 는 쓰기 권한자만 실행할 수 있지만, 그 권한으로도 main 에
+      # 직접 push 는 못 하게 막아 둘 예정(브랜치 보호)이다. 입력값 주입을 열어 두면
+      # 리뷰 없이 AWS 자격 증명을 쥔 job 에서 코드를 돌릴 수 있어 그 보호가 무의미해진다.
       - name: 배포 대상 결정
         id: target
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          TAG="${{ inputs.image_tag }}"
+          TAG="${INPUT_TAG:-}"
           if [ -n "$TAG" ]; then
+            if ! printf '%s' "$TAG" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error title=잘못된 이미지 태그::image_tag 는 40자리 소문자 hex 커밋 SHA 여야 한다. 받은 값의 길이는 ${#TAG} 다."
+              exit 1
+            fi
             echo "롤백 배포: ${TAG} (빌드 생략)"
             echo "sha=${TAG}" >> "$GITHUB_OUTPUT"
             echo "rebuild=false" >> "$GITHUB_OUTPUT"
           else
-            echo "신규 배포: ${{ github.sha }}"
-            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "신규 배포: ${HEAD_SHA}"
+            echo "sha=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
             echo "rebuild=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -374,16 +393,19 @@ jobs:
       # 없는 태그로 배포를 시도하면 인스턴스에서 pull 이 실패하고 원인이 멀어진다.
       - name: 롤백 대상 이미지 존재 확인
         if: steps.target.outputs.rebuild == 'false'
+        env:
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+          DEPLOY_SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -euo pipefail
           if ! aws ecr describe-images \
-                --repository-name "${{ vars.ECR_REPOSITORY }}" \
-                --image-ids imageTag="${{ steps.target.outputs.sha }}" \
+                --repository-name "$ECR_REPOSITORY" \
+                --image-ids imageTag="$DEPLOY_SHA" \
                 --region "$AWS_REGION" > /dev/null 2>&1; then
-            echo "::error title=롤백 실패::태그 ${{ steps.target.outputs.sha }} 가 ECR 에 없다."
+            echo "::error title=롤백 실패::태그 ${DEPLOY_SHA} 가 ECR 에 없다."
             exit 1
           fi
-          echo "확인됨: ${{ steps.target.outputs.sha }}"
+          echo "확인됨: ${DEPLOY_SHA}"
 
       # SSM Send-Command 로 인스턴스 A 에서 deploy.sh 를 실행한다.
       # 인바운드 포트를 열지 않고, 저장된 SSH 키도 없다.
@@ -399,24 +421,32 @@ jobs:
         run: |
           set -euo pipefail
 
-          cat > /tmp/ssm.json <<JSON
-          {
-            "InstanceIds": ["${INSTANCE_ID}"],
-            "DocumentName": "AWS-RunShellScript",
-            "Comment": "petopia deploy ${DEPLOY_SHA}",
-            "TimeoutSeconds": 600,
-            "Parameters": {
-              "executionTimeout": ["900"],
-              "commands": [
-                "set -euo pipefail",
-                "mkdir -p /opt/petopia && cd /opt/petopia",
-                "curl -fsSL --retry 3 --retry-delay 5 https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${DEPLOY_SHA}/deploy/deploy.sh -o deploy.sh",
-                "chmod +x deploy.sh",
-                "./deploy.sh '${IMAGE_URI}' '${DEPLOY_SHA}'"
-              ]
-            }
-          }
-          JSON
+          # JSON 을 heredoc 문자열 보간으로 만들지 않는다. 값에 " 가 섞이면 JSON 구조가
+          # 깨지고, 원격 명령의 './deploy.sh '\''...'\''' 인용도 함께 탈출된다.
+          # jq 가 JSON 이스케이프를, @sh 가 EC2 셸 인용을 각각 책임진다.
+          # (jq 는 GitHub 호스팅 ubuntu 러너에 기본 설치되어 있다)
+          jq -n \
+            --arg instance "$INSTANCE_ID" \
+            --arg sha      "$DEPLOY_SHA" \
+            --arg image    "$IMAGE_URI" \
+            --arg repo     "$GITHUB_REPOSITORY" \
+            '{
+              InstanceIds: [$instance],
+              DocumentName: "AWS-RunShellScript",
+              Comment: ("petopia deploy " + $sha),
+              TimeoutSeconds: 600,
+              Parameters: {
+                executionTimeout: ["900"],
+                commands: [
+                  "set -euo pipefail",
+                  "mkdir -p /opt/petopia && cd /opt/petopia",
+                  ("curl -fsSL --retry 3 --retry-delay 5 https://raw.githubusercontent.com/"
+                    + $repo + "/" + $sha + "/deploy/deploy.sh -o deploy.sh"),
+                  "chmod +x deploy.sh",
+                  ("./deploy.sh " + ($image | @sh) + " " + ($sha | @sh))
+                ]
+              }
+            }' > /tmp/ssm.json
 
           CMD_ID=$(aws ssm send-command --cli-input-json file:///tmp/ssm.json \
                     --region "$AWS_REGION" --query 'Command.CommandId' --output text)

@@ -74,6 +74,9 @@ mv "${COMPOSE_FILE}.tmp" "${COMPOSE_FILE}"
 log "SSM 파라미터 조회 (${SSM_PREFIX})"
 umask 077
 : > .env.tmp
+# 아래 검증 중 어디서 죽어도 복호화된 시크릿이 담긴 임시 파일을 남기지 않는다.
+# 성공 경로에서는 mv 로 사라지므로 trap 이 지울 것이 없다.
+trap 'rm -f "${APP_DIR}/.env.tmp"' EXIT
 echo "APP_IMAGE=${IMAGE_URI}" >> .env.tmp
 
 # 먼저 파라미터 개수를 받아 둔다. 아래 루프가 읽은 줄 수와 비교해
@@ -87,7 +90,10 @@ expected_count=$(
 )
 
 param_count=0
+line_count=0
 while IFS=$'\t' read -r name value; do
+  # 빈 줄까지 세는 것이 핵심이다. 아래 검증 주석 참고.
+  line_count=$((line_count + 1))
   [ -z "${name:-}" ] && continue
   echo "${name##*/}=${value}" >> .env.tmp
   param_count=$((param_count + 1))
@@ -114,9 +120,15 @@ fi
 # KEY=VALUE 한 줄 단위라 여러 줄 값을 담을 수 없다. 정확히 파싱해도 결과물이 깨진다.
 # 즉 여러 줄 값은 지원 불가능한 입력이므로, 올바른 동작은 명확히 거부하는 것이다.
 #
-# 읽은 줄 수가 실제 파라미터 개수보다 많으면 어딘가에 줄바꿈이 섞인 것이다.
-if [ "$param_count" -ne "$expected_count" ]; then
-  echo "[deploy] 오류: 파라미터 개수가 맞지 않는다 (기대 ${expected_count}건, 읽음 ${param_count}건)." >&2
+# 읽은 줄 수가 실제 파라미터 개수와 다르면 어딘가에 줄바꿈이 섞인 것이다.
+#
+# param_count 가 아니라 line_count 로 비교한다. 값이 후행 개행으로 끝나는 경우
+# (VALUE="secret\n") 출력은 "NAME<TAB>secret\n\n" 이 되어 마지막에 빈 줄이 하나
+# 더 붙는데, 빈 줄은 위에서 continue 로 건너뛰므로 param_count 는 늘지 않는다.
+# 그러면 개수가 맞아떨어져 검증을 통과하고, 개행이 잘린 값이 조용히 배포된다.
+# 빈 줄까지 세면 이 경우도 1건 기대에 2줄 수신으로 잡힌다.
+if [ "$line_count" -ne "$expected_count" ]; then
+  echo "[deploy] 오류: 파라미터 개수가 맞지 않는다 (기대 ${expected_count}건, 읽음 ${line_count}줄)." >&2
   echo "[deploy] 값에 줄바꿈이 들어간 파라미터가 있을 가능성이 높다." >&2
   echo "[deploy] .env 형식은 여러 줄 값을 담을 수 없으므로 해당 값을 한 줄로 바꿔야 한다." >&2
   exit 1
