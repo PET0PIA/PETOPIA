@@ -14,6 +14,13 @@ public interface EntryMapper {
 
     boolean existsEntryQr(@Param("reservationId") Long reservationId);
 
+    int updateEntryQrAvailability(
+            @Param("reservationId") Long reservationId,
+            @Param("availableFrom") LocalDateTime availableFrom,
+            @Param("expiresAt") LocalDateTime expiresAt,
+            @Param("now") LocalDateTime now
+    );
+
     int insertEntryQr(
             @Param("reservationId") Long reservationId,
             @Param("tokenHash") String tokenHash,

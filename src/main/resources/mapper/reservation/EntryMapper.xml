@@ -28,6 +28,14 @@
         )
     </select>
 
+    <update id="updateEntryQrAvailability">
+        UPDATE entry_qrs
+           SET available_from = #{availableFrom}
+             , expires_at = #{expiresAt}
+             , updated_at = #{now}
+         WHERE reservation_id = #{reservationId}
+    </update>
+
     <insert id="insertEntryQr">
         INSERT INTO entry_qrs (
                reservation_id
