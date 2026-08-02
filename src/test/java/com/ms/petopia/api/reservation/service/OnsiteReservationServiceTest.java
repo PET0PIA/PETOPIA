@@ -106,6 +106,66 @@ class OnsiteReservationServiceTest {
     }
 
     @Test
+    @DisplayName("유료 현장예매는 10분 결제 제한시간이 입장 마감시각에 정확히 끝나면 생성할 수 있다")
+    void create_paidOnsiteReservation_allowsPaymentDeadlineAtEntryEnd() {
+        LocalDateTime tenMinutesBeforeEntryEnd = LocalDateTime.of(2026, 8, 1, 17, 50);
+        givenOpenContextAt(tenMinutesBeforeEntryEnd, 12_345);
+        givenUserAndNoDuplicate();
+        given(reservationNumberGenerator.generate(tenMinutesBeforeEntryEnd.toLocalDate()))
+                .willReturn("R20260801PAID0002");
+        assignGeneratedReservationId();
+
+        CreateOnsiteReservationResponse response = service.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateOnsiteReservationRequest(true, OnsiteReservationService.ONSITE_TERMS_VERSION)
+        );
+
+        assertThat(response.reservationStatus()).isEqualTo("PENDING_PAYMENT");
+        assertThat(response.paymentExpiresAt()).isEqualTo(LocalDateTime.of(2026, 8, 1, 18, 0));
+    }
+
+    @Test
+    @DisplayName("유료 현장예매는 10분 결제 제한시간이 입장 마감시각을 넘으면 생성할 수 없다")
+    void create_paidOnsiteReservation_rejectsWhenPaymentDeadlineExceedsEntryEnd() {
+        LocalDateTime nineMinutesBeforeEntryEnd = LocalDateTime.of(2026, 8, 1, 17, 51);
+        givenOpenContextAt(nineMinutesBeforeEntryEnd, 12_345);
+
+        assertError(
+                () -> service.create(FAIR_ID, USER_ID,
+                        new CreateOnsiteReservationRequest(true, OnsiteReservationService.ONSITE_TERMS_VERSION)),
+                ErrorCode.ONSITE_RESERVATION_CLOSED
+        );
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
+    @DisplayName("입장 마감시각 이후에는 무료 현장예매도 생성할 수 없다")
+    void create_freeOnsiteReservation_rejectsAfterEntryEnd() {
+        LocalDateTime afterEntryEnd = LocalDateTime.of(2026, 8, 1, 18, 0, 1);
+        givenOpenContextAt(afterEntryEnd, 0);
+
+        assertError(() -> service.create(FAIR_ID, USER_ID, null), ErrorCode.ONSITE_RESERVATION_CLOSED);
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
+    @DisplayName("무료 현장예매는 입장 마감시각에는 생성할 수 있다")
+    void create_freeOnsiteReservation_allowsAtEntryEnd() {
+        LocalDateTime entryEnd = LocalDateTime.of(2026, 8, 1, 18, 0);
+        givenOpenContextAt(entryEnd, 0);
+        givenUserAndNoDuplicate();
+        given(reservationNumberGenerator.generate(entryEnd.toLocalDate())).willReturn("R20260801FREE0002");
+        given(entryQrService.issueForReservation(RESERVATION_ID)).willReturn("qr-token");
+        assignGeneratedReservationId();
+
+        CreateOnsiteReservationResponse response = service.create(FAIR_ID, USER_ID, null);
+
+        assertThat(response.reservationStatus()).isEqualTo("CONFIRMED");
+        assertThat(response.entryQrToken()).isEqualTo("qr-token");
+    }
+
+    @Test
     @DisplayName("현장예매가 일시중지되면 신규 예약을 거절한다")
     void create_paused_rejects() {
         OnsiteReservationCreationContext context = context(10_000, "PAUSED");
@@ -159,8 +219,12 @@ class OnsiteReservationServiceTest {
     }
 
     private void givenOpenContext(long price) {
-        given(timeProvider.now()).willReturn(NOW);
-        given(onsiteReservationMapper.selectCreationContextForUpdate(FAIR_ID, NOW.toLocalDate()))
+        givenOpenContextAt(NOW, price);
+    }
+
+    private void givenOpenContextAt(LocalDateTime now, long price) {
+        given(timeProvider.now()).willReturn(now);
+        given(onsiteReservationMapper.selectCreationContextForUpdate(FAIR_ID, now.toLocalDate()))
                 .willReturn(context(price, "OPEN"));
     }
 

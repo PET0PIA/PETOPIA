@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Service
 @RequiredArgsConstructor
@@ -57,7 +58,7 @@ public class OnsiteReservationService {
             throw new CommonException(ErrorCode.RESERVATION_DATE_NOT_AVAILABLE);
         }
 
-        validateFairAndSales(context);
+        validateFairAndSales(context, now);
 
         ReservationUserSnapshot user = reservationMapper.selectUserSnapshot(userId);
         validateUser(user);
@@ -126,7 +127,7 @@ public class OnsiteReservationService {
         }
     }
 
-    private void validateFairAndSales(OnsiteReservationCreationContext context) {
+    private void validateFairAndSales(OnsiteReservationCreationContext context, LocalDateTime now) {
         if (context.getPublishedAt() == null
                 || context.getCanceledAt() != null
                 || !("PREPARING".equals(context.getFairStatus())
@@ -144,6 +145,23 @@ public class OnsiteReservationService {
         }
         if (context.getOnsitePrice() == null || context.getOnsitePrice() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        LocalTime entryStartTime = context.getEntryStartTime();
+        LocalTime entryEndTime = context.getEntryEndTime();
+        if (context.getOperationDate() == null
+                || entryStartTime == null
+                || entryEndTime == null
+                || entryEndTime.isBefore(entryStartTime)) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        LocalDateTime entryEndsAt = LocalDateTime.of(context.getOperationDate(), entryEndTime);
+        if (now.isAfter(entryEndsAt)) {
+            throw new CommonException(ErrorCode.ONSITE_RESERVATION_CLOSED);
+        }
+        if (context.getOnsitePrice() > 0 && now.plusMinutes(PAYMENT_WAIT_MINUTES).isAfter(entryEndsAt)) {
+            throw new CommonException(ErrorCode.ONSITE_RESERVATION_CLOSED);
         }
     }
 
