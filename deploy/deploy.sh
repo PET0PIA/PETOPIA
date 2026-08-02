@@ -32,6 +32,22 @@ mkdir -p "$APP_DIR"
 cd "$APP_DIR"
 
 # ---------------------------------------------------------------------------
+# 0. 사전 조건 확인
+#
+# Amazon Linux 2023 의 `dnf install docker` 는 엔진만 설치하고 compose 플러그인은
+# 넣어주지 않는다. 없는 상태로 진행하면 아래에서 command not found 로 죽는데,
+# SSM 로그만 보고 원인을 알아채기 어렵다. 여기서 먼저 끊고 해결 방법을 알린다.
+# ---------------------------------------------------------------------------
+if ! docker compose version > /dev/null 2>&1; then
+  echo "[deploy] 오류: 이 인스턴스에 docker compose 플러그인이 없다." >&2
+  echo "[deploy] 아래를 실행한 뒤 다시 배포한다." >&2
+  echo "[deploy]   sudo mkdir -p /usr/local/lib/docker/cli-plugins" >&2
+  echo "[deploy]   sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose" >&2
+  echo "[deploy]   sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose" >&2
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # 1. compose 파일을 배포 SHA 로 고정해 내려받는다.
 #
 # 저장소가 public 이라 자격 증명이 필요 없다. git clone 대신 raw URL 을 쓰는 것은
