@@ -7,6 +7,8 @@ package com.ms.petopia.api.reservation.controller;
 public final class TemporaryAuthHeaders {
 
     public static final String USER_ID = "X-User-Id";
+    public static final String INTERNAL_CALLER = "X-Internal-Caller";
+    public static final String PAYMENT_CALLER = "PAYMENT";
 
     private TemporaryAuthHeaders() {
     }

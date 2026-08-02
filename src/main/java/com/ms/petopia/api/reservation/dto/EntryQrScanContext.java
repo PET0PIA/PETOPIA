@@ -3,18 +3,19 @@ package com.ms.petopia.api.reservation.dto;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
-public class EntryQrIssueContext {
+public class EntryQrScanContext {
+    private Long entryQrId;
     private Long reservationId;
     private Long fairId;
     private Long userId;
     private String reservationType;
     private String reservationStatus;
-    private LocalDate visitDate;
-    private LocalTime entryStartTime;
-    private LocalTime entryEndTime;
+    private LocalDateTime availableFrom;
+    private LocalDateTime expiresAt;
+    private Long entryRecordId;
+    private LocalDateTime firstCheckedInAt;
 }

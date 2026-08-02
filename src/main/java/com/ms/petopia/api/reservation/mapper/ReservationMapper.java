@@ -30,6 +30,11 @@ public interface ReservationMapper {
 
     ReservationUserSnapshot selectUserSnapshot(@Param("userId") Long userId);
 
+    boolean isAssignedEventAdmin(
+            @Param("fairId") Long fairId,
+            @Param("adminUserId") Long adminUserId
+    );
+
     int insertReservation(ReservationInsertRow row);
 
     int insertCreatedHistory(

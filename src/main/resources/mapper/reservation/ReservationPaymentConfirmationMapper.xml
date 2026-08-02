@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.ReservationPaymentConfirmationMapper">
+
+    <select id="selectPaymentContext" resultType="ReservationPaymentContextRow">
+        SELECT reservation_id
+             , fair_id
+             , user_id
+             , reservation_type
+             , status
+             , reservation_amount
+             , payment_expires_at
+          FROM reservations
+         WHERE reservation_id = #{reservationId}
+    </select>
+
+    <select id="selectReceiptByEventId" resultType="ReservationPaymentReceiptRow">
+        SELECT confirmation_id
+             , event_id
+             , payment_id
+             , reservation_id
+             , paid_amount
+             , paid_at
+             , received_at
+          FROM reservation_payment_confirmations
+         WHERE event_id = #{eventId}
+    </select>
+
+    <select id="selectReceiptByReservationId" resultType="ReservationPaymentReceiptRow">
+        SELECT confirmation_id
+             , event_id
+             , payment_id
+             , reservation_id
+             , paid_amount
+             , paid_at
+             , received_at
+          FROM reservation_payment_confirmations
+         WHERE reservation_id = #{reservationId}
+    </select>
+
+    <select id="selectReservationForUpdate" resultType="PaymentConfirmationReservationRow">
+        SELECT reservation_id
+             , status
+             , reservation_amount
+             , payment_expires_at
+          FROM reservations
+         WHERE reservation_id = #{reservationId}
+         FOR UPDATE
+    </select>
+
+    <insert id="insertReceipt">
+        INSERT INTO reservation_payment_confirmations (
+               event_id
+             , payment_id
+             , reservation_id
+             , paid_amount
+             , paid_at
+             , received_at
+        ) VALUES (
+               #{command.eventId}
+             , #{command.paymentId}
+             , #{command.reservationId}
+             , #{command.paidAmount}
+             , #{command.paidAt}
+             , #{receivedAt}
+        )
+    </insert>
+
+    <update id="confirmPendingReservation">
+        UPDATE reservations
+           SET status = 'CONFIRMED'
+             , reserved_at = #{paidAt}
+             , updated_at = #{updatedAt}
+         WHERE reservation_id = #{reservationId}
+           AND status = 'PENDING_PAYMENT'
+    </update>
+
+    <insert id="insertConfirmedHistory">
+        INSERT INTO reservation_histories (
+               reservation_id
+             , action_type
+             , before_data
+             , after_data
+             , changed_by
+             , actor_type
+             , is_admin_action
+             , change_reason
+             , created_at
+        ) VALUES (
+               #{reservationId}
+             , 'PAYMENT_CONFIRMED'
+             , JSON_OBJECT('status', 'PENDING_PAYMENT')
+             , JSON_OBJECT(
+                    'status', 'CONFIRMED',
+                    'paymentId', #{paymentId},
+                    'paidAmount', #{paidAmount}
+               )
+             , NULL
+             , 'PAYMENT'
+             , FALSE
+             , NULL
+             , #{now}
+        )
+    </insert>
+
+</mapper>
