@@ -21,7 +21,7 @@ public class FairController {
 
     @PostMapping
     public ResponseEntity<CreateFairApplicationResponse> createApplication(
-            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long userId,
+            @RequestHeader(FairTemporaryAuthHeaders.USER_ID) Long userId,
             @RequestBody CreateFairApplicationRequest request
     ) {
         // TODO 인증 도메인 완성 후 X-User-Id 대신 인증 Principal에서 userId를 가져온다.
