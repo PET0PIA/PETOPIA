@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#
+# 인스턴스 A(애플리케이션, Amazon Linux 2023)에서 실행되는 배포 스크립트.
+# GitHub Actions 가 SSM Send-Command 로 이 파일을 내려받아 실행한다.
+#
+#   ./deploy.sh <IMAGE_URI> <DEPLOY_SHA>
+#
+# 배포 로직을 워크플로에 인라인으로 박지 않고 저장소에 두는 이유:
+#   - 리뷰와 버전 관리의 대상이 된다.
+#   - 배포 SHA 로 고정해 내려받으므로, 실행되는 스크립트가 배포되는 이미지와
+#     항상 같은 커밋이다.
+#
+# 주의: 이 스크립트의 표준 출력은 SSM 명령 결과로 워크플로 로그에 그대로 남는다.
+#       따라서 set -x 를 쓰지 않고, .env 내용이나 헬스 응답 본문을 출력하지 않는다.
+#       (헬스 응답에는 dbUser / dbVersion / connectionId 가 들어 있다.)
+set -euo pipefail
+
+IMAGE_URI="${1:?사용법: deploy.sh <IMAGE_URI> <DEPLOY_SHA>}"
+DEPLOY_SHA="${2:?사용법: deploy.sh <IMAGE_URI> <DEPLOY_SHA>}"
+
+REPO_SLUG="PET0PIA/PETOPIA"
+APP_DIR="/opt/petopia"
+COMPOSE_FILE="docker-compose.app.yaml"
+SSM_PREFIX="/petopia/prod"
+REGION="ap-northeast-2"
+HEALTH_URL="http://127.0.0.1:8080/api/reservation/health"
+HEALTH_TIMEOUT=180
+
+log() { echo "[deploy] $*"; }
+
+mkdir -p "$APP_DIR"
+cd "$APP_DIR"
+
+# ---------------------------------------------------------------------------
+# 1. compose 파일을 배포 SHA 로 고정해 내려받는다.
+#
+# 저장소가 public 이라 자격 증명이 필요 없다. git clone 대신 raw URL 을 쓰는 것은
+# git 설치가 불필요하고 전송량이 5MB+ 에서 2KB 로 줄기 때문이다.
+# SHA 로 고정하므로 compose 파일과 배포 이미지가 항상 같은 커밋이다.
+#
+# 저장소를 private 으로 전환하면 이 경로가 막힌다. 그때는 S3 경유로 바꿔야 한다.
+# ---------------------------------------------------------------------------
+log "compose 파일 수신 (SHA ${DEPLOY_SHA})"
+curl -fsSL --retry 3 --retry-delay 5 \
+  "https://raw.githubusercontent.com/${REPO_SLUG}/${DEPLOY_SHA}/${COMPOSE_FILE}" \
+  -o "${COMPOSE_FILE}.tmp"
+mv "${COMPOSE_FILE}.tmp" "${COMPOSE_FILE}"
+
+# ---------------------------------------------------------------------------
+# 2. SSM Parameter Store 에서 설정을 받아 .env 를 만든다.
+#
+# get-parameters-by-path 를 쓰므로 파라미터를 추가하면 자동으로 흘러 들어온다.
+# 워크플로나 이 스크립트를 고칠 필요가 없다. DB_HOST 도 여기 포함된다.
+#
+# jq 에 의존하지 않으려고 --query + --output text 로 탭 구분 출력을 받는다.
+# (AL2023 에 jq 는 기본 설치되지 않는다.)
+# ---------------------------------------------------------------------------
+log "SSM 파라미터 조회 (${SSM_PREFIX})"
+umask 077
+: > .env.tmp
+echo "APP_IMAGE=${IMAGE_URI}" >> .env.tmp
+
+param_count=0
+while IFS=$'\t' read -r name value; do
+  [ -z "${name:-}" ] && continue
+  echo "${name##*/}=${value}" >> .env.tmp
+  param_count=$((param_count + 1))
+done < <(
+  aws ssm get-parameters-by-path \
+    --path "$SSM_PREFIX" \
+    --with-decryption \
+    --region "$REGION" \
+    --query 'Parameters[].[Name,Value]' \
+    --output text
+)
+
+if [ "$param_count" -eq 0 ]; then
+  echo "[deploy] 오류: ${SSM_PREFIX} 에서 파라미터를 하나도 받지 못했다." >&2
+  echo "[deploy] 인스턴스 역할의 ssm:GetParametersByPath 권한과 파라미터 경로를 확인한다." >&2
+  exit 1
+fi
+log "파라미터 ${param_count}건 수신"
+
+# 앱 기동에 반드시 필요한 값이 실제로 들어왔는지 확인한다.
+# 없으면 컨테이너가 뜨다 죽으므로 여기서 먼저 끊는 편이 진단이 빠르다.
+for required in DB_HOST DB_PASSWORD REDIS_PASSWORD ENTRY_QR_SECRET; do
+  if ! grep -q "^${required}=." .env.tmp; then
+    echo "[deploy] 오류: 필수 값 ${required} 가 비어 있거나 없다." >&2
+    exit 1
+  fi
+done
+
+chmod 600 .env.tmp
+mv .env.tmp .env
+
+# ---------------------------------------------------------------------------
+# 3. ECR 로그인 후 이미지를 받아 교체한다.
+# ---------------------------------------------------------------------------
+ECR_REGISTRY="${IMAGE_URI%%/*}"
+log "ECR 로그인 (${ECR_REGISTRY})"
+aws ecr get-login-password --region "$REGION" \
+  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+log "이미지 수신 ${IMAGE_URI}"
+docker compose -f "$COMPOSE_FILE" pull
+
+log "컨테이너 교체"
+docker compose -f "$COMPOSE_FILE" up -d
+
+# ---------------------------------------------------------------------------
+# 4. 실제로 떴는지 확인한다.
+#
+# 이 확인이 없으면 "배포 성공" 초록불 아래 죽은 앱이 남는다.
+# SSM 은 스크립트 종료 코드로 성패를 판정하므로 반드시 exit 1 로 끝내야 한다.
+#
+# 첫 기동이나 DB 재시작 직후에는 Flyway 가 MySQL 을 기다리며 컨테이너가
+# 몇 차례 재시작할 수 있다(connection-timeout 3초). 그래서 넉넉히 기다린다.
+# ---------------------------------------------------------------------------
+log "헬스체크 대기 (최대 ${HEALTH_TIMEOUT}초)"
+deadline=$(( SECONDS + HEALTH_TIMEOUT ))
+until curl -fsS -o /dev/null --max-time 5 "$HEALTH_URL"; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    echo "[deploy] 오류: ${HEALTH_TIMEOUT}초 안에 헬스체크가 200 을 반환하지 않았다." >&2
+    echo "----- 컨테이너 상태 -----" >&2
+    docker compose -f "$COMPOSE_FILE" ps >&2 || true
+    echo "----- 앱 로그 (마지막 200줄) -----" >&2
+    docker compose -f "$COMPOSE_FILE" logs --tail=200 app >&2 || true
+    exit 1
+  fi
+  sleep 5
+done
+
+# 헬스 응답 본문은 출력하지 않는다. dbUser / dbVersion / connectionId 가 들어 있다.
+log "헬스체크 통과 (${SECONDS}초)"
+
+# 이전 배포에서 남은 이미지를 정리한다. 8GB 볼륨이라 방치하면 쌓인다.
+# 현재 실행 중인 이미지는 dangling 이 아니므로 지워지지 않는다.
+docker image prune -f > /dev/null 2>&1 || true
+
+log "배포 완료 ${IMAGE_URI}"
