@@ -337,6 +337,17 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # 이 저장소는 public 이라 Actions 실행 로그도 누구나 볼 수 있다.
+      # ECR 주소에는 AWS 계정 ID 12자리가 들어 있어 그대로 로그에 남는다.
+      # 비밀번호는 아니지만 불필요하게 공개할 이유가 없으므로 마스킹한다.
+      # add-mask 는 이 job 의 이후 모든 출력에 적용되므로, SSM 이 돌려주는
+      # 인스턴스 로그에 섞여 나오는 계정 ID 도 함께 가려진다.
+      - name: 로그에서 AWS 계정 ID 가리기
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "::add-mask::${ACCOUNT_ID}"
+
       - name: ECR 로그인
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
