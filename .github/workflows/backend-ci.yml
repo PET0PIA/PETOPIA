@@ -58,6 +58,11 @@ jobs:
     steps:
       - name: 체크아웃
         uses: actions/checkout@v4
+        with:
+          # 기본값(true)은 GITHUB_TOKEN 을 .git/config 의 extraheader 로 남긴다.
+          # 이 워크플로는 체크아웃 이후 git 을 전혀 쓰지 않으므로 남길 이유가 없다.
+          # (build.gradle 에도 git 기반 버저닝이 없다.)
+          persist-credentials: false
 
       # MySQL 초기화에 10~20초가 더 걸린다(README §3 참고).
       # JDK/Gradle 준비보다 앞에 두어 그 시간을 겹치게 한다. 순서가 성능의 핵심이다.
