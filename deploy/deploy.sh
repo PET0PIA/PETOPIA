@@ -76,6 +76,16 @@ umask 077
 : > .env.tmp
 echo "APP_IMAGE=${IMAGE_URI}" >> .env.tmp
 
+# 먼저 파라미터 개수를 받아 둔다. 아래 루프가 읽은 줄 수와 비교해
+# 값에 줄바꿈이 섞였는지 검증하기 위함이다. (자세한 이유는 루프 아래 참고)
+expected_count=$(
+  aws ssm get-parameters-by-path \
+    --path "$SSM_PREFIX" \
+    --region "$REGION" \
+    --query 'length(Parameters)' \
+    --output text
+)
+
 param_count=0
 while IFS=$'\t' read -r name value; do
   [ -z "${name:-}" ] && continue
@@ -95,6 +105,23 @@ if [ "$param_count" -eq 0 ]; then
   echo "[deploy] 인스턴스 역할의 ssm:GetParametersByPath 권한과 파라미터 경로를 확인한다." >&2
   exit 1
 fi
+
+# --output text 는 값에 줄바꿈이 있으면 그대로 여러 줄로 출력한다. 그러면 위 루프가
+# 두 번째 줄부터를 새 파라미터로 오인해 .env 에 쓰레기 줄을 쓰고 원래 값은 잘린다.
+# 조용히 깨지기 때문에 비밀번호가 잘린 채로 배포되어도 알아채기 어렵다.
+#
+# JSON 파싱으로 바꾸지 않는 이유: .env 형식(docker compose 의 env_file)은 애초에
+# KEY=VALUE 한 줄 단위라 여러 줄 값을 담을 수 없다. 정확히 파싱해도 결과물이 깨진다.
+# 즉 여러 줄 값은 지원 불가능한 입력이므로, 올바른 동작은 명확히 거부하는 것이다.
+#
+# 읽은 줄 수가 실제 파라미터 개수보다 많으면 어딘가에 줄바꿈이 섞인 것이다.
+if [ "$param_count" -ne "$expected_count" ]; then
+  echo "[deploy] 오류: 파라미터 개수가 맞지 않는다 (기대 ${expected_count}건, 읽음 ${param_count}건)." >&2
+  echo "[deploy] 값에 줄바꿈이 들어간 파라미터가 있을 가능성이 높다." >&2
+  echo "[deploy] .env 형식은 여러 줄 값을 담을 수 없으므로 해당 값을 한 줄로 바꿔야 한다." >&2
+  exit 1
+fi
+
 log "파라미터 ${param_count}건 수신"
 
 # 앱 기동에 반드시 필요한 값이 실제로 들어왔는지 확인한다.
