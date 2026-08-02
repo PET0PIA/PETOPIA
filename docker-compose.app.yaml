@@ -5,8 +5,14 @@
 #   인스턴스 B : MySQL + Redis     -> docker-compose.release.yaml
 #
 # 인스턴스 A 와 B 의 .env 는 내용이 다르다.
-#   A: APP_IMAGE, DB_HOST, REDIS_HOST, DB_PASSWORD, REDIS_PASSWORD, ENTRY_QR_SECRET
-#   B: DB_ROOT_PASSWORD, DB_DATABASE, DB_USER, DB_PASSWORD, REDIS_PASSWORD
+# 각 인스턴스에 필요한 변수 목록은 .env.example 을 단일 출처로 삼는다.
+# 여기에 목록을 복제해 두었더니 실제로 어긋났다(A 목록에서 DB_PORT / DB_DATABASE /
+# DB_USER / REDIS_PORT 가 누락). 같은 목록을 두 곳에서 관리하지 않는다.
+#
+# 특히 주의: 값을 생략하면 application-release.yaml 의 기본값
+# (3306 / petopia_db / petopia_user / 6379)이 조용히 쓰인다. 인스턴스 B 에서
+# 비기본값을 쓰는데 A 에 명시하지 않으면 접속이 실패한다.
+#
 # 두 .env 는 배포 시 SSM Parameter Store 에서 받아 생성한다. 커밋하지 않는다.
 #
 # 실행(보통은 SSM Send-Command 가 대신 수행한다):
