@@ -1,10 +1,23 @@
-# docker-compose.prod.yml (운영 배포용)
+# 데이터 계층 (운영) — 인스턴스 B 에서 실행한다.
+#
+# 토폴로지: t3.micro 2대.
+#   인스턴스 A : 애플리케이션      -> docker-compose.app.yaml
+#   인스턴스 B : MySQL + Redis     -> 이 파일
+#
+# 실행:
+#   cp .env.example .env   # 값을 채운 뒤
+#   docker compose -f docker-compose.release.yaml up -d
 services:
   mysql:
     image: mysql:8.0
     container_name: petopia-mysql-prod
     restart: always
     ports:
+      # 앱이 다른 호스트(인스턴스 A)에 있으므로 127.0.0.1 바인딩은 불가능하다.
+      # 즉 이 포트는 인스턴스의 모든 인터페이스에 열린다.
+      # >>> 보안 방어선은 보안 그룹 하나뿐이다. <<<
+      # petopia-data-sg 의 3306 인바운드를 반드시 petopia-app-sg 소스로만
+      # 제한할 것. CIDR(0.0.0.0/0)로 열면 DB가 인터넷에 노출된다.
       - "${DB_PORT:-3306}:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
@@ -16,13 +29,57 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=mysql_native_password
+    volumes:
+      # 이 볼륨이 없으면 컨테이너를 지우는 순간 스키마와 데이터가 사라진다.
+      # V1__init.sql 은 40KB / 34테이블이고 IF NOT EXISTS 가 하나도 없다.
+      # MySQL DDL 은 트랜잭션이 아니라서 부분 적용되면 자동 복구가 안 된다.
+      # 운영에서 이 볼륨은 협상 대상이 아니다.
+      - petopia-mysql-data:/var/lib/mysql
+    logging:
+      # json-file 기본값은 무제한이라 작은 EBS 에서 디스크가 찬다.
+      # HttpLoggingFilter 가 요청마다 여러 줄을 남기므로 특히 필요하다.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      # 소켓 기반 mysqladmin ping 은 초기화 단계의 임시 서버(--skip-networking)
+      # 에서도 성공해 위양성을 낸다. TCP 로 실제 질의를 던져야 준비 완료다.
+      test: ["CMD-SHELL", "mysql --protocol=TCP -h 127.0.0.1 -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
     container_name: petopia-redis-prod
     restart: always
     ports:
+      # MySQL 과 동일. SG(petopia-data-sg)의 6379 를 petopia-app-sg 로만 제한할 것.
       - "${REDIS_PORT:-6379}:6379"
     command: redis-server --requirepass ${REDIS_PASSWORD}
     environment:
       TZ: Asia/Seoul
+      # healthcheck 가 컨테이너 안에서 쓰려면 환경변수로도 들어와야 한다.
+      # command 의 ${REDIS_PASSWORD} 는 compose 가 호스트에서 치환하는 값이라
+      # 컨테이너 환경에는 남지 않는다.
+      # 노출 관점의 추가 위험은 없다. 이미 --requirepass 로 컨테이너
+      # 커맨드라인에 실제 값이 박혀 있다.
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    # Redis 볼륨은 두지 않는다. 현재 Redis 를 쓰는 코드는 HealthCheckService
+    # 뿐이라 재시작으로 잃을 상태가 없다. 캐시/세션 용도가 생기면 그때 검토한다.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+volumes:
+  petopia-mysql-data:

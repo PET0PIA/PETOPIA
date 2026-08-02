@@ -1,0 +1,18 @@
+# 빌드 컨텍스트는 jar 하나면 충분하다.
+# 아무것도 제외하지 않으면 build/ 40MB + .git/ 5MB + frontend/ 4.9MB 가
+# 통째로 데몬에 전송된다. frontend 에는 2MB짜리 PNG도 있다.
+#
+# 규칙은 위에서 아래로 평가되고 마지막에 매치된 것이 이긴다.
+
+# 1) 전부 제외한다.
+*
+
+# 2) bootJar 만 다시 포함한다.
+#    버전이 바뀌어도 깨지지 않도록 이름을 고정하지 않는다.
+!build/libs/*.jar
+
+# 3) plain jar 는 다시 제외한다.
+#    assemble 은 petopia-<ver>.jar 와 petopia-<ver>-plain.jar 를 함께 만든다.
+#    둘 다 남으면 Dockerfile 의 COPY build/libs/*.jar 가 소스 2개를 잡아
+#    "COPY with more than one source must end with /" 로 실패한다.
+build/libs/*-plain.jar
