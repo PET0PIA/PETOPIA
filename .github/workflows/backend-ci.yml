@@ -252,12 +252,20 @@ jobs:
           # 컴파일 단계에서 실패하면 두 디렉터리가 아예 없다. 이유는 Gradle 로그에 이미 있다.
           if-no-files-found: ignore
 
-      # deploy job 에 넘길 jar. main push 에서만 올린다.
+      # deploy job 에 넘길 jar.
       # deploy 가 소스에서 다시 빌드하지 않고 이 산출물을 쓰는 이유는
       # Dockerfile 주석과 같다. 테스트를 통과한 바로 그 jar 를 배포해야
       # "테스트한 것"과 "배포한 것"이 갈라지지 않는다.
+      #
+      # 조건을 event_name 이 아니라 ref 로 거는 이유:
+      # deploy job 은 push 뿐 아니라 workflow_dispatch 로도 돈다.
+      # image_tag 를 비운 채 수동 실행하면 rebuild 경로를 타서 이 아티팩트를
+      # 요구하는데, event_name == 'push' 로 걸어 두면 그때 업로드가 건너뛰어져
+      # "아티팩트를 찾을 수 없음"으로 실패한다.
+      # ref 로 걸면 main 제한은 그대로 유지하면서 두 경로 모두를 덮는다.
+      # (PR 의 ref 는 refs/pull/N/merge 라 여전히 걸러진다)
       - name: 배포용 jar 업로드
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: app-jar-${{ github.sha }}
