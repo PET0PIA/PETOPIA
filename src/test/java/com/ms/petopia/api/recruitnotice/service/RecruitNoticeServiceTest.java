@@ -1,5 +1,6 @@
 package com.ms.petopia.api.recruitnotice.service;
 
+import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.dto.request.RecruitNoticeRequest;
 import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeResponse;
@@ -50,9 +51,7 @@ class RecruitNoticeServiceTest {
 
     }
 
-    /*
-     * 테스트용 RecruitNotice 도메인 객체(DB에 저장된 것처럼 가정)를 만드는 헬퍼 메서드.
-     */
+    // 테스트용 RecruitNotice 도메인 객체(DB에 저장된 것처럼 가정)를 만드는 헬퍼 메서드.
     private RecruitNotice createNotice(Long recruitNoticeId, Long fairId, Long writerId,
                                        String title, LocalDateTime updatedAt) {
 
@@ -70,6 +69,21 @@ class RecruitNoticeServiceTest {
 
     }
 
+    /*
+     * 테스트용 FairStatusInfo(행사 취소/종료 여부) 객체를 만드는 헬퍼 메서드.
+     * closed 판정 로직에서 참조하는 fairs 테이블의 상태값을 임의로 지정하기 위함.
+     */
+    private FairStatusInfo createFairStatus(LocalDateTime canceledAt, String status) {
+
+        FairStatusInfo info = new FairStatusInfo();
+
+        info.setCanceledAt(canceledAt);
+        info.setStatus(status);
+
+        return info;
+
+    }
+
     @Nested
     @DisplayName("모집 공고 작성/수정")
     class UpsertNotice {
@@ -83,7 +97,6 @@ class RecruitNoticeServiceTest {
             Long writerId = 1L;
 
             RecruitNoticeRequest request = createRequest("멍냥페스타 참가업체 모집");
-
             RecruitNotice savedNotice = createNotice(1L, fairId, writerId,
                     "멍냥페스타 참가업체 모집", null);
 
@@ -112,7 +125,6 @@ class RecruitNoticeServiceTest {
             Long writerId = 1L;
 
             RecruitNoticeRequest request = createRequest("수정된 제목");
-
             RecruitNotice existing = createNotice(1L, fairId, writerId,
                     "원래 제목", null);
             RecruitNotice updated = createNotice(1L, fairId, writerId,
@@ -192,7 +204,6 @@ class RecruitNoticeServiceTest {
             Long currentAdminId = 2L;
 
             RecruitNoticeRequest request = createRequest("이전 담당자의 공고 수정 시도");
-
             RecruitNotice existing = createNotice(1L, fairId, 1L, "원래 제목", null);
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(currentAdminId);
@@ -215,7 +226,6 @@ class RecruitNoticeServiceTest {
             Long writerId = 1L;
 
             RecruitNoticeRequest request = createRequest("검증용 제목");
-
             RecruitNotice savedNotice = createNotice(1L, fairId, writerId,
                     "검증용 제목", null);
 
@@ -237,6 +247,126 @@ class RecruitNoticeServiceTest {
             assertThat(passed.getWriterId()).isEqualTo(writerId);
             // 그 안의 값들이 request 내용이랑 정확히 일치하는지 확인
             assertThat(passed.getTitle()).isEqualTo("검증용 제목");
+        }
+
+    }
+
+
+    @Nested
+    @DisplayName("모집 공고 상세 조회")
+    class GetNotice{
+
+        @Test
+        @DisplayName("마감일 전이고 행사도 정상이면 closed=false로 응답한다")
+        void returnsNoticeWhenNotClosed() {
+
+            // given: 마감일이 미래이고, 행사도 취소/종료 안 된 정상 상황
+            Long fairId = 1L;
+
+            RecruitNotice notice = createNotice(1L, fairId, 1L, "멍냥페스타 참가업체 모집", null);
+            FairStatusInfo fairStatus = createFairStatus(null, "IN_PROGRESS");
+
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(fairStatus);
+
+            // when
+            RecruitNoticeResponse result = recruitNoticeService.getNotice(fairId);
+
+            // then: 세 조건 다 해당 안 되니 closed는 false여야 함
+            assertThat(result.getRecruitNoticeId()).isEqualTo(1L);
+            assertThat(result.isClosed()).isFalse();
+
+        }
+
+        @Test
+        @DisplayName("모집 마감일이 지났으면 closed=true로 응답한다")
+        void returnsClosedTrueWhenDeadlinePassed() {
+
+            // given: recruitDeadline을 과거(2020년)로 설정한 공고
+            Long fairId = 1L;
+
+            RecruitNotice notice = RecruitNotice.builder()
+                    .recruitNoticeId(1L)
+                    .fairId(fairId)
+                    .writerId(1L)
+                    .title("마감된 공고")
+                    .content("내용")
+                    .recruitDeadline(LocalDateTime.of(2020, 1, 1, 0, 0))
+                    .build();
+
+            FairStatusInfo fairStatus = createFairStatus(null, "IN_PROGRESS");
+
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(fairStatus);
+
+            // when
+            RecruitNoticeResponse result = recruitNoticeService.getNotice(fairId);
+
+            // then: 마감일 지남 조건 하나만으로도 closed=true여야 함
+            assertThat(result.isClosed()).isTrue();
+
+        }
+
+        @Test
+        @DisplayName("행사가 취소됐으면 마감일이 남았어도 closed=true로 응답한다")
+        void returnsClosedTrueWhenFairCanceled() {
+
+            // given: 마감일은 미래지만, fairs.canceled_at에 값이 있는(취소된) 행사
+            Long fairId = 1L;
+
+            RecruitNotice notice = createNotice(1L, fairId, 1L, "취소된 행사의 공고", null);
+            FairStatusInfo fairStatus = createFairStatus(LocalDateTime.of(2026, 8, 1, 10, 0),
+                    "IN_PROGRESS");
+
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(fairStatus);
+
+            // when
+            RecruitNoticeResponse result = recruitNoticeService.getNotice(fairId);
+
+            // then: 마감일과 무관하게, 행사 취소만으로도 closed=true여야 함
+            assertThat(result.isClosed()).isTrue();
+
+        }
+
+        @Test
+        @DisplayName("행사가 종료(ENDED)됐으면 마감일이 남았어도 closed=true로 응답한다")
+        void returnsClosedTrueWhenFairEnded() {
+
+            // given: 마감일은 미래지만, fairs.status가 ENDED인 행사
+            Long fairId = 1L;
+
+            RecruitNotice notice = createNotice(1L, fairId, 1L, "종료된 행사의 공고", null);
+            FairStatusInfo fairStatus = createFairStatus(null, "ENDED");
+
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(fairStatus);
+
+            // when
+            RecruitNoticeResponse result = recruitNoticeService.getNotice(fairId);
+
+            // then: 마감일과 무관하게, 행사 종료만으로도 closed=true여야 함
+            assertThat(result.isClosed()).isTrue();
+
+        }
+
+        @Test
+        @DisplayName("공고가 없으면 예외를 던진다")
+        void throwsWhenNoticeNotFound() {
+
+            // given: 이 fairId에 대해 아직 작성된 공고가 없는 상황(Mapper가 null 리턴)
+            Long fairId = 999L;
+
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> recruitNoticeService.getNotice(fairId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("아직 작성된 모집 공고가 없습니다");
+
+            // 공고 자체가 없어 예외로 끝났으니, 그 뒤 fairs 상태 조회는 시도되면 안 됨
+            verify(recruitNoticeMapper, never()).selectFairStatusByFairId(any());
+
         }
 
     }
