@@ -8,13 +8,10 @@ import java.time.LocalTime;
 
 @Getter
 @Setter
-public class EntryQrIssueContext {
-    private Long reservationId;
-    private Long fairId;
-    private Long userId;
-    private String reservationType;
-    private String reservationStatus;
+public class ReservationAvailabilityDateRow {
     private LocalDate visitDate;
     private LocalTime entryStartTime;
     private LocalTime entryEndTime;
+    private int capacity;
+    private long occupiedCount;
 }

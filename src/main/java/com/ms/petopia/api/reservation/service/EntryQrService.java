@@ -33,6 +33,22 @@ public class EntryQrService {
         return issue(context);
     }
 
+    /** 임시 사용자 헤더로 요청한 본인의 예약에만 QR을 반환한다. */
+    @Transactional
+    public String issueForUser(Long reservationId, Long userId) {
+        if (reservationId == null || reservationId <= 0 || userId == null || userId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        EntryQrIssueContext context = entryMapper.selectQrIssueContext(reservationId);
+        if (context == null) {
+            throw new CommonException(ErrorCode.RESERVATION_NOT_FOUND);
+        }
+        if (!userId.equals(context.getUserId())) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+        return issue(context);
+    }
+
     private String issue(EntryQrIssueContext context) {
         if (!("CONFIRMED".equals(context.getReservationStatus())
                 || "CHECKED_IN".equals(context.getReservationStatus()))) {
