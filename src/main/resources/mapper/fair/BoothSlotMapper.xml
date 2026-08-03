@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fair.mapper.BoothSlotMapper">
+
+    <!--
+        is_active 컬럼은 자동 언더스코어->camelCase 매핑에 맡기지 않고 아래 resultMap에서
+        명시적으로 property="active"에 연결한다. Boolean 필드는 Lombok이 getActive()로
+        getter를 생성하는데(boolean 프리미티브 특례인 isXxx는 여기 해당 안 됨), 자동 매핑은
+        is_active -> "isActive" 프로퍼티를 찾으려 하니 어긋난다. 나머지 컬럼도 이 파일 안에서
+        일관성 있게 전부 명시했다.
+    -->
+    <resultMap id="boothSlotResultMap" type="BoothSlot">
+        <id column="booth_slot_id" property="boothSlotId"/>
+        <result column="hall_id" property="hallId"/>
+        <result column="slot_number" property="slotNumber"/>
+        <result column="pos_x" property="posX"/>
+        <result column="pos_y" property="posY"/>
+        <result column="width" property="width"/>
+        <result column="height" property="height"/>
+        <result column="price" property="price"/>
+        <result column="is_active" property="active"/>
+        <result column="memo" property="memo"/>
+        <result column="locked_at" property="lockedAt"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <!--
+        hall_id/slot_number/pos_x/pos_y/width/height/price는 DDL상 NOT NULL이고 기본값이 없어
+        서비스 레이어가 항상 채워 넣는다는 전제로 고정 바인딩한다.
+        is_active는 DEFAULT TRUE라 값이 없으면 DB 기본값이 적용되도록 <if>로 뺐다.
+    -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="boothSlotId" keyColumn="booth_slot_id">
+        INSERT INTO booth_slots
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            hall_id, slot_number, pos_x, pos_y, width, height, price, created_at, updated_at,
+            <if test="active != null">is_active,</if>
+            <if test="memo != null">memo,</if>
+            <if test="lockedAt != null">locked_at,</if>
+        </trim>
+        <trim prefix="VALUES (" suffix=")" suffixOverrides=",">
+            #{hallId}, #{slotNumber}, #{posX}, #{posY}, #{width}, #{height}, #{price}, #{createdAt}, #{updatedAt},
+            <if test="active != null">#{active},</if>
+            <if test="memo != null">#{memo},</if>
+            <if test="lockedAt != null">#{lockedAt},</if>
+        </trim>
+    </insert>
+
+    <select id="selectById" resultMap="boothSlotResultMap">
+        SELECT booth_slot_id, hall_id, slot_number, pos_x, pos_y, width, height, price,
+               is_active, memo, locked_at, created_at, updated_at
+          FROM booth_slots
+         WHERE booth_slot_id = #{boothSlotId}
+    </select>
+
+    <select id="selectByHallId" resultMap="boothSlotResultMap">
+        SELECT booth_slot_id, hall_id, slot_number, pos_x, pos_y, width, height, price,
+               is_active, memo, locked_at, created_at, updated_at
+          FROM booth_slots
+         WHERE hall_id = #{hallId}
+         ORDER BY slot_number
+    </select>
+
+    <!-- null이 아닌 필드만 갱신한다. hall_id는 갱신 대상에서 제외한다. -->
+    <update id="update">
+        UPDATE booth_slots
+        <set>
+            <if test="slotNumber != null">slot_number = #{slotNumber},</if>
+            <if test="posX != null">pos_x = #{posX},</if>
+            <if test="posY != null">pos_y = #{posY},</if>
+            <if test="width != null">width = #{width},</if>
+            <if test="height != null">height = #{height},</if>
+            <if test="price != null">price = #{price},</if>
+            <if test="active != null">is_active = #{active},</if>
+            <if test="memo != null">memo = #{memo},</if>
+            <if test="lockedAt != null">locked_at = #{lockedAt},</if>
+            updated_at = NOW(),
+        </set>
+        WHERE booth_slot_id = #{boothSlotId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM booth_slots WHERE booth_slot_id = #{boothSlotId}
+    </delete>
+
+</mapper>

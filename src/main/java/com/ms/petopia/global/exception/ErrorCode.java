@@ -30,6 +30,13 @@ public enum ErrorCode {
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
 
+    // ===== Fair =====
+    FAIR_INVALID_VENDOR_RECRUIT_PERIOD(HttpStatus.BAD_REQUEST, "F001", "참가업체 모집 종료일이 시작일보다 빠릅니다."),
+    FAIR_INVALID_RESERVATION_PERIOD(HttpStatus.BAD_REQUEST, "F002", "예약 기간 종료일이 시작일보다 빠릅니다."),
+    FAIR_INVALID_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F003", "행사 운영 종료일이 시작일보다 빠릅니다."),
+    FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "F004", "존재하지 않는 행사입니다."),
+    HALL_NOT_FOUND(HttpStatus.NOT_FOUND, "F005", "존재하지 않는 홀이거나 해당 행사의 홀이 아닙니다."),
+
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
     RESERVATION_DATE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "R002", "예약할 수 없는 방문 날짜입니다."),
