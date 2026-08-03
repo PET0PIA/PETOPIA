@@ -20,6 +20,7 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     // MyBatis는 Spring Boot BOM이 버전을 관리하지 않으므로 직접 명시한다. 4.1.0은 Boot 4.1.0 기준으로 빌드됐다.
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.1.0'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
@@ -48,8 +49,8 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
 
-    //Bean Validation 어노테이션을 위한 의존성(@NotBlank, @Email 등)
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // 이메일 발송을 위한 의존성
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
 }
 
 tasks.named('test') {
