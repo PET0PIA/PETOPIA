@@ -57,7 +57,11 @@ public enum ErrorCode {
     ENTRY_QR_NOT_FOUND(HttpStatus.NOT_FOUND, "R015", "유효한 입장 QR을 찾을 수 없습니다."),
     ENTRY_QR_NOT_AVAILABLE(HttpStatus.CONFLICT, "R016", "현재 사용할 수 없는 입장 QR입니다."),
     ENTRY_FAIR_MISMATCH(HttpStatus.FORBIDDEN, "R017", "해당 행사의 입장 QR이 아닙니다."),
-    RESERVATION_CHANGE_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R018", "방문 날짜 변경 가능 시간이 지났습니다.")
+    RESERVATION_CHANGE_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R018", "방문 날짜 변경 가능 시간이 지났습니다."),
+
+    // ===== Notification =====
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),
+    NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "N002", "해당 알림에 접근 권한이 없습니다."),
     ;
 
     private final HttpStatus httpStatus;
