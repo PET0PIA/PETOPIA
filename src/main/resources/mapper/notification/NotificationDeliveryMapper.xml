@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.notification.mapper.NotificationDeliveryMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="deliveryId">
+        INSERT INTO notification_delivery(
+            notification_id, channel, status, recipient_contact, created_at
+        ) VALUES(
+            #{notificationId}, #{channel}, #{status}, #{recipientContact}, NOW()
+        )
+    </insert>
+
+    <select id="selectByNotificationId" resultType="NotificationDelivery">
+        SELECT *
+        FROM notification_delivery
+        WHERE notification_id = #{notificationId}
+    </select>
+
+    <select id="selectByNotificationIdAndChannel" resultType="NotificationDelivery">
+        SELECT *
+        FROM notification_delivery
+        WHERE notification_id = #{notificationId}
+        AND channel = #{channel}
+    </select>
+
+    <select id="selectByStatus" resultType="NotificationDelivery">
+        SELECT *
+        FROM notification_delivery
+        WHERE status = #{status}
+    </select>
+
+    <update id="updateStatus">
+        UPDATE notification_delivery
+        SET status = #{status}
+            , sent_at = #{sentAt}
+            , fail_reason = #{failReason}
+        WHERE delivery_id = #{deliveryId}
+    </update>
+
+    <update id="updateReadAt">
+        UPDATE notification_delivery
+        SET read_at = #{readAt}
+        WHERE delivery_id = #{deliveryId}
+            AND channel = 'IN_APP'
+    </update>
+
+    <!--
+        인앱 알림 미읽음 수 : notification 조인해서 user_id 필터링
+        read_at IS NULL = 아직 안 읽은 것
+    -->
+    <select id="countUnreadInApp" resultType="int">
+        SELECT COUNT(*)
+        FROM notification_delivery nd
+        JOIN notification n ON n.notification_id = nd.notification_id
+        WHERE n.user_id = #{userId}
+            AND nd.channel = 'IN_APP'
+            AND nd.read_at IS NULL
+    </select>
+</mapper>
