@@ -3,6 +3,7 @@ package com.ms.petopia.api.notification.controller;
 import tools.jackson.databind.ObjectMapper;
 import com.ms.petopia.api.notification.dto.*;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +27,9 @@ class NotificationControllerTest {
 
     // Spring Boot 4.x는 @MockBean 대신 @MockitoBean 사용
     @MockitoBean NotificationService notificationService;
+    // SecurityConfig → JwtAuthenticationFilter → JwtTokenProvider 의존 체인.
+    // @WebMvcTest는 일반 @Component를 스캔하지 않으므로 mock으로 등록해야 컨텍스트가 뜬다.
+    @MockitoBean JwtTokenProvider jwtTokenProvider;
 
     @Test
     @DisplayName("POST /api/notifications → 201 Created + notificationId 반환")

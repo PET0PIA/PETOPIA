@@ -15,6 +15,7 @@ public class NotificationDelivery {
     private Long notificationId;
     private DeliveryChannel channel;
     private DeliveryStatus status;
+    @ToString.Exclude
     private String recipientContact; // IN_APP은 NULL
     private LocalDateTime sentAt;
     private String failReason;

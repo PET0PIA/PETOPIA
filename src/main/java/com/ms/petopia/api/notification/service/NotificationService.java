@@ -8,11 +8,14 @@ import com.ms.petopia.api.notification.dto.Notification;
 import com.ms.petopia.api.notification.dto.NotificationDelivery;
 import com.ms.petopia.api.notification.mapper.NotificationDeliveryMapper;
 import com.ms.petopia.api.notification.mapper.NotificationMapper;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +27,14 @@ public class NotificationService {
 
     @Transactional
     public SaveNotificationResponse save(SaveNotificationRequest request) {
+        if (request.channels().size() != new HashSet<>(request.channels()).size()) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE, "channels에 중복된 값이 있습니다");
+        }
+        if (request.channels().contains(DeliveryChannel.EMAIL) &&
+                (request.recipientContact() == null || request.recipientContact().isBlank())) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE, "EMAIL 채널 사용 시 recipientContact는 필수입니다");
+        }
+
         Notification notification = Notification.builder()
                 .userId(request.userId())
                 .recipientType(request.recipientType())
