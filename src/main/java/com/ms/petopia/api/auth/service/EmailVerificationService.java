@@ -23,18 +23,20 @@ public class EmailVerificationService {
 
     //회원가입 인증 코드 발급
     public void issueAndSend(User user) {
-        //TokenHashUtil.generateRawToken()으로 원본 토큰 생성
-        String rawToken = TokenHashUtil.generateRawToken();
+        //TokenHashUtil.generateVerificationCode()로 원본 코드 생성 (6자리, 대문자+숫자)
+        String rawToken = TokenHashUtil.generateVerificationCode();
 
         //TokenHashUtil.sha256(rawToken)으로 해시값 생성
         String tokenHash = TokenHashUtil.sha256(rawToken);
 
         //UserToken.builder()로 저장할 객체 만들기
+        LocalDateTime now = LocalDateTime.now();
         UserToken userToken = UserToken.builder()
                 .userId(user.getUserId())
                 .tokenHash(tokenHash)
                 .purpose(PURPOSE_EMAIL_VERIFY)
-                .expiresAt(LocalDateTime.now().plusMinutes(EXPIRATION_MINUTES))
+                .createdAt(now)
+                .expiresAt(now.plusMinutes(EXPIRATION_MINUTES))
                 .build();
 
         //DB에 저장

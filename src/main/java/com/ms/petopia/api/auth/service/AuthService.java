@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -39,6 +41,7 @@ public class AuthService {
                 .agreedPrivacy(request.getAgreedPrivacy())
                 .role("USER")
                 .status("ACTIVE")
+                .createdAt(LocalDateTime.now())
                 .build();
 
         authMapper.insertUser(user);

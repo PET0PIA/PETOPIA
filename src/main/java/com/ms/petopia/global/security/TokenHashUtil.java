@@ -12,6 +12,10 @@ public final class TokenHashUtil {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
+    // 대문자+숫자 중 헷갈리는 문자(0/O, 1/I/L) 제외. 사람이 직접 입력하는 인증 코드용.
+    private static final String CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+    private static final int CODE_LENGTH = 6;
+
     private TokenHashUtil() {
     }
 
@@ -20,6 +24,17 @@ public final class TokenHashUtil {
         byte[] bytes = new byte[32];
         SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    // 6자리 인증 코드 생성
+    // generateRawToken() 너무 길어 6자리로 수정.
+    //TODO 시도 횟수 제한 추가 할지말지
+    public static String generateVerificationCode() {
+        StringBuilder code = new StringBuilder(CODE_LENGTH);
+        for (int i = 0; i < CODE_LENGTH; i++) {
+            code.append(CODE_ALPHABET.charAt(SECURE_RANDOM.nextInt(CODE_ALPHABET.length())));
+        }
+        return code.toString();
     }
 
     // 원본 토큰 -> SHA-256 해시(16진수 64자). DB엔 이 값만 저장한다.

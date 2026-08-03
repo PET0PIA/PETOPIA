@@ -30,6 +30,7 @@
              , role
              , status
              , email_verified
+             , created_at
         ) VALUES (
                #{email}
              , #{passwordHash}
@@ -43,6 +44,7 @@
              , #{role}
              , #{status}
              , #{emailVerified}
+             , #{createdAt}
         )
     </insert>
 
@@ -56,11 +58,13 @@
              , token_hash
              , purpose
              , expires_at
+             , created_at
         ) VALUES (
                #{userId}
              , #{tokenHash}
              , #{purpose}
              , #{expiresAt}
+             , #{createdAt}
         )
     </insert>
 
