@@ -23,6 +23,15 @@ spring:
           min-idle: 0
           max-wait: 3s
 
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${GMAIL_USERNAME:}
+    password: ${GMAIL_APP_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
 logging:
   level:
     # 매퍼 인터페이스가 이 패키지 아래에 있으므로 실행 SQL이 함께 찍힌다.
