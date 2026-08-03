@@ -3,6 +3,7 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper">
+
     <resultMap id="recruitNoticeResultMap" type="com.ms.petopia.api.recruitnotice.domain.RecruitNotice">
         <id property="recruitNoticeId" column="recruit_notice_id" />
         <result property="writerId" column="writer_id" />
@@ -42,6 +43,14 @@
     <select id="selectAdminUserIdByFairId" parameterType="long" resultType="long">
         SELECT admin_user_id
         FROM fair_admin_assignments
+        WHERE fair_id = #{fairId}
+    </select>
+
+    <!-- 이 행사(fairId)의 취소/종료 여부 조회. 모집 공고 마감(closed) 판정에 사용 -->
+    <select id="selectFairStatusByFairId" parameterType="long"
+            resultType="com.ms.petopia.api.recruitnotice.domain.FairStatusInfo">
+        SELECT canceled_at AS canceledAt, status
+        FROM fairs
         WHERE fair_id = #{fairId}
     </select>
 

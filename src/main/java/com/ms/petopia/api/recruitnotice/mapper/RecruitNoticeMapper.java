@@ -1,5 +1,6 @@
 package com.ms.petopia.api.recruitnotice.mapper;
 
+import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import org.apache.ibatis.annotations.Mapper;
 
@@ -14,5 +15,8 @@ public interface RecruitNoticeMapper {
 
     // fair_admin_assignments에서 이 행사의 담당 EVENT_ADMIN 조회 (참조용)
     Long selectAdminUserIdByFairId(Long fairId);
+
+    // 행사 취소/종료 상태 조회 (모집 공고 마감 판정용)
+    FairStatusInfo selectFairStatusByFairId(Long fairId);
 
 }
