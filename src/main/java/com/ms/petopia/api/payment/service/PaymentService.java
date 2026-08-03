@@ -2,11 +2,16 @@ package com.ms.petopia.api.payment.service;
 
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.PaymentRow;
+import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DuplicateKeyException;
+
+import java.time.LocalDateTime;
 
 /**
  * 결제 조회를 담당하는 서비스.
@@ -32,4 +37,43 @@ public class PaymentService {
         }
         return PaymentResponse.from(row);
     }
+
+    /**
+     * 참가비 결제를 생성한다. application 테이블은 조회하지 않으므로(애그리거트 간
+     * ID 참조 원칙 유지) 금액·소속 정보는 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
+     *
+     * <p>동일 참가신청에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
+     * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 참가신청일 때
+     */
+
+    @Transactional
+    public PaymentResponse payVendorFee(Long applicationId, VendorFeePaymentRequest request) {
+        LocalDateTime now = LocalDateTime.now();
+
+        PaymentRow row = new PaymentRow();
+        row.setPaymentType("VENDOR_FEE");
+        row.setAmount(request.amount());
+        row.setStatus("COMPLETED");
+        row.setMethod("MOCK");
+        row.setIdempotencyKey("VENDOR_FEE_" + applicationId);
+        row.setPaidAt(now);
+        row.setCreatedAt(now);
+        row.setUpdatedAt(now);
+        row.setFairId(request.fairId());
+        row.setBusinessId(request.businessId());
+        row.setApplicationId(applicationId);
+
+        try {
+            paymentMapper.insert(row);
+        } catch (DuplicateKeyException e) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        return PaymentResponse.from(row);
+    }
+
+
+
 }
