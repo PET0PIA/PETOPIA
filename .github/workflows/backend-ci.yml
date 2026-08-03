@@ -59,43 +59,25 @@ jobs:
       # local 로 뜨므로(application.yaml 의 profiles.default), 이 값이 없으면
       # @SpringBootTest 가 전부 컨텍스트 로딩 단계에서 실패한다.
       #
-      # step 이 아니라 job 레벨에 두는 이유: 테스트(러너의 JVM)와 스모크 테스트
-      # (release 프로필 컨테이너)가 같은 값을 써야 하고, 주입 지점을 하나로 묶어야
-      # 한쪽만 빠뜨리는 사고가 안 난다.
-      JWT_SECRET: ${{ secrets.JWT_SECRET }}
-
-    steps:
-      # 값 검증을 맨 앞에 둔다. 이 job 에서 유일하게 "실패가 확정인데 20분을 태우는"
-      # 종류의 오류이기 때문이다. 증상이 테스트 실패가 아니라 전 테스트 클래스의
-      # 컨텍스트 로딩 실패로 나타나서 원인도 잘 안 보인다.
+      # 저장소 Secret 이 아니라 리터럴인 이유는 아래 ENTRY_QR_SECRET 과 같다.
+      # CI 가 이 값에 요구하는 것은 "컨텍스트가 뜬다" 뿐이고, 특정 키로 서명을
+      # 검증하는 테스트는 없다. 반대로 Secret 으로 두면 pull_request 는 같은
+      # 저장소 브랜치일 때 Secret 이 주입되므로, PR 의 임의 코드가 이 job 에서
+      # 운영 서명 키를 쥔 채 실행된다. 운영 값은 SSM Parameter Store 에만 둔다.
       #
-      # JwtTokenProvider 생성자가 Decoders.BASE64.decode(secret) 결과를
-      # Keys.hmacShaKeyFor 에 넘긴다. 그래서 조건이 두 개다.
+      # 값의 제약은 JwtTokenProvider 생성자에서 온다.
+      # Decoders.BASE64.decode(secret) 결과를 Keys.hmacShaKeyFor 에 넘기므로
       #   1) 유효한 Base64 여야 한다.        아니면 DecodingException
       #   2) 디코드 결과가 32바이트 이상.     아니면 WeakKeyException (HS256 = 256비트)
-      # 둘 다 기동 시점 예외라 "값이 없을 때"와 증상이 똑같다. 여기서 1초 만에 끊는다.
+      # 아래 값은 "ci-only-jwt-signing-key-not-for-production"(42바이트)의 Base64 다.
+      # 바꿀 일이 생기면 `openssl rand -base64 32` 로 만든다.
       #
-      # 값은 저장소 Secret(JWT_SECRET)에서 온다. 포크 PR 에는 Secret 이 주입되지
-      # 않아 이 단계에서 멈추는데, 이 저장소는 포크 PR 을 받지 않으므로 그대로 둔다.
-      - name: JWT_SECRET 확인
-        run: |
-          set -uo pipefail
-          if [ -z "${JWT_SECRET:-}" ]; then
-            echo "::error title=JWT_SECRET 없음::저장소 Secret 에 JWT_SECRET 이 없다. Settings > Secrets and variables > Actions 에서 추가한다. 값은 openssl rand -base64 32 로 만든다."
-            exit 1
-          fi
-          # 값 자체는 절대 출력하지 않는다. 디코드한 바이트 수만 센다.
-          # pipefail 을 켜 두었으므로 base64 가 실패하면 이 치환도 실패한다.
-          if ! bytes=$(printf '%s' "$JWT_SECRET" | base64 -d 2>/dev/null | wc -c | tr -d ' '); then
-            echo "::error title=JWT_SECRET 부적합::Base64 문자열이 아니다. JwtTokenProvider 가 Decoders.BASE64.decode 로 읽으므로 기동 시 DecodingException 이 난다. openssl rand -base64 32 로 만든 값을 넣는다."
-            exit 1
-          fi
-          if [ "$bytes" -lt 32 ]; then
-            echo "::error title=JWT_SECRET 부적합::Base64 디코드 결과가 32바이트 이상이어야 한다(현재 ${bytes}바이트). HS256 서명 키가 256비트를 요구해 Keys.hmacShaKeyFor 가 WeakKeyException 을 던진다. openssl rand -base64 32 로 다시 만든다."
-            exit 1
-          fi
-          echo "JWT_SECRET 확인 완료 (디코드 ${bytes}바이트)"
+      # job 레벨에 두는 이유: 테스트(러너의 JVM)와 스모크 테스트(release 프로필
+      # 컨테이너)가 같은 값을 써야 하고, 주입 지점을 하나로 묶어야 한쪽만
+      # 빠뜨리는 사고가 안 난다.
+      JWT_SECRET: Y2ktb25seS1qd3Qtc2lnbmluZy1rZXktbm90LWZvci1wcm9kdWN0aW9u
 
+    steps:
       - name: 체크아웃
         uses: actions/checkout@v4
         with:
@@ -223,13 +205,13 @@ jobs:
         run: |
           set -uo pipefail
 
-          # 아래 리터럴 값들은 CI 전용이다. compose 의 로컬 계정과 일치시킨 것이고,
+          # 이 값들은 CI 전용이다. compose 의 로컬 계정과 일치시킨 것이고,
           # 러너 안에서만 살다 사라지는 컨테이너에 쓰인다.
           # ENTRY_QR_SECRET 은 32자 이상이어야 기동한다는 제약만 만족시키면 된다.
           #
-          # JWT_SECRET 만 예외로 job env(저장소 Secret)에서 그대로 넘긴다.
-          # -e 뒤에 =값 없이 이름만 적으면 러너의 환경변수가 컨테이너로 전달된다.
-          # 값을 명령줄에 적지 않으므로 셸 인용 사고도, 로그 노출 경로도 없다.
+          # JWT_SECRET 만 job env 에서 넘긴다. -e 뒤에 =값 없이 이름만 적으면
+          # 러너의 환경변수가 그대로 컨테이너로 전달된다. 값이 두 군데에 적히지
+          # 않아 어긋날 일이 없고, docker 명령행에도 남지 않는다.
           # release 프로필의 jwt.secret 에도 기본값이 없어, 이게 빠지면
           # 스모크 테스트가 "컨테이너가 죽었다" 로만 실패한다.
           docker run -d --name petopia-app-ci --network host \
