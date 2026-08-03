@@ -50,6 +50,9 @@ dependencies {
 
     //Bean Validation 어노테이션을 위한 의존성(@NotBlank, @Email 등)
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    //이메일 발송 (회원가입 인증 메일)
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
 }
 
 tasks.named('test') {
