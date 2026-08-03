@@ -45,3 +45,7 @@ out/
 
 
 .claude.*
+
+### 내부 기획 문서 (GitHub에 푸시하지 않음) ###
+# 원본 기획서와 도메인별 개인 작업 요약은 docs/internal/에 보관한다.
+/docs/internal/

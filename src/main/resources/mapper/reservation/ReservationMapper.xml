@@ -4,6 +4,65 @@
 
 <mapper namespace="com.ms.petopia.api.reservation.mapper.ReservationMapper">
 
+    <select id="selectAvailabilityFair" resultType="ReservationAvailabilityFair">
+        SELECT fair_id
+             , reservation_fee
+             , reservation_start_date
+             , reservation_end_date
+             , published_at
+             , canceled_at
+          FROM fairs
+         WHERE fair_id = #{fairId}
+    </select>
+
+    <select id="selectAvailabilityDates" resultType="ReservationAvailabilityDateRow">
+        SELECT fd.operation_date AS visit_date
+             , fd.entry_start_time
+             , fd.entry_end_time
+             , fd.capacity
+             , COUNT(r.reservation_id) AS occupied_count
+          FROM fair_dates fd
+     LEFT JOIN reservations r
+            ON r.fair_id = fd.fair_id
+           AND r.visit_date = fd.operation_date
+           AND r.reservation_type = 'ADVANCE'
+           AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
+         WHERE fd.fair_id = #{fairId}
+           AND fd.operation_date >= #{today}
+         GROUP BY fd.fair_date_id, fd.operation_date, fd.entry_start_time, fd.entry_end_time, fd.capacity
+         ORDER BY fd.operation_date ASC
+    </select>
+
+    <select id="selectMyReservations" resultType="ReservationListRow">
+        SELECT r.reservation_id
+             , f.name AS fair_name
+             , f.poster_image_url AS fair_poster_image_url
+             , r.visit_date
+             , fd.entry_start_time
+             , fd.entry_end_time
+             , r.status AS reservation_status
+             , r.reservation_amount AS amount
+             , r.reserved_at
+             , er.first_checked_in_at AS checked_in_at
+          FROM reservations r
+          JOIN fairs f
+            ON f.fair_id = r.fair_id
+          JOIN fair_dates fd
+            ON fd.fair_id = r.fair_id
+           AND fd.operation_date = r.visit_date
+     LEFT JOIN entry_records er
+            ON er.reservation_id = r.reservation_id
+         WHERE r.user_id = #{userId}
+         ORDER BY r.created_at DESC, r.reservation_id DESC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countMyReservations" resultType="long">
+        SELECT COUNT(*)
+          FROM reservations
+         WHERE user_id = #{userId}
+    </select>
+
     <!--
         같은 운영일의 예약 생성 요청을 직렬화하는 잠금 기준점이다.
         정원 확인과 INSERT는 반드시 이 조회와 같은 트랜잭션에서 실행한다.

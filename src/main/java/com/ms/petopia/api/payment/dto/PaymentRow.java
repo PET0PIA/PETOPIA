@@ -30,4 +30,9 @@ public class PaymentRow {
     private Long payerUserId;
     private Long reservationId;
     private Long applicationId;
+
+    //멱득성-같은요청을 여러번 보내도 결과가 딱 한 번 처리한 것과 같아야하는
+    // 그걸 구현하는 실제컬럼
+    private String idempotencyKey;
+    private LocalDateTime updatedAt;
 }

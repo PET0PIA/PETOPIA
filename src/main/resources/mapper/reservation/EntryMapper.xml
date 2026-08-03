@@ -6,6 +6,9 @@
 
     <select id="selectQrIssueContext" resultType="EntryQrIssueContext">
         SELECT r.reservation_id
+             , r.fair_id
+             , r.user_id
+             , r.reservation_type
              , r.status AS reservation_status
              , r.visit_date
              , fd.entry_start_time
@@ -24,6 +27,14 @@
              WHERE reservation_id = #{reservationId}
         )
     </select>
+
+    <update id="updateEntryQrAvailability">
+        UPDATE entry_qrs
+           SET available_from = #{availableFrom}
+             , expires_at = #{expiresAt}
+             , updated_at = #{now}
+         WHERE reservation_id = #{reservationId}
+    </update>
 
     <insert id="insertEntryQr">
         INSERT INTO entry_qrs (
@@ -48,6 +59,120 @@
              , NULL
              , #{now}
              , #{now}
+        )
+    </insert>
+
+    <select id="selectQrForUpdate" resultType="EntryQrScanContext">
+        SELECT eq.entry_qr_id
+             , r.reservation_id
+             , r.fair_id
+             , r.user_id
+             , r.reservation_type
+             , r.status AS reservation_status
+             , eq.available_from
+             , eq.expires_at
+             , er.entry_record_id
+             , er.first_checked_in_at
+          FROM entry_qrs eq
+          JOIN reservations r
+            ON r.reservation_id = eq.reservation_id
+          LEFT JOIN entry_records er
+            ON er.reservation_id = r.reservation_id
+         WHERE eq.token_hash = #{tokenHash}
+         FOR UPDATE
+    </select>
+
+    <insert id="insertEntryRecord">
+        INSERT INTO entry_records (
+               fair_id
+             , reservation_id
+             , user_id
+             , entry_source
+             , first_checked_in_at
+             , last_scanned_at
+             , scan_count
+             , first_processed_by
+             , first_gate_name
+             , created_at
+             , updated_at
+        ) VALUES (
+               #{fairId}
+             , #{reservationId}
+             , #{userId}
+             , #{entrySource}
+             , #{checkedInAt}
+             , #{checkedInAt}
+             , 1
+             , #{processedBy}
+             , #{gateName}
+             , #{checkedInAt}
+             , #{checkedInAt}
+        )
+    </insert>
+
+    <update id="updateEntryRecordForRescan">
+        UPDATE entry_records
+           SET last_scanned_at = #{scannedAt}
+             , scan_count = scan_count + 1
+             , updated_at = #{scannedAt}
+         WHERE entry_record_id = #{entryRecordId}
+    </update>
+
+    <update id="markReservationCheckedIn">
+        UPDATE reservations
+           SET status = 'CHECKED_IN'
+             , updated_at = #{now}
+         WHERE reservation_id = #{reservationId}
+           AND status = 'CONFIRMED'
+    </update>
+
+    <insert id="insertCheckedInHistory">
+        INSERT INTO reservation_histories (
+               reservation_id
+             , action_type
+             , before_data
+             , after_data
+             , changed_by
+             , actor_type
+             , is_admin_action
+             , change_reason
+             , created_at
+        ) VALUES (
+               #{reservationId}
+             , 'CHECKED_IN'
+             , JSON_OBJECT('status', 'CONFIRMED')
+             , JSON_OBJECT('status', 'CHECKED_IN')
+             , #{processedBy}
+             , 'ADMIN'
+             , TRUE
+             , NULL
+             , #{now}
+        )
+    </insert>
+
+    <insert id="insertGateScanLog">
+        INSERT INTO entry_scan_logs (
+               entry_qr_id
+             , reservation_id
+             , fair_id
+             , scan_type
+             , result_code
+             , scanned_at
+             , processed_by
+             , gate_name
+             , device_info
+             , created_at
+        ) VALUES (
+               #{entryQrId}
+             , #{reservationId}
+             , #{fairId}
+             , 'GATE'
+             , #{resultCode}
+             , #{scannedAt}
+             , #{processedBy}
+             , #{gateName}
+             , #{deviceInfo}
+             , #{scannedAt}
         )
     </insert>
 

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fair.mapper.FairMapper">
+
+    <!--
+        status/reservation_fee는 DDL에 DEFAULT가 걸려 있어(status DEFAULT 'RECEIVED',
+        reservation_fee DEFAULT 0) Java 쪽에서 값을 안 채워도 되게 <if>로 뺐다.
+        applicant_user_id/name/manager_name/manager_email/created_at/updated_at은
+        DDL상 NOT NULL이고 기본값도 없어 서비스 레이어가 항상 채워 넣는다는 전제로 고정 바인딩한다.
+        reject_reason/reviewed_by/reviewed_at/published_at/canceled_at은 신청 시점에는
+        의미가 없는 값이라 insert 대상에서 아예 뺐다(update에서만 채운다).
+    -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="fairId" keyColumn="fair_id">
+        INSERT INTO fairs
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            applicant_user_id, name, manager_name, manager_email, created_at, updated_at,
+            <if test="description != null">description,</if>
+            <if test="category != null">category,</if>
+            <if test="posterImageUrl != null">poster_image_url,</if>
+            <if test="noticeText != null">notice_text,</if>
+            <if test="placeName != null">place_name,</if>
+            <if test="address != null">address,</if>
+            <if test="indoorOutdoor != null">indoor_outdoor,</if>
+            <if test="vendorRecruitStartDate != null">vendor_recruit_start_date,</if>
+            <if test="vendorRecruitEndDate != null">vendor_recruit_end_date,</if>
+            <if test="reservationStartDate != null">reservation_start_date,</if>
+            <if test="reservationEndDate != null">reservation_end_date,</if>
+            <if test="operationStartDate != null">operation_start_date,</if>
+            <if test="operationEndDate != null">operation_end_date,</if>
+            <if test="reservationFee != null">reservation_fee,</if>
+            <if test="reservationCancelDeadlineHours != null">reservation_cancel_deadline_hours,</if>
+            <if test="reservationChangeDeadlineHours != null">reservation_change_deadline_hours,</if>
+            <if test="managerPhone != null">manager_phone,</if>
+            <if test="status != null">status,</if>
+            <if test="paymentDueAt != null">payment_due_at,</if>
+            <if test="publicScheduledAt != null">public_scheduled_at,</if>
+            <if test="submittedSnapshot != null">submitted_snapshot,</if>
+        </trim>
+        <trim prefix="VALUES (" suffix=")" suffixOverrides=",">
+            #{applicantUserId}, #{name}, #{managerName}, #{managerEmail}, #{createdAt}, #{updatedAt},
+            <if test="description != null">#{description},</if>
+            <if test="category != null">#{category},</if>
+            <if test="posterImageUrl != null">#{posterImageUrl},</if>
+            <if test="noticeText != null">#{noticeText},</if>
+            <if test="placeName != null">#{placeName},</if>
+            <if test="address != null">#{address},</if>
+            <if test="indoorOutdoor != null">#{indoorOutdoor},</if>
+            <if test="vendorRecruitStartDate != null">#{vendorRecruitStartDate},</if>
+            <if test="vendorRecruitEndDate != null">#{vendorRecruitEndDate},</if>
+            <if test="reservationStartDate != null">#{reservationStartDate},</if>
+            <if test="reservationEndDate != null">#{reservationEndDate},</if>
+            <if test="operationStartDate != null">#{operationStartDate},</if>
+            <if test="operationEndDate != null">#{operationEndDate},</if>
+            <if test="reservationFee != null">#{reservationFee},</if>
+            <if test="reservationCancelDeadlineHours != null">#{reservationCancelDeadlineHours},</if>
+            <if test="reservationChangeDeadlineHours != null">#{reservationChangeDeadlineHours},</if>
+            <if test="managerPhone != null">#{managerPhone},</if>
+            <if test="status != null">#{status},</if>
+            <if test="paymentDueAt != null">#{paymentDueAt},</if>
+            <if test="publicScheduledAt != null">#{publicScheduledAt},</if>
+            <if test="submittedSnapshot != null">#{submittedSnapshot},</if>
+        </trim>
+    </insert>
+
+    <select id="selectById" resultType="Fair">
+        SELECT fair_id, applicant_user_id, name, description, category, poster_image_url, notice_text,
+               place_name, address, indoor_outdoor,
+               vendor_recruit_start_date, vendor_recruit_end_date,
+               reservation_start_date, reservation_end_date,
+               operation_start_date, operation_end_date,
+               reservation_fee, reservation_cancel_deadline_hours, reservation_change_deadline_hours,
+               manager_name, manager_phone, manager_email,
+               status, reject_reason, reviewed_by, reviewed_at,
+               payment_due_at, public_scheduled_at, published_at, canceled_at,
+               submitted_snapshot, created_at, updated_at
+          FROM fairs
+         WHERE fair_id = #{fairId}
+    </select>
+
+    <!--
+        null이 아닌 필드만 갱신한다(승인/반려/재제출마다 채우는 필드가 달라서 범용으로 둠).
+        updated_at은 호출부 값과 무관하게 항상 NOW()로 덮어쓴다.
+        applicant_user_id, created_at은 갱신 대상에서 제외한다.
+    -->
+    <update id="update">
+        UPDATE fairs
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="category != null">category = #{category},</if>
+            <if test="posterImageUrl != null">poster_image_url = #{posterImageUrl},</if>
+            <if test="noticeText != null">notice_text = #{noticeText},</if>
+            <if test="placeName != null">place_name = #{placeName},</if>
+            <if test="address != null">address = #{address},</if>
+            <if test="indoorOutdoor != null">indoor_outdoor = #{indoorOutdoor},</if>
+            <if test="vendorRecruitStartDate != null">vendor_recruit_start_date = #{vendorRecruitStartDate},</if>
+            <if test="vendorRecruitEndDate != null">vendor_recruit_end_date = #{vendorRecruitEndDate},</if>
+            <if test="reservationStartDate != null">reservation_start_date = #{reservationStartDate},</if>
+            <if test="reservationEndDate != null">reservation_end_date = #{reservationEndDate},</if>
+            <if test="operationStartDate != null">operation_start_date = #{operationStartDate},</if>
+            <if test="operationEndDate != null">operation_end_date = #{operationEndDate},</if>
+            <if test="reservationFee != null">reservation_fee = #{reservationFee},</if>
+            <if test="reservationCancelDeadlineHours != null">reservation_cancel_deadline_hours = #{reservationCancelDeadlineHours},</if>
+            <if test="reservationChangeDeadlineHours != null">reservation_change_deadline_hours = #{reservationChangeDeadlineHours},</if>
+            <if test="managerName != null">manager_name = #{managerName},</if>
+            <if test="managerPhone != null">manager_phone = #{managerPhone},</if>
+            <if test="managerEmail != null">manager_email = #{managerEmail},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="rejectReason != null">reject_reason = #{rejectReason},</if>
+            <if test="reviewedBy != null">reviewed_by = #{reviewedBy},</if>
+            <if test="reviewedAt != null">reviewed_at = #{reviewedAt},</if>
+            <if test="paymentDueAt != null">payment_due_at = #{paymentDueAt},</if>
+            <if test="publicScheduledAt != null">public_scheduled_at = #{publicScheduledAt},</if>
+            <if test="publishedAt != null">published_at = #{publishedAt},</if>
+            <if test="canceledAt != null">canceled_at = #{canceledAt},</if>
+            <if test="submittedSnapshot != null">submitted_snapshot = #{submittedSnapshot},</if>
+            updated_at = NOW(),
+        </set>
+        WHERE fair_id = #{fairId}
+    </update>
+
+</mapper>
