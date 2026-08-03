@@ -10,6 +10,9 @@ import java.time.LocalTime;
 @Setter
 public class EntryQrIssueContext {
     private Long reservationId;
+    private Long fairId;
+    private Long userId;
+    private String reservationType;
     private String reservationStatus;
     private LocalDate visitDate;
     private LocalTime entryStartTime;

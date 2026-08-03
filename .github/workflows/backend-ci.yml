@@ -58,6 +58,28 @@ jobs:
     env:
       # 컨테이너(TZ=Asia/Seoul)와 JDBC serverTimezone=Asia/Seoul 에 JVM 기본 시간대를 맞춘다.
       TZ: Asia/Seoul
+      # jwt.secret 은 application-local.yaml / application-release.yaml 양쪽 모두
+      # 기본값 없이 ${JWT_SECRET} 로만 적혀 있다. 테스트는 프로필을 지정하지 않아
+      # local 로 뜨므로(application.yaml 의 profiles.default), 이 값이 없으면
+      # @SpringBootTest 가 전부 컨텍스트 로딩 단계에서 실패한다.
+      #
+      # 저장소 Secret 이 아니라 리터럴인 이유는 아래 ENTRY_QR_SECRET 과 같다.
+      # CI 가 이 값에 요구하는 것은 "컨텍스트가 뜬다" 뿐이고, 특정 키로 서명을
+      # 검증하는 테스트는 없다. 반대로 Secret 으로 두면 pull_request 는 같은
+      # 저장소 브랜치일 때 Secret 이 주입되므로, PR 의 임의 코드가 이 job 에서
+      # 운영 서명 키를 쥔 채 실행된다. 운영 값은 SSM Parameter Store 에만 둔다.
+      #
+      # 값의 제약은 JwtTokenProvider 생성자에서 온다.
+      # Decoders.BASE64.decode(secret) 결과를 Keys.hmacShaKeyFor 에 넘기므로
+      #   1) 유효한 Base64 여야 한다.        아니면 DecodingException
+      #   2) 디코드 결과가 32바이트 이상.     아니면 WeakKeyException (HS256 = 256비트)
+      # 아래 값은 "ci-only-jwt-signing-key-not-for-production"(42바이트)의 Base64 다.
+      # 바꿀 일이 생기면 `openssl rand -base64 32` 로 만든다.
+      #
+      # job 레벨에 두는 이유: 테스트(러너의 JVM)와 스모크 테스트(release 프로필
+      # 컨테이너)가 같은 값을 써야 하고, 주입 지점을 하나로 묶어야 한쪽만
+      # 빠뜨리는 사고가 안 난다.
+      JWT_SECRET: Y2ktb25seS1qd3Qtc2lnbmluZy1rZXktbm90LWZvci1wcm9kdWN0aW9u
 
     steps:
       - name: 체크아웃
@@ -190,6 +212,12 @@ jobs:
           # 이 값들은 CI 전용이다. compose 의 로컬 계정과 일치시킨 것이고,
           # 러너 안에서만 살다 사라지는 컨테이너에 쓰인다.
           # ENTRY_QR_SECRET 은 32자 이상이어야 기동한다는 제약만 만족시키면 된다.
+          #
+          # JWT_SECRET 만 job env 에서 넘긴다. -e 뒤에 =값 없이 이름만 적으면
+          # 러너의 환경변수가 그대로 컨테이너로 전달된다. 값이 두 군데에 적히지
+          # 않아 어긋날 일이 없고, docker 명령행에도 남지 않는다.
+          # release 프로필의 jwt.secret 에도 기본값이 없어, 이게 빠지면
+          # 스모크 테스트가 "컨테이너가 죽었다" 로만 실패한다.
           docker run -d --name petopia-app-ci --network host \
             -e SPRING_PROFILES_ACTIVE=release \
             -e DB_HOST=127.0.0.1 -e DB_PORT=3306 \
@@ -198,6 +226,7 @@ jobs:
             -e REDIS_HOST=127.0.0.1 -e REDIS_PORT=6379 \
             -e REDIS_PASSWORD='rootpassword123!' \
             -e ENTRY_QR_SECRET='ci-smoke-test-secret-not-for-production' \
+            -e JWT_SECRET \
             petopia:ci-${{ github.sha }}
 
           deadline=$(( SECONDS + 120 ))

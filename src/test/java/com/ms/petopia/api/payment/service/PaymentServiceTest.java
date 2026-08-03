@@ -3,6 +3,7 @@ package com.ms.petopia.api.payment.service;
 
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.PaymentRow;
+import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -12,12 +13,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verify;
 
 
 //JUnit5 확장기능,자동으로  Mock초기화,없으면 Mock선언 필드 null처리됨
@@ -83,8 +89,53 @@ class PaymentServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
-        }
+    }
+
+    @Test
+    @DisplayName("참가비 결제를 요청하면 결제가 생성된다")
+    void payVendorFee_결제생성_성공() {
+        // Arrange: application 테이블을 안 보니까, 프론트가 금액/fairId/businessId를 실어서 보낸 상황 흉내
+        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L,20L, 50000L);
+
+        //Act
+        PaymentResponse result = paymentService.payVendorFee(40L,request);
+
+        // Assert: 응답에 요청값·기본값(COMPLETED/MOCK)이 제대로 들어갔는지
+        assertThat(result.paymentType()).isEqualTo("VENDOR_FEE");
+        assertThat(result.amount()).isEqualTo(50000L);
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(result.method()).isEqualTo("MOCK");
+        assertThat(result.fairId()).isEqualTo(10L);
+        assertThat(result.businessId()).isEqualTo(20L);
+        assertThat(result.applicationId()).isEqualTo(40L);
+        assertThat(result.paidAt()).isNotNull();
+
+        // insert가 실제로 호출됐는지 + idempotencyKey가 applicationId 기준으로
+        // 만들어졌는지 확인 (이게 나중에 중복결제를 막아주는 값이라 제대로 세팅되는지가 중요)
+        verify(paymentMapper).insert(argThat(row -> "VENDOR_FEE_40".equals(row.getIdempotencyKey())));
 
     }
+
+    @Test
+    @DisplayName("이미 결제된 참가신청에 다시 결제를 요청하면 예외를 던진다")
+    void payVendorFee_중복결제_예외를던진다() {
+
+        // Arrange: 실제로는 DB의 idempotency_key UNIQUE 제약 위반이
+        // DuplicateKeyException으로 올라옴 — 여기선 insert 호출 시 그 예외를 던지도록
+        // 미리 세팅해서 "이미 결제된 상황"을 흉내냄.
+        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L,20L,50000L);
+        willThrow(new DuplicateKeyException("idempotency key violation"))
+                .given(paymentMapper).insert(any(PaymentRow.class));
+
+        // Act & Assert
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, request))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+
+    }
+
+
+}
 
 

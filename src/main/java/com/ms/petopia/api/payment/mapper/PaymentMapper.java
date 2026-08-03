@@ -18,4 +18,13 @@ public interface PaymentMapper {
      * 서비스 계층의 책임으로 남겨둔다).
      */
     PaymentRow selectById(@Param("paymentId") Long paymentId);
+
+    /**
+     * 결제 한 건을 생성한다. row.idempotencyKey가 이미 존재하면(동일 대상 중복결제)
+     * DB의 UK_PAYMENT_IDEMPOTENCY_KEY 위반으로 DuplicateKeyException이 던져진다 —
+     * 서비스 계층에서 잡아서 비즈니스 예외로 변환한다.
+     *
+     * <p>insert 후 row.paymentId에 생성된 PK가 채워진다(XML의 useGeneratedKeys).
+     */
+    void insert(PaymentRow row);
 }
