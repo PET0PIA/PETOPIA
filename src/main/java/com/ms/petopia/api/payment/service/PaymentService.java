@@ -49,7 +49,7 @@ public class PaymentService {
      */
 
     @Transactional
-    public PaymentResponse payVendorFee(Long applicationId, VendorFeePaymentRequest request) {
+    public PaymentResponse payVendorFee(Long applicationId,Long userId, VendorFeePaymentRequest request) {
         LocalDateTime now = LocalDateTime.now();
 
         PaymentRow row = new PaymentRow();
@@ -63,6 +63,7 @@ public class PaymentService {
         row.setUpdatedAt(now);
         row.setFairId(request.fairId());
         row.setBusinessId(request.businessId());
+        row.setPayerUserId(userId);
         row.setApplicationId(applicationId);
 
         try {

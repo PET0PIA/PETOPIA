@@ -98,7 +98,7 @@ class PaymentServiceTest {
         VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L,20L, 50000L);
 
         //Act
-        PaymentResponse result = paymentService.payVendorFee(40L,request);
+        PaymentResponse result = paymentService.payVendorFee(40L,90L,request);
 
         // Assert: 응답에 요청값·기본값(COMPLETED/MOCK)이 제대로 들어갔는지
         assertThat(result.paymentType()).isEqualTo("VENDOR_FEE");
@@ -128,7 +128,7 @@ class PaymentServiceTest {
                 .given(paymentMapper).insert(any(PaymentRow.class));
 
         // Act & Assert
-        assertThatThrownBy(() -> paymentService.payVendorFee(40L, request))
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L, request))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
