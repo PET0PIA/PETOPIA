@@ -227,6 +227,7 @@ jobs:
             -e REDIS_PASSWORD='rootpassword123!' \
             -e ENTRY_QR_SECRET='ci-smoke-test-secret-not-for-production' \
             -e JWT_SECRET \
+            -e GMAIL_USERNAME='' -e GMAIL_APP_PASSWORD='' \
             petopia:ci-${{ github.sha }}
 
           deadline=$(( SECONDS + 120 ))
