@@ -29,8 +29,7 @@ public enum ErrorCode {
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
-    PAYMENT_TARGET_NOT_FOUND(HttpStatus.NOT_FOUND, "P002", "결제 대상을 찾을 수 없습니다."),
-    PAYMENT_TARGET_NOT_PAYABLE(HttpStatus.CONFLICT, "P003", "결제할 수 없는 상태입니다.")
+    PAYMENT_TARGET_NOT_PAYABLE(HttpStatus.CONFLICT, "P002", "결제할 수 없는 상태입니다.")
     ;
 
     private final HttpStatus httpStatus;
