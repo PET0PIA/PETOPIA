@@ -41,7 +41,9 @@ class BusinessServiceTest {
      * businessId/ownerId/name/verifyStatus만 테스트마다 다르게 주고, 나머지 필드는 고정값 사용.
      */
     private Business createBusiness(Long businessId, Long ownerId, String name, String verifyStatus) {
+
         Business business = new Business();
+
         business.setBusinessId(businessId);
         business.setOwnerId(ownerId);
         business.setName(name);
@@ -53,6 +55,7 @@ class BusinessServiceTest {
         business.setWebsite("https://test.co.kr");
         business.setVerifyStatus(Business.VerifyStatus.valueOf(verifyStatus));
         business.setCreatedAt(LocalDateTime.of(2026, 7, 29, 10, 0));
+
         return business;
     }
 
