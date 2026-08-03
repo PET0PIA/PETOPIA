@@ -25,4 +25,17 @@
          WHERE payment_id = #{paymentId}
     </select>
 
+    <insert id="insert" parameterType="PaymentRow"
+            useGeneratedKeys="true" keyProperty="paymentId">
+        INSERT INTO payment (
+        payment_type, amount, status, method, idempotency_key,
+        paid_at, created_at, updated_at,
+        fair_id, business_id, payer_user_id, reservation_id, application_id
+        ) VALUES (
+        #{paymentType}, #{amount}, #{status}, #{method}, #{idempotencyKey},
+        #{paidAt}, #{createdAt}, #{updatedAt},
+        #{fairId}, #{businessId}, #{payerUserId}, #{reservationId}, #{applicationId}
+        )
+    </insert>
+
 </mapper>
