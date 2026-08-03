@@ -64,6 +64,11 @@ logging:
 petopia:
   reservation:
     entry-qr-secret: ${ENTRY_QR_SECRET}
+  toss:
+    client-key: ${TOSS_CLIENT_KEY}
+    secret-key: ${TOSS_SECRET_KEY}
+    security-key: ${TOSS_SECURITY_KEY}
+    api-version: ${TOSS_API_VERSION:2024-06-01}
 
 jwt:
   secret: ${JWT_SECRET}

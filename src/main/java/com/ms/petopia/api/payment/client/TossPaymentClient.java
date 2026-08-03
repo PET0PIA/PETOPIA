@@ -13,11 +13,8 @@ public class TossPaymentClient {
 
     private final RestClient restClient;
 
-    public TossPaymentClient(
-            RestClient.Builder restClientBuilder,
-            @Value("${petopia.toss.secret-key}") String secretKey
-    ) {
-        this.restClient = restClientBuilder
+    public TossPaymentClient(@Value("${petopia.toss.secret-key}") String secretKey) {
+        this.restClient = RestClient.builder()
                 .baseUrl("https://api.tosspayments.com/v1")
                 .defaultHeaders(headers -> headers.setBasicAuth(secretKey, ""))
                 .build();
