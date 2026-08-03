@@ -53,6 +53,7 @@ class PaymentControllerTest {
         // Arrange: paymentService.getPayment(1L)을 호출하면 이 응답을 리턴하도록
         // 가짜로 세팅. 실제 DB는 전혀 관여 안 함.
         given(paymentService.getPayment(1L)).willReturn(
+
                 new PaymentResponse(
                         1L, "VENDOR_FEE", 50000L, "COMPLETED", "MOCK",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
@@ -64,7 +65,8 @@ class PaymentControllerTest {
         // Act + Assert: 실제 HTTP GET 요청처럼 "/api/payments/1"을 호출하고
         // jsonPath("$.필드명")로 응답 JSON 안의 값을 하나씩 꺼내서 검증함.
         // ($는 JSON 최상위를 가리키는 표기법 — jQuery 셀렉터 비슷한 느낌)
-        mockMvc.perform(get("/api/payments/1"))
+        mockMvc.perform(get("/api/payments/1")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
                 .andExpect(status().isOk()) // HTTP 200인지
                 .andExpect(jsonPath("$.paymentId").value(1))
                 .andExpect(jsonPath("$.paymentType").value("VENDOR_FEE"))
@@ -84,7 +86,8 @@ class PaymentControllerTest {
         willThrow(new CommonException(ErrorCode.PAYMENT_NOT_FOUND))
                 .given(paymentService).getPayment(999L);
 
-        mockMvc.perform(get("/api/payments/999"))
+        mockMvc.perform(get("/api/payments/999")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
                 .andExpect(status().isNotFound()) // ErrorCode.PAYMENT_NOT_FOUND가 HttpStatus.NOT_FOUND라서 404 기대
                 .andExpect(jsonPath("$.code").value("P001")); // ErrorResponse.code는 ErrorCode의 "P001" 문자열
     }
@@ -92,7 +95,7 @@ class PaymentControllerTest {
     @Test
     void createsVendorFeePayment() throws Exception {
         // Arrange
-        given(paymentService.payVendorFee(eq(40L), any(VendorFeePaymentRequest.class))).willReturn(
+        given(paymentService.payVendorFee(eq(40L),eq(99L),any(VendorFeePaymentRequest.class))).willReturn(
                 new PaymentResponse(
                         1L, "VENDOR_FEE", 50000L, "COMPLETED", "MOCK",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
@@ -105,13 +108,14 @@ class PaymentControllerTest {
         // 여기 JSON 키(fairId/businessId/amount)는 VendorFeePaymentRequest 필드명과
         // 정확히 일치해야 Jackson이 자동으로 객체로 바꿔줌(대소문자도 그대로 맞춰야 함).
         mockMvc.perform(post("/api/vendor-applications/40/payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"fairId\":10,\"businessId\":20,\"amount\":50000}"))
                 .andExpect(status().isCreated()) // 컨트롤러가 201로 응답하는지
                 .andExpect(jsonPath("$.paymentType").value("VENDOR_FEE"))
                 .andExpect(jsonPath("$.applicationId").value(40));
 
-        verify(paymentService).payVendorFee(eq(40L), any(VendorFeePaymentRequest.class));
+        verify(paymentService).payVendorFee(eq(40L), eq(99L), any(VendorFeePaymentRequest.class));
     }
 
     @Test
@@ -119,9 +123,10 @@ class PaymentControllerTest {
         // Arrange: PaymentServiceTest의 "중복결제 예외" 케이스가 컨트롤러까지
         // 올라왔을 때 409로 잘 변환되는지 확인
         willThrow(new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE))
-                .given(paymentService).payVendorFee(eq(40L), any(VendorFeePaymentRequest.class));
+                .given(paymentService).payVendorFee(eq(40L), eq(99L), any(VendorFeePaymentRequest.class));
 
         mockMvc.perform(post("/api/vendor-applications/40/payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"fairId\":10,\"businessId\":20,\"amount\":50000}"))
                 .andExpect(status().isConflict()) // ErrorCode.PAYMENT_TARGET_NOT_PAYABLE이 HttpStatus.CONFLICT라서 409

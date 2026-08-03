@@ -20,6 +20,7 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     // MyBatis는 Spring Boot BOM이 버전을 관리하지 않으므로 직접 명시한다. 4.1.0은 Boot 4.1.0 기준으로 빌드됐다.
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.1.0'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
@@ -39,6 +40,14 @@ dependencies {
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
+
+
+    //spring security 코어. 인증/인가 필터 체인과 BCryptPasswordEncoder 제공
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    //JWT 발급과 검증
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
 }
 
 tasks.named('test') {

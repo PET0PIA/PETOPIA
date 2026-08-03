@@ -3,6 +3,7 @@ package com.ms.petopia.api.payment.controller;
 import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,20 +24,28 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @GetMapping("/payments/{paymentId}")
-    public PaymentResponse getPayment(@PathVariable Long paymentId) {
+    public PaymentResponse getPayment(
+            @PathVariable Long paymentId,
+            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userID
+            ) {
+        // TODO 인증 도메인 완성 후: 조회한 결제가 이 userId 소유(또는 관리자 권한)인지
+        // 검증하는 로직 추가. 지금은 헤더 존재를 강제하는 수준까지만
+        // (다른 도메인 컨트롤러들과 최소한의 관례만 맞춘 것, 완전한 IDOR 방지는 아님).
         return paymentService.getPayment(paymentId);
     }
 
     @PostMapping("/vendor-applications/{applicationId}/payment")
     public ResponseEntity<PaymentResponse>payVendorFee(
             @PathVariable Long applicationId,
+            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
+            @Valid
             @RequestBody VendorFeePaymentRequest request
             ) {
         // 조회(GET)는 그냥 객체를 리턴해도 스프링이 200 OK로 응답하지만,
         // "새로 만들었다"는 의미를 명확히 하려고 리소스 생성 성공은
         // 관례적으로 201 Created를 씀. 그래서 ResponseEntity로 감싸서 상태코드 직접 지정.
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(paymentService.payVendorFee(applicationId, request));
+                .body(paymentService.payVendorFee(applicationId,userId, request));
 
     }
 
