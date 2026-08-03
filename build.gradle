@@ -40,9 +40,18 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
 
-    // 유효성 검사를 위한 의존성 추가
+
+    //spring security 코어. 인증/인가 필터 체인과 BCryptPasswordEncoder 제공
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    //JWT 발급과 검증
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
+
+    //Bean Validation 어노테이션을 위한 의존성(@NotBlank, @Email 등)
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    // 이메일 발송을 위한 의존성 추가
+
+    // 이메일 발송을 위한 의존성
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 }
 
