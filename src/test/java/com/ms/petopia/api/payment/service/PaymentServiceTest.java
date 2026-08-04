@@ -1,8 +1,11 @@
 package com.ms.petopia.api.payment.service;
 
 
+import com.ms.petopia.api.payment.client.TossPaymentClient;
+import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.PaymentRow;
+import com.ms.petopia.api.payment.dto.TossPaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.global.exception.CommonException;
@@ -16,11 +19,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
@@ -33,6 +38,11 @@ class PaymentServiceTest {
     //가짜(mock) 객체 ,실제로 DB에 안 붙음.
     @Mock
     private PaymentMapper paymentMapper;
+
+    // 토스 API를 실제로 호출하지 않도록 가짜로 대체. confirmPayment 테스트에서
+    // "토스가 이렇게 응답했다고 치자"를 흉내내는 데 씀.
+    @Mock
+    private TossPaymentClient tossPaymentClient;
 
     // PaymentService 생성자가 PaymentMapper를 받는 구조여야 동작함
     // (@RequiredArgsConstructor 패턴).
@@ -64,7 +74,7 @@ class PaymentServiceTest {
         // row에서 값을 그대로 가져와서 expected를 만듦 (따로 값을 또 타이핑하면
         // paidAt/createdAt 같은 시간값이 미묘하게 달라질 수 있어서, row 기준으로 통일).
         PaymentResponse expected = new PaymentResponse(
-                row.getPaymentId(), row.getPaymentType(), row.getAmount(), row.getStatus(), row.getMethod(),
+                row.getPaymentId(), "PAYMENT_"+ row.getPaymentId(), row.getPaymentType(), row.getAmount(), row.getStatus(), row.getMethod(),
                 row.getPaidAt(), row.getCreatedAt(), row.getFairId(), row.getBusinessId(),
                 row.getPayerUserId(), row.getReservationId(), row.getApplicationId()
         );
@@ -103,12 +113,12 @@ class PaymentServiceTest {
         // Assert: 응답에 요청값·기본값(COMPLETED/MOCK)이 제대로 들어갔는지
         assertThat(result.paymentType()).isEqualTo("VENDOR_FEE");
         assertThat(result.amount()).isEqualTo(50000L);
-        assertThat(result.status()).isEqualTo("COMPLETED");
-        assertThat(result.method()).isEqualTo("MOCK");
+        assertThat(result.status()).isEqualTo("PENDING");
+        assertThat(result.method()).isEqualTo("TOSS");
         assertThat(result.fairId()).isEqualTo(10L);
         assertThat(result.businessId()).isEqualTo(20L);
         assertThat(result.applicationId()).isEqualTo(40L);
-        assertThat(result.paidAt()).isNotNull();
+        assertThat(result.paidAt()).isNull();
 
         // insert가 실제로 호출됐는지 + idempotencyKey가 applicationId 기준으로
         // 만들어졌는지 확인 (이게 나중에 중복결제를 막아주는 값이라 제대로 세팅되는지가 중요)
@@ -135,6 +145,97 @@ class PaymentServiceTest {
 
     }
 
+    // PENDING 상태의 결제 하나를 미리 만들어두는 헬퍼. confirmPayment 테스트들이
+    // 전부 "PENDING인 결제가 이미 있다"는 상황에서 시작하므로 중복을 줄이려고 뺐음.
+    private PaymentRow pendingRow() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPaymentType("VENDOR_FEE");
+        row.setAmount(50000L);
+        row.setStatus("PENDING");
+        row.setMethod("TOSS");
+        row.setPayerUserId(90L);
+        row.setFairId(10L);
+        row.setBusinessId(20L);
+        row.setApplicationId(40L);
+        return row;
+    }
+
+    @Test
+    @DisplayName("결제 승인을 요청하면 토스 승인 확인 후 COMPLETED로 바뀐다")
+    void confirmPayment_성공() {
+        // Arrange
+        PaymentRow row = pendingRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+
+        // Act
+        PaymentResponse result = paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        // Assert
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(result.method()).isEqualTo("카드");
+        assertThat(result.paidAt()).isNotNull();
+        verify(paymentMapper).markCompleted(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 결제를 승인하려 하면 예외를 던진다")
+    void confirmPayment_결제없음_예외를던진다() {
+        given(paymentMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> paymentService.confirmPayment(999L, 90L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("결제자 본인이 아닌 사용자가 승인하려 하면 예외를 던진다")
+    void confirmPayment_소유자아님_예외를던진다() {
+        // Arrange: pendingRow()는 payerUserId=90L인데, 다른 사람(999L)이 승인 시도하는 상황
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+
+        assertThatThrownBy(() -> paymentService.confirmPayment(1L, 999L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("이미 완료되었거나 취소된 결제를 다시 승인하려 하면 예외를 던진다")
+    void confirmPayment_PENDING아님_예외를던진다() {
+        PaymentRow row = pendingRow();
+        row.setStatus("COMPLETED");
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+    }
+
+    @Test
+    @DisplayName("동시에 두 번 승인 처리돼 markCompleted가 0건이면 예외를 던진다")
+    void confirmPayment_동시승인_예외를던진다() {
+        // Arrange: 토스 승인까지는 성공했는데, 그 사이 다른 요청이 먼저 COMPLETED로
+        // 바꿔놔서 markCompleted의 WHERE status='PENDING' 조건에 안 걸리는 상황(0건 업데이트)
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(tossPaymentClient.confirmPayment(any(), any(), any()))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(0);
+
+        assertThatThrownBy(() -> paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+    }
 
 }
 
