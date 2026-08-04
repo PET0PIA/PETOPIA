@@ -1,18 +1,25 @@
 package com.ms.petopia.api.notification.service;
 
 import com.ms.petopia.api.notification.dto.*;
+import com.ms.petopia.api.notification.entity.Notification;
+import com.ms.petopia.api.notification.entity.NotificationDelivery;
 import com.ms.petopia.api.notification.mapper.NotificationDeliveryMapper;
 import com.ms.petopia.api.notification.mapper.NotificationMapper;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,14 +40,14 @@ class NotificationServiceTest {
             return null;
         }).when(notificationMapper).insert(any());
 
-        SaveNotificationRequest request = new SaveNotificationRequest(
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "결제 완료", "결제가 완료됐습니다.", null,
                 List.of(DeliveryChannel.IN_APP),
                 null
         );
 
-        SaveNotificationResponse response = notificationService.save(request);
+        SaveNotificationDto.Response response = notificationService.save(request);
 
         assertThat(response.notificationId()).isEqualTo(42L);
         verify(notificationMapper).insert(any(Notification.class));
@@ -52,7 +59,7 @@ class NotificationServiceTest {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
 
-        SaveNotificationRequest request = new SaveNotificationRequest(
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "제목", "내용", null,
                 List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
@@ -71,7 +78,7 @@ class NotificationServiceTest {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
 
-        SaveNotificationRequest request = new SaveNotificationRequest(
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "제목", "내용", null,
                 List.of(DeliveryChannel.IN_APP),
@@ -92,7 +99,7 @@ class NotificationServiceTest {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
 
-        SaveNotificationRequest request = new SaveNotificationRequest(
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "제목", "내용", null,
                 List.of(DeliveryChannel.EMAIL),
@@ -113,7 +120,7 @@ class NotificationServiceTest {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
 
-        SaveNotificationRequest request = new SaveNotificationRequest(
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "제목", "내용", null,
                 List.of(DeliveryChannel.EMAIL),
@@ -133,7 +140,7 @@ class NotificationServiceTest {
                 .when(notificationMapper).insert(any());
         doThrow(new RuntimeException("SMTP 연결 실패")).when(emailSenderService).send(any(), any(), any());
 
-        SaveNotificationRequest request = new SaveNotificationRequest(
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "제목", "내용", null,
                 List.of(DeliveryChannel.EMAIL),
@@ -151,7 +158,7 @@ class NotificationServiceTest {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
 
-        SaveNotificationRequest request = new SaveNotificationRequest(
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "제목", "내용", null,
                 List.of(DeliveryChannel.IN_APP),
@@ -169,7 +176,7 @@ class NotificationServiceTest {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
 
-        SaveNotificationRequest request = new SaveNotificationRequest(
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "결제 완료", "결제가 완료됐습니다.", null,
                 List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
@@ -184,5 +191,107 @@ class NotificationServiceTest {
         verify(emailSenderService, times(1)).send("user@example.com", "결제 완료", "결제가 완료됐습니다.");
         // 이메일 발송 성공 후 SENT 업데이트도 1번
         verify(notificationDeliveryMapper, times(1)).updateStatus(any(), eq(DeliveryStatus.SENT), any(), isNull());
+    }
+
+    // ===== markAsRead =====
+
+    @Test
+    @DisplayName("읽지 않은 IN_APP 알림을 읽음 처리하면 updateReadAt이 호출된다")
+    void markAsRead_success() {
+        Notification notification = Notification.builder()
+                .notificationId(1L).userId(10L).build();
+        NotificationDelivery delivery = NotificationDelivery.builder()
+                .deliveryId(100L).channel(DeliveryChannel.IN_APP).readAt(null).build();
+
+        given(notificationMapper.selectById(1L)).willReturn(notification);
+        given(notificationDeliveryMapper.selectByNotificationIdAndChannel(1L, DeliveryChannel.IN_APP))
+                .willReturn(delivery);
+
+        notificationService.markAsRead(1L, 10L);
+
+        verify(notificationDeliveryMapper).updateReadAt(eq(100L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 알림 ID로 읽음 처리 시 NOTIFICATION_NOT_FOUND 예외가 발생한다")
+    void markAsRead_notificationNotFound() {
+        given(notificationMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> notificationService.markAsRead(999L, 10L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
+
+        verifyNoInteractions(notificationDeliveryMapper);
+    }
+
+    @Test
+    @DisplayName("다른 사용자의 알림을 읽음 처리 시 NOTIFICATION_ACCESS_DENIED 예외가 발생한다")
+    void markAsRead_accessDenied() {
+        Notification notification = Notification.builder()
+                .notificationId(1L).userId(10L).build();
+        given(notificationMapper.selectById(1L)).willReturn(notification);
+
+        assertThatThrownBy(() -> notificationService.markAsRead(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+
+        verifyNoInteractions(notificationDeliveryMapper);
+    }
+
+    @Test
+    @DisplayName("IN_APP delivery가 없는 알림(EMAIL 전용)은 NOTIFICATION_NOT_FOUND 예외가 발생한다")
+    void markAsRead_noInAppDelivery_throwsNotFound() {
+        Notification notification = Notification.builder()
+                .notificationId(1L).userId(10L).build();
+        given(notificationMapper.selectById(1L)).willReturn(notification);
+        given(notificationDeliveryMapper.selectByNotificationIdAndChannel(1L, DeliveryChannel.IN_APP))
+                .willReturn(null);
+
+        assertThatThrownBy(() -> notificationService.markAsRead(1L, 10L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOTIFICATION_NOT_FOUND);
+
+        verify(notificationDeliveryMapper, never()).updateReadAt(any(), any());
+    }
+
+    @Test
+    @DisplayName("이미 읽은 알림은 updateReadAt을 호출하지 않고 정상 종료된다 (멱등성)")
+    void markAsRead_alreadyRead_doesNothing() {
+        Notification notification = Notification.builder()
+                .notificationId(1L).userId(10L).build();
+        NotificationDelivery delivery = NotificationDelivery.builder()
+                .deliveryId(100L).channel(DeliveryChannel.IN_APP)
+                .readAt(LocalDateTime.of(2026, 8, 1, 10, 0)).build();
+
+        given(notificationMapper.selectById(1L)).willReturn(notification);
+        given(notificationDeliveryMapper.selectByNotificationIdAndChannel(1L, DeliveryChannel.IN_APP))
+                .willReturn(delivery);
+
+        notificationService.markAsRead(1L, 10L);
+
+        verify(notificationDeliveryMapper, never()).updateReadAt(any(), any());
+    }
+
+    // ===== markAllAsRead =====
+
+    @Test
+    @DisplayName("전체 읽음 처리 시 userId와 현재 시각으로 updateReadAtAllInApp이 호출된다")
+    void markAllAsRead_callsMapperWithUserId() {
+        notificationService.markAllAsRead(10L);
+
+        verify(notificationDeliveryMapper).updateReadAtAllInApp(eq(10L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("읽지 않은 알림이 없어도 예외 없이 정상 종료된다 (멱등성)")
+    void markAllAsRead_noUnread_doesNotThrow() {
+        given(notificationDeliveryMapper.updateReadAtAllInApp(eq(10L), any())).willReturn(0);
+
+        notificationService.markAllAsRead(10L);
+
+        verify(notificationDeliveryMapper).updateReadAtAllInApp(eq(10L), any(LocalDateTime.class));
     }
 }

@@ -16,10 +16,25 @@
         WHERE notification_id = #{notificationId}
     </select>
 
-    <select id="selectByUserId" resultType="Notification">
-        SELECT *
-        FROM notification
-        WHERE user_id = #{userId}
-        ORDER BY created_at DESC
+    <select id="selectByUserId" resultType="NotificationListRow">
+        SELECT n.notification_id, n.type, n.title, n.body, n.link_url, n.created_at,
+        nd.read_at IS NOT NULL AS read
+        FROM notification n
+        INNER JOIN notification_delivery nd
+        ON nd.notification_id = n.notification_id
+        AND nd.channel = 'IN_APP'
+        WHERE n.user_id = #{userId}
+        ORDER BY n.created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- countByUserId: JOIN 추가 -->
+    <select id="countByUserId" resultType="long">
+        SELECT COUNT(*)
+        FROM notification n
+        INNER JOIN notification_delivery nd
+        ON nd.notification_id = n.notification_id
+        AND nd.channel = 'IN_APP'
+        WHERE n.user_id = #{userId}
     </select>
 </mapper>
