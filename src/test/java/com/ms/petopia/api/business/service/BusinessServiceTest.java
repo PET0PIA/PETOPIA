@@ -1,6 +1,7 @@
 package com.ms.petopia.api.business.service;
 
 import com.ms.petopia.api.business.domain.Business;
+import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.response.BusinessResponse;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.global.exception.CommonException;
@@ -9,10 +10,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.BDDMockito.given;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.verify;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,6 +17,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import static org.mockito.BDDMockito.given;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 
 /*
  * BusinessService 단위 테스트.
@@ -31,6 +35,12 @@ class BusinessServiceTest {
     // 실제 DB 접근 없이 가짜로 동작(리턴값을 직접 지정)
     @Mock
     private BusinessMapper businessMapper;
+
+    @Mock
+    private NtsBusinessVerificationClient ntsClient;
+
+    @Mock
+    private BusinessRegistrar businessRegistrar;
 
     // 위 businessMapper가 자동으로 주입된 테스트 대상
     @InjectMocks
@@ -59,6 +69,90 @@ class BusinessServiceTest {
         return business;
     }
 
+    private BusinessRegisterRequest createRequest() {
+
+        BusinessRegisterRequest request = new BusinessRegisterRequest();
+
+        request.setName("테스트업체");
+        request.setCeoName("홍길동");
+        request.setBizRegNo("1234567890");
+        request.setStartDate(LocalDate.of(2020, 1, 1));
+        request.setAddress("서울시 강남구 테스트로 1");
+        request.setPhone("02-1234-5678");
+        request.setWebsite("https://test.co.kr");
+
+        return request;
+
+    }
+
+    @Nested
+    @DisplayName("사업자 등록")
+    class RegisterBusiness {
+
+        @Test
+        @DisplayName("국세청 검증 통과하면 VERIFIED로 저장한다")
+        void savesAsVerifiedWhenValid() {
+
+            // given
+            Long ownerId = 1L;
+            BusinessRegisterRequest request = createRequest();
+
+            Business savedBusiness = createBusiness(1L, ownerId, "테스트업체", "VERIFIED");
+
+            given(ntsClient.validate(request.getBizRegNo(), request.getCeoName(), request.getStartDate()))
+                    .willReturn(true);
+            given(businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED))
+                    .willReturn(savedBusiness);
+
+            // when
+            BusinessResponse result = businessService.registerBusiness(ownerId, request);
+
+            // then
+            assertThat(result.getVerifyStatus()).isEqualTo("VERIFIED");
+            verify(businessRegistrar).save(ownerId, request, Business.VerifyStatus.VERIFIED);
+        }
+
+        @Test
+        @DisplayName("국세청 검증이 false면 저장하지 않고 예외를 던진다")
+        void doesNotSaveWhenInvalid() {
+
+            // given
+            Long ownerId = 1L;
+            BusinessRegisterRequest request = createRequest();
+
+            given(ntsClient.validate(any(), any(), any())).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> businessService.registerBusiness(ownerId, request))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("사업자 정보를 확인할 수 없습니다");
+
+            // 검증 실패로 막혔으니, 저장 자체가 절대 호출되면 안 됨
+            verify(businessRegistrar, never()).save(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("국세청 API 호출 자체가 실패하면 저장하지 않고 예외를 던진다")
+        void doesNotSaveWhenApiThrows() {
+
+            // given
+            Long ownerId = 1L;
+            BusinessRegisterRequest request = createRequest();
+
+            given(ntsClient.validate(any(), any(), any()))
+                    .willThrow(new IllegalStateException("국세청 API 호출 실패"));
+
+            // when & then
+            assertThatThrownBy(() -> businessService.registerBusiness(ownerId, request))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("일시적으로 연결할 수 없습니다");
+
+            // API 자체가 실패했으니, 저장도 절대 호출되면 안 됨
+            verify(businessRegistrar, never()).save(any(), any(), any());
+        }
+
+    }
+
     @Nested
     @DisplayName("내 사업자 목록 조회")
     class GetMyBusinesses {
@@ -69,7 +163,6 @@ class BusinessServiceTest {
 
             // given: Mapper가 사업자 2건을 리턴하도록 미리 설정
             Long ownerId = 1L;
-
             List<Business> businesses = List.of(
                     createBusiness(1L, ownerId, "멍냥사료", "VERIFIED"),
                     createBusiness(2L, ownerId, "클린포즈 미용실", "PENDING")
@@ -122,7 +215,6 @@ class BusinessServiceTest {
             // given: 조회하려는 사업자가 실제로 존재하고, 조회하는 사람(ownerId)이 그 사업자의 소유자와 일치하는 상황
             Long ownerId = 1L;
             Long businessId = 1L;
-
             Business business = createBusiness(businessId, ownerId, "멍냥사료", "VERIFIED");
 
             given(businessMapper.selectById(businessId)).willReturn(business);
@@ -147,7 +239,6 @@ class BusinessServiceTest {
              * (Mapper 입장에서는 사업자가 정상적으로 조회되지만, 소유자가 다른 상황을 재현)
              */
             Long businessId = 1L;
-
             Business business = createBusiness(businessId, 1L, "멍냥사료", "VERIFIED");
 
             given(businessMapper.selectById(businessId)).willReturn(business);
