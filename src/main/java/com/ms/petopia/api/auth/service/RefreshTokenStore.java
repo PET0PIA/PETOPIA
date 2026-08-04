@@ -25,9 +25,10 @@ public class RefreshTokenStore {
         stringRedisTemplate.opsForValue().set(key, userId.toString(), ttl);
     }
 
-    public Long findUserId(String tokenHash) {
+    //조회+삭제(GETDEL)를 원자적으로 처리해 동시에 같은 토큰으로 refresh 요청이 와도 하나만 성공하게 함
+    public Long consumeUserId(String tokenHash) {
         String key = "refresh_token:" + tokenHash;
-        String value = stringRedisTemplate.opsForValue().get(key);
+        String value = stringRedisTemplate.opsForValue().getAndDelete(key);
         return value == null ? null : Long.valueOf(value);
     }
 

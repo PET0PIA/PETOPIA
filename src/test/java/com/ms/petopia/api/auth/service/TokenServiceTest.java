@@ -39,7 +39,7 @@ class TokenServiceTest {
     @Test
     void refresh_유효한토큰이면_새토큰쌍을반환하고_기존토큰을무효화한다() {
         String hash = TokenHashUtil.sha256(RAW_REFRESH_TOKEN);
-        given(refreshTokenStore.findUserId(hash)).willReturn(USER_ID);
+        given(refreshTokenStore.consumeUserId(hash)).willReturn(USER_ID);
         given(authMapper.selectUserById(USER_ID)).willReturn(user());
         given(jwtTokenProvider.generateAccessToken(USER_ID, "USER")).willReturn("new-access");
         given(jwtTokenProvider.generateRefreshToken(USER_ID)).willReturn("new-refresh");
@@ -48,13 +48,14 @@ class TokenServiceTest {
 
         assertThat(result.accessToken()).isEqualTo("new-access");
         assertThat(result.refreshToken()).isEqualTo("new-refresh");
-        verify(refreshTokenStore).revoke(hash);
+        //기존 토큰은 consumeUserId(GETDEL)에서 이미 삭제되므로 revoke는 refresh 경로에서 안 불림
+        verify(refreshTokenStore, never()).revoke(any());
         verify(refreshTokenStore).save(eq(TokenHashUtil.sha256("new-refresh")), eq(USER_ID), any());
     }
 
     @Test
     void refresh_Redis에없는토큰이면_INVALID_REFRESH_TOKEN을던진다() {
-        given(refreshTokenStore.findUserId(any())).willReturn(null);
+        given(refreshTokenStore.consumeUserId(any())).willReturn(null);
 
         assertThatThrownBy(() -> tokenService.refresh(RAW_REFRESH_TOKEN))
                 .isInstanceOf(CommonException.class)
@@ -67,7 +68,7 @@ class TokenServiceTest {
     @Test
     void refresh_토큰주인유저가없으면_INVALID_REFRESH_TOKEN을던진다() {
         String hash = TokenHashUtil.sha256(RAW_REFRESH_TOKEN);
-        given(refreshTokenStore.findUserId(hash)).willReturn(USER_ID);
+        given(refreshTokenStore.consumeUserId(hash)).willReturn(USER_ID);
         given(authMapper.selectUserById(USER_ID)).willReturn(null);
 
         assertThatThrownBy(() -> tokenService.refresh(RAW_REFRESH_TOKEN))

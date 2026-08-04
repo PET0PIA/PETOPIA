@@ -24,8 +24,8 @@ public class TokenService {
         //refreshToken 해시
         String refreshTokenHash = TokenHashUtil.sha256(refreshToken);
 
-        //만료된 토큰 조회
-        Long userId = refreshTokenStore.findUserId(refreshTokenHash);
+        //조회+삭제를 원자적으로(GETDEL) - 동시 요청이 같은 토큰을 중복으로 소비 못 하게 함
+        Long userId = refreshTokenStore.consumeUserId(refreshTokenHash);
         if(userId == null){
             throw new CommonException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
@@ -40,8 +40,7 @@ public class TokenService {
         String newAccessToken = jwtTokenProvider.generateAccessToken(user.getUserId(), user.getRole());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
 
-        //기존 refresh token 무효화
-        refreshTokenStore.revoke(refreshTokenHash);
+        //기존 refresh token은 consumeUserId 시점에 이미 삭제됨(GETDEL)
 
         //새 refresh token 저장
         String newRefreshTokenHash = TokenHashUtil.sha256(newRefreshToken);
