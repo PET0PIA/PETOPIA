@@ -51,6 +51,7 @@ dependencies {
 
     // 이메일 발송을 위한 의존성
     implementation 'org.springframework.boot:spring-boot-starter-mail'
+
 }
 
 tasks.named('test') {

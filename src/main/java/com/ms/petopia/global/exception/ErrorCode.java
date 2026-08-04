@@ -27,6 +27,12 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "A001", "인증이 필요합니다."),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "A002", "접근 권한이 없습니다."),
     INVALID_LOGIN(HttpStatus.UNAUTHORIZED, "A003", "이메일 혹은 비밀번호가 일치하지 않습니다."),
+    INVALID_TOKEN(HttpStatus.BAD_REQUEST, "A004", "유효하지 않은 인증 코드입니다."),
+    TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "A005", "인증 코드가 만료되었습니다."),
+    TOKEN_ALREADY_USED(HttpStatus.BAD_REQUEST, "A006", "이미 사용된 인증 코드입니다."),
+    EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "A007", "이미 인증된 이메일입니다."),
+    TOO_MANY_VERIFY_ATTEMPTS(HttpStatus.BAD_REQUEST, "A008", "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 받아주세요."),
+    RESEND_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "A009", "인증 코드 재전송은 잠시 후 다시 시도해주세요."),
 
     // ===== Vendor (참가업체·부스) =====
     BUSINESS_NOT_FOUND(HttpStatus.NOT_FOUND, "V001", "사업자를 찾을 수 없습니다."),

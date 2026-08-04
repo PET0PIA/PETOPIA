@@ -1,12 +1,12 @@
 package com.ms.petopia.api.auth.dto;
 
-import jakarta.validation.constraints.AssertTrue;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.time.LocalDate;
+import java.util.Date;
 
 @Getter
 @Setter
@@ -32,4 +32,28 @@ public class EmailSignupRequest {
         if (password == null) return true;
         return password.equals(passwordConfirm);
     }
+
+    @NotBlank
+    private String nickname;
+
+    @NotNull
+    @Past
+    private LocalDate birthDate;
+
+    @NotBlank
+    private String phone;
+
+    @NotBlank
+    private String gender;
+
+    @NotBlank
+    private String address;
+
+    @NotNull
+    @AssertTrue
+    private Boolean agreedTerms;
+
+    @NotNull
+    @AssertTrue
+    private Boolean agreedPrivacy;
 }
