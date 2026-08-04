@@ -2,7 +2,7 @@ package com.ms.petopia.api.notification.mapper;
 
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.DeliveryStatus;
-import com.ms.petopia.api.notification.dto.NotificationDelivery;
+import com.ms.petopia.api.notification.entity.NotificationDelivery;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -37,4 +37,7 @@ public interface NotificationDeliveryMapper {
 
     // 인앱 미읽음 수
     int countUnreadInApp(@Param("userId") Long userId);
+
+    // 전체 읽음
+    int updateReadAtAllInApp(@Param("userId") Long userId, @Param("readAt") LocalDateTime readAt);
 }
