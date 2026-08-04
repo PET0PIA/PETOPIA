@@ -20,13 +20,13 @@ public class NtsValidateRequest {
     public static class BusinessItem {
 
         @JsonProperty("b_no")
-        private String bNo;
+        private String bNo; // 사업자등록번호
 
         @JsonProperty("start_dt")
-        private String startDt;
+        private String startDt; // 개업일자(YYYYMMDD 포맷)
 
         @JsonProperty("p_nm")
-        private String pNm;
+        private String pNm; // 대표자성명
 
     }
 

@@ -1,9 +1,6 @@
 package com.ms.petopia.api.business.domain;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -12,6 +9,7 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Business {
 
     private Long businessId;
@@ -27,6 +25,12 @@ public class Business {
     private LocalDateTime createdAt;
 
 
+    /*
+     * 사업자 진위확인 상태.
+     * 현재 등록 로직(registerBusiness)에서는 검증 실패 시 등록 자체를 막기 때문에
+     * 실제로는 VERIFIED만 저장된다. 나머지 값들은 향후 재검증/관리자 수동 처리 기능
+     * 등에서 다시 쓰일 수 있어 남겨둔다.
+     */
     public enum VerifyStatus {
         PENDING, VERIFIED, INVALID, RETRY_NEEDED
     }
