@@ -69,6 +69,14 @@ petopia:
     secret-key: ${TOSS_SECRET_KEY}
     security-key: ${TOSS_SECURITY_KEY}
     api-version: ${TOSS_API_VERSION:2024-06-01}
+  storage:
+    # 기본값을 두지 않는다. 값이 비면 기동 자체가 실패해야 한다.
+    # 기본값을 남겨두면 SSM 등록을 빠뜨렸을 때 운영 트래픽이 개발 버킷에
+    # 파일을 쓰는 것을 아무도 알아채지 못한다.
+    # 나머지 항목(region / presign-expiry / prefix)은 application.yaml 의
+    # 값을 그대로 쓴다. 환경에 따라 달라질 값이 아니다.
+    bucket: ${S3_BUCKET}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL}
 
 jwt:
   secret: ${JWT_SECRET}

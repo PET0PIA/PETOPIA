@@ -28,10 +28,13 @@ spring:
 
 petopia:
   storage:
-    # 실제 버킷 및 공개 URL은 환경변수로 주입한다. 기본값은 로컬 기동/테스트용이다.
-    bucket: ${S3_BUCKET:petopia-local}
+    # 환경에 따라 달라지지 않는 항목만 여기 둔다.
+    # 환경마다 다른 bucket / public-base-url 은 application-local.yaml 과
+    # application-release.yaml 에서 각각 선언한다.
+    #
+    # prefix 두 개는 ObjectKeyGenerator 의 키 생성·검증이 함께 맞물려 있어
+    # 환경별로 달리하면 이미 저장된 키를 해석할 수 없게 된다. 바꾸지 않는다.
     region: ${AWS_REGION:ap-northeast-2}
-    public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://storage.local.invalid}
     presign-expiry: ${S3_PRESIGN_EXPIRY:5m}
     tmp-prefix: ${S3_TMP_PREFIX:tmp/}
     confirmed-prefix: ${S3_CONFIRMED_PREFIX:uploads/}
