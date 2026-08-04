@@ -16,28 +16,25 @@
         WHERE notification_id = #{notificationId}
     </select>
 
-    <!--IN_APP채널 없이 EMAIL만 있는 알림도 목록에 포함해야 해서 LEFT JOIN 사용-->
     <select id="selectByUserId" resultType="NotificationListRow">
-        SELECT n.notification_id,
-            n.type,
-            n.title,
-            n.body,
-            n.link_url,
-            n.created_at,
-            nd.read_at IS NOT NULL AS read
+        SELECT n.notification_id, n.type, n.title, n.body, n.link_url, n.created_at,
+        nd.read_at IS NOT NULL AS read
         FROM notification n
-        LEFT JOIN notification_delivery nd
-            ON nd.notification_id = n.notification_id
-            AND nd.channel = 'IN_APP'
+        INNER JOIN notification_delivery nd
+        ON nd.notification_id = n.notification_id
+        AND nd.channel = 'IN_APP'
         WHERE n.user_id = #{userId}
         ORDER BY n.created_at DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
-    <!-- count 추가 -->
+    <!-- countByUserId: JOIN 추가 -->
     <select id="countByUserId" resultType="long">
         SELECT COUNT(*)
-        FROM notification
-        WHERE user_id = #{userId}
+        FROM notification n
+        INNER JOIN notification_delivery nd
+        ON nd.notification_id = n.notification_id
+        AND nd.channel = 'IN_APP'
+        WHERE n.user_id = #{userId}
     </select>
 </mapper>

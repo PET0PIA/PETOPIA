@@ -167,4 +167,39 @@ class NotificationControllerTest {
         mockMvc.perform(put("/api/notifications/read-all"))
                 .andExpect(status().isBadRequest());
     }
+
+    // PUT /api/notifications/{notificationId}/read → 200
+    @Test
+    void markAsRead_returns200() throws Exception {
+        doNothing().when(notificationService).markAsRead(10L, 1L);
+        mockMvc.perform(put("/api/notifications/10/read")
+                        .header("X-User-Id", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    // PUT /api/notifications/{notificationId}/read 헤더 누락 → 400
+    @Test
+    void markAsRead_missingHeader_returns400() throws Exception {
+        mockMvc.perform(put("/api/notifications/10/read"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // GET /api/notifications/unread-count → 200
+    @Test
+    void getUnreadCount_returns200() throws Exception {
+        given(notificationQueryService.getUnreadCount(1L)).willReturn(5);
+        mockMvc.perform(get("/api/notifications/unread-count")
+                        .header("X-User-Id", 1L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(5));
+    }
+
+    // GET /api/notifications/unread-count 헤더 누락 → 400
+    @Test
+    void getUnreadCount_missingHeader_returns400() throws Exception {
+        mockMvc.perform(get("/api/notifications/unread-count"))
+                .andExpect(status().isBadRequest());
+    }
+
 }

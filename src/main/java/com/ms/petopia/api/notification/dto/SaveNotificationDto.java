@@ -15,7 +15,7 @@ public class SaveNotificationDto {
             @NotBlank String title,
             @NotBlank String body,
             String linkUrl,
-            @NotEmpty List<DeliveryChannel> channels,
+            @NotEmpty List<@NotNull DeliveryChannel> channels,
             String recipientContact
     ) {}
 
