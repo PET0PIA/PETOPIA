@@ -4,6 +4,8 @@ import com.ms.petopia.api.payment.dto.PaymentRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
+
 /**
  * PAYMENT 테이블 조회용 매퍼.
  *
@@ -28,4 +30,11 @@ public interface PaymentMapper {
      */
     void insert(PaymentRow row);
     int markCompleted(PaymentRow row);
+
+    /**
+     * 토스가 확정적으로 승인을 거부했을 때(4xx) PENDING -> FAILED로 전이한다.
+     * markCompleted와 마찬가지로 status='PENDING' 조건이 걸려있어, 이미 다른 요청이
+     * 먼저 상태를 바꿔놨으면(동시 처리) 0을 반환한다.
+     */
+    int markFailed(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
 }

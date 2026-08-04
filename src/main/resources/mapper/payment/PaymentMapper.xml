@@ -49,4 +49,12 @@
         AND status = 'PENDING'
     </update>
 
+    <update id="markFailed">
+        UPDATE payment
+        SET status = 'FAILED',
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'PENDING'
+    </update>
+
 </mapper>

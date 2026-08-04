@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 
@@ -235,6 +236,42 @@ class PaymentServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+    }
+
+    @Test
+    @DisplayName("토스가 승인을 확정적으로 거부하면(4xx) 결제를 FAILED로 남긴다")
+    void confirmPayment_토스승인거부_FAILED로전이한다() {
+        // Arrange: 토스 클라이언트가 4xx를 이미 PAYMENT_APPROVAL_FAILED로 변환해서 던지는 상황을 흉내냄
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        willThrow(new CommonException(ErrorCode.PAYMENT_APPROVAL_FAILED))
+                .given(tossPaymentClient).confirmPayment(any(), any(), any());
+
+        // Act & Assert: 호출한 쪽에는 여전히 실패 예외가 그대로 전달돼야 함
+        assertThatThrownBy(() -> paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_APPROVAL_FAILED);
+
+        // 예외를 던지면서도 DB엔 FAILED로 남겨야 함(트랜잭션 롤백에 안 딸려가는지 확인하는 셈)
+        verify(paymentMapper).markFailed(eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("토스 서버 장애(5xx)면 결제 상태를 건드리지 않고 예외만 전달한다")
+    void confirmPayment_토스서버장애_상태유지() {
+        // Arrange: 5xx는 실제로 승인됐을 수도 있어서 실패로 단정하면 안 됨(PENDING 유지)
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        willThrow(new CommonException(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE))
+                .given(tossPaymentClient).confirmPayment(any(), any(), any());
+
+        assertThatThrownBy(() -> paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE);
+
+        // markFailed/markCompleted 둘 다 호출되면 안 됨 — 상태는 그대로 PENDING
+        verify(paymentMapper, never()).markFailed(any(), any());
+        verify(paymentMapper, never()).markCompleted(any());
     }
 
 }
