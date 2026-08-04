@@ -54,3 +54,6 @@ petopia:
     secret-key: ${TOSS_SECRET_KEY}
     security-key: ${TOSS_SECURITY_KEY}
     api-version: ${TOSS_API_VERSION:2024-06-01}
+
+nts:
+  service-key: ${NTS_SERVICE_KEY}
