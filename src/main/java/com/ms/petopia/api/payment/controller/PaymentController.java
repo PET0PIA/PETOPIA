@@ -54,9 +54,9 @@ public class PaymentController {
     public PaymentResponse confirmPayment(
             @PathVariable Long paymentId,
             @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
-            @RequestBody ConfirmPaymentRequest request
+            @Valid @RequestBody ConfirmPaymentRequest request
     ) {
-        return paymentService.confirmPayment(paymentId, request);
+        return paymentService.confirmPayment(paymentId, userId, request);
     }
 
 

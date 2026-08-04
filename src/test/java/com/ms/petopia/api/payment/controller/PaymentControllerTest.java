@@ -1,5 +1,6 @@
 package com.ms.petopia.api.payment.controller;
 
+import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.payment.service.PaymentService;
@@ -131,6 +132,52 @@ class PaymentControllerTest {
                         .content("{\"fairId\":10,\"businessId\":20,\"amount\":50000}"))
                 .andExpect(status().isConflict()) // ErrorCode.PAYMENT_TARGET_NOT_PAYABLE이 HttpStatus.CONFLICT라서 409
                 .andExpect(jsonPath("$.code").value("P002"));
+    }
+
+    @Test
+    void confirmsPayment() throws Exception {
+        given(paymentService.confirmPayment(eq(1L), eq(99L), any(ConfirmPaymentRequest.class))).willReturn(
+                new PaymentResponse(
+                        1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "카드",
+                        LocalDateTime.of(2026, 8, 4, 10, 0),
+                        LocalDateTime.of(2026, 8, 3, 10, 0),
+                        10L, 20L, 99L, null, 40L
+                )
+        );
+
+        mockMvc.perform(post("/api/payments/1/confirm")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentKey\":\"5EnNZRJGvxNa2mzq\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.method").value("카드"));
+
+        verify(paymentService).confirmPayment(eq(1L), eq(99L), any(ConfirmPaymentRequest.class));
+    }
+
+    @Test
+    void returns403WhenConfirmingSomeoneElsesPayment() throws Exception {
+        // 다른 사람의 결제를 승인하려는 상황(IDOR 방지 확인)
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(paymentService).confirmPayment(eq(1L), eq(99L), any(ConfirmPaymentRequest.class));
+
+        mockMvc.perform(post("/api/payments/1/confirm")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentKey\":\"5EnNZRJGvxNa2mzq\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("A002"));
+    }
+
+    @Test
+    void returns400WhenPaymentKeyIsBlank() throws Exception {
+        // @NotBlank 검증 — 서비스까지 안 가고 컨트롤러 바인딩 단계에서 걸러져야 함
+        mockMvc.perform(post("/api/payments/1/confirm")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentKey\":\"\"}"))
+                .andExpect(status().isBadRequest());
     }
 
 }

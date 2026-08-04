@@ -75,10 +75,13 @@ public class PaymentService {
     }
 
     @Transactional
-    public PaymentResponse confirmPayment(Long paymentId, ConfirmPaymentRequest request) {
+    public PaymentResponse confirmPayment(Long paymentId, Long userId, ConfirmPaymentRequest request) {
         PaymentRow row = paymentMapper.selectById(paymentId);
         if (row == null) {
             throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!userId.equals(row.getPayerUserId())) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
         if (!"PENDING".equals(row.getStatus())) {
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
@@ -89,6 +92,7 @@ public class PaymentService {
                 request.paymentKey(), orderId, row.getAmount()
         );
         LocalDateTime now = LocalDateTime.now();
+        row.setStatus("COMPLETED");
         row.setMethod(tossResponse.method());
         row.setTossPaymentKey(tossResponse.paymentKey());
         row.setPaidAt(now);
