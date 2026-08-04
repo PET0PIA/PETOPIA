@@ -8,7 +8,6 @@ import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -18,12 +17,12 @@ public class BusinessService {
 
     private final BusinessMapper businessMapper;
     private final NtsBusinessVerificationClient ntsClient;
+    private final BusinessRegistrar businessRegistrar;
 
     // 사업자 등록(국세청 진위확인 포함)
-    @Transactional
     public BusinessResponse registerBusiness(Long ownerId, BusinessRegisterRequest request) {
 
-        // 국세청 진위 확인 API 호출(동기)
+        // 국세청 진위 확인 API 호출(동기) - 트랜잭션 없이, DB 커넥션 안 붙잡은 상태로 호출
         boolean valid;
 
         try {
@@ -47,24 +46,8 @@ public class BusinessService {
             throw new CommonException(ErrorCode.BUSINESS_VERIFICATION_FAILED);
         }
 
-        // 여기 도달하면 항상 VERIFIED, 검증 결과까지 확정된 상태로 한 번에 저장
-        Business business = Business.builder()
-                .ownerId(ownerId)
-                .name(request.getName())
-                .ceoName(request.getCeoName())
-                .bizRegNo(request.getBizRegNo())
-                .startDate(request.getStartDate())
-                .address(request.getAddress())
-                .phone(request.getPhone())
-                .website(request.getWebsite())
-                .verifyStatus(Business.VerifyStatus.VERIFIED)
-                .build();
-
-        // 검증 결과까지 포함해서 한 번에 저장
-        businessMapper.insertBusiness(business);
-
-        // 재조회 (정확한 값으로 응답 만들기 위해)
-        Business saved = businessMapper.selectById(business.getBusinessId());
+        // 여기 도달하면 항상 VERIFIED. 저장은 별도 컴포넌트(트랜잭션 안)에서 수행
+        Business saved = businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED);
 
         return BusinessResponse.from(saved);
 

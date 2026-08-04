@@ -17,11 +17,11 @@ public class RecruitNoticeController {
     // 모집 공고 작성/수정
     // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @PutMapping("/recruit-notice")
-    public RecruitNoticeResponse upsertNotice(@PathVariable Long fairId,
-                                              @Valid @RequestBody RecruitNoticeRequest request) {
-
-        // TODO: 로그인 붙으면 인증 정보에서 writerId, role 추출
-        Long writerId = 1L;
+    public RecruitNoticeResponse upsertNotice(
+            @PathVariable Long fairId,
+            @RequestHeader(RecruitNoticeTemporaryAuthHeaders.USER_ID) Long writerId,
+            @Valid @RequestBody RecruitNoticeRequest request
+    ) {
 
         return recruitNoticeService.upsertNotice(fairId, writerId, request);
 

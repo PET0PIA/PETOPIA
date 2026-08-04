@@ -52,7 +52,14 @@ public class NtsBusinessVerificationClient {
                 throw new IllegalStateException("국세청 API 응답이 비어있습니다.");
             }
 
-            return response.getData().get(0).getValid() == NtsValidateResponse.ValidCode.MATCH;
+            NtsValidateResponse.ValidCode valid = response.getData().get(0).getValid();
+
+            // 방어 코드
+            if(valid == null || valid == NtsValidateResponse.ValidCode.UNKNOWN) {
+                throw new IllegalStateException("국세청 API가 알 수 없는 응답 코드를 반환했습니다.");
+            }
+
+            return valid == NtsValidateResponse.ValidCode.MATCH;
 
         } catch(Exception e) {
 

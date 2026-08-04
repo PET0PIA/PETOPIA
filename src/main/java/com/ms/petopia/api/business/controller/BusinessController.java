@@ -18,10 +18,10 @@ public class BusinessController {
 
     // 사업자 등록 및 진위 확인
     @PostMapping
-    public BusinessResponse register(@Valid @RequestBody BusinessRegisterRequest request) {
-
-        // TODO: 로그인 붙으면 인증 정보에서 추출
-        Long ownerId = 1L;
+    public BusinessResponse register(
+            @RequestHeader(BusinessTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @Valid @RequestBody BusinessRegisterRequest request
+    ) {
 
         return businessService.registerBusiness(ownerId, request);
 
@@ -29,23 +29,23 @@ public class BusinessController {
 
     // 내 사업자 목록 조회
     @GetMapping
-    public List<BusinessResponse> getMyBusinesses() {
-
-        // TODO: 로그인 붙으면 인증 정보에서 추출
-        Long ownerId = 1L;
+    public List<BusinessResponse> getMyBusinesses(
+            @RequestHeader(BusinessTemporaryAuthHeaders.USER_ID) Long ownerId
+    ) {
 
         return businessService.getMyBusinesses(ownerId);
 
     }
 
-    // 사업자 상세 조회 (진위확인 상태 포함)
+    // 사업자 상세 조회 (진위 확인 상태 포함)
     @GetMapping("/{businessId}")
-    public BusinessResponse getBusiness(@PathVariable Long businessId) {
-
-        // TODO: 로그인 붙으면 인증 정보에서 추출
-        Long ownerId = 1L;
+    public BusinessResponse getBusiness(
+            @RequestHeader(BusinessTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @PathVariable Long businessId
+    ) {
 
         return businessService.getBusiness(ownerId, businessId);
+
     }
 
 }
