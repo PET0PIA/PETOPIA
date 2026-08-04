@@ -29,12 +29,21 @@ public interface PaymentMapper {
      * <p>insert 후 row.paymentId에 생성된 PK가 채워진다(XML의 useGeneratedKeys).
      */
     void insert(PaymentRow row);
+
+    /**
+     * 토스 승인 API를 부르기 전에 PENDING -> PROCESSING으로 원자적으로 선점한다.
+     * 동시에 두 요청이 들어와도 이 UPDATE 자체가 원자적이라 딱 하나만 1을 받고,
+     * 나머지는 0을 받는다 — 0을 받은 쪽은 토스를 아예 호출하지 않아야 한다
+     * (두 요청이 동시에 토스 승인 API를 부르는 것 자체를 막는 게 목적).
+     */
+    int markProcessing(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** PROCESSING -> COMPLETED. markProcessing으로 선점에 성공한 요청만 호출한다. */
     int markCompleted(PaymentRow row);
 
     /**
-     * 토스가 확정적으로 승인을 거부했을 때(4xx) PENDING -> FAILED로 전이한다.
-     * markCompleted와 마찬가지로 status='PENDING' 조건이 걸려있어, 이미 다른 요청이
-     * 먼저 상태를 바꿔놨으면(동시 처리) 0을 반환한다.
+     * 토스가 확정적으로 승인을 거부했을 때(4xx) PROCESSING -> FAILED로 전이한다.
+     * markProcessing으로 선점에 성공한 요청만 호출하므로, 정상 흐름에서는 항상 1을 반환한다.
      */
     int markFailed(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
 }
