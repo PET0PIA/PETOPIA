@@ -8,6 +8,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.TokenHashUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,6 +22,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -50,10 +52,12 @@ class EmailVerificationServiceTest {
 
         emailVerificationService.verify(EMAIL, rawToken);
 
-        //issueAndSend()와 잠금 순서를 맞추기 위해 users 행을 먼저 잠그는지 확인
-        verify(authMapper).selectUserByIdForUpdate(USER_ID);
-        verify(authMapper).markUserTokenUsed(TOKEN_ID);
-        verify(authMapper).markEmailVerified(USER_ID);
+        //issueAndSend()와 잠금 순서(users -> user_tokens)를 맞추는지, 호출 순서 자체를 검증
+        InOrder inOrder = inOrder(authMapper);
+        inOrder.verify(authMapper).selectUserByIdForUpdate(USER_ID);
+        inOrder.verify(authMapper).selectActiveUserToken(USER_ID, PURPOSE);
+        inOrder.verify(authMapper).markUserTokenUsed(TOKEN_ID);
+        inOrder.verify(authMapper).markEmailVerified(USER_ID);
         verify(authMapper, never()).recordFailedAttempt(anyLong(), anyInt());
     }
 
