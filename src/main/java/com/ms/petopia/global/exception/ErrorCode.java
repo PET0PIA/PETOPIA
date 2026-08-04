@@ -34,6 +34,14 @@ public enum ErrorCode {
     TOO_MANY_VERIFY_ATTEMPTS(HttpStatus.BAD_REQUEST, "A008", "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 받아주세요."),
     RESEND_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "A009", "인증 코드 재전송은 잠시 후 다시 시도해주세요."),
 
+    // ===== Storage =====
+    STORAGE_UNSUPPORTED_EXTENSION(HttpStatus.BAD_REQUEST, "S001", "허용하지 않는 파일 확장자입니다."),
+    STORAGE_CONTENT_TYPE_MISMATCH(HttpStatus.BAD_REQUEST, "S002", "파일 확장자와 Content-Type이 일치하지 않습니다."),
+    STORAGE_FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "S003", "허용 용량을 초과했습니다."),
+    STORAGE_INVALID_OBJECT_KEY(HttpStatus.BAD_REQUEST, "S004", "잘못된 임시 파일 키입니다."),
+    STORAGE_UPLOAD_NOT_FOUND(HttpStatus.BAD_REQUEST, "S005", "업로드된 파일을 찾을 수 없습니다."),
+    STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "S006", "파일 저장소에 일시적으로 연결할 수 없습니다."),
+
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
     PAYMENT_TARGET_NOT_PAYABLE(HttpStatus.CONFLICT, "P002", "결제할 수 없는 상태입니다."),

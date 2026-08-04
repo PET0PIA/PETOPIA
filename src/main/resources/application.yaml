@@ -26,6 +26,16 @@ spring:
     # SQL 안의 ${...} 를 Flyway가 치환하려다 깨지는 사고를 막는다.
     placeholder-replacement: false
 
+petopia:
+  storage:
+    # 실제 버킷 및 공개 URL은 환경변수로 주입한다. 기본값은 로컬 기동/테스트용이다.
+    bucket: ${S3_BUCKET:petopia-local}
+    region: ${AWS_REGION:ap-northeast-2}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://storage.local.invalid}
+    presign-expiry: ${S3_PRESIGN_EXPIRY:5m}
+    tmp-prefix: ${S3_TMP_PREFIX:tmp/}
+    confirmed-prefix: ${S3_CONFIRMED_PREFIX:uploads/}
+
 mybatis:
   # 매퍼 XML 위치. src/main/resources/mapper 아래 하위 디렉터리까지 모두 스캔한다.
   mapper-locations: classpath:mapper/**/*.xml
