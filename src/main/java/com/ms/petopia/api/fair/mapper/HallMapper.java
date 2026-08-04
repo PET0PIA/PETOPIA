@@ -27,4 +27,11 @@ public interface HallMapper {
     int update(Hall hall);
 
     int deleteById(@Param("hallId") Long hallId);
+
+    /**
+     * 부스 슬롯 일괄저장용 낙관적 락. hall_id와 booth_layout_version이 동시에 일치할
+     * 때만 버전을 1 증가시킨다. 반환값이 0이면(영향받은 행 없음) 그 사이 다른 저장이
+     * 있었다는 뜻이라 호출부(BoothSlotService)가 버전 충돌로 처리해야 한다.
+     */
+    int bumpBoothLayoutVersion(@Param("hallId") Long hallId, @Param("expectedVersion") Long expectedVersion);
 }

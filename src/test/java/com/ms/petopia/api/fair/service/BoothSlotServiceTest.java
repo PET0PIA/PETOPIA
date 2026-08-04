@@ -1,5 +1,6 @@
 package com.ms.petopia.api.fair.service;
 
+import com.ms.petopia.api.fair.dto.BoothLayoutResponse;
 import com.ms.petopia.api.fair.dto.BoothSlot;
 import com.ms.petopia.api.fair.dto.BoothSlotItem;
 import com.ms.petopia.api.fair.dto.BoothSlotResponse;
@@ -38,6 +39,8 @@ class BoothSlotServiceTest {
     private static final Long HALL_ID = 100L;
     private static final Long SLOT_ID = 1000L;
     private static final Long NEW_SLOT_ID = 1001L;
+    private static final Long EXPECTED_VERSION = 5L;
+    private static final Long STALE_VERSION = 4L;
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 1, 10, 0);
 
     @Mock
@@ -56,6 +59,9 @@ class BoothSlotServiceTest {
     void setUp() {
         org.mockito.Mockito.lenient().when(hallMapper.selectById(HALL_ID)).thenReturn(hall());
         org.mockito.Mockito.lenient().when(timeProvider.now()).thenReturn(NOW);
+        // bulkSave는 검증(중복 번호/좌표/가격)을 통과한 요청만 이 낙관적 락 단계까지 도달한다.
+        // 그 이전에 실패하는 테스트에서는 호출되지 않아 lenient로 둔다.
+        org.mockito.Mockito.lenient().when(hallMapper.bumpBoothLayoutVersion(HALL_ID, EXPECTED_VERSION)).thenReturn(1);
     }
 
     // ===== 공통 =====
@@ -64,10 +70,57 @@ class BoothSlotServiceTest {
     @DisplayName("다른 행사 소속 홀에 저장하려 하면 HALL_NOT_FOUND를 던진다")
     void bulkSave_다른행사소속홀이면_예외를_던진다() {
         assertErrorCode(
-                () -> boothSlotService.bulkSave(OTHER_FAIR_ID, HALL_ID, new BulkSaveBoothSlotsRequest(List.of())),
+                () -> boothSlotService.bulkSave(OTHER_FAIR_ID, HALL_ID, request(List.of())),
                 ErrorCode.HALL_NOT_FOUND
         );
         verify(boothSlotMapper, never()).insert(any());
+    }
+
+    // ===== 동시 편집(낙관적 락) =====
+
+    @Test
+    @DisplayName("expectedVersion이 halls.booth_layout_version과 다르면 BOOTH_LAYOUT_VERSION_CONFLICT를 던지고 아무것도 바꾸지 않는다")
+    void bulkSave_버전이다르면_예외를_던지고_아무것도_바꾸지않는다() {
+        given(hallMapper.bumpBoothLayoutVersion(HALL_ID, STALE_VERSION)).willReturn(0);
+
+        BulkSaveBoothSlotsRequest request = request(List.of(
+                item(null, "A-01", "0.1", "0.1", "0.2", "0.2", 10000L, null)
+        ), STALE_VERSION);
+
+        assertErrorCode(() -> boothSlotService.bulkSave(FAIR_ID, HALL_ID, request), ErrorCode.BOOTH_LAYOUT_VERSION_CONFLICT);
+        verify(boothSlotMapper, never()).selectByHallId(any());
+        verify(boothSlotMapper, never()).insert(any());
+        verify(boothSlotMapper, never()).update(any());
+        verify(boothSlotMapper, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("expectedVersion이 없으면 INVALID_INPUT_VALUE를 던진다")
+    void bulkSave_버전이없으면_예외를_던진다() {
+        BulkSaveBoothSlotsRequest request = request(List.of(
+                item(null, "A-01", "0.1", "0.1", "0.2", "0.2", 10000L, null)
+        ), null);
+
+        assertErrorCode(() -> boothSlotService.bulkSave(FAIR_ID, HALL_ID, request), ErrorCode.INVALID_INPUT_VALUE);
+        verify(hallMapper, never()).bumpBoothLayoutVersion(any(), any());
+    }
+
+    @Test
+    @DisplayName("저장에 성공하면 버전을 1 증가시켜 응답에 담는다")
+    void bulkSave_성공하면_버전을_1증가시켜_반환한다() {
+        given(boothSlotMapper.selectByHallId(HALL_ID)).willReturn(List.of());
+        willAnswer(invocation -> {
+            BoothSlot slot = invocation.getArgument(0);
+            slot.setBoothSlotId(NEW_SLOT_ID);
+            return 1;
+        }).given(boothSlotMapper).insert(any(BoothSlot.class));
+
+        BoothLayoutResponse result = boothSlotService.bulkSave(FAIR_ID, HALL_ID, request(List.of(
+                item(null, "A-01", "0.1", "0.1", "0.2", "0.2", 10000L, null)
+        )));
+
+        assertThat(result.boothLayoutVersion()).isEqualTo(EXPECTED_VERSION + 1);
+        verify(hallMapper).bumpBoothLayoutVersion(HALL_ID, EXPECTED_VERSION);
     }
 
     // ===== 생성 =====
@@ -82,11 +135,11 @@ class BoothSlotServiceTest {
             return 1;
         }).given(boothSlotMapper).insert(any(BoothSlot.class));
 
-        BulkSaveBoothSlotsRequest request = new BulkSaveBoothSlotsRequest(List.of(
+        BulkSaveBoothSlotsRequest request = request(List.of(
                 item(null, "A-01", "0.1", "0.1", "0.2", "0.2", 10000L, null)
         ));
 
-        List<BoothSlotResponse> responses = boothSlotService.bulkSave(FAIR_ID, HALL_ID, request);
+        List<BoothSlotResponse> responses = boothSlotService.bulkSave(FAIR_ID, HALL_ID, request).slots();
 
         assertThat(responses).hasSize(1);
         BoothSlotResponse response = responses.get(0);
@@ -107,11 +160,11 @@ class BoothSlotServiceTest {
     void bulkSave_잠기지않은슬롯이면_전부수정한다() {
         given(boothSlotMapper.selectByHallId(HALL_ID)).willReturn(List.of(existingSlot(null)));
 
-        BulkSaveBoothSlotsRequest request = new BulkSaveBoothSlotsRequest(List.of(
+        BulkSaveBoothSlotsRequest request = request(List.of(
                 item(SLOT_ID, "A-02", "0.3", "0.3", "0.2", "0.2", 20000L, "콘센트 추가")
         ));
 
-        List<BoothSlotResponse> responses = boothSlotService.bulkSave(FAIR_ID, HALL_ID, request);
+        List<BoothSlotResponse> responses = boothSlotService.bulkSave(FAIR_ID, HALL_ID, request).slots();
 
         BoothSlotResponse response = responses.get(0);
         assertThat(response.slotNumber()).isEqualTo("A-02");
@@ -122,6 +175,9 @@ class BoothSlotServiceTest {
         verify(boothSlotMapper).update(captor.capture());
         assertThat(captor.getValue().getSlotNumber()).isEqualTo("A-02");
         assertThat(captor.getValue().getPrice()).isEqualTo(20000L);
+        // mapper에 넘기는 updatedAt이 응답에 담기는 값(now)과 같은지 - DB의 NOW()에 맡기면
+        // 이 값과 실제 저장값이 어긋날 수 있어서 앱이 정한 시각을 명시적으로 실어 보낸다.
+        assertThat(captor.getValue().getUpdatedAt()).isEqualTo(NOW);
     }
 
     @Test
@@ -129,7 +185,7 @@ class BoothSlotServiceTest {
     void bulkSave_잠긴슬롯위치변경시도하면_예외를_던진다() {
         given(boothSlotMapper.selectByHallId(HALL_ID)).willReturn(List.of(existingSlot(NOW.minusDays(1))));
 
-        BulkSaveBoothSlotsRequest request = new BulkSaveBoothSlotsRequest(List.of(
+        BulkSaveBoothSlotsRequest request = request(List.of(
                 item(SLOT_ID, "A-02", "0.1", "0.1", "0.2", "0.2", 10000L, null)
         ));
 
@@ -142,11 +198,11 @@ class BoothSlotServiceTest {
     void bulkSave_잠긴슬롯이라도_핵심값동일하면_memo만수정한다() {
         given(boothSlotMapper.selectByHallId(HALL_ID)).willReturn(List.of(existingSlot(NOW.minusDays(1))));
 
-        BulkSaveBoothSlotsRequest request = new BulkSaveBoothSlotsRequest(List.of(
+        BulkSaveBoothSlotsRequest request = request(List.of(
                 item(SLOT_ID, "A-01", "0.1", "0.1", "0.2", "0.2", 10000L, "변경된 메모")
         ));
 
-        List<BoothSlotResponse> responses = boothSlotService.bulkSave(FAIR_ID, HALL_ID, request);
+        List<BoothSlotResponse> responses = boothSlotService.bulkSave(FAIR_ID, HALL_ID, request).slots();
 
         assertThat(responses.get(0).slotNumber()).isEqualTo("A-01");
         assertThat(responses.get(0).memo()).isEqualTo("변경된 메모");
@@ -166,8 +222,8 @@ class BoothSlotServiceTest {
         given(boothSlotMapper.selectByHallId(HALL_ID)).willReturn(List.of(existingSlot(null)));
 
         List<BoothSlotResponse> responses = boothSlotService.bulkSave(
-                FAIR_ID, HALL_ID, new BulkSaveBoothSlotsRequest(List.of())
-        );
+                FAIR_ID, HALL_ID, request(List.of())
+        ).slots();
 
         assertThat(responses).isEmpty();
         verify(boothSlotMapper).deleteById(SLOT_ID);
@@ -179,7 +235,7 @@ class BoothSlotServiceTest {
         given(boothSlotMapper.selectByHallId(HALL_ID)).willReturn(List.of(existingSlot(NOW.minusDays(1))));
 
         assertErrorCode(
-                () -> boothSlotService.bulkSave(FAIR_ID, HALL_ID, new BulkSaveBoothSlotsRequest(List.of())),
+                () -> boothSlotService.bulkSave(FAIR_ID, HALL_ID, request(List.of())),
                 ErrorCode.BOOTH_SLOT_LOCKED
         );
         verify(boothSlotMapper, never()).deleteById(any());
@@ -192,7 +248,7 @@ class BoothSlotServiceTest {
     void bulkSave_존재하지않는슬롯참조하면_예외를_던진다() {
         given(boothSlotMapper.selectByHallId(HALL_ID)).willReturn(List.of());
 
-        BulkSaveBoothSlotsRequest request = new BulkSaveBoothSlotsRequest(List.of(
+        BulkSaveBoothSlotsRequest request = request(List.of(
                 item(9999L, "A-01", "0.1", "0.1", "0.2", "0.2", 10000L, null)
         ));
 
@@ -202,7 +258,7 @@ class BoothSlotServiceTest {
     @Test
     @DisplayName("요청 안에 부스 번호가 중복되면 BOOTH_SLOT_DUPLICATE_NUMBER를 던진다")
     void bulkSave_번호중복이면_예외를_던진다() {
-        BulkSaveBoothSlotsRequest request = new BulkSaveBoothSlotsRequest(List.of(
+        BulkSaveBoothSlotsRequest request = request(List.of(
                 item(null, "A-01", "0.1", "0.1", "0.2", "0.2", 10000L, null),
                 item(null, "A-01", "0.5", "0.5", "0.2", "0.2", 10000L, null)
         ));
@@ -212,9 +268,22 @@ class BoothSlotServiceTest {
     }
 
     @Test
+    @DisplayName("요청 안에 같은 boothSlotId를 두 번 이상 참조하면 BOOTH_SLOT_DUPLICATE_REFERENCE를 던진다")
+    void bulkSave_슬롯ID중복참조하면_예외를_던진다() {
+        BulkSaveBoothSlotsRequest request = request(List.of(
+                item(SLOT_ID, "A-01", "0.1", "0.1", "0.2", "0.2", 10000L, null),
+                item(SLOT_ID, "A-02", "0.5", "0.5", "0.2", "0.2", 10000L, null)
+        ));
+
+        assertErrorCode(() -> boothSlotService.bulkSave(FAIR_ID, HALL_ID, request), ErrorCode.BOOTH_SLOT_DUPLICATE_REFERENCE);
+        verify(boothSlotMapper, never()).selectByHallId(any());
+        verify(boothSlotMapper, never()).update(any());
+    }
+
+    @Test
     @DisplayName("좌표가 0~1 범위를 벗어나면 INVALID_INPUT_VALUE를 던진다")
     void bulkSave_좌표범위벗어나면_예외를_던진다() {
-        BulkSaveBoothSlotsRequest request = new BulkSaveBoothSlotsRequest(List.of(
+        BulkSaveBoothSlotsRequest request = request(List.of(
                 item(null, "A-01", "1.5", "0.1", "0.2", "0.2", 10000L, null)
         ));
 
@@ -224,7 +293,7 @@ class BoothSlotServiceTest {
     @Test
     @DisplayName("가격이 음수면 INVALID_INPUT_VALUE를 던진다")
     void bulkSave_가격음수면_예외를_던진다() {
-        BulkSaveBoothSlotsRequest request = new BulkSaveBoothSlotsRequest(List.of(
+        BulkSaveBoothSlotsRequest request = request(List.of(
                 item(null, "A-01", "0.1", "0.1", "0.2", "0.2", -1L, null)
         ));
 
@@ -234,14 +303,15 @@ class BoothSlotServiceTest {
     // ===== 조회 =====
 
     @Test
-    @DisplayName("정상 조회 시 응답 목록으로 매핑한다")
+    @DisplayName("정상 조회 시 응답 목록과 현재 버전으로 매핑한다")
     void getBoothSlots_정상조회() {
         given(boothSlotMapper.selectByHallId(HALL_ID)).willReturn(List.of(existingSlot(null)));
 
-        List<BoothSlotResponse> responses = boothSlotService.getBoothSlots(FAIR_ID, HALL_ID);
+        BoothLayoutResponse result = boothSlotService.getBoothSlots(FAIR_ID, HALL_ID);
 
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).boothSlotId()).isEqualTo(SLOT_ID);
+        assertThat(result.slots()).hasSize(1);
+        assertThat(result.slots().get(0).boothSlotId()).isEqualTo(SLOT_ID);
+        assertThat(result.boothLayoutVersion()).isEqualTo(EXPECTED_VERSION);
     }
 
     @Test
@@ -257,6 +327,7 @@ class BoothSlotServiceTest {
         hall.setHallId(HALL_ID);
         hall.setFairId(FAIR_ID);
         hall.setName("A홀");
+        hall.setBoothLayoutVersion(EXPECTED_VERSION);
         return hall;
     }
 
@@ -287,6 +358,14 @@ class BoothSlotServiceTest {
                 new BigDecimal(posX), new BigDecimal(posY), new BigDecimal(width), new BigDecimal(height),
                 price, memo
         );
+    }
+
+    private BulkSaveBoothSlotsRequest request(List<BoothSlotItem> items) {
+        return request(items, EXPECTED_VERSION);
+    }
+
+    private BulkSaveBoothSlotsRequest request(List<BoothSlotItem> items, Long expectedVersion) {
+        return new BulkSaveBoothSlotsRequest(items, expectedVersion);
     }
 
     private void assertErrorCode(Runnable action, ErrorCode errorCode) {
