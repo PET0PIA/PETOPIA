@@ -59,6 +59,8 @@ public class EmailVerificationService {
         //DB에 저장
         authMapper.insertUserToken(userToken);
 
+        //TODO SMTP 응답을 기다리는 동안 users row FOR UPDATE 락을 계속 들고 있음.
+        //     outbox/워커로 분리해 커밋 후 비동기 발송하도록 개선 필요 (2차 범위)
         mailService.sendVerificationEmail(lockedUser.getEmail(), rawToken);
     }
 
@@ -85,6 +87,9 @@ public class EmailVerificationService {
         if (user == null) {
             throw new CommonException(ErrorCode.INVALID_TOKEN);
         }
+
+        //issueAndSend()와 잠금 순서(users -> user_tokens)를 맞춰 데드락을 피함
+        authMapper.selectUserByIdForUpdate(user.getUserId());
 
         //email 기준으로만 조회. 다른 사용자 검증 끼어들기 막음
         UserToken userToken = authMapper.selectActiveUserToken(user.getUserId(), PURPOSE_EMAIL_VERIFY);

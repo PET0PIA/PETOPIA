@@ -50,6 +50,8 @@ class EmailVerificationServiceTest {
 
         emailVerificationService.verify(EMAIL, rawToken);
 
+        //issueAndSend()와 잠금 순서를 맞추기 위해 users 행을 먼저 잠그는지 확인
+        verify(authMapper).selectUserByIdForUpdate(USER_ID);
         verify(authMapper).markUserTokenUsed(TOKEN_ID);
         verify(authMapper).markEmailVerified(USER_ID);
         verify(authMapper, never()).recordFailedAttempt(anyLong(), anyInt());
@@ -171,9 +173,14 @@ class EmailVerificationServiceTest {
 
     @Test
     void issueAndSend_잠긴유저row기준으로_토큰과메일을발급한다() {
-        given(authMapper.selectUserByIdForUpdate(USER_ID)).willReturn(user());
+        User lockedUser = user();
+        User requestedUser = User.builder()
+                .userId(USER_ID)
+                .email("input@petopia.com")
+                .build();
+        given(authMapper.selectUserByIdForUpdate(USER_ID)).willReturn(lockedUser);
 
-        emailVerificationService.issueAndSend(user());
+        emailVerificationService.issueAndSend(requestedUser);
 
         verify(mailService).sendVerificationEmail(eq(EMAIL), anyString());
     }
