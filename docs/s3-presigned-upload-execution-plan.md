@@ -93,7 +93,7 @@ public enum UploadPolicy {
 
 - `size`는 조기 실패용이며 보안 검증은 아니다. 실제 검증은 `confirm`의 `HeadObject` 결과로 한다.
 - 클라이언트는 presign 요청에 사용한 것과 같은 `Content-Type`으로 PUT해야 한다.
-- 확정 HTTP API는 만들지 않는다. 확정은 향후 도메인 서비스 트랜잭션 안에서만 `StorageService#confirm`을 호출하도록 한다. 공용 confirm API를 열면 소유권이 확인되지 않은 tmp 파일을 다른 리소스에 연결할 여지가 생긴다.
+- 확정 HTTP API는 만들지 않는다. 공용 confirm API를 열면 소유권이 확인되지 않은 tmp 파일을 다른 리소스에 연결할 여지가 생긴다. 향후 도메인 서비스만 소유권을 검증한 뒤 `StorageService#confirm`을 호출한다. 이 호출은 S3 내부 연산일 뿐 DB 트랜잭션과 원자적이지 않다.
 
 ## 4. 구현 단계
 
@@ -186,6 +186,8 @@ String toPublicUrl(String objectKey);
 5. Copy 성공 후에도 같은 ETag를 `DeleteObject.ifMatch`에 넣어 tmp 객체를 삭제한다. 복사 직후 새 객체가 업로드됐으면 삭제하지 않는다.
 6. tmp 삭제가 실패해도 복사 성공을 되돌리지 않는다. `warn` 로그만 남긴다.
 
+`confirm`은 S3 객체만 다루며 DB 상태를 생성·변경하지 않는다. 따라서 호출 도메인은 S3 확정 성공 뒤 DB 트랜잭션이 롤백될 수 있음을 전제로, 보상 삭제 또는 재시도 가능한 상태 전이 흐름을 별도로 구현해야 한다.
+
 예외 변환:
 
 - 객체 없음(404/`NoSuchKeyException`) → `STORAGE_UPLOAD_NOT_FOUND`
@@ -262,7 +264,8 @@ src/main/java/com/ms/petopia/global/logging/HttpLoggingFilter.java
 
 ## 8. 후속 작업 (이번 브랜치 제외)
 
-1. 첫 도메인에서 요청 DTO의 object key를 `confirm`하고 DB에 최종 키를 저장한다.
-2. 파일 메타 테이블을 도입해 업로더·정책·도메인 리소스·상태를 저장하고, tmp key 소유권을 검증한다.
-3. 교체/삭제 시 이전 객체 삭제, 트랜잭션 실패 시 보상 삭제를 도메인 규칙에 맞게 추가한다.
-4. 비공개 파일 정책과 presigned GET은 별도 설계/구현한다.
+1. 파일 메타 테이블을 도입해 업로더·정책·도메인 리소스·tmp/final key·`PENDING`/`CONFIRMED` 상태를 저장하고, tmp key 소유권을 검증한다.
+2. 첫 도메인에서 PENDING 레코드를 만든 뒤, 재시도 가능한 확정 작업으로 `confirm`과 DB의 CONFIRMED 전이를 조율한다. 최종 key는 재시도에도 같은 값을 쓰도록 DB에 먼저 기록한다.
+3. S3 확정 성공 뒤 DB 갱신·커밋이 실패하면 보상 삭제를 시도하고, 실패한 정리는 별도 재시도 작업으로 남긴다. DB 트랜잭션과 함께 롤백되는 outbox만으로는 이 보상을 보장할 수 없다.
+4. 교체/삭제 시 이전 객체 삭제를 도메인 규칙에 맞게 추가한다.
+5. 비공개 파일 정책과 presigned GET은 별도 설계/구현한다.
