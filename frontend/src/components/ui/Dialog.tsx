@@ -22,6 +22,14 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
 
+  // onClose가 호출부에서 인라인 함수로 넘어와도(참조가 매 렌더마다 바뀌어도) 아래
+  // 포커스 트랩 effect가 재실행되지 않도록 최신값만 ref로 추적한다. 그렇지 않으면
+  // 다이얼로그 안 입력창에 한 글자씩 칠 때마다(부모 리렌더 -> onClose 재생성) effect가
+  // 매번 cleanup(이전 포커스로 복귀)+재실행(닫기 버튼으로 재포커스)되어 타이핑 중 포커스가
+  // 계속 요동친다.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
 
@@ -34,7 +42,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -64,7 +72,7 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
       document.removeEventListener("keydown", handleKeyDown);
       previousFocusRef.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
