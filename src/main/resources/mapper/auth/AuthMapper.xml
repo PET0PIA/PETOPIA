@@ -4,6 +4,8 @@
 
 <mapper namespace="com.ms.petopia.api.auth.mapper.AuthMapper">
 
+    <!-- ===== 회원가입 / 유저 조회·수정 ===== -->
+
     <select id="existsVerifiedByEmail" resultType="boolean">
         SELECT EXISTS (
             SELECT 1
@@ -65,26 +67,6 @@
            AND email_verified = FALSE
     </update>
 
-    <insert id="insertUserToken"
-            parameterType="UserToken"
-            useGeneratedKeys="true"
-            keyProperty="tokenId"
-            keyColumn="token_id">
-        INSERT INTO user_tokens (
-               user_id
-             , token_hash
-             , purpose
-             , expires_at
-             , created_at
-        ) VALUES (
-               #{userId}
-             , #{tokenHash}
-             , #{purpose}
-             , #{expiresAt}
-             , #{createdAt}
-        )
-    </insert>
-
     <select id="selectUserByEmail" resultType="User">
         SELECT user_id
              , email
@@ -105,6 +87,29 @@
          WHERE email = #{email}
     </select>
 
+    <!-- refresh 시 최신 role 조회용 -->
+    <select id="selectUserById" resultType="User">
+        SELECT user_id
+             , email
+             , password_hash
+             , nickname
+             , birth_date
+             , phone
+             , gender
+             , address
+             , agreed_terms
+             , agreed_privacy
+             , role
+             , status
+             , email_verified
+             , created_at
+             , updated_at
+          FROM users
+         WHERE user_id = #{userId}
+    </select>
+
+    <!-- 재전송/인증 동시 요청을 직렬화하기 위한 행 잠금 조회. issueAndSend()/verify() 둘 다
+         이걸 제일 먼저 호출해서 잠금 순서(users -> user_tokens)를 맞춤 -->
     <select id="selectUserByIdForUpdate" resultType="User">
         SELECT user_id
              , email
@@ -126,6 +131,29 @@
            FOR UPDATE
     </select>
 
+    <!-- ===== 이메일 인증 코드 (user_tokens) ===== -->
+
+    <insert id="insertUserToken"
+            parameterType="UserToken"
+            useGeneratedKeys="true"
+            keyProperty="tokenId"
+            keyColumn="token_id">
+        INSERT INTO user_tokens (
+               user_id
+             , token_hash
+             , purpose
+             , expires_at
+             , created_at
+        ) VALUES (
+               #{userId}
+             , #{tokenHash}
+             , #{purpose}
+             , #{expiresAt}
+             , #{createdAt}
+        )
+    </insert>
+
+    <!-- 해당 유저의 아직 안 쓰인 최신 토큰 1건. verify()에서 검증 대상으로 씀 -->
     <select id="selectActiveUserToken" resultType="UserToken">
         SELECT token_id
              , user_id
@@ -143,6 +171,7 @@
          LIMIT 1
     </select>
 
+    <!-- 사용/폐기 여부와 상관없이 가장 최근 발급된 토큰 1건. 재발급 쿨다운 판단용 -->
     <select id="selectLatestToken" resultType="UserToken">
         SELECT token_id
              , user_id
@@ -159,6 +188,7 @@
          LIMIT 1
     </select>
 
+    <!-- 재전송 등으로 새 토큰을 발급하기 전, 기존에 살아있던 토큰을 무효화 -->
     <update id="invalidateActiveTokens">
         UPDATE user_tokens
            SET used_at = CURRENT_TIMESTAMP
@@ -167,6 +197,7 @@
            AND used_at IS NULL
     </update>
 
+    <!-- 검증 실패 시 시도 횟수 증가. maxAttempts 도달 시 같은 statement에서 토큰도 폐기 -->
     <update id="recordFailedAttempt">
         UPDATE user_tokens
            SET attempt_count = attempt_count + 1
@@ -175,6 +206,7 @@
            AND used_at IS NULL
     </update>
 
+    <!-- AND used_at IS NULL 가드로 동시 요청 중 한쪽만 실제로 갱신됨 -->
     <update id="markUserTokenUsed">
         UPDATE user_tokens
            SET used_at = CURRENT_TIMESTAMP
@@ -182,6 +214,7 @@
            AND used_at IS NULL
     </update>
 
+    <!-- 인증 완료 기록. users.email_verified + status 둘 다 여기서 같이 전환 -->
     <update id="markEmailVerified">
         UPDATE users
            SET email_verified = TRUE
@@ -189,6 +222,9 @@
          WHERE user_id = #{userId}
     </update>
 
+    <!-- ===== 권한 관리 ===== -->
+
+    <!-- 사업자 등록/삭제 시 role 부여·회수 (참가업체·부스 도메인이 UserRoleService를 통해 호출) -->
     <update id="updateUserRole">
         UPDATE users
            SET role = #{role}
