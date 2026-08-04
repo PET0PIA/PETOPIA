@@ -1,6 +1,5 @@
 package com.ms.petopia.api.business.dto.response;
 
-import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
@@ -43,15 +42,15 @@ public class NtsValidateResponse {
     }
 
     /*
-     * 국세청 진위확인 결과 코드.
-     * "01"=일치, "02"=불일치. 그 외(빈 문자열, 새로운 코드 등)는 UNKNOWN으로 처리한다.
-     * @JsonEnumDefaultValue + READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE 설정으로,
-     * 매핑 안 되는 값이 와도 예외 대신 UNKNOWN으로 안전하게 떨어지게 한다.
+     * 국세청 진위확인 결과 코드
+     * "01"=일치, "02"=불일치.
+     * 그 외 값(새 코드, 빈 문자열 등)은 매핑되지 않아 역직렬화 자체가 실패하고,
+     * NtsBusinessVerificationClient.validate()의 catch(Exception)로 떨어져
+     * NTS_API_UNAVAILABLE(503)로 처리된다.
      */
     public enum ValidCode {
         @JsonProperty("01") MATCH,
-        @JsonProperty("02") MISMATCH,
-        @JsonEnumDefaultValue UNKNOWN
+        @JsonProperty("02") MISMATCH
     }
 
 }

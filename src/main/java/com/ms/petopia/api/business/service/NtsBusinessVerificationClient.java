@@ -68,7 +68,7 @@ public class NtsBusinessVerificationClient {
             NtsValidateResponse.ValidCode valid = response.getData().get(0).getValid();
 
             // 방어 코드
-            if(valid == null || valid == NtsValidateResponse.ValidCode.UNKNOWN) {
+            if(valid == null) {
                 throw new IllegalStateException("국세청 API가 알 수 없는 응답 코드를 반환했습니다.");
             }
 
