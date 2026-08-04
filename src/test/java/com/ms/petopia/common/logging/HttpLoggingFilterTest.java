@@ -29,7 +29,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 로깅 필터가 요청/응답 바디를 소비해버리지 않는지 검증한다.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = {
+                "jwt.secret=c2VjdXJlLXRlc3Qta2V5LXRlc3Qta2V5LXRlc3Qta2V5LXRlc3Qta2V5",
+                "jwt.access-token-expiration=3600000",
+                "jwt.refresh-token-expiration=1209600000",
+                "petopia.toss.secret-key=test-secret"
+        })
 class HttpLoggingFilterTest {
 
     @LocalServerPort
@@ -145,6 +152,31 @@ class HttpLoggingFilterTest {
                 .contains("\"name\":\"코코\"");
     }
 
+    @Test
+    @DisplayName("presigned upload URL은 응답 로그에서 마스킹한다")
+    void masksPresignedUploadUrlInResponseLog() {
+        ch.qos.logback.classic.Logger root =
+                (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        root.addAppender(appender);
+
+        try {
+            client().get().uri("/test/upload-url").retrieve().toBodilessEntity();
+        } finally {
+            root.detachAppender(appender);
+        }
+
+        List<String> responseLogs = appender.list.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .filter(message -> message.contains("HTTP RES") && message.contains("/test/upload-url"))
+                .toList();
+
+        assertThat(responseLogs).isNotEmpty();
+        assertThat(responseLogs).anySatisfy(message -> assertThat(message).contains("\"uploadUrl\":\"****\""));
+        assertThat(responseLogs).noneMatch(message -> message.contains("signature-value"));
+    }
+
     private int indexOfMessageContaining(List<String> messages, String keyword) {
         for (int i = 0; i < messages.size(); i++) {
             if (messages.get(i).contains(keyword)) {
@@ -172,6 +204,11 @@ class HttpLoggingFilterTest {
         @GetMapping("/test/data")
         Map<String, String> data() {
             return Map.of("message", "pong");
+        }
+
+        @GetMapping("/test/upload-url")
+        Map<String, String> uploadUrl() {
+            return Map.of("uploadUrl", "https://storage.example/upload?X-Amz-Signature=signature-value");
         }
 
         @GetMapping("/test/error")

@@ -164,12 +164,22 @@ export interface BoothSlotItem {
 
 export interface BulkSaveBoothSlotsRequest {
   slots: BoothSlotItem[];
+  /**
+   * 이 홀을 조회했을 때 받은 boothLayoutVersion. 서버가 halls.booth_layout_version과
+   * 비교해서 다르면(그 사이 다른 곳에서 먼저 저장했으면) 409로 거부한다.
+   */
+  expectedVersion: number;
+}
+
+export interface BoothLayoutResponse {
+  slots: BoothSlot[];
+  boothLayoutVersion: number;
 }
 
 export function getBoothSlots(fairId: number, hallId: number) {
-  return apiClient.get<BoothSlot[]>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`);
+  return apiClient.get<BoothLayoutResponse>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`);
 }
 
 export function bulkSaveBoothSlots(fairId: number, hallId: number, payload: BulkSaveBoothSlotsRequest) {
-  return apiClient.put<BoothSlot[]>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`, payload);
+  return apiClient.put<BoothLayoutResponse>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`, payload);
 }

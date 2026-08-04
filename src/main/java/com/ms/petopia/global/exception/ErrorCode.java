@@ -34,6 +34,15 @@ public enum ErrorCode {
     TOO_MANY_VERIFY_ATTEMPTS(HttpStatus.BAD_REQUEST, "A008", "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 받아주세요."),
     RESEND_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "A009", "인증 코드 재전송은 잠시 후 다시 시도해주세요."),
 
+    // ===== Storage =====
+    STORAGE_UNSUPPORTED_EXTENSION(HttpStatus.BAD_REQUEST, "S001", "허용하지 않는 파일 확장자입니다."),
+    STORAGE_CONTENT_TYPE_MISMATCH(HttpStatus.BAD_REQUEST, "S002", "파일 확장자와 Content-Type이 일치하지 않습니다."),
+    STORAGE_FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "S003", "허용 용량을 초과했습니다."),
+    STORAGE_INVALID_OBJECT_KEY(HttpStatus.BAD_REQUEST, "S004", "잘못된 임시 파일 키입니다."),
+    STORAGE_UPLOAD_NOT_FOUND(HttpStatus.BAD_REQUEST, "S005", "업로드된 파일을 찾을 수 없습니다."),
+    STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "S006", "파일 저장소에 일시적으로 연결할 수 없습니다."),
+    STORAGE_UPLOAD_CHANGED(HttpStatus.CONFLICT, "S007", "파일이 업로드 후 변경되어 확정할 수 없습니다."),
+
     // ===== Vendor (참가업체·부스) =====
     BUSINESS_NOT_FOUND(HttpStatus.NOT_FOUND, "V001", "사업자를 찾을 수 없습니다."),
     RECRUIT_NOTICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V002", "해당 공고에 대한 권한이 없습니다."),
@@ -60,6 +69,8 @@ public enum ErrorCode {
     BOOTH_SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "F008", "존재하지 않는 부스 슬롯이거나 해당 홀의 슬롯이 아닙니다."),
     BOOTH_SLOT_LOCKED(HttpStatus.CONFLICT, "F009", "이미 신청이 걸려 위치·번호·가격 변경 및 삭제가 제한된 부스 슬롯입니다."),
     BOOTH_SLOT_DUPLICATE_NUMBER(HttpStatus.BAD_REQUEST, "F010", "같은 홀 안에 중복된 부스 번호가 있습니다."),
+    BOOTH_LAYOUT_VERSION_CONFLICT(HttpStatus.CONFLICT, "F011", "다른 곳에서 이미 이 홀의 배치를 저장했습니다. 최신 상태를 다시 불러와 주세요."),
+    BOOTH_SLOT_DUPLICATE_REFERENCE(HttpStatus.BAD_REQUEST, "F012", "같은 부스 슬롯을 요청 안에서 두 번 이상 참조했습니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
