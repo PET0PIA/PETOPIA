@@ -37,6 +37,7 @@ public class EmailSignupRequest {
     private String nickname;
 
     @NotNull
+    @Past
     private LocalDate birthDate;
 
     @NotBlank

@@ -8,6 +8,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.TokenHashUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
@@ -17,12 +18,24 @@ public class EmailVerificationService {
 
     private static final String PURPOSE_EMAIL_VERIFY = "EMAIL_VERIFY";
     private static final long EXPIRATION_MINUTES = 10;
+    private static final int MAX_VERIFY_ATTEMPTS = 5;
+    private static final long RESEND_COOLDOWN_SECONDS = 300;
 
     private final AuthMapper authMapper;
     private final MailService mailService;
 
     //회원가입 인증 코드 발급
     public void issueAndSend(User user) {
+        //직전 토큰이 쿨다운 시간 내에 발급됐으면 재요청 거부
+        UserToken latestToken = authMapper.selectLatestToken(user.getUserId(), PURPOSE_EMAIL_VERIFY);
+        if (latestToken != null
+                && latestToken.getCreatedAt().isAfter(LocalDateTime.now().minusSeconds(RESEND_COOLDOWN_SECONDS))) {
+            throw new CommonException(ErrorCode.RESEND_COOLDOWN);
+        }
+
+        //재전송 등으로 새 코드를 발급하기 전, 기존에 살아있던 코드는 무효화
+        authMapper.invalidateActiveTokens(user.getUserId(), PURPOSE_EMAIL_VERIFY);
+
         //TokenHashUtil.generateVerificationCode()로 원본 코드 생성 (6자리, 대문자+숫자)
         String rawToken = TokenHashUtil.generateVerificationCode();
 
@@ -60,22 +73,34 @@ public class EmailVerificationService {
     }
 
     //이메일 인증 코드 검증
-    public void verify(String rawToken) {
-        String tokenHash = TokenHashUtil.sha256(rawToken);
-
-        UserToken userToken = authMapper.selectUserTokenByHash(tokenHash, PURPOSE_EMAIL_VERIFY);
-
-        if (userToken == null) {
+    @Transactional
+    public void verify(String email, String rawToken) {
+        User user = authMapper.selectUserByEmail(email);
+        if (user == null) {
             throw new CommonException(ErrorCode.INVALID_TOKEN);
         }
-        if (userToken.getUsedAt() != null) {
-            throw new CommonException(ErrorCode.TOKEN_ALREADY_USED);
+
+        //email 기준으로만 조회. 다른 사용자 검증 끼어들기 막음
+        UserToken userToken = authMapper.selectActiveUserToken(user.getUserId(), PURPOSE_EMAIL_VERIFY);
+        if (userToken == null) {
+            throw new CommonException(ErrorCode.INVALID_TOKEN);
         }
         if (userToken.getExpiresAt().isBefore(LocalDateTime.now())) {
             throw new CommonException(ErrorCode.TOKEN_EXPIRED);
         }
 
-        authMapper.markUserTokenUsed(userToken.getTokenId());
+        String tokenHash = TokenHashUtil.sha256(rawToken);
+        if (!tokenHash.equals(userToken.getTokenHash())) {
+            //실패 횟수 증가 + maxAttempts 도달 시
+            authMapper.recordFailedAttempt(userToken.getTokenId(), MAX_VERIFY_ATTEMPTS);
+            throw new CommonException(ErrorCode.INVALID_TOKEN);
+        }
+
+        //AND used_at IS NULL 가드로 인해 동시 요청 중 한쪽만 갱신되게 함
+        int updated = authMapper.markUserTokenUsed(userToken.getTokenId());
+        if (updated == 0) {
+            throw new CommonException(ErrorCode.TOKEN_ALREADY_USED);
+        }
         authMapper.markEmailVerified(userToken.getUserId());
     }
 }

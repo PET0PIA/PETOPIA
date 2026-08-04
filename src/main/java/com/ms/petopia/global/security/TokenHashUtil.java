@@ -28,7 +28,6 @@ public final class TokenHashUtil {
 
     // 6자리 인증 코드 생성
     // generateRawToken() 너무 길어 6자리로 수정.
-    //TODO 시도 횟수 제한 추가 할지말지
     public static String generateVerificationCode() {
         StringBuilder code = new StringBuilder(CODE_LENGTH);
         for (int i = 0; i < CODE_LENGTH; i++) {

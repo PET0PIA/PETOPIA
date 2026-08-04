@@ -18,6 +18,7 @@ public class UserToken {
     private String tokenHash;
     private String purpose;
     private LocalDateTime usedAt;
+    private int attemptCount;
     private LocalDateTime createdAt;
     private LocalDateTime expiresAt;
 }

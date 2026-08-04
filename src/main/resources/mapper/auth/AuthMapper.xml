@@ -4,11 +4,12 @@
 
 <mapper namespace="com.ms.petopia.api.auth.mapper.AuthMapper">
 
-    <select id="existsByEmail" resultType="boolean">
+    <select id="existsVerifiedByEmail" resultType="boolean">
         SELECT EXISTS (
             SELECT 1
               FROM users
              WHERE email = #{email}
+               AND email_verified = TRUE
         )
     </select>
 
@@ -47,6 +48,22 @@
              , #{createdAt}
         )
     </insert>
+
+    <update id="updateUnverifiedUser" parameterType="User">
+        UPDATE users
+           SET password_hash   = #{passwordHash}
+             , nickname        = #{nickname}
+             , birth_date      = #{birthDate}
+             , phone           = #{phone}
+             , gender          = #{gender}
+             , address         = #{address}
+             , agreed_terms    = #{agreedTerms}
+             , agreed_privacy  = #{agreedPrivacy}
+             , status          = #{status}
+             , updated_at      = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+           AND email_verified = FALSE
+    </update>
 
     <insert id="insertUserToken"
             parameterType="UserToken"
@@ -88,18 +105,54 @@
          WHERE email = #{email}
     </select>
 
-    <select id="selectUserTokenByHash" resultType="UserToken">
+    <select id="selectActiveUserToken" resultType="UserToken">
         SELECT token_id
              , user_id
              , token_hash
              , purpose
              , used_at
+             , attempt_count
              , created_at
              , expires_at
           FROM user_tokens
-         WHERE token_hash = #{tokenHash}
+         WHERE user_id = #{userId}
            AND purpose = #{purpose}
+           AND used_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT 1
     </select>
+
+    <select id="selectLatestToken" resultType="UserToken">
+        SELECT token_id
+             , user_id
+             , token_hash
+             , purpose
+             , used_at
+             , attempt_count
+             , created_at
+             , expires_at
+          FROM user_tokens
+         WHERE user_id = #{userId}
+           AND purpose = #{purpose}
+         ORDER BY created_at DESC
+         LIMIT 1
+    </select>
+
+    <update id="invalidateActiveTokens">
+        UPDATE user_tokens
+           SET used_at = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+           AND purpose = #{purpose}
+           AND used_at IS NULL
+    </update>
+
+    <update id="recordFailedAttempt">
+        UPDATE user_tokens
+           SET attempt_count = attempt_count + 1
+             , used_at = IF(attempt_count + 1 >= #{maxAttempts}, CURRENT_TIMESTAMP, used_at)
+         WHERE token_id = #{tokenId}
+           AND used_at IS NULL
+    </update>
 
     <update id="markUserTokenUsed">
         UPDATE user_tokens
@@ -111,6 +164,7 @@
     <update id="markEmailVerified">
         UPDATE users
            SET email_verified = TRUE
+             , status = 'ACTIVE'
          WHERE user_id = #{userId}
     </update>
 

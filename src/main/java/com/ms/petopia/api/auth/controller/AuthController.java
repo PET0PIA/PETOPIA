@@ -6,6 +6,8 @@ import com.ms.petopia.api.auth.dto.EmailVerifyRequest;
 import com.ms.petopia.api.auth.dto.EmailVerifyResendRequest;
 import com.ms.petopia.api.auth.service.AuthService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,7 +26,7 @@ public class AuthController {
 
     //이메일이 이미 존재하는지 확인
     @GetMapping("/check")
-    public EmailCheckResponse isEmailAvailable(@RequestParam String email){
+    public EmailCheckResponse isEmailAvailable(@RequestParam @NotBlank @Email String email){
         return authService.isEmailAvailable(email);
     }
 
@@ -37,7 +39,7 @@ public class AuthController {
     //이메일 인증 코드 검증
     @PostMapping("/verify")
     public void verifyEmail(@Valid @RequestBody EmailVerifyRequest request) {
-        authService.verifyEmail(request.token());
+        authService.verifyEmail(request.email(), request.token());
     }
 
 }
