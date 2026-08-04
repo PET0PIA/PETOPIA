@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class BoothSlotResponse {
+public class BoothSlotLockStatusResponse {
 
     private Long boothSlotsId; // booth_slots.booth_slot_id
     private String slotNumber;

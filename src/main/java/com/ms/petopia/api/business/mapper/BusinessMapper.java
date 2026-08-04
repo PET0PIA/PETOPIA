@@ -13,10 +13,10 @@ public interface BusinessMapper {
     void insertBusiness(Business business);
 
     // 내 사업자 목록 조회
-    List<Business> selectByOwnerId(Long ownerId);
+    List<Business> selectByOwnerId(@Param("ownerId") Long ownerId);
 
     // 사업자 상세 조회
-    Business selectById(Long businessId);
+    Business selectById(@Param("businessId") Long businessId);
 
     // 사업자 등록 진위 확인
     void updateVerifyStatus(@Param("businessId") Long businessId,

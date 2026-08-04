@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.application.mapper.ApplicationMapper">
+
+    <!--
+        특정 행사의 사용 가능한(is_active) 부스 슬롯 + 잠금 상태.
+        locked: 이 슬롯을 참조하는 활성(PENDING_REVIEW/PAYMENT_PENDING/CONFIRMED) 신청이 있으면 true.
+        booth_slots/halls는 도메인2 소유 테이블이라 직접 SQL로 조회함.
+    -->
+    <select id="selectBoothSlotsWithLockStatus" parameterType="long"
+            resultType="com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse">
+        SELECT bs.booth_slot_id AS boothSlotsId,
+            bs.slot_number AS slotNumber,
+            bs.pos_x AS posX,
+            bs.pos_y AS posY,
+            bs.width AS width,
+            bs.height AS height,
+            bs.price AS price,
+            EXISTS (
+                SELECT 1
+                FROM application_slot aps
+                JOIN application a ON a.application_id = aps.application_id
+                WHERE aps.booth_slot_id = bs.booth_slot_id
+                AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+            ) AS locked
+        FROM booth_slots bs
+        JOIN halls h ON bs.hall_id = h.hall_id
+        WHERE h.fair_id = #{fairId}
+        AND bs.is_active = TRUE
+        ORDER BY bs.slot_number
+    </select>
+
+    <!-- 행사 존재 확인 (fair_id를 가진 행이 있는지만 확인, true/false) -->
+    <select id="existsFair" parameterType="long" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM fairs WHERE fair_id = #{fairId})
+    </select>
+
+</mapper>
