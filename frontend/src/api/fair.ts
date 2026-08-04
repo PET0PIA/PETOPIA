@@ -134,3 +134,42 @@ export function updateHall(fairId: number, hallId: number, payload: HallInput) {
 export function deleteHall(fairId: number, hallId: number) {
   return apiClient.delete<void>(`/api/fairs/${fairId}/halls/${hallId}`);
 }
+
+export interface BoothSlot {
+  boothSlotId: number;
+  hallId: number;
+  slotNumber: string;
+  posX: number;
+  posY: number;
+  width: number;
+  height: number;
+  price: number;
+  active: boolean;
+  memo: string | null;
+  lockedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BoothSlotItem {
+  boothSlotId?: number;
+  slotNumber: string;
+  posX: number;
+  posY: number;
+  width: number;
+  height: number;
+  price: number;
+  memo?: string;
+}
+
+export interface BulkSaveBoothSlotsRequest {
+  slots: BoothSlotItem[];
+}
+
+export function getBoothSlots(fairId: number, hallId: number) {
+  return apiClient.get<BoothSlot[]>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`);
+}
+
+export function bulkSaveBoothSlots(fairId: number, hallId: number, payload: BulkSaveBoothSlotsRequest) {
+  return apiClient.put<BoothSlot[]>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`, payload);
+}

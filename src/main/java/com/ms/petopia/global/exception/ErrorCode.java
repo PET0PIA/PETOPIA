@@ -48,6 +48,9 @@ public enum ErrorCode {
     HALL_NOT_FOUND(HttpStatus.NOT_FOUND, "F005", "존재하지 않는 홀이거나 해당 행사의 홀이 아닙니다."),
     FAIR_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "F006", "심사 대기 중인 신청서만 검토할 수 있습니다."),
     FAIR_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F007", "반려 시 반려 사유를 입력해야 합니다."),
+    BOOTH_SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "F008", "존재하지 않는 부스 슬롯이거나 해당 홀의 슬롯이 아닙니다."),
+    BOOTH_SLOT_LOCKED(HttpStatus.CONFLICT, "F009", "이미 신청이 걸려 위치·번호·가격 변경 및 삭제가 제한된 부스 슬롯입니다."),
+    BOOTH_SLOT_DUPLICATE_NUMBER(HttpStatus.BAD_REQUEST, "F010", "같은 홀 안에 중복된 부스 번호가 있습니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
