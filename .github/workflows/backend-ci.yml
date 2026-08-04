@@ -235,6 +235,7 @@ jobs:
             -e GMAIL_USERNAME='' -e GMAIL_APP_PASSWORD='' \
             -e TOSS_SECRET_KEY \
             -e TOSS_CLIENT_KEY='' -e TOSS_SECURITY_KEY='' \
+            -e NTS_SERVICE_KEY \
             petopia:ci-${{ github.sha }}
 
           deadline=$(( SECONDS + 120 ))
