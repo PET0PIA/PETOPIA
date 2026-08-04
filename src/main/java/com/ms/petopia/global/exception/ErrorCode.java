@@ -27,10 +27,18 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "A001", "인증이 필요합니다."),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "A002", "접근 권한이 없습니다."),
     INVALID_LOGIN(HttpStatus.UNAUTHORIZED, "A003", "이메일 혹은 비밀번호가 일치하지 않습니다."),
+    INVALID_TOKEN(HttpStatus.BAD_REQUEST, "A004", "유효하지 않은 인증 코드입니다."),
+    TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "A005", "인증 코드가 만료되었습니다."),
+    TOKEN_ALREADY_USED(HttpStatus.BAD_REQUEST, "A006", "이미 사용된 인증 코드입니다."),
+    EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "A007", "이미 인증된 이메일입니다."),
+    TOO_MANY_VERIFY_ATTEMPTS(HttpStatus.BAD_REQUEST, "A008", "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 받아주세요."),
+    RESEND_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "A009", "인증 코드 재전송은 잠시 후 다시 시도해주세요."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
     PAYMENT_TARGET_NOT_PAYABLE(HttpStatus.CONFLICT, "P002", "결제할 수 없는 상태입니다."),
+    PAYMENT_APPROVAL_FAILED(HttpStatus.PAYMENT_REQUIRED, "P003", "결제 승인에 실패했습니다."),
+    PAYMENT_GATEWAY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "P004", "결제 서비스에 일시적으로 연결할 수 없습니다."),
 
     // ===== Fair =====
     FAIR_INVALID_VENDOR_RECRUIT_PERIOD(HttpStatus.BAD_REQUEST, "F001", "참가업체 모집 종료일이 시작일보다 빠릅니다."),
@@ -38,6 +46,8 @@ public enum ErrorCode {
     FAIR_INVALID_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F003", "행사 운영 종료일이 시작일보다 빠릅니다."),
     FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "F004", "존재하지 않는 행사입니다."),
     HALL_NOT_FOUND(HttpStatus.NOT_FOUND, "F005", "존재하지 않는 홀이거나 해당 행사의 홀이 아닙니다."),
+    FAIR_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "F006", "심사 대기 중인 신청서만 검토할 수 있습니다."),
+    FAIR_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F007", "반려 시 반려 사유를 입력해야 합니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -59,6 +69,11 @@ public enum ErrorCode {
     ENTRY_FAIR_MISMATCH(HttpStatus.FORBIDDEN, "R017", "해당 행사의 입장 QR이 아닙니다."),
     RESERVATION_CHANGE_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R018", "방문 날짜 변경 가능 시간이 지났습니다."),
     RESERVATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R019", "예약 취소 가능 시간이 지났습니다.")
+    RESERVATION_CHANGE_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R018", "방문 날짜 변경 가능 시간이 지났습니다."),
+
+    // ===== Notification =====
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),
+    NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "N002", "해당 알림에 접근 권한이 없습니다."),
     ;
 
     private final HttpStatus httpStatus;
