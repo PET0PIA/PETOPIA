@@ -3,6 +3,7 @@ package com.ms.petopia.api.recruitnotice.controller;
 import com.ms.petopia.api.recruitnotice.dto.request.RecruitNoticeRequest;
 import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeResponse;
 import com.ms.petopia.api.recruitnotice.service.RecruitNoticeService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,7 +18,7 @@ public class RecruitNoticeController {
     // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @PutMapping("/recruit-notice")
     public RecruitNoticeResponse upsertNotice(@PathVariable Long fairId,
-                                              @RequestBody RecruitNoticeRequest request) {
+                                              @Valid @RequestBody RecruitNoticeRequest request) {
 
         // TODO: 로그인 붙으면 인증 정보에서 writerId, role 추출
         Long writerId = 1L;
