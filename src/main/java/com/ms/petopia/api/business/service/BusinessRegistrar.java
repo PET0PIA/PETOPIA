@@ -1,5 +1,6 @@
 package com.ms.petopia.api.business.service;
 
+import com.ms.petopia.api.auth.service.UserRoleService;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -22,9 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class BusinessRegistrar {
 
     private final BusinessMapper businessMapper;
+    private final UserRoleService userRoleService;
 
     @Transactional
     public Business save(Long ownerId, BusinessRegisterRequest request, Business.VerifyStatus verifyStatus) {
+
+        // insert 전에 먼저 확인 — 이번이 첫 사업자 등록인지
+        boolean isFirstBusiness = businessMapper.selectByOwnerId(ownerId).isEmpty();
 
         // 검증 결과까지 확정된 상태로 한 번에 저장
         Business business = Business.builder()
@@ -46,6 +51,14 @@ public class BusinessRegistrar {
 
         } catch (DuplicateKeyException e) {
             throw new CommonException(ErrorCode.BUSINESS_DUPLICATE);
+        }
+
+        /*
+         * 첫 사업자 등록일 때만 role 전환 (두 번째부턴 이미 VENDOR라 건드릴 필요 없음)
+         * 사업자 저장과 role 전환을 같은 트랜잭션으로 묶는다 (하나 실패하면 둘 다 롤백)
+         */
+        if (isFirstBusiness) {
+            userRoleService.grantVendorRole(ownerId);
         }
 
         // 재조회(정확한 값으로 응답 만들기 위해) 값 반환
