@@ -60,6 +60,7 @@ class AuthServiceTest {
         given(authMapper.existsVerifiedByEmail(EMAIL)).willReturn(false);
         given(authMapper.selectUserByEmail(EMAIL)).willReturn(existing);
         given(passwordEncoder.encode(any())).willReturn("hashed");
+        given(authMapper.updateUnverifiedUser(any(User.class))).willReturn(1);
 
         authService.signup(buildRequest());
 
@@ -91,6 +92,27 @@ class AuthServiceTest {
         given(passwordEncoder.encode(any())).willReturn("hashed");
         given(authMapper.insertUser(any(User.class)))
                 .willThrow(new DuplicateKeyException("UK_USERS_EMAIL"));
+
+        assertThatThrownBy(() -> authService.signup(buildRequest()))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.DUPLICATED_EMAIL);
+
+        verify(emailVerificationService, never()).issueAndSend(any());
+    }
+
+    @Test
+    void signup_재가입중_상대가먼저인증을끝내면_DUPLICATED_EMAIL을던지고_인증메일을보내지않는다() {
+        User existing = User.builder()
+                .userId(1L)
+                .email(EMAIL)
+                .emailVerified(false)
+                .build();
+        given(authMapper.existsVerifiedByEmail(EMAIL)).willReturn(false);
+        given(authMapper.selectUserByEmail(EMAIL)).willReturn(existing);
+        given(passwordEncoder.encode(any())).willReturn("hashed");
+        //AND email_verified = FALSE 가드에 걸려 0건 갱신되는 경우를 흉내
+        given(authMapper.updateUnverifiedUser(any(User.class))).willReturn(0);
 
         assertThatThrownBy(() -> authService.signup(buildRequest()))
                 .isInstanceOf(CommonException.class)

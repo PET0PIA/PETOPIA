@@ -18,6 +18,9 @@ public interface AuthMapper {
 
     User selectUserByEmail(@Param("email") String email);
 
+    //재전송 동시 요청을 직렬화하기 위한 행 잠금 조회 - user_tokens는 신규 유저에게 아직 없을 수 있어 users 행을 잠금
+    User selectUserByIdForUpdate(@Param("userId") Long userId);
+
     //해당 유저의 아직 안 쓰인(무효화되지 않은) 최신 토큰 1건
     UserToken selectActiveUserToken(
             @Param("userId") Long userId,

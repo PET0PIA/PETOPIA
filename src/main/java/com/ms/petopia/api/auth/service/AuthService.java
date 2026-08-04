@@ -53,7 +53,10 @@ public class AuthService {
 
         try {
             if (existing != null) {
-                authMapper.updateUnverifiedUser(user);
+                int updated = authMapper.updateUnverifiedUser(user);
+                if (updated == 0) {
+                    throw new CommonException(ErrorCode.DUPLICATED_EMAIL);
+                }
             } else {
                 authMapper.insertUser(user);
             }

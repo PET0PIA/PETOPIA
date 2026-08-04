@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -113,8 +115,11 @@ class EmailVerificationServiceTest {
 
     @Test
     void issueAndSend_새코드발급전에_기존활성토큰을무효화한다() {
+        given(authMapper.selectUserByIdForUpdate(USER_ID)).willReturn(user());
+
         emailVerificationService.issueAndSend(user());
 
+        verify(authMapper).selectUserByIdForUpdate(USER_ID);
         verify(authMapper).invalidateActiveTokens(USER_ID, PURPOSE);
         verify(authMapper).insertUserToken(any(UserToken.class));
     }
@@ -123,6 +128,7 @@ class EmailVerificationServiceTest {
     void issueAndSend_직전토큰이쿨다운시간내면_RESEND_COOLDOWN을던지고_재발급하지않는다() {
         UserToken recentToken = activeToken(TokenHashUtil.sha256("ABC123"));
         recentToken.setCreatedAt(LocalDateTime.now());
+        given(authMapper.selectUserByIdForUpdate(USER_ID)).willReturn(user());
         given(authMapper.selectLatestToken(USER_ID, PURPOSE)).willReturn(recentToken);
 
         assertThatThrownBy(() -> emailVerificationService.issueAndSend(user()))
@@ -139,6 +145,7 @@ class EmailVerificationServiceTest {
         UserToken justInvalidatedToken = activeToken(TokenHashUtil.sha256("ABC123"));
         justInvalidatedToken.setCreatedAt(LocalDateTime.now());
         justInvalidatedToken.setUsedAt(LocalDateTime.now()); //5회 실패로 방금 폐기된 상태를 흉내
+        given(authMapper.selectUserByIdForUpdate(USER_ID)).willReturn(user());
         given(authMapper.selectLatestToken(USER_ID, PURPOSE)).willReturn(justInvalidatedToken);
 
         assertThatThrownBy(() -> emailVerificationService.issueAndSend(user()))
@@ -153,12 +160,22 @@ class EmailVerificationServiceTest {
     void issueAndSend_쿨다운이지난토큰이면_무효화하고_새로발급한다() {
         UserToken oldToken = activeToken(TokenHashUtil.sha256("ABC123"));
         oldToken.setCreatedAt(LocalDateTime.now().minusSeconds(301));
+        given(authMapper.selectUserByIdForUpdate(USER_ID)).willReturn(user());
         given(authMapper.selectLatestToken(USER_ID, PURPOSE)).willReturn(oldToken);
 
         emailVerificationService.issueAndSend(user());
 
         verify(authMapper).invalidateActiveTokens(USER_ID, PURPOSE);
         verify(authMapper).insertUserToken(any(UserToken.class));
+    }
+
+    @Test
+    void issueAndSend_잠긴유저row기준으로_토큰과메일을발급한다() {
+        given(authMapper.selectUserByIdForUpdate(USER_ID)).willReturn(user());
+
+        emailVerificationService.issueAndSend(user());
+
+        verify(mailService).sendVerificationEmail(eq(EMAIL), anyString());
     }
 
     private User user() {

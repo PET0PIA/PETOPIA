@@ -25,16 +25,20 @@ public class EmailVerificationService {
     private final MailService mailService;
 
     //회원가입 인증 코드 발급
+    //users.user_id 행을 잠가서 같은 유저의 동시 요청을 직렬화
+    @Transactional
     public void issueAndSend(User user) {
+        User lockedUser = authMapper.selectUserByIdForUpdate(user.getUserId());
+
         //직전 토큰이 쿨다운 시간 내에 발급됐으면 재요청 거부
-        UserToken latestToken = authMapper.selectLatestToken(user.getUserId(), PURPOSE_EMAIL_VERIFY);
+        UserToken latestToken = authMapper.selectLatestToken(lockedUser.getUserId(), PURPOSE_EMAIL_VERIFY);
         if (latestToken != null
                 && latestToken.getCreatedAt().isAfter(LocalDateTime.now().minusSeconds(RESEND_COOLDOWN_SECONDS))) {
             throw new CommonException(ErrorCode.RESEND_COOLDOWN);
         }
 
         //재전송 등으로 새 코드를 발급하기 전, 기존에 살아있던 코드는 무효화
-        authMapper.invalidateActiveTokens(user.getUserId(), PURPOSE_EMAIL_VERIFY);
+        authMapper.invalidateActiveTokens(lockedUser.getUserId(), PURPOSE_EMAIL_VERIFY);
 
         //TokenHashUtil.generateVerificationCode()로 원본 코드 생성 (6자리, 대문자+숫자)
         String rawToken = TokenHashUtil.generateVerificationCode();
@@ -45,7 +49,7 @@ public class EmailVerificationService {
         //UserToken.builder()로 저장할 객체 만들기
         LocalDateTime now = LocalDateTime.now();
         UserToken userToken = UserToken.builder()
-                .userId(user.getUserId())
+                .userId(lockedUser.getUserId())
                 .tokenHash(tokenHash)
                 .purpose(PURPOSE_EMAIL_VERIFY)
                 .createdAt(now)
@@ -55,12 +59,13 @@ public class EmailVerificationService {
         //DB에 저장
         authMapper.insertUserToken(userToken);
 
-        mailService.sendVerificationEmail(user.getEmail(), rawToken);
+        mailService.sendVerificationEmail(lockedUser.getEmail(), rawToken);
     }
 
 
     //이메일 인증 재전송
     //AuthService에서 받아 여기서 판단하고, 통과하면 issueAndSend를 그대로 재사용
+    @Transactional
     public void resend(String email) {
         User user = authMapper.selectUserByEmail(email);
         if (user == null) {
@@ -73,7 +78,8 @@ public class EmailVerificationService {
     }
 
     //이메일 인증 코드 검증
-    @Transactional
+    //실패 시 recordFailedAttempt로 남긴 시도 횟수까지 롤백되면 시도 제한이 무의미해지므로 CommonException은 롤백 대상에서 제외
+    @Transactional(noRollbackFor = CommonException.class)
     public void verify(String email, String rawToken) {
         User user = authMapper.selectUserByEmail(email);
         if (user == null) {
