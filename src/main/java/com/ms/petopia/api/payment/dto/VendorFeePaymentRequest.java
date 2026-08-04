@@ -1,5 +1,7 @@
 package com.ms.petopia.api.payment.dto;
 
+import jakarta.validation.constraints.NotNull;
+
 /**
  * 참가비 결제 생성 요청.
  *
@@ -7,6 +9,8 @@ package com.ms.petopia.api.payment.dto;
  * ID 참조 원칙 유지), 결제에 필요한 금액과 소속 정보를 호출자가 직접 실어보낸다.
  * 서버는 이 값을 그대로 신뢰하고 결제 레코드를 만든다 — 값 검증은 하지 않는다(MVP 트레이드오프).
  */
-public record VendorFeePaymentRequest(Long fairId, Long businessId, Long amount) {
+public record VendorFeePaymentRequest(
+        @NotNull Long fairId,@NotNull Long businessId,@NotNull Long amount
+) {
 
 }
