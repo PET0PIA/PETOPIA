@@ -64,7 +64,7 @@ class PaymentServiceTest {
         // row에서 값을 그대로 가져와서 expected를 만듦 (따로 값을 또 타이핑하면
         // paidAt/createdAt 같은 시간값이 미묘하게 달라질 수 있어서, row 기준으로 통일).
         PaymentResponse expected = new PaymentResponse(
-                row.getPaymentId(), row.getPaymentType(), row.getAmount(), row.getStatus(), row.getMethod(),
+                row.getPaymentId(), "PAYMENT_"+ row.getPaymentId(), row.getPaymentType(), row.getAmount(), row.getStatus(), row.getMethod(),
                 row.getPaidAt(), row.getCreatedAt(), row.getFairId(), row.getBusinessId(),
                 row.getPayerUserId(), row.getReservationId(), row.getApplicationId()
         );
@@ -103,12 +103,12 @@ class PaymentServiceTest {
         // Assert: 응답에 요청값·기본값(COMPLETED/MOCK)이 제대로 들어갔는지
         assertThat(result.paymentType()).isEqualTo("VENDOR_FEE");
         assertThat(result.amount()).isEqualTo(50000L);
-        assertThat(result.status()).isEqualTo("COMPLETED");
-        assertThat(result.method()).isEqualTo("MOCK");
+        assertThat(result.status()).isEqualTo("PENDING");
+        assertThat(result.method()).isEqualTo("TOSS");
         assertThat(result.fairId()).isEqualTo(10L);
         assertThat(result.businessId()).isEqualTo(20L);
         assertThat(result.applicationId()).isEqualTo(40L);
-        assertThat(result.paidAt()).isNotNull();
+        assertThat(result.paidAt()).isNull();
 
         // insert가 실제로 호출됐는지 + idempotencyKey가 applicationId 기준으로
         // 만들어졌는지 확인 (이게 나중에 중복결제를 막아주는 값이라 제대로 세팅되는지가 중요)

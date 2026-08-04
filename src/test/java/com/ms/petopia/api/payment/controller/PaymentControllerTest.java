@@ -55,7 +55,7 @@ class PaymentControllerTest {
         given(paymentService.getPayment(1L)).willReturn(
 
                 new PaymentResponse(
-                        1L, "VENDOR_FEE", 50000L, "COMPLETED", "MOCK",
+                        1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "TOSS",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, null, null, 40L
@@ -97,7 +97,7 @@ class PaymentControllerTest {
         // Arrange
         given(paymentService.payVendorFee(eq(40L),eq(99L),any(VendorFeePaymentRequest.class))).willReturn(
                 new PaymentResponse(
-                        1L, "VENDOR_FEE", 50000L, "COMPLETED", "MOCK",
+                        1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "PENDING", "TOSS",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, null, null, 40L

@@ -1,5 +1,6 @@
 package com.ms.petopia.api.payment.controller;
 
+import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
@@ -49,6 +50,14 @@ public class PaymentController {
 
     }
 
+    @PostMapping("/payments/{paymentId}/confirm")
+    public PaymentResponse confirmPayment(
+            @PathVariable Long paymentId,
+            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
+            @RequestBody ConfirmPaymentRequest request
+    ) {
+        return paymentService.confirmPayment(paymentId, request);
+    }
 
 
 }

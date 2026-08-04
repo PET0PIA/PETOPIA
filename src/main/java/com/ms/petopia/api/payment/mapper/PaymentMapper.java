@@ -27,4 +27,5 @@ public interface PaymentMapper {
      * <p>insert 후 row.paymentId에 생성된 PK가 채워진다(XML의 useGeneratedKeys).
      */
     void insert(PaymentRow row);
+    int markCompleted(PaymentRow row);
 }

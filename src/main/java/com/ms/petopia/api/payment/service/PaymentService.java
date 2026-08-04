@@ -1,8 +1,7 @@
 package com.ms.petopia.api.payment.service;
 
-import com.ms.petopia.api.payment.dto.PaymentResponse;
-import com.ms.petopia.api.payment.dto.PaymentRow;
-import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
+import com.ms.petopia.api.payment.client.TossPaymentClient;
+import com.ms.petopia.api.payment.dto.*;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -24,6 +23,7 @@ import java.time.LocalDateTime;
 public class PaymentService {
 
     private final PaymentMapper paymentMapper;
+    private final TossPaymentClient tossPaymentClient;
 
     /**
      * 결제 ID로 상세 조회한다.
@@ -55,10 +55,9 @@ public class PaymentService {
         PaymentRow row = new PaymentRow();
         row.setPaymentType("VENDOR_FEE");
         row.setAmount(request.amount());
-        row.setStatus("COMPLETED");
-        row.setMethod("MOCK");
+        row.setStatus("PENDING");
+        row.setMethod("TOSS");
         row.setIdempotencyKey("VENDOR_FEE_" + applicationId);
-        row.setPaidAt(now);
         row.setCreatedAt(now);
         row.setUpdatedAt(now);
         row.setFairId(request.fairId());
@@ -75,6 +74,34 @@ public class PaymentService {
         return PaymentResponse.from(row);
     }
 
+    @Transactional
+    public PaymentResponse confirmPayment(Long paymentId, ConfirmPaymentRequest request) {
+        PaymentRow row = paymentMapper.selectById(paymentId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!"PENDING".equals(row.getStatus())) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
 
+        String orderId = "PAYMENT_" + row.getPaymentId();
+        TossPaymentResponse tossResponse = tossPaymentClient.confirmPayment(
+                request.paymentKey(), orderId, row.getAmount()
+        );
+        LocalDateTime now = LocalDateTime.now();
+        row.setMethod(tossResponse.method());
+        row.setTossPaymentKey(tossResponse.paymentKey());
+        row.setPaidAt(now);
+        row.setUpdatedAt(now);
+
+        int updated = paymentMapper.markCompleted(row);
+        if (updated == 0) {
+            // 이 사이 다른 요청이 먼저 확정 처리한 경우(동시 승인 시도)
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        return PaymentResponse.from(row);
+
+    }
 
 }
