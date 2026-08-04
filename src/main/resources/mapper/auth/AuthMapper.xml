@@ -189,4 +189,11 @@
          WHERE user_id = #{userId}
     </update>
 
+    <update id="updateUserRole">
+        UPDATE users
+           SET role = #{role}
+             , updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+    </update>
+
 </mapper>

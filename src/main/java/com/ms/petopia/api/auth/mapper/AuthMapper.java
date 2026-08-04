@@ -47,5 +47,9 @@ public interface AuthMapper {
 
     int markUserTokenUsed(@Param("tokenId") Long tokenId);
 
+    //인증 완료 기록
     int markEmailVerified(@Param("userId") Long userId);
+
+    //내부 연동: 사업자 등록/삭제 시 role 부여·회수 (참가업체·부스 도메인이 호출)
+    int updateUserRole(@Param("userId") Long userId, @Param("role") String role);
 }

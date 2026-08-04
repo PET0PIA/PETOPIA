@@ -34,6 +34,15 @@ public enum ErrorCode {
     TOO_MANY_VERIFY_ATTEMPTS(HttpStatus.BAD_REQUEST, "A008", "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 받아주세요."),
     RESEND_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "A009", "인증 코드 재전송은 잠시 후 다시 시도해주세요."),
 
+    // ===== Vendor (참가업체·부스) =====
+    BUSINESS_NOT_FOUND(HttpStatus.NOT_FOUND, "V001", "사업자를 찾을 수 없습니다."),
+    RECRUIT_NOTICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V002", "해당 공고에 대한 권한이 없습니다."),
+    RECRUIT_NOTICE_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "V003", "모집 공고 등록에 실패했습니다."),
+    RECRUIT_NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "V004", "아직 작성된 모집 공고가 없습니다."),
+    NTS_API_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "V005", "사업자 진위확인 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요."),
+    BUSINESS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "V006", "사업자 정보를 확인할 수 없습니다. 입력하신 정보를 다시 확인해주세요."),
+    BUSINESS_DUPLICATE(HttpStatus.CONFLICT, "V007", "이미 등록된 사업자등록번호입니다."),
+
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
     PAYMENT_TARGET_NOT_PAYABLE(HttpStatus.CONFLICT, "P002", "결제할 수 없는 상태입니다."),
@@ -48,6 +57,9 @@ public enum ErrorCode {
     HALL_NOT_FOUND(HttpStatus.NOT_FOUND, "F005", "존재하지 않는 홀이거나 해당 행사의 홀이 아닙니다."),
     FAIR_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "F006", "심사 대기 중인 신청서만 검토할 수 있습니다."),
     FAIR_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F007", "반려 시 반려 사유를 입력해야 합니다."),
+    BOOTH_SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "F008", "존재하지 않는 부스 슬롯이거나 해당 홀의 슬롯이 아닙니다."),
+    BOOTH_SLOT_LOCKED(HttpStatus.CONFLICT, "F009", "이미 신청이 걸려 위치·번호·가격 변경 및 삭제가 제한된 부스 슬롯입니다."),
+    BOOTH_SLOT_DUPLICATE_NUMBER(HttpStatus.BAD_REQUEST, "F010", "같은 홀 안에 중복된 부스 번호가 있습니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
