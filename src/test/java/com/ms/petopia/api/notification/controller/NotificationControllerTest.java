@@ -19,6 +19,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -159,6 +160,7 @@ class NotificationControllerTest {
                         .header("X-User-Id", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+        verify(notificationService).markAllAsRead(1L);
     }
 
     @Test
@@ -176,6 +178,7 @@ class NotificationControllerTest {
                         .header("X-User-Id", 1L))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+        verify(notificationService).markAsRead(10L, 1L);
     }
 
     // PUT /api/notifications/{notificationId}/read 헤더 누락 → 400
