@@ -76,7 +76,7 @@
             <if test="active != null">is_active = #{active},</if>
             <if test="memo != null">memo = #{memo},</if>
             <if test="lockedAt != null">locked_at = #{lockedAt},</if>
-            updated_at = NOW(),
+            updated_at = #{updatedAt},
         </set>
         WHERE booth_slot_id = #{boothSlotId}
     </update>
