@@ -84,6 +84,7 @@ jobs:
       # (TossPaymentClient 생성자가 @Value 로 바로 요구). 실제 토스 API를
       # 호출하는 테스트는 없으므로 값 자체는 아무 문자열이나 된다.
       TOSS_SECRET_KEY: ci-only-toss-secret-key-not-for-production
+      NTS_SERVICE_KEY: ci-only-nts-service-key-not-for-production
 
     steps:
       - name: 체크아웃
@@ -234,6 +235,7 @@ jobs:
             -e GMAIL_USERNAME='' -e GMAIL_APP_PASSWORD='' \
             -e TOSS_SECRET_KEY \
             -e TOSS_CLIENT_KEY='' -e TOSS_SECURITY_KEY='' \
+            -e NTS_SERVICE_KEY \
             petopia:ci-${{ github.sha }}
 
           deadline=$(( SECONDS + 120 ))
