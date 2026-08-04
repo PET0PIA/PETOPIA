@@ -39,6 +39,8 @@ public enum ErrorCode {
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
     PAYMENT_TARGET_NOT_PAYABLE(HttpStatus.CONFLICT, "P002", "결제할 수 없는 상태입니다."),
+    PAYMENT_APPROVAL_FAILED(HttpStatus.PAYMENT_REQUIRED, "P003", "결제 승인에 실패했습니다."),
+    PAYMENT_GATEWAY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "P004", "결제 서비스에 일시적으로 연결할 수 없습니다."),
 
     // ===== Fair =====
     FAIR_INVALID_VENDOR_RECRUIT_PERIOD(HttpStatus.BAD_REQUEST, "F001", "참가업체 모집 종료일이 시작일보다 빠릅니다."),
