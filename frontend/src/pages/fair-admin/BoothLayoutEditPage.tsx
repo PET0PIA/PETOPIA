@@ -85,6 +85,9 @@ export function BoothLayoutEditPage() {
   const paramsValid = Number.isInteger(fairId) && fairId > 0 && Number.isInteger(hallId) && hallId > 0;
 
   const [hall, setHall] = useState<Hall | null>(null);
+  // 조회 시점의 부스 배치 버전. 저장 요청에 그대로 실어 보내서, 그 사이 다른 곳에서
+  // 먼저 저장했으면(버전이 달라졌으면) 서버가 409로 거부하게 한다(동시 편집 보호).
+  const [boothLayoutVersion, setBoothLayoutVersion] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<DraftSlot[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,10 +107,11 @@ export function BoothLayoutEditPage() {
     setLoading(true);
     setLoadError(null);
     Promise.all([getHalls(fairId), getBoothSlots(fairId, hallId)])
-      .then(([halls, slots]) => {
+      .then(([halls, layout]) => {
         if (ignore) return;
         setHall(halls.find((item) => item.hallId === hallId) ?? null);
-        setDrafts(slots.map(toDraft));
+        setDrafts(layout.slots.map(toDraft));
+        setBoothLayoutVersion(layout.boothLayoutVersion);
         setDirty(false);
         setSelectedKey(null);
       })
@@ -240,16 +244,25 @@ export function BoothLayoutEditPage() {
       setFormError(validationError);
       return;
     }
+    if (boothLayoutVersion === null) {
+      setFormError("배치 정보를 아직 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
 
     setFormError(null);
     setSaving(true);
     try {
-      const saved = await bulkSaveBoothSlots(fairId, hallId, { slots: drafts.map(toItem) });
-      setDrafts(saved.map(toDraft));
+      const saved = await bulkSaveBoothSlots(fairId, hallId, { slots: drafts.map(toItem), expectedVersion: boothLayoutVersion });
+      setDrafts(saved.slots.map(toDraft));
+      setBoothLayoutVersion(saved.boothLayoutVersion);
       setSelectedKey(null);
       setDirty(false);
     } catch (error) {
-      setFormError(error instanceof ApiError ? error.message : "부스 배치를 저장하지 못했어요.");
+      if (error instanceof ApiError && error.status === 409) {
+        setFormError("다른 곳에서 이미 이 홀의 배치를 저장했어요. \"되돌리기\"로 최신 상태를 다시 불러온 뒤 다시 시도해 주세요.");
+      } else {
+        setFormError(error instanceof ApiError ? error.message : "부스 배치를 저장하지 못했어요.");
+      }
     } finally {
       setSaving(false);
     }
