@@ -74,7 +74,11 @@ public class PaymentService {
         return PaymentResponse.from(row);
     }
 
-    @Transactional
+    // CommonException을 던지면서도 markFailed()로 남긴 변경은 롤백되면 안 되므로
+    // noRollbackFor로 예외 발생 시 자동 롤백 대상에서 제외한다. 이 메서드의 다른
+    // CommonException(존재하지 않음/소유자 아님/이미 처리됨)은 전부 쓰기 이전에
+    // 던져지거나 쓰기 자체가 반영되지 않은 경우라 롤백 여부가 결과에 영향을 안 준다.
+    @Transactional(noRollbackFor = CommonException.class)
     public PaymentResponse confirmPayment(Long paymentId, Long userId, ConfirmPaymentRequest request) {
         PaymentRow row = paymentMapper.selectById(paymentId);
         if (row == null) {
@@ -88,9 +92,18 @@ public class PaymentService {
         }
 
         String orderId = "PAYMENT_" + row.getPaymentId();
-        TossPaymentResponse tossResponse = tossPaymentClient.confirmPayment(
-                request.paymentKey(), orderId, row.getAmount()
-        );
+        TossPaymentResponse tossResponse;
+        try {
+            tossResponse = tossPaymentClient.confirmPayment(request.paymentKey(), orderId, row.getAmount());
+        } catch (CommonException e) {
+            // 토스가 확정적으로 거부한 경우(4xx)만 FAILED로 남긴다. 5xx(게이트웨이 장애)는
+            // 실제로는 승인이 처리됐을 수도 있어 여기서 실패로 단정하지 않고 PENDING 그대로
+            // 둔다 — 나중에 상태조회로 확인 후 재시도하는 흐름은 별도 구현 필요.
+            if (e.getErrorCode() == ErrorCode.PAYMENT_APPROVAL_FAILED) {
+                paymentMapper.markFailed(paymentId, LocalDateTime.now());
+            }
+            throw e;
+        }
         LocalDateTime now = LocalDateTime.now();
         row.setStatus("COMPLETED");
         row.setMethod(tossResponse.method());
