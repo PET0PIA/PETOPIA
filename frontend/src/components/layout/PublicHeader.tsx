@@ -1,12 +1,25 @@
 import { Bell, ChevronDown, LogOut, Menu, UserRound, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { publicNavigation } from "../../config/navigation";
 import type { BusinessStatus, CurrentUser } from "../../types/domain";
 import type { NavigationItem } from "../../config/navigation";
 import petopiaLogoOriginal from "../../assets/petopia-logo-original.png";
 import { currentUser } from "../../mocks/home";
+import { getUnreadNotificationCount } from "../../api/notification";
 import { DropdownMenu } from "../ui/DropdownMenu";
+
+function useUnreadNotificationCount() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let active = true;
+    getUnreadNotificationCount()
+      .then((value) => { if (active) setCount(value); })
+      .catch(() => { /* 알림 배지는 조회 실패 시 0으로 유지한다. */ });
+    return () => { active = false; };
+  }, []);
+  return count;
+}
 
 function matchesStatus(item: NavigationItem, businessStatus: BusinessStatus) {
   return !item.requiredBusinessStatus || item.requiredBusinessStatus === businessStatus;
@@ -35,7 +48,8 @@ function MobileSection({ item, onNavigate, user }: { item: NavigationItem; onNav
 export function PublicHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
+  const unreadCount = useUnreadNotificationCount();
   const visibleNavigation = publicNavigation.map((item) => ({ ...item, children: item.children?.filter((child) => matchesStatus(child, currentUser.businessStatus)) }));
   const go = (path: string) => { navigate(path); setMobileOpen(false); };
-  return <header className="sticky top-0 z-40 border-b border-line bg-card/95 backdrop-blur"><div className="page-shell flex h-[72px] items-center justify-between gap-4"><HeaderLogo /><nav className="hidden items-center lg:flex">{visibleNavigation.map((item) => <DropdownMenu key={item.label} label={item.label} items={(item.children ?? []).map((child) => ({ label: child.label, onSelect: () => child.path && navigate(child.path) }))} />)}</nav><div className="hidden items-center gap-1 lg:flex"><button type="button" aria-label={`알림 ${currentUser.notificationCount}건`} className="relative rounded-button p-2 text-muted hover:bg-page hover:text-ink" onClick={() => navigate("/notifications")}><Bell size={19} />{currentUser.notificationCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</button><ProfileMenu user={currentUser} /></div><button className="rounded-button p-2 text-ink hover:bg-page lg:hidden" type="button" aria-label={mobileOpen ? "메뉴 닫기" : "메뉴 열기"} aria-expanded={mobileOpen} onClick={() => setMobileOpen((value) => !value)}>{mobileOpen ? <X size={23} /> : <Menu size={23} />}</button></div>{mobileOpen && <div className="border-t border-line bg-card lg:hidden"><div className="page-shell py-2"><nav aria-label="모바일 주요 메뉴">{visibleNavigation.map((item) => <MobileSection key={item.label} item={item} user={currentUser} onNavigate={go} />)}</nav><div className="flex items-center justify-between py-4"><button type="button" className="flex items-center gap-2 text-sm font-bold" onClick={() => go("/mypage")}><UserRound size={17} />{currentUser.name}님</button><button type="button" aria-label="알림 보기" className="relative p-2" onClick={() => go("/notifications")}><Bell size={19} />{currentUser.notificationCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</button></div><button type="button" className="mb-3 flex items-center gap-2 text-sm text-muted" onClick={() => go("/")}><LogOut size={16} />로그아웃</button></div></div>}</header>;
+  return <header className="sticky top-0 z-40 border-b border-line bg-card/95 backdrop-blur"><div className="page-shell flex h-[72px] items-center justify-between gap-4"><HeaderLogo /><nav className="hidden items-center lg:flex">{visibleNavigation.map((item) => <DropdownMenu key={item.label} label={item.label} items={(item.children ?? []).map((child) => ({ label: child.label, onSelect: () => child.path && navigate(child.path) }))} />)}</nav><div className="hidden items-center gap-1 lg:flex"><button type="button" aria-label={`알림 ${unreadCount}건`} className="relative rounded-button p-2 text-muted hover:bg-page hover:text-ink" onClick={() => navigate("/notifications")}><Bell size={19} />{unreadCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</button><ProfileMenu user={currentUser} /></div><button className="rounded-button p-2 text-ink hover:bg-page lg:hidden" type="button" aria-label={mobileOpen ? "메뉴 닫기" : "메뉴 열기"} aria-expanded={mobileOpen} onClick={() => setMobileOpen((value) => !value)}>{mobileOpen ? <X size={23} /> : <Menu size={23} />}</button></div>{mobileOpen && <div className="border-t border-line bg-card lg:hidden"><div className="page-shell py-2"><nav aria-label="모바일 주요 메뉴">{visibleNavigation.map((item) => <MobileSection key={item.label} item={item} user={currentUser} onNavigate={go} />)}</nav><div className="flex items-center justify-between py-4"><button type="button" className="flex items-center gap-2 text-sm font-bold" onClick={() => go("/mypage")}><UserRound size={17} />{currentUser.name}님</button><button type="button" aria-label="알림 보기" className="relative p-2" onClick={() => go("/notifications")}><Bell size={19} />{unreadCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</button></div><button type="button" className="mb-3 flex items-center gap-2 text-sm text-muted" onClick={() => go("/")}><LogOut size={16} />로그아웃</button></div></div>}</header>;
 }
