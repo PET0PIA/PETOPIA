@@ -1,6 +1,6 @@
 import { Bell, ChevronDown, LogOut, Menu, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { publicNavigation } from "../../config/navigation";
 import type { BusinessStatus, CurrentUser } from "../../types/domain";
 import type { NavigationItem } from "../../config/navigation";
@@ -11,13 +11,14 @@ import { DropdownMenu } from "../ui/DropdownMenu";
 
 function useUnreadNotificationCount() {
   const [count, setCount] = useState(0);
+  const { pathname } = useLocation();
   useEffect(() => {
     let active = true;
     getUnreadNotificationCount()
       .then((value) => { if (active) setCount(value); })
       .catch(() => { /* 알림 배지는 조회 실패 시 0으로 유지한다. */ });
     return () => { active = false; };
-  }, []);
+  }, [pathname]);
   return count;
 }
 

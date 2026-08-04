@@ -81,14 +81,15 @@ export function NotificationsPage() {
       />
 
       {error && (
-        <div className="surface mb-6 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+        <div className="surface mb-6 flex items-center justify-between border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           {error}
+          <button type="button" className="ml-4 shrink-0 underline" onClick={load}>다시 시도</button>
         </div>
       )}
 
       {loading ? (
         <div className="surface grid min-h-72 place-items-center p-8 text-sm text-muted">불러오는 중이에요...</div>
-      ) : items.length === 0 ? (
+      ) : !error && items.length === 0 ? (
         <EmptyState title="아직 알림이 없어요." description="새 소식이 도착하면 이곳에서 확인할 수 있어요." />
       ) : (
         <ul className="space-y-3">
@@ -98,7 +99,10 @@ export function NotificationsPage() {
                 className={`flex w-full cursor-pointer items-start gap-4 p-5 text-left transition hover:bg-page ${
                   item.isRead ? "" : "border-primary-strong/40 bg-primary-soft/40"
                 }`}
+                role="button"
+                tabIndex={0}
                 onClick={() => handleItemClick(item)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleItemClick(item); } }}
               >
                 <div className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-sun-soft text-ink">
                   <Bell size={16} />

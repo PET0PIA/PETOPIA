@@ -38,7 +38,7 @@
     <select id="selectByActionType" resultType="AuditLogRow">
         SELECT audit_id, user_id, actor_type, actor_role,
             action_type, target_type, target_id,
-            before_value, after_value, occured_at
+            before_value, after_value, occurred_at
         FROM audit_log
         WHERE action_type = #{actionType}
         ORDER BY occurred_at DESC

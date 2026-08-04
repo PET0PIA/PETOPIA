@@ -18,6 +18,7 @@ public class AuditLog {
     private Long auditId;
     private Long userId; // SYSTEM 행위이면 null
     private ActorType actorType;
+    private String actorRole;
     private ActionType actionType;
     private TargetType targetType;
     private Long targetId;

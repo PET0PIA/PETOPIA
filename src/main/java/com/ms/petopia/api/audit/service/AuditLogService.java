@@ -20,6 +20,7 @@ public class AuditLogService {
     public void record(
         Long userId,
         ActorType actorType,
+        String actorRole,
         ActionType actionType,
         TargetType targetType,
         Long targetId,
@@ -29,6 +30,7 @@ public class AuditLogService {
         AuditLog log = AuditLog.builder()
                 .userId(userId)
                 .actorType(actorType)
+                .actorRole(actorRole)
                 .actionType(actionType)
                 .targetType(targetType)
                 .targetId(targetId)
@@ -45,7 +47,7 @@ public class AuditLogService {
         try{
             return objectMapper.writeValueAsString(obj);
         } catch (Exception e){
-            return obj.toString();
+            return "{\"error\":\"serialization_failed\"}";
         }
     }
 }
