@@ -1,0 +1,39 @@
+package com.ms.petopia.api.auth.service;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class MailService {
+
+    private final JavaMailSender javaMailSender;
+
+    @Value("${spring.mail.username}")
+    private String fromEmail;
+
+    //이메일 인증
+    public void sendVerificationEmail(String to, String verificationCode){
+        SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
+        simpleMailMessage.setFrom(fromEmail);
+        simpleMailMessage.setTo(to);
+        simpleMailMessage.setSubject("[PETOPIA] 이메일 인증코드");
+        simpleMailMessage.setText("""
+            안녕하세요. PETOPIA 입니다.
+
+            PETOPIA에 가입해 주셔서 감사합니다.
+            아래 인증 코드를 입력해 이메일 인증을 완료해주세요.
+
+            [인증코드] %s
+
+            인증코드는 발급 후 10분 동안 유효합니다.
+
+            감사합니다.
+            PETOPIA 드림.
+            """.formatted(verificationCode));
+        javaMailSender.send(simpleMailMessage);
+    }
+}

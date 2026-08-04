@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.auth.mapper.AuthMapper">
+
+    <select id="existsVerifiedByEmail" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM users
+             WHERE email = #{email}
+               AND email_verified = TRUE
+        )
+    </select>
+
+    <insert id="insertUser"
+            parameterType="User"
+            useGeneratedKeys="true"
+            keyProperty="userId"
+            keyColumn="user_id">
+        INSERT INTO users (
+               email
+             , password_hash
+             , nickname
+             , birth_date
+             , phone
+             , gender
+             , address
+             , agreed_terms
+             , agreed_privacy
+             , role
+             , status
+             , email_verified
+             , created_at
+        ) VALUES (
+               #{email}
+             , #{passwordHash}
+             , #{nickname}
+             , #{birthDate}
+             , #{phone}
+             , #{gender}
+             , #{address}
+             , #{agreedTerms}
+             , #{agreedPrivacy}
+             , #{role}
+             , #{status}
+             , #{emailVerified}
+             , #{createdAt}
+        )
+    </insert>
+
+    <update id="updateUnverifiedUser" parameterType="User">
+        UPDATE users
+           SET password_hash   = #{passwordHash}
+             , nickname        = #{nickname}
+             , birth_date      = #{birthDate}
+             , phone           = #{phone}
+             , gender          = #{gender}
+             , address         = #{address}
+             , agreed_terms    = #{agreedTerms}
+             , agreed_privacy  = #{agreedPrivacy}
+             , status          = #{status}
+             , updated_at      = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+           AND email_verified = FALSE
+    </update>
+
+    <insert id="insertUserToken"
+            parameterType="UserToken"
+            useGeneratedKeys="true"
+            keyProperty="tokenId"
+            keyColumn="token_id">
+        INSERT INTO user_tokens (
+               user_id
+             , token_hash
+             , purpose
+             , expires_at
+             , created_at
+        ) VALUES (
+               #{userId}
+             , #{tokenHash}
+             , #{purpose}
+             , #{expiresAt}
+             , #{createdAt}
+        )
+    </insert>
+
+    <select id="selectUserByEmail" resultType="User">
+        SELECT user_id
+             , email
+             , password_hash
+             , nickname
+             , birth_date
+             , phone
+             , gender
+             , address
+             , agreed_terms
+             , agreed_privacy
+             , role
+             , status
+             , email_verified
+             , created_at
+             , updated_at
+          FROM users
+         WHERE email = #{email}
+    </select>
+
+    <select id="selectUserByIdForUpdate" resultType="User">
+        SELECT user_id
+             , email
+             , password_hash
+             , nickname
+             , birth_date
+             , phone
+             , gender
+             , address
+             , agreed_terms
+             , agreed_privacy
+             , role
+             , status
+             , email_verified
+             , created_at
+             , updated_at
+          FROM users
+         WHERE user_id = #{userId}
+           FOR UPDATE
+    </select>
+
+    <select id="selectActiveUserToken" resultType="UserToken">
+        SELECT token_id
+             , user_id
+             , token_hash
+             , purpose
+             , used_at
+             , attempt_count
+             , created_at
+             , expires_at
+          FROM user_tokens
+         WHERE user_id = #{userId}
+           AND purpose = #{purpose}
+           AND used_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT 1
+    </select>
+
+    <select id="selectLatestToken" resultType="UserToken">
+        SELECT token_id
+             , user_id
+             , token_hash
+             , purpose
+             , used_at
+             , attempt_count
+             , created_at
+             , expires_at
+          FROM user_tokens
+         WHERE user_id = #{userId}
+           AND purpose = #{purpose}
+         ORDER BY created_at DESC
+         LIMIT 1
+    </select>
+
+    <update id="invalidateActiveTokens">
+        UPDATE user_tokens
+           SET used_at = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+           AND purpose = #{purpose}
+           AND used_at IS NULL
+    </update>
+
+    <update id="recordFailedAttempt">
+        UPDATE user_tokens
+           SET attempt_count = attempt_count + 1
+             , used_at = IF(attempt_count + 1 >= #{maxAttempts}, CURRENT_TIMESTAMP, used_at)
+         WHERE token_id = #{tokenId}
+           AND used_at IS NULL
+    </update>
+
+    <update id="markUserTokenUsed">
+        UPDATE user_tokens
+           SET used_at = CURRENT_TIMESTAMP
+         WHERE token_id = #{tokenId}
+           AND used_at IS NULL
+    </update>
+
+    <update id="markEmailVerified">
+        UPDATE users
+           SET email_verified = TRUE
+             , status = 'ACTIVE'
+         WHERE user_id = #{userId}
+    </update>
+
+    <update id="updateUserRole">
+        UPDATE users
+           SET role = #{role}
+             , updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+    </update>
+
+</mapper>
