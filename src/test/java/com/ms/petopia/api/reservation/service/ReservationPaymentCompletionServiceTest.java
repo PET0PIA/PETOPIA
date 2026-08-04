@@ -102,6 +102,15 @@ class ReservationPaymentCompletionServiceTest {
         assertError(() -> service.complete(COMMAND), ErrorCode.RESERVATION_PAYMENT_EXPIRED);
     }
 
+    @Test
+    void rejectsPaymentAtExactReservationDeadline() {
+        PaymentConfirmationReservationRow row = pendingReservation(15_000);
+        row.setPaymentExpiresAt(PAID_AT);
+        given(mapper.selectReservationForUpdate(10L)).willReturn(row);
+
+        assertError(() -> service.complete(COMMAND), ErrorCode.RESERVATION_PAYMENT_EXPIRED);
+    }
+
     private PaymentConfirmationReservationRow pendingReservation(long amount) {
         PaymentConfirmationReservationRow row = new PaymentConfirmationReservationRow();
         row.setReservationId(10L);

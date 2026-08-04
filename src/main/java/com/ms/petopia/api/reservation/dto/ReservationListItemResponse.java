@@ -14,6 +14,7 @@ public record ReservationListItemResponse(
         String reservationStatus,
         boolean isEnded,
         boolean qrAvailable,
+        boolean paymentAvailable,
         long amount,
         LocalDateTime reservedAt,
         LocalDateTime checkedInAt

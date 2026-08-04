@@ -68,7 +68,7 @@ public class ReservationPaymentCompletionService {
             throw new CommonException(ErrorCode.RESERVATION_PAYMENT_AMOUNT_MISMATCH);
         }
         if (reservation.getPaymentExpiresAt() == null
-                || command.paidAt().isAfter(reservation.getPaymentExpiresAt())) {
+                || !command.paidAt().isBefore(reservation.getPaymentExpiresAt())) {
             throw new CommonException(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
         }
 

@@ -22,6 +22,11 @@ public interface OnsiteReservationMapper {
             @Param("fairDateId") Long fairDateId
     );
 
+    FairDateSnapshot selectFairDate(
+            @Param("fairId") Long fairId,
+            @Param("fairDateId") Long fairDateId
+    );
+
     OnsiteSalesPolicyRow selectPolicy(@Param("fairDateId") Long fairDateId);
 
     int insertPolicy(

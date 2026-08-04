@@ -4,12 +4,15 @@ import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationRequest;
 import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationResponse;
 import com.ms.petopia.api.reservation.dto.CreateReservationRequest;
 import com.ms.petopia.api.reservation.dto.CreateReservationResponse;
+import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
+import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.EntryQrResponse;
 import com.ms.petopia.api.reservation.dto.ReservationAvailabilityResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListResponse;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateRequest;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateResponse;
 import com.ms.petopia.api.reservation.service.ReservationAvailabilityService;
+import com.ms.petopia.api.reservation.service.ReservationCancellationService;
 import com.ms.petopia.api.reservation.service.EntryQrService;
 import com.ms.petopia.api.reservation.service.OnsiteReservationService;
 import com.ms.petopia.api.reservation.service.ReservationQueryService;
@@ -39,6 +42,7 @@ public class ReservationController {
     private final ReservationQueryService reservationQueryService;
     private final ReservationAvailabilityService reservationAvailabilityService;
     private final ReservationVisitDateChangeService visitDateChangeService;
+    private final ReservationCancellationService cancellationService;
 
     @GetMapping("/fairs/{fairId}/reservation-availability")
     public ReservationAvailabilityResponse getReservationAvailability(@PathVariable Long fairId) {
@@ -61,6 +65,15 @@ public class ReservationController {
             @RequestBody UpdateReservationVisitDateRequest request
     ) {
         return visitDateChangeService.changeVisitDate(reservationId, userId, request);
+    }
+
+    @PatchMapping("/reservations/{reservationId}/cancel")
+    public CancelReservationResponse cancelReservation(
+            @PathVariable Long reservationId,
+            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long userId,
+            @RequestBody(required = false) CancelReservationRequest request
+    ) {
+        return cancellationService.cancel(reservationId, userId, request);
     }
 
     @PostMapping("/fairs/{fairId}/reservations")

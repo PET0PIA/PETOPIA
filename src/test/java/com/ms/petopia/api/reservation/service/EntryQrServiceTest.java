@@ -62,6 +62,7 @@ class EntryQrServiceTest {
         given(entryMapper.selectQrIssueContext(RESERVATION_ID)).willReturn(issuableContext("CHECKED_IN"));
         given(tokenService.tokenForReservation(RESERVATION_ID)).willReturn("token");
         given(entryMapper.existsEntryQr(RESERVATION_ID)).willReturn(true);
+        given(timeProvider.now()).willReturn(NOW);
 
         assertThat(service.issueForReservation(RESERVATION_ID)).isEqualTo("token");
     }
@@ -72,11 +73,27 @@ class EntryQrServiceTest {
         given(entryMapper.selectQrIssueContext(RESERVATION_ID)).willReturn(issuableContext("CONFIRMED"));
         given(tokenService.tokenForReservation(RESERVATION_ID)).willReturn("token");
         given(entryMapper.existsEntryQr(RESERVATION_ID)).willReturn(true);
+        given(timeProvider.now()).willReturn(NOW);
 
         assertThat(service.issueForReservation(RESERVATION_ID)).isEqualTo("token");
 
         verify(entryMapper, never()).insertEntryQr(any(), any(), any(), any(), any());
-        verify(timeProvider, never()).now();
+        verify(timeProvider).now();
+    }
+
+    @Test
+    @DisplayName("입장 종료 시각이 지나면 확정 예약도 QR을 반환하지 않는다")
+    void rejectsQrAfterEntryEnds() {
+        given(entryMapper.selectQrIssueContext(RESERVATION_ID)).willReturn(issuableContext("CONFIRMED"));
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 18, 0, 1));
+
+        assertErrorCode(
+                () -> service.issueForReservation(RESERVATION_ID),
+                ErrorCode.ENTRY_QR_NOT_AVAILABLE
+        );
+
+        verify(tokenService, never()).tokenForReservation(any());
+        verify(entryMapper, never()).insertEntryQr(any(), any(), any(), any(), any());
     }
 
     @Test

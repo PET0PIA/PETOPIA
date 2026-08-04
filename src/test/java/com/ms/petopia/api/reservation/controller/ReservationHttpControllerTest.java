@@ -3,6 +3,7 @@ package com.ms.petopia.api.reservation.controller;
 import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationResponse;
 import com.ms.petopia.api.reservation.dto.CreateReservationRequest;
 import com.ms.petopia.api.reservation.dto.CreateReservationResponse;
+import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.GateScanResponse;
 import com.ms.petopia.api.reservation.dto.OnsiteSalesPolicyResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletionResponse;
@@ -19,6 +20,7 @@ import com.ms.petopia.api.reservation.service.OnsiteSalesPolicyService;
 import com.ms.petopia.api.reservation.service.ReservationPaymentCompletionService;
 import com.ms.petopia.api.reservation.service.ReservationPaymentContextService;
 import com.ms.petopia.api.reservation.service.ReservationAvailabilityService;
+import com.ms.petopia.api.reservation.service.ReservationCancellationService;
 import com.ms.petopia.api.reservation.service.ReservationQueryService;
 import com.ms.petopia.api.reservation.service.ReservationService;
 import com.ms.petopia.api.reservation.service.ReservationVisitDateChangeService;
@@ -64,6 +66,8 @@ class ReservationHttpControllerTest {
     @Mock
     private ReservationVisitDateChangeService visitDateChangeService;
     @Mock
+    private ReservationCancellationService cancellationService;
+    @Mock
     private OnsiteReservationService onsiteReservationService;
     @Mock
     private EntryQrService entryQrService;
@@ -87,7 +91,8 @@ class ReservationHttpControllerTest {
                                 entryQrService,
                                 reservationQueryService,
                                 reservationAvailabilityService,
-                                visitDateChangeService
+                                visitDateChangeService,
+                                cancellationService
                         ),
                         new OnsiteSalesAdminController(policyService),
                         new GateEntryController(gateEntryService),
@@ -126,6 +131,22 @@ class ReservationHttpControllerTest {
     }
 
     @Test
+    void cancelsReservationUsingTemporaryUserHeader() throws Exception {
+        given(cancellationService.cancel(any(), any(), any())).willReturn(
+                new CancelReservationResponse(30L, "CANCELED", LocalDateTime.of(2026, 8, 1, 9, 0))
+        );
+
+        mockMvc.perform(patch("/api/v1/reservations/30/cancel")
+                        .header(TemporaryAuthHeaders.USER_ID, 20)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"일정 변경\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reservationStatus").value("CANCELED"));
+
+        verify(cancellationService).cancel(eq(30L), eq(20L), any());
+    }
+
+    @Test
     void getsReservationAvailabilityForBookingScreen() throws Exception {
         given(reservationAvailabilityService.getAvailability(10L)).willReturn(
                 new ReservationAvailabilityResponse(
@@ -153,7 +174,7 @@ class ReservationHttpControllerTest {
                         new ReservationListItemResponse(
                                 30L, "서울 펫페어", null,
                                 LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0),
-                                "CONFIRMED", false, true, 10_000,
+                                "CONFIRMED", false, true, false, 10_000,
                                 LocalDateTime.of(2026, 8, 1, 9, 0), null
                         )
                 ), 1, 10, 11, 2, false)
@@ -269,8 +290,25 @@ class ReservationHttpControllerTest {
     }
 
     @Test
+    void getsOnsitePolicyUsingTemporaryAdminHeader() throws Exception {
+        given(policyService.get(10L, 11L, 20L)).willReturn(
+                new OnsiteSalesPolicyResponse(
+                        10L, 11L, LocalDate.of(2026, 8, 1),
+                        12_000, "OPEN", 3, LocalDateTime.of(2026, 8, 1, 9, 0)
+                )
+        );
+
+        mockMvc.perform(get("/api/v1/admin/fairs/10/dates/11/onsite-sales-policy")
+                        .header(TemporaryAuthHeaders.USER_ID, 20))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.price").value(12_000))
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.version").value(3));
+    }
+
+    @Test
     void scansGateQrUsingTemporaryAdminHeader() throws Exception {
-        given(gateEntryService.scan(any(), any(), any(), any(), any())).willReturn(
+        given(gateEntryService.scan(any(), any(), any(), any())).willReturn(
                 new GateScanResponse(
                         "FIRST_ENTRY", true, "ONSITE_DIRECT",
                         LocalDateTime.of(2026, 8, 1, 10, 0)
@@ -281,7 +319,7 @@ class ReservationHttpControllerTest {
                         .header(TemporaryAuthHeaders.USER_ID, 20)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"qrToken":"qr-token","gateName":"A게이트","deviceInfo":"tablet"}
+                                {"qrToken":"qr-token","deviceInfo":"tablet"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value("FIRST_ENTRY"));

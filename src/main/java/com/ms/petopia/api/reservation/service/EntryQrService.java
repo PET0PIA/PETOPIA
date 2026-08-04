@@ -59,16 +59,21 @@ public class EntryQrService {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
+        LocalDateTime now = timeProvider.now();
+        LocalDateTime expiresAt = LocalDateTime.of(context.getVisitDate(), context.getEntryEndTime());
+        if (now.isAfter(expiresAt)) {
+            throw new CommonException(ErrorCode.ENTRY_QR_NOT_AVAILABLE);
+        }
+
         Long reservationId = context.getReservationId();
         String token = tokenService.tokenForReservation(reservationId);
         if (!entryMapper.existsEntryQr(reservationId)) {
-            LocalDateTime now = timeProvider.now();
             try {
                 entryMapper.insertEntryQr(
                         reservationId,
                         tokenService.hash(token),
                         LocalDateTime.of(context.getVisitDate(), context.getEntryStartTime()),
-                        LocalDateTime.of(context.getVisitDate(), context.getEntryEndTime()),
+                        expiresAt,
                         now
                 );
             } catch (DuplicateKeyException exception) {
