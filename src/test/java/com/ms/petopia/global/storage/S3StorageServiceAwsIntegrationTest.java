@@ -1,10 +1,12 @@
 package com.ms.petopia.global.storage;
 
 import com.ms.petopia.global.storage.dto.PresignedUpload;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -32,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Tag("aws-integration")
 @EnabledIfEnvironmentVariable(named = "RUN_AWS_S3_INTEGRATION_TEST", matches = "true")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class S3StorageServiceAwsIntegrationTest {
 
     private static final String CONTENT_TYPE = "image/png";
@@ -91,6 +94,12 @@ class S3StorageServiceAwsIntegrationTest {
     void cleanUpUploadedObjects() {
         deleteIfPresent(temporaryKey);
         deleteIfPresent(confirmedKey);
+    }
+
+    @AfterAll
+    void closeAwsClients() {
+        s3Presigner.close();
+        s3Client.close();
     }
 
     private void deleteIfPresent(String key) {
