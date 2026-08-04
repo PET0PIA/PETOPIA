@@ -44,6 +44,15 @@
             AND channel = 'IN_APP'
     </update>
 
+    <update id="updateReadAtAllInApp">
+        UPDATE notification_delivery nd
+        JOIN notification n ON n.notification_id = nd.notification_id
+        SET nd.read_at = #{readAt}
+        WHERE n.user_id = #{userId}
+            AND nd.channel = 'IN_APP'
+            AND nd.read_at IS NULL
+    </update>
+
     <!--
         인앱 알림 미읽음 수 : notification 조인해서 user_id 필터링
         read_at IS NULL = 아직 안 읽은 것
