@@ -57,12 +57,13 @@ public class S3StorageService implements StorageService {
     public String confirm(String temporaryObjectKey, UploadPolicy policy) {
         String extension = objectKeyGenerator.validateAndExtractTemporaryExtension(policy, temporaryObjectKey);
         HeadObjectResponse headObject = headObject(temporaryObjectKey);
+        String sourceETag = requiredETag(temporaryObjectKey, headObject);
 
         try {
             policy.validateSize(headObject.contentLength());
             policy.validateContentType(extension, headObject.contentType());
         } catch (CommonException e) {
-            deleteIgnoringFailure(temporaryObjectKey);
+            deleteIgnoringFailure(temporaryObjectKey, sourceETag);
             throw e;
         }
 
@@ -71,14 +72,20 @@ public class S3StorageService implements StorageService {
             s3Client.copyObject(CopyObjectRequest.builder()
                     .sourceBucket(properties.bucket())
                     .sourceKey(temporaryObjectKey)
+                    .copySourceIfMatch(sourceETag)
                     .destinationBucket(properties.bucket())
                     .destinationKey(confirmedKey)
                     .build());
-        } catch (S3Exception | SdkClientException e) {
+        } catch (S3Exception e) {
+            if (e.statusCode() == 409 || e.statusCode() == 412) {
+                throw new CommonException(ErrorCode.STORAGE_UPLOAD_CHANGED);
+            }
+            throw storageUnavailable(e);
+        } catch (SdkClientException e) {
             throw storageUnavailable(e);
         }
 
-        deleteIgnoringFailure(temporaryObjectKey);
+        deleteIgnoringFailure(temporaryObjectKey, sourceETag);
         return confirmedKey;
     }
 
@@ -122,11 +129,21 @@ public class S3StorageService implements StorageService {
         }
     }
 
-    private void deleteIgnoringFailure(String objectKey) {
+    private String requiredETag(String objectKey, HeadObjectResponse headObject) {
+        String eTag = headObject.eTag();
+        if (eTag == null || eTag.isBlank()) {
+            log.warn("S3 HeadObject 응답에 ETag가 없습니다. objectKey={}", objectKey);
+            throw new CommonException(ErrorCode.STORAGE_UNAVAILABLE);
+        }
+        return eTag;
+    }
+
+    private void deleteIgnoringFailure(String objectKey, String eTag) {
         try {
             s3Client.deleteObject(DeleteObjectRequest.builder()
                     .bucket(properties.bucket())
                     .key(objectKey)
+                    .ifMatch(eTag)
                     .build());
         } catch (S3Exception | SdkClientException e) {
             log.warn("임시 업로드 객체 삭제에 실패했습니다. objectKey={}, errorType={}",

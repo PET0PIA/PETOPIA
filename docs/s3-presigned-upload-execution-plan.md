@@ -166,6 +166,7 @@ src/main/java/com/ms/petopia/global/storage/dto/PresignedUpload.java
 | `STORAGE_INVALID_OBJECT_KEY` | 400 | 형식이 맞지 않는 tmp key |
 | `STORAGE_UPLOAD_NOT_FOUND` | 400 | 업로드되지 않았거나 tmp 객체가 없음 |
 | `STORAGE_UNAVAILABLE` | 503 | S3/SDK 통신 실패 |
+| `STORAGE_UPLOAD_CHANGED` | 409 | `HeadObject` 검증 뒤 tmp 객체가 변경되어 조건부 복사에 실패 |
 
 `StorageService` 공개 메서드:
 
@@ -181,8 +182,8 @@ String toPublicUrl(String objectKey);
 1. key 형식을 로컬에서 검증한다. 실패 시 S3를 호출하지 않는다.
 2. `HeadObject`로 실제 `contentLength`, `contentType`을 읽는다.
 3. 정책 재검증에 실패하면 해당 tmp 객체 삭제를 시도한 뒤 오류를 반환한다.
-4. 날짜 기반 최종 키를 만들고 `CopyObject`한다.
-5. Copy 성공 후 tmp 객체를 삭제한다.
+4. `HeadObject`가 반환한 ETag를 `copySourceIfMatch`에 넣어 날짜 기반 최종 키로 조건부 `CopyObject`한다. ETag가 불일치하면 409으로 확정을 실패시키고 tmp 객체를 삭제하지 않는다.
+5. Copy 성공 후에도 같은 ETag를 `DeleteObject.ifMatch`에 넣어 tmp 객체를 삭제한다. 복사 직후 새 객체가 업로드됐으면 삭제하지 않는다.
 6. tmp 삭제가 실패해도 복사 성공을 되돌리지 않는다. `warn` 로그만 남긴다.
 
 예외 변환:
@@ -193,8 +194,9 @@ String toPublicUrl(String objectKey);
 
 완료 조건:
 
-- 정상 흐름에서 `HeadObject → CopyObject → DeleteObject` 호출 순서 검증
+- 정상 흐름에서 `HeadObject → 조건부 CopyObject → 조건부 DeleteObject` 호출 순서와 ETag 전달 검증
 - 타입/용량 실패 시 `DeleteObject` 호출 검증
+- Head 이후 Copy가 412/409으로 실패하면 409을 반환하고 DeleteObject를 호출하지 않음 검증
 - tmp 삭제 실패 시 최종 key 반환과 warn 로그 검증
 
 ### D. URL 발급 API와 보안/로그 방어

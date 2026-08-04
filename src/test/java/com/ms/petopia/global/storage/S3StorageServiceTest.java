@@ -3,6 +3,7 @@ package com.ms.petopia.global.storage;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
@@ -27,8 +28,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 class S3StorageServiceTest {
 
@@ -59,7 +61,7 @@ class S3StorageServiceTest {
     @Test
     void confirmCopiesThenDeletesValidatedTemporaryObject() {
         given(s3Client.headObject(any(HeadObjectRequest.class))).willReturn(
-                HeadObjectResponse.builder().contentLength(10L).contentType("image/png").build());
+                HeadObjectResponse.builder().contentLength(10L).contentType("image/png").eTag("validated-etag").build());
 
         String finalKey = storageService.confirm(
                 "tmp/image/550e8400-e29b-41d4-a716-446655440000.png", UploadPolicy.IMAGE);
@@ -69,12 +71,19 @@ class S3StorageServiceTest {
         order.verify(s3Client).headObject(any(HeadObjectRequest.class));
         order.verify(s3Client).copyObject(any(CopyObjectRequest.class));
         order.verify(s3Client).deleteObject(any(DeleteObjectRequest.class));
+
+        ArgumentCaptor<CopyObjectRequest> copyRequest = ArgumentCaptor.forClass(CopyObjectRequest.class);
+        ArgumentCaptor<DeleteObjectRequest> deleteRequest = ArgumentCaptor.forClass(DeleteObjectRequest.class);
+        verify(s3Client).copyObject(copyRequest.capture());
+        verify(s3Client).deleteObject(deleteRequest.capture());
+        assertThat(copyRequest.getValue().copySourceIfMatch()).isEqualTo("validated-etag");
+        assertThat(deleteRequest.getValue().ifMatch()).isEqualTo("validated-etag");
     }
 
     @Test
     void confirmDeletesObjectWhenActualContentTypeDoesNotMatch() {
         given(s3Client.headObject(any(HeadObjectRequest.class))).willReturn(
-                HeadObjectResponse.builder().contentLength(10L).contentType("image/jpeg").build());
+                HeadObjectResponse.builder().contentLength(10L).contentType("image/jpeg").eTag("validated-etag").build());
 
         assertThatThrownBy(() -> storageService.confirm(
                 "tmp/image/550e8400-e29b-41d4-a716-446655440000.png", UploadPolicy.IMAGE))
@@ -99,7 +108,7 @@ class S3StorageServiceTest {
     @Test
     void confirmSucceedsWhenTemporaryDeleteFailsAfterCopy() {
         given(s3Client.headObject(any(HeadObjectRequest.class))).willReturn(
-                HeadObjectResponse.builder().contentLength(10L).contentType("image/png").build());
+                HeadObjectResponse.builder().contentLength(10L).contentType("image/png").eTag("validated-etag").build());
         doThrow(S3Exception.builder().statusCode(503).build())
                 .when(s3Client).deleteObject(any(DeleteObjectRequest.class));
 
@@ -107,5 +116,21 @@ class S3StorageServiceTest {
                 "tmp/image/550e8400-e29b-41d4-a716-446655440000.png", UploadPolicy.IMAGE);
 
         assertThat(finalKey).startsWith("uploads/image/");
+    }
+
+    @Test
+    void confirmRejectsCopyWhenTemporaryObjectChangedAfterValidation() {
+        given(s3Client.headObject(any(HeadObjectRequest.class))).willReturn(
+                HeadObjectResponse.builder().contentLength(10L).contentType("image/png").eTag("validated-etag").build());
+        doThrow(S3Exception.builder().statusCode(412).build())
+                .when(s3Client).copyObject(any(CopyObjectRequest.class));
+
+        assertThatThrownBy(() -> storageService.confirm(
+                "tmp/image/550e8400-e29b-41d4-a716-446655440000.png", UploadPolicy.IMAGE))
+                .isInstanceOf(CommonException.class)
+                .extracting(error -> ((CommonException) error).getErrorCode())
+                .isEqualTo(ErrorCode.STORAGE_UPLOAD_CHANGED);
+
+        verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 }

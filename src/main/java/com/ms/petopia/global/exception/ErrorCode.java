@@ -41,6 +41,7 @@ public enum ErrorCode {
     STORAGE_INVALID_OBJECT_KEY(HttpStatus.BAD_REQUEST, "S004", "잘못된 임시 파일 키입니다."),
     STORAGE_UPLOAD_NOT_FOUND(HttpStatus.BAD_REQUEST, "S005", "업로드된 파일을 찾을 수 없습니다."),
     STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "S006", "파일 저장소에 일시적으로 연결할 수 없습니다."),
+    STORAGE_UPLOAD_CHANGED(HttpStatus.CONFLICT, "S007", "파일이 업로드 후 변경되어 확정할 수 없습니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
