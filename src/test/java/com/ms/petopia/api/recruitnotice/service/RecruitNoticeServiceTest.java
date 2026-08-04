@@ -45,7 +45,7 @@ class RecruitNoticeServiceTest {
         request.setTitle(title);
         request.setContent("반려동물 관련 사업자를 모집합니다.");
         request.setImageUrl("https://cdn.petopia.kr/notice/1.jpg");
-        request.setRecruitDeadline(LocalDateTime.of(2026, 9, 1, 23, 59));
+        request.setRecruitDeadline(LocalDateTime.now().plusDays(1));
 
         return request;
 
@@ -62,7 +62,7 @@ class RecruitNoticeServiceTest {
                 .title(title)
                 .content("반려동물 관련 사업자를 모집합니다.")
                 .imageUrl("https://cdn.petopia.kr/notice/1.jpg")
-                .recruitDeadline(LocalDateTime.of(2026, 9, 1, 23, 59))
+                .recruitDeadline(LocalDateTime.now().plusDays(1))
                 .createdAt(LocalDateTime.of(2026, 8, 1, 10, 0))
                 .updatedAt(updatedAt)
                 .build();
@@ -102,6 +102,8 @@ class RecruitNoticeServiceTest {
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
             given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null, savedNotice);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId))
+                    .willReturn(createFairStatus(null, "IN_PROGRESS"));
 
             // when
             RecruitNoticeResponse result = recruitNoticeService.upsertNotice(fairId, writerId, request);
@@ -132,6 +134,8 @@ class RecruitNoticeServiceTest {
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
             given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(existing, updated);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId))
+                    .willReturn(createFairStatus(null, "IN_PROGRESS"));
 
             // when
             RecruitNoticeResponse result = recruitNoticeService.upsertNotice(fairId, writerId, request);
@@ -231,6 +235,8 @@ class RecruitNoticeServiceTest {
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
             given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null, savedNotice);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId))
+                    .willReturn(createFairStatus(null, "IN_PROGRESS"));
 
             // ArgumentCaptor: "Service가 Mock한테 뭘 넘겼는지" 우리가 훔쳐봄 (Service가 보낸 값을 확인)
             ArgumentCaptor<RecruitNotice> captor = ArgumentCaptor.forClass(RecruitNotice.class);
