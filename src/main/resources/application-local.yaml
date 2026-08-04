@@ -65,3 +65,6 @@ petopia:
     # (2026-08-04 NTS_SERVICE_KEY 로 같은 실패를 겪었다.)
     bucket: ${S3_BUCKET:petopia-bucket}
     public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://d2jl6zs612zyt4.cloudfront.net}
+
+nts:
+  service-key: ${NTS_SERVICE_KEY}

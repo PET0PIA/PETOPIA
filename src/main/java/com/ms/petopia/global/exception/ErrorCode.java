@@ -41,6 +41,14 @@ public enum ErrorCode {
     STORAGE_INVALID_OBJECT_KEY(HttpStatus.BAD_REQUEST, "S004", "잘못된 임시 파일 키입니다."),
     STORAGE_UPLOAD_NOT_FOUND(HttpStatus.BAD_REQUEST, "S005", "업로드된 파일을 찾을 수 없습니다."),
     STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "S006", "파일 저장소에 일시적으로 연결할 수 없습니다."),
+    // ===== Vendor (참가업체·부스) =====
+    BUSINESS_NOT_FOUND(HttpStatus.NOT_FOUND, "V001", "사업자를 찾을 수 없습니다."),
+    RECRUIT_NOTICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V002", "해당 공고에 대한 권한이 없습니다."),
+    RECRUIT_NOTICE_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "V003", "모집 공고 등록에 실패했습니다."),
+    RECRUIT_NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "V004", "아직 작성된 모집 공고가 없습니다."),
+    NTS_API_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "V005", "사업자 진위확인 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요."),
+    BUSINESS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "V006", "사업자 정보를 확인할 수 없습니다. 입력하신 정보를 다시 확인해주세요."),
+    BUSINESS_DUPLICATE(HttpStatus.CONFLICT, "V007", "이미 등록된 사업자등록번호입니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
