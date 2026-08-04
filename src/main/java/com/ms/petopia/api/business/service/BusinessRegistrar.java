@@ -3,7 +3,10 @@ package com.ms.petopia.api.business.service;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,8 +39,14 @@ public class BusinessRegistrar {
                 .verifyStatus(verifyStatus)
                 .build();
 
-        // 검증 결과까지 포함해서 한 번에 저장
-        businessMapper.insertBusiness(business);
+        try {
+
+            // 검증 결과까지 포함해서 한 번에 저장
+            businessMapper.insertBusiness(business);
+
+        } catch (DuplicateKeyException e) {
+            throw new CommonException(ErrorCode.BUSINESS_DUPLICATE);
+        }
 
         // 재조회(정확한 값으로 응답 만들기 위해) 값 반환
         return businessMapper.selectById(business.getBusinessId());

@@ -35,6 +35,7 @@ public enum ErrorCode {
     RECRUIT_NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "V004", "아직 작성된 모집 공고가 없습니다."),
     NTS_API_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "V005", "사업자 진위확인 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요."),
     BUSINESS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "V006", "사업자 정보를 확인할 수 없습니다. 입력하신 정보를 다시 확인해주세요."),
+    BUSINESS_DUPLICATE(HttpStatus.CONFLICT, "V007", "이미 등록된 사업자등록번호입니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
