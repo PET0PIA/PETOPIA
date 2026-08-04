@@ -1,10 +1,13 @@
 package com.ms.petopia.api.auth.service;
 
 import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.dto.EmailLoginRequest;
 import com.ms.petopia.api.auth.dto.EmailSignupRequest;
+import com.ms.petopia.api.auth.dto.TokenPair;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -19,6 +22,8 @@ import java.time.LocalDate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,6 +32,7 @@ import static org.mockito.Mockito.verify;
 class AuthServiceTest {
 
     private static final String EMAIL = "test@petopia.com";
+    private static final Long USER_ID = 1L;
 
     @Mock
     private AuthMapper authMapper;
@@ -34,6 +40,10 @@ class AuthServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private EmailVerificationService emailVerificationService;
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
+    @Mock
+    private RefreshTokenStore refreshTokenStore;
     @InjectMocks
     private AuthService authService;
 
@@ -120,6 +130,81 @@ class AuthServiceTest {
                 .isEqualTo(ErrorCode.DUPLICATED_EMAIL);
 
         verify(emailVerificationService, never()).issueAndSend(any());
+    }
+
+    @Test
+    void login_이메일과비밀번호가맞고인증된유저면_토큰을발급한다() {
+        User user = loginUser();
+        given(authMapper.selectUserByEmail(EMAIL)).willReturn(user);
+        given(passwordEncoder.matches("password1!", "hashed")).willReturn(true);
+        given(jwtTokenProvider.generateAccessToken(USER_ID, "USER")).willReturn("access-token");
+        given(jwtTokenProvider.generateRefreshToken(USER_ID)).willReturn("refresh-token");
+
+        TokenPair result = authService.login(loginRequest());
+
+        assertThat(result.accessToken()).isEqualTo("access-token");
+        assertThat(result.refreshToken()).isEqualTo("refresh-token");
+        verify(refreshTokenStore).save(any(String.class), eq(USER_ID), any());
+    }
+
+    @Test
+    void login_이메일이없으면_INVALID_LOGIN을던진다() {
+        given(authMapper.selectUserByEmail(EMAIL)).willReturn(null);
+
+        assertThatThrownBy(() -> authService.login(loginRequest()))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_LOGIN);
+
+        verify(jwtTokenProvider, never()).generateAccessToken(anyLong(), any());
+    }
+
+    @Test
+    void login_비밀번호가틀리면_INVALID_LOGIN을던진다() {
+        given(authMapper.selectUserByEmail(EMAIL)).willReturn(loginUser());
+        given(passwordEncoder.matches("password1!", "hashed")).willReturn(false);
+
+        assertThatThrownBy(() -> authService.login(loginRequest()))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_LOGIN);
+    }
+
+    @Test
+    void login_이메일미인증이면_EMAIL_NOT_VERIFIED를던진다() {
+        User user = User.builder()
+                .userId(USER_ID)
+                .email(EMAIL)
+                .passwordHash("hashed")
+                .role("USER")
+                .emailVerified(false)
+                .build();
+        given(authMapper.selectUserByEmail(EMAIL)).willReturn(user);
+        given(passwordEncoder.matches("password1!", "hashed")).willReturn(true);
+
+        assertThatThrownBy(() -> authService.login(loginRequest()))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.EMAIL_NOT_VERIFIED);
+
+        verify(jwtTokenProvider, never()).generateAccessToken(anyLong(), any());
+    }
+
+    private User loginUser() {
+        return User.builder()
+                .userId(USER_ID)
+                .email(EMAIL)
+                .passwordHash("hashed")
+                .role("USER")
+                .emailVerified(true)
+                .build();
+    }
+
+    private EmailLoginRequest loginRequest() {
+        EmailLoginRequest request = new EmailLoginRequest();
+        request.setEmail(EMAIL);
+        request.setPassword("password1!");
+        return request;
     }
 
     private EmailSignupRequest buildRequest() {
