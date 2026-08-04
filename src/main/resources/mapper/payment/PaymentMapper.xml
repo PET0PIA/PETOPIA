@@ -38,6 +38,14 @@
         )
     </insert>
 
+    <update id="markProcessing">
+        UPDATE payment
+        SET status = 'PROCESSING',
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'PENDING'
+    </update>
+
     <update id="markCompleted" parameterType="PaymentRow">
         UPDATE payment
         SET status = 'COMPLETED',
@@ -46,7 +54,15 @@
         paid_at = #{paidAt},
         updated_at = #{updatedAt}
         WHERE payment_id = #{paymentId}
-        AND status = 'PENDING'
+        AND status = 'PROCESSING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE payment
+        SET status = 'FAILED',
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'PROCESSING'
     </update>
 
 </mapper>

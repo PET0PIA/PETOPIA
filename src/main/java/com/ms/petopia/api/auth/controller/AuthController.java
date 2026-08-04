@@ -1,15 +1,23 @@
 package com.ms.petopia.api.auth.controller;
 
 import com.ms.petopia.api.auth.dto.EmailCheckResponse;
+import com.ms.petopia.api.auth.dto.EmailLoginRequest;
 import com.ms.petopia.api.auth.dto.EmailSignupRequest;
 import com.ms.petopia.api.auth.dto.EmailVerifyRequest;
 import com.ms.petopia.api.auth.dto.EmailVerifyResendRequest;
+import com.ms.petopia.api.auth.dto.LoginResponse;
+import com.ms.petopia.api.auth.dto.TokenPair;
 import com.ms.petopia.api.auth.service.AuthService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
 
 @RestController
 @RequiredArgsConstructor
@@ -40,6 +48,27 @@ public class AuthController {
     @PostMapping("/verify")
     public void verifyEmail(@Valid @RequestBody EmailVerifyRequest request) {
         authService.verifyEmail(request.email(), request.token());
+    }
+
+    //로그인
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody EmailLoginRequest request) {
+        TokenPair tokenPair = authService.login(request);
+
+        //쿠키로 refreshToken 저장
+        ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", tokenPair.refreshToken())
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+                .path("/")
+                .maxAge(Duration.ofDays(14))
+                .build();
+
+        return ResponseEntity.ok()
+                //헤더에 쿠키 추가
+                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                //body는 json
+                .body(new LoginResponse(tokenPair.accessToken()));
     }
 
 }

@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 
@@ -167,6 +168,7 @@ class PaymentServiceTest {
         // Arrange
         PaymentRow row = pendingRow();
         given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
                 .willReturn(new TossPaymentResponse(
                         "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
@@ -220,21 +222,57 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("동시에 두 번 승인 처리돼 markCompleted가 0건이면 예외를 던진다")
-    void confirmPayment_동시승인_예외를던진다() {
-        // Arrange: 토스 승인까지는 성공했는데, 그 사이 다른 요청이 먼저 COMPLETED로
-        // 바꿔놔서 markCompleted의 WHERE status='PENDING' 조건에 안 걸리는 상황(0건 업데이트)
+    @DisplayName("동시에 두 번 승인 요청이 들어오면 선점에 실패한 쪽은 토스를 부르지도 않고 예외를 던진다")
+    void confirmPayment_동시승인_선점실패시토스호출안함() {
+        // Arrange: markProcessing이 0을 반환 = 다른 요청이 먼저 PENDING -> PROCESSING을 선점한 상황
         given(paymentMapper.selectById(1L)).willReturn(pendingRow());
-        given(tossPaymentClient.confirmPayment(any(), any(), any()))
-                .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
-                ));
-        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(0);
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(0);
 
         assertThatThrownBy(() -> paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123")))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+
+        // 핵심: 선점에 실패했으면 토스 승인 API 자체를 호출하면 안 됨(중복 승인 시도 방지)
+        verify(tossPaymentClient, never()).confirmPayment(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("토스가 승인을 확정적으로 거부하면(4xx) 결제를 FAILED로 남긴다")
+    void confirmPayment_토스승인거부_FAILED로전이한다() {
+        // Arrange: 토스 클라이언트가 4xx를 이미 PAYMENT_APPROVAL_FAILED로 변환해서 던지는 상황을 흉내냄
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        willThrow(new CommonException(ErrorCode.PAYMENT_APPROVAL_FAILED))
+                .given(tossPaymentClient).confirmPayment(any(), any(), any());
+
+        // Act & Assert: 호출한 쪽에는 여전히 실패 예외가 그대로 전달돼야 함
+        assertThatThrownBy(() -> paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_APPROVAL_FAILED);
+
+        // 예외를 던지면서도 DB엔 FAILED로 남겨야 함(트랜잭션 롤백에 안 딸려가는지 확인하는 셈)
+        verify(paymentMapper).markFailed(eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("토스 서버 장애(5xx)면 결제 상태를 건드리지 않고 예외만 전달한다")
+    void confirmPayment_토스서버장애_상태유지() {
+        // Arrange: 5xx는 실제로 승인됐을 수도 있어서 실패로 단정하면 안 됨(PROCESSING 유지)
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        willThrow(new CommonException(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE))
+                .given(tossPaymentClient).confirmPayment(any(), any(), any());
+
+        assertThatThrownBy(() -> paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE);
+
+        // markFailed/markCompleted 둘 다 호출되면 안 됨 — 상태는 선점된 PROCESSING 그대로 유지
+        verify(paymentMapper, never()).markFailed(any(), any());
+        verify(paymentMapper, never()).markCompleted(any());
     }
 
 }
