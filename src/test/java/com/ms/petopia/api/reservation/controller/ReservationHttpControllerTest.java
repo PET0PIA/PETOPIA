@@ -25,19 +25,30 @@ import com.ms.petopia.api.reservation.service.ReservationQueryService;
 import com.ms.petopia.api.reservation.service.ReservationService;
 import com.ms.petopia.api.reservation.service.ReservationVisitDateChangeService;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
+import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.io.IOException;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,7 +56,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -56,6 +66,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @ExtendWith(MockitoExtension.class)
 class ReservationHttpControllerTest {
+
+    private static final String AUTHENTICATED_USER_ID_ATTRIBUTE = "authenticatedUserId";
 
     @Mock
     private ReservationService reservationService;
@@ -82,6 +94,11 @@ class ReservationHttpControllerTest {
 
     private MockMvc mockMvc;
 
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(
@@ -102,6 +119,8 @@ class ReservationHttpControllerTest {
                         )
                 )
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+                .addFilters(new TestAuthenticationFilter())
                 .build();
     }
 
@@ -119,7 +138,7 @@ class ReservationHttpControllerTest {
         );
 
         mockMvc.perform(patch("/api/v1/reservations/30/visit-date")
-                        .header(TemporaryAuthHeaders.USER_ID, 20)
+                        .with(authenticatedAs(20L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"visitDate\":\"2026-08-03\"}"))
                 .andExpect(status().isOk())
@@ -131,13 +150,13 @@ class ReservationHttpControllerTest {
     }
 
     @Test
-    void cancelsReservationUsingTemporaryUserHeader() throws Exception {
+    void cancelsReservationUsingAuthenticatedUser() throws Exception {
         given(cancellationService.cancel(any(), any(), any())).willReturn(
                 new CancelReservationResponse(30L, "CANCELED", LocalDateTime.of(2026, 8, 1, 9, 0))
         );
 
         mockMvc.perform(patch("/api/v1/reservations/30/cancel")
-                        .header(TemporaryAuthHeaders.USER_ID, 20)
+                        .with(authenticatedAs(20L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"일정 변경\"}"))
                 .andExpect(status().isOk())
@@ -181,7 +200,7 @@ class ReservationHttpControllerTest {
         );
 
         mockMvc.perform(get("/api/v1/reservations/me?page=1&size=10")
-                        .header(TemporaryAuthHeaders.USER_ID, 20))
+                        .with(authenticatedAs(20L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[0].fairName").value("서울 펫페어"))
                 .andExpect(jsonPath("$.items[0].entryStartTime").value("10:00:00"))
@@ -194,7 +213,7 @@ class ReservationHttpControllerTest {
     }
 
     @Test
-    void createsAdvanceReservationUsingTemporaryUserHeader() throws Exception {
+    void createsAdvanceReservationUsingAuthenticatedUser() throws Exception {
         LocalDateTime deadline = LocalDateTime.of(2026, 8, 1, 10, 10);
         given(reservationService.create(any(), any(), any())).willReturn(
                 new CreateReservationResponse(
@@ -204,7 +223,7 @@ class ReservationHttpControllerTest {
         );
 
         mockMvc.perform(post("/api/v1/fairs/10/reservations")
-                        .header(TemporaryAuthHeaders.USER_ID, 20)
+                        .with(authenticatedAs(20L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -227,7 +246,7 @@ class ReservationHttpControllerTest {
     }
 
     @Test
-    void createsOnsiteReservationUsingTemporaryUserHeader() throws Exception {
+    void createsOnsiteReservationUsingAuthenticatedUser() throws Exception {
         given(onsiteReservationService.create(any(), any(), any())).willReturn(
                 new CreateOnsiteReservationResponse(
                         30L, "R20260801ONSITE1", "ONSITE_DIRECT",
@@ -237,7 +256,7 @@ class ReservationHttpControllerTest {
         );
 
         mockMvc.perform(post("/api/v1/fairs/10/onsite-reservations")
-                        .header(TemporaryAuthHeaders.USER_ID, 20))
+                        .with(authenticatedAs(20L)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.reservationType").value("ONSITE_DIRECT"))
                 .andExpect(jsonPath("$.entryQrToken").value("qr-token"));
@@ -247,15 +266,24 @@ class ReservationHttpControllerTest {
     }
 
     @Test
-    void rejectsAdvanceReservationWithoutTemporaryUserHeader() throws Exception {
+    void ignoresUserIdHeaderAndUsesAuthenticationPrincipal() throws Exception {
+        given(reservationService.create(any(), any(), any())).willReturn(
+                new CreateReservationResponse(
+                        30L, "R20260801ADVANCE1", "ADVANCE", "PENDING_PAYMENT",
+                        10_000, true, LocalDateTime.of(2026, 8, 1, 10, 10), null
+                )
+        );
+
         mockMvc.perform(post("/api/v1/fairs/10/reservations")
+                        .with(authenticatedAs(20L))
+                        .header(TemporaryAuthHeaders.USER_ID, 999L)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"visitDate": "2026-08-02"}
                                 """))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isCreated());
 
-        verify(reservationService, never()).create(any(), any(), any());
+        verify(reservationService).create(eq(10L), eq(20L), any());
     }
 
     @Test
@@ -263,7 +291,7 @@ class ReservationHttpControllerTest {
         given(entryQrService.issueForUser(30L, 20L)).willReturn("qr-token");
 
         mockMvc.perform(get("/api/v1/reservations/30/entry-qr")
-                        .header(TemporaryAuthHeaders.USER_ID, 20))
+                        .with(authenticatedAs(20L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.qrToken").value("qr-token"));
 
@@ -271,7 +299,7 @@ class ReservationHttpControllerTest {
     }
 
     @Test
-    void savesOnsitePolicyUsingTemporaryAdminHeader() throws Exception {
+    void savesOnsitePolicyUsingAuthenticatedAdmin() throws Exception {
         given(policyService.save(any(), any(), any(), any())).willReturn(
                 new OnsiteSalesPolicyResponse(
                         10L, 11L, LocalDate.of(2026, 8, 1),
@@ -280,7 +308,7 @@ class ReservationHttpControllerTest {
         );
 
         mockMvc.perform(put("/api/v1/admin/fairs/10/dates/11/onsite-sales-policy")
-                        .header(TemporaryAuthHeaders.USER_ID, 20)
+                        .with(authenticatedAs(20L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"price":12000,"status":"OPEN","expectedVersion":null}
@@ -290,7 +318,7 @@ class ReservationHttpControllerTest {
     }
 
     @Test
-    void getsOnsitePolicyUsingTemporaryAdminHeader() throws Exception {
+    void getsOnsitePolicyUsingAuthenticatedAdmin() throws Exception {
         given(policyService.get(10L, 11L, 20L)).willReturn(
                 new OnsiteSalesPolicyResponse(
                         10L, 11L, LocalDate.of(2026, 8, 1),
@@ -299,7 +327,7 @@ class ReservationHttpControllerTest {
         );
 
         mockMvc.perform(get("/api/v1/admin/fairs/10/dates/11/onsite-sales-policy")
-                        .header(TemporaryAuthHeaders.USER_ID, 20))
+                        .with(authenticatedAs(20L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.price").value(12_000))
                 .andExpect(jsonPath("$.status").value("OPEN"))
@@ -307,7 +335,7 @@ class ReservationHttpControllerTest {
     }
 
     @Test
-    void scansGateQrUsingTemporaryAdminHeader() throws Exception {
+    void scansGateQrUsingAuthenticatedAdmin() throws Exception {
         given(gateEntryService.scan(any(), any(), any(), any())).willReturn(
                 new GateScanResponse(
                         "FIRST_ENTRY", true, "ONSITE_DIRECT",
@@ -316,7 +344,7 @@ class ReservationHttpControllerTest {
         );
 
         mockMvc.perform(post("/api/v1/admin/fairs/10/gate-entries/scan")
-                        .header(TemporaryAuthHeaders.USER_ID, 20)
+                        .with(authenticatedAs(20L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"qrToken":"qr-token","deviceInfo":"tablet"}
@@ -360,5 +388,34 @@ class ReservationHttpControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reservationStatus").value("CONFIRMED"));
+    }
+
+    private RequestPostProcessor authenticatedAs(Long userId) {
+        return request -> {
+            request.setAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE, userId);
+            return request;
+        };
+    }
+
+    private static final class TestAuthenticationFilter extends OncePerRequestFilter {
+
+        @Override
+        protected void doFilterInternal(
+                HttpServletRequest request,
+                HttpServletResponse response,
+                FilterChain filterChain
+        ) throws ServletException, IOException {
+            Long userId = (Long) request.getAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE);
+            if (userId != null) {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(userId, null, List.of())
+                );
+            }
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        }
     }
 }

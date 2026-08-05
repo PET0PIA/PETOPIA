@@ -36,6 +36,13 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/api/v1/reservations/**",
+                                "/api/v1/fairs/*/reservations",
+                                "/api/v1/fairs/*/onsite-reservations"
+                        ).authenticated()
+                        .requestMatchers("/api/v1/admin/fairs/**")
+                        .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/files/presigned-upload").authenticated()
                         //user 권한을 필요
                         //.requestMatchers("/user").hasAuthority("ROLE_USER")

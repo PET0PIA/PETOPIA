@@ -72,6 +72,19 @@ class ReservationCancellationServiceTest {
     }
 
     @Test
+    void rejectsCancellationRequestFromAnotherUser() {
+        ReservationCancellationContext context = context("PENDING_PAYMENT", "ADVANCE", 10_000);
+        context.setUserId(99L);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+
+        assertError(() -> service.cancel(RESERVATION_ID, USER_ID, null), ErrorCode.ACCESS_DENIED);
+
+        verify(cancellationMapper, never()).cancelReservation(
+                RESERVATION_ID, "PENDING_PAYMENT", null, USER_ID, NOW
+        );
+    }
+
+    @Test
     void rejectsFreeAdvanceCancellationAfterDeadline() {
         ReservationCancellationContext context = context("CONFIRMED", "ADVANCE", 0);
         given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
