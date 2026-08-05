@@ -9,6 +9,6 @@ public record ReservationPaymentContext(Long reservationId,
                                         Long payerUserId,
                                         String reservationType,
                                         long amount,
-                                        LocalDateTime PaymentExpiresAt) {
+                                        LocalDateTime paymentExpiresAt) {
 
 }

@@ -201,17 +201,22 @@ public class PaymentService {
                 }
                 log.warn("예약 도메인 결제완료 통지 실패({}번째 시도), 재시도한다. reservationId={}, paymentId={}",
                         attempt, row.getReservationId(), row.getPaymentId(), e);
-                sleepBeforeRetry();
+                // 대기 중 인터럽트(취소 신호) 걸리면 재시도를 더 돌리지 않고 바로 빠져나간다.
+                if (!sleepBeforeRetry()) {
+                    return;
+                }
             }
         }
     }
 
-    private void sleepBeforeRetry() {
+    private boolean sleepBeforeRetry() {
         try {
             Thread.sleep(NOTIFY_RETRY_DELAY_MS);
+            return true;
         } catch (InterruptedException interruptedException) {
             // 인터럽트 상태를 삼키지 않고 다시 세팅 — 스레드 종료/취소 신호를 존중하기 위함.
             Thread.currentThread().interrupt();
+            return false;
         }
     }
 
