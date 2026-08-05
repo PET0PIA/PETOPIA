@@ -13,7 +13,12 @@ public record CreateFairApplicationRequest(
         String description,
         /** DOG / CAT / ETC */
         String category,
-        String posterImageUrl,
+        /**
+         * {@code POST /api/files/presigned-upload}로 발급받아 S3에 직접 업로드한 임시 객체 키.
+         * 서비스가 이 키를 확정(tmp → uploads) 처리해 최종 URL을 만들어 저장한다.
+         * 이미지가 없으면 null.
+         */
+        String posterImageObjectKey,
         String noticeText,
 
         String placeName,

@@ -7,6 +7,7 @@ import { SectionHeader } from "../../components/common/SectionHeader";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
+import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { ApiError } from "../../api/client";
@@ -16,7 +17,6 @@ interface FormState {
   name: string;
   description: string;
   category: "" | "DOG" | "CAT" | "ETC";
-  posterImageUrl: string;
   noticeText: string;
   placeName: string;
   address: string;
@@ -39,7 +39,6 @@ const initialForm: FormState = {
   name: "",
   description: "",
   category: "",
-  posterImageUrl: "",
   noticeText: "",
   placeName: "",
   address: "",
@@ -82,12 +81,12 @@ function validate(form: FormState): string[] {
   return errors;
 }
 
-function toRequest(form: FormState): CreateFairApplicationRequest {
+function toRequest(form: FormState, posterImageObjectKey: string | null): CreateFairApplicationRequest {
   return {
     name: form.name.trim(),
     description: form.description.trim() || undefined,
     category: form.category || undefined,
-    posterImageUrl: form.posterImageUrl.trim() || undefined,
+    posterImageObjectKey: posterImageObjectKey ?? undefined,
     noticeText: form.noticeText.trim() || undefined,
     placeName: form.placeName.trim() || undefined,
     address: form.address.trim() || undefined,
@@ -109,6 +108,7 @@ function toRequest(form: FormState): CreateFairApplicationRequest {
 
 export function FairApplicationNewPage() {
   const [form, setForm] = useState<FormState>(initialForm);
+  const [posterImageObjectKey, setPosterImageObjectKey] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -127,7 +127,7 @@ export function FairApplicationNewPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await createFairApplication(toRequest(form));
+      const response = await createFairApplication(toRequest(form, posterImageObjectKey));
       setResult(response);
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : "신청서를 제출하지 못했어요. 잠시 후 다시 시도해 주세요.");
@@ -198,10 +198,10 @@ export function FairApplicationNewPage() {
                   <option value="ETC">기타</option>
                 </Select>
               </div>
-              <div>
-                {label("포스터 이미지 URL")}
-                <Input value={form.posterImageUrl} onChange={(event) => update("posterImageUrl", event.target.value)} placeholder="https://..." />
-              </div>
+              <ImageUploadField
+                label="포스터 이미지"
+                onObjectKeyChange={setPosterImageObjectKey}
+              />
             </div>
             <div>
               {label("행사 소개")}

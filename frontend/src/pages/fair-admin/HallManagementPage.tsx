@@ -7,10 +7,9 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
+import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { Input } from "../../components/ui/Input";
 import { Table } from "../../components/ui/Table";
-
-const emptyHallForm: HallInput = { name: "", floorPlanImageUrl: "" };
 
 export function HallManagementPage() {
   // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
@@ -23,7 +22,9 @@ export function HallManagementPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingHall, setEditingHall] = useState<Hall | null>(null);
-  const [hallForm, setHallForm] = useState<HallInput>(emptyHallForm);
+  const [hallName, setHallName] = useState("");
+  const [floorPlanImageObjectKey, setFloorPlanImageObjectKey] = useState<string | null>(null);
+  const [existingFloorPlanImageUrl, setExistingFloorPlanImageUrl] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -53,14 +54,18 @@ export function HallManagementPage() {
 
   function openCreateDialog() {
     setEditingHall(null);
-    setHallForm(emptyHallForm);
+    setHallName("");
+    setFloorPlanImageObjectKey(null);
+    setExistingFloorPlanImageUrl(null);
     setFormError(null);
     setDialogOpen(true);
   }
 
   function openEditDialog(hall: Hall) {
     setEditingHall(hall);
-    setHallForm({ name: hall.name, floorPlanImageUrl: hall.floorPlanImageUrl ?? "" });
+    setHallName(hall.name);
+    setFloorPlanImageObjectKey(null);
+    setExistingFloorPlanImageUrl(hall.floorPlanImageUrl);
     setFormError(null);
     setDialogOpen(true);
   }
@@ -68,12 +73,12 @@ export function HallManagementPage() {
   async function handleSaveHall(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (fairId === null) return;
-    if (hallForm.name.trim() === "") {
+    if (hallName.trim() === "") {
       setFormError("홀 이름을 입력해 주세요.");
       return;
     }
 
-    const payload: HallInput = { name: hallForm.name.trim(), floorPlanImageUrl: hallForm.floorPlanImageUrl?.trim() || undefined };
+    const payload: HallInput = { name: hallName.trim(), floorPlanImageObjectKey: floorPlanImageObjectKey ?? undefined };
 
     setSaving(true);
     setFormError(null);
@@ -187,20 +192,17 @@ export function HallManagementPage() {
           <div>
             <span className="mb-1.5 block text-sm font-bold text-ink">홀 이름<span className="ml-1 text-primary-strong">*</span></span>
             <Input
-              value={hallForm.name}
-              onChange={(event) => setHallForm((previous) => ({ ...previous, name: event.target.value }))}
+              value={hallName}
+              onChange={(event) => setHallName(event.target.value)}
               placeholder="예: A홀"
               required
             />
           </div>
-          <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">도면 이미지 URL</span>
-            <Input
-              value={hallForm.floorPlanImageUrl ?? ""}
-              onChange={(event) => setHallForm((previous) => ({ ...previous, floorPlanImageUrl: event.target.value }))}
-              placeholder="https://..."
-            />
-          </div>
+          <ImageUploadField
+            label="도면 이미지"
+            initialImageUrl={existingFloorPlanImageUrl}
+            onObjectKeyChange={setFloorPlanImageObjectKey}
+          />
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>취소</Button>
             <Button type="submit" disabled={saving}>{saving ? "저장 중..." : "저장"}</Button>

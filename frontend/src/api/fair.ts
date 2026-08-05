@@ -15,7 +15,8 @@ export interface CreateFairApplicationRequest {
   name: string;
   description?: string;
   category?: FairCategory;
-  posterImageUrl?: string;
+  /** presigned 업로드로 받은 임시 객체 키(파일 자체가 아니라 objectKey를 보낸다). */
+  posterImageObjectKey?: string;
   noticeText?: string;
   placeName?: string;
   address?: string;
@@ -116,7 +117,8 @@ export interface Hall {
 
 export interface HallInput {
   name: string;
-  floorPlanImageUrl?: string;
+  /** presigned 업로드로 받은 임시 객체 키. 이미지를 바꾸지 않으면 생략한다(기존 이미지 유지). */
+  floorPlanImageObjectKey?: string;
 }
 
 export function getHalls(fairId: number) {
