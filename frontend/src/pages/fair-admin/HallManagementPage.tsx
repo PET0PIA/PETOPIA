@@ -10,8 +10,11 @@ import { Dialog } from "../../components/ui/Dialog";
 import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { Input } from "../../components/ui/Input";
 import { Table } from "../../components/ui/Table";
+import { useConfirm } from "../../components/ui/useConfirm";
 
 export function HallManagementPage() {
+  const { confirm, confirmDialog } = useConfirm();
+
   // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
   const [fairIdInput, setFairIdInput] = useState("");
   const [fairId, setFairId] = useState<number | null>(null);
@@ -99,7 +102,7 @@ export function HallManagementPage() {
 
   async function handleDeleteHall(hall: Hall) {
     if (fairId === null) return;
-    if (!window.confirm(`'${hall.name}' 홀을 삭제할까요?`)) return;
+    if (!(await confirm({ description: `'${hall.name}' 홀을 삭제할까요?` }))) return;
 
     try {
       await deleteHall(fairId, hall.hallId);
@@ -209,6 +212,7 @@ export function HallManagementPage() {
           </div>
         </form>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }
