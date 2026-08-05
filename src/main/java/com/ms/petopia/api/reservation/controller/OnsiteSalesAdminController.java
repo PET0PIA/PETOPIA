@@ -4,6 +4,7 @@ import com.ms.petopia.api.reservation.dto.OnsiteSalesPolicyResponse;
 import com.ms.petopia.api.reservation.dto.UpdateOnsiteSalesPolicyRequest;
 import com.ms.petopia.api.reservation.service.OnsiteSalesPolicyService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +18,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class OnsiteSalesAdminController {
 
     private final OnsiteSalesPolicyService policyService;
+
+    @GetMapping
+    public OnsiteSalesPolicyResponse getPolicy(
+            @PathVariable Long fairId,
+            @PathVariable Long fairDateId,
+            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long actorUserId
+    ) {
+        return policyService.get(fairId, fairDateId, actorUserId);
+    }
 
     @PutMapping
     public OnsiteSalesPolicyResponse savePolicy(
