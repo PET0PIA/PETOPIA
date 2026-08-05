@@ -65,4 +65,24 @@
         AND status = 'PROCESSING'
     </update>
 
+    <select id="selectCompletedVendorFeePayments" resultType="PaymentRow">
+        SELECT payment_id
+             , payment_type
+             , amount
+             , status
+             , method
+             , paid_at
+             , created_at
+             , fair_id
+             , business_id
+             , payer_user_id
+             , reservation_id
+             , application_id
+          FROM payment
+         WHERE fair_id = #{fairId}
+           AND business_id = #{businessId}
+           AND payment_type = 'VENDOR_FEE'
+           AND status = 'COMPLETED'
+    </select>
+
 </mapper>

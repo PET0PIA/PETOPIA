@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * PAYMENT 테이블 조회용 매퍼.
@@ -46,4 +47,11 @@ public interface PaymentMapper {
      * markProcessing으로 선점에 성공한 요청만 호출하므로, 정상 흐름에서는 항상 1을 반환한다.
      */
     int markFailed(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * 정산 집계용 — 특정 행사·업체의 완료된 참가비(VENDOR_FEE) 결제 전체를 조회한다.
+     * 정산대상은 "결제완료된 참가비"만이라 status/paymentType을 XML에서 고정한다.
+     */
+    List<PaymentRow> selectCompletedVendorFeePayments(
+            @Param("fairId") Long fairId, @Param("businessId") Long businessId);
 }
