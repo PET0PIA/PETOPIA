@@ -46,6 +46,9 @@ public class PasswordService {
     //비밀번호 재설정(분실용) 이메일 전송용 링크 메소드
     @Transactional
     public String issueResetLink(Long userId) {
+        //users.user_id 행을 잠가서 같은 유저의 동시 요청을 직렬화
+        authMapper.selectUserByIdForUpdate(userId);
+
         //직전 토큰이 쿨다운 시간 내에 발급됐으면 재요청 거부
         UserToken latestToken = authMapper.selectLatestToken(userId, PURPOSE_PASSWORD_RESET);
         if (latestToken != null

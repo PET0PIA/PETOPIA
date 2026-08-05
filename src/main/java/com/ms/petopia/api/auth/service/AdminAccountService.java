@@ -8,6 +8,7 @@ import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.TokenHashUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,7 +62,12 @@ public class AdminAccountService {
                 .status("ACTIVE")
                 .createdAt(LocalDateTime.now())
                 .build();
-        authMapper.insertUser(newAdmin);
+        try {
+            authMapper.insertUser(newAdmin);
+        } catch (DuplicateKeyException e) {
+            //동시 요청이 겹쳐 email UNIQUE 제약에 걸린 경우 500 대신 409로 응답
+            throw new CommonException(ErrorCode.DUPLICATED_EMAIL, e);
+        }
 
         //페어-관리자 연결 테이블에 값 넣기
         FairAdminAssignment fairAdminAssignment = FairAdminAssignment.builder()
@@ -69,7 +75,12 @@ public class AdminAccountService {
                 .requesterUserId(applicant.getUserId())
                 .fairId(fairId)
                 .build();
-        fairAdminAssignmentMapper.insertFairAdminAssignment(fairAdminAssignment);
+        try {
+            fairAdminAssignmentMapper.insertFairAdminAssignment(fairAdminAssignment);
+        } catch (DuplicateKeyException e) {
+            //동시 승인 요청이 겹쳐 fair_id UNIQUE 제약에 걸린 경우 500 대신 409로 응답
+            throw new CommonException(ErrorCode.FAIR_ADMIN_ALREADY_ASSIGNED, e);
+        }
 
         //비밀번호가 담긴 메일 전송
         mailService.sendAdminAccountIssueEmail(managerEmail, tempPassword);

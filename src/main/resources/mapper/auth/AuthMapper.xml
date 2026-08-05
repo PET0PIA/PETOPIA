@@ -207,12 +207,12 @@
            AND used_at IS NULL
     </update>
 
-    <!-- AND used_at IS NULL 가드로 동시 요청 중 한쪽만 실제로 갱신됨 -->
     <update id="markUserTokenUsed">
         UPDATE user_tokens
            SET used_at = CURRENT_TIMESTAMP
          WHERE token_id = #{tokenId}
            AND used_at IS NULL
+           AND expires_at > CURRENT_TIMESTAMP
     </update>
 
     <!-- 인증 완료 기록. users.email_verified + status 둘 다 여기서 같이 전환 -->

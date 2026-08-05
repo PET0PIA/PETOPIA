@@ -36,6 +36,7 @@ public enum ErrorCode {
     EMAIL_NOT_VERIFIED(HttpStatus.UNAUTHORIZED, "A010", "이메일 인증이 완료되지 않은 이메일입니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "A011", "유효하지 않거나 만료된 토큰입니다. 다시 로그인해주세요."),
     INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "A012", "현재 비밀번호가 일치하지 않습니다."),
+    FAIR_ADMIN_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "A013", "이미 관리자 계정이 배정된 행사입니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
