@@ -1,6 +1,7 @@
 package com.ms.petopia.api.application.controller;
 
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
+import com.ms.petopia.api.application.dto.response.ApplicationDetailResponse;
 import com.ms.petopia.api.application.dto.response.ApplicationResponse;
 import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
 import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
@@ -54,6 +55,18 @@ public class ApplicationController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(applicationService.getMyApplications(ownerId, businessId)));
+
+    }
+
+    // 신청 상세 조회
+    @GetMapping("/applications/{applicationId}")
+    public ResponseEntity<ApiResponse<ApplicationDetailResponse>> getApplicationDetail(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @PathVariable Long applicationId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.getApplicationDetail(ownerId, applicationId)));
 
     }
 

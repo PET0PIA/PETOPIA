@@ -119,4 +119,38 @@
         ORDER BY a.submitted_at DESC
     </select>
 
+    <!-- 신청 상세 (application + application_form 조인). slots는 별도 쿼리로 채움 -->
+    <select id="selectApplicationDetail"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationDetailResponse">
+        SELECT a.application_id AS applicationId,
+            a.fair_id AS fairId,
+            a.business_id AS businessId,
+            a.status AS status,
+            af.purpose AS purpose,
+            af.items_desc AS itemsDesc,
+            af.manager_name AS managerName,
+            af.manager_phone AS managerPhone,
+            af.manager_email AS managerEmail,
+            a.final_price AS finalPrice,
+            a.reject_reason AS rejectReason,
+            af.attachment_url AS attachmentUrl,
+            a.submitted_at AS submittedAt,
+            a.reviewed_at AS reviewedAt
+        FROM application a
+        JOIN application_form af ON af.application_id = a.application_id
+        WHERE a.application_id = #{applicationId}
+    </select>
+
+    <!-- 신청이 선택한 부스 슬롯 목록. slot_number는 booth_slots에서 참조 -->
+    <select id="selectApplicationSlotDetails"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationSlotDetailResponse">
+        SELECT aps.booth_slot_id AS boothSlotsId,
+            bs.slot_number AS slotNumber,
+            aps.price_at_selection AS priceAtSelection
+        FROM application_slot aps
+        JOIN booth_slots bs ON bs.booth_slot_id = aps.booth_slot_id
+        WHERE aps.application_id = #{applicationId}
+        ORDER BY bs.slot_number
+    </select>
+
 </mapper>

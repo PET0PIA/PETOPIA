@@ -2,9 +2,7 @@ package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
-import com.ms.petopia.api.application.dto.response.ApplicationResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
-import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
+import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -605,6 +603,101 @@ class ApplicationServiceTest {
 
             // then
             assertThat(result).isEmpty();
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("신청 상세 조회")
+    class GetApplicationDetail {
+
+        @Test
+        @DisplayName("본인 소유 신청이면 슬롯 목록까지 채워서 반환한다")
+        void returnsDetailWithSlots() {
+
+            // given: 신청 상세는 정상 조회되고, 사업자 소유자도 요청자와 일치하는 상황
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+
+            ApplicationDetailResponse detail = ApplicationDetailResponse.builder()
+                    .applicationId(applicationId)
+                    .fairId(1L)
+                    .businessId(1L)
+                    .status("PENDING_REVIEW")
+                    .purpose("신제품 홍보 및 오프라인 판매")
+                    .itemsDesc("유기농 사료, 간식 샘플")
+                    .managerName("김담당")
+                    .build();
+
+            // 이 신청이 선택한 슬롯 2개
+            List<ApplicationSlotDetailResponse> slots = List.of(
+                    ApplicationSlotDetailResponse.builder()
+                            .boothSlotsId(1L).slotNumber("A-01").priceAtSelection(450000L)
+                            .build(),
+                    ApplicationSlotDetailResponse.builder()
+                            .boothSlotsId(2L).slotNumber("A-02").priceAtSelection(450000L)
+                            .build()
+            );
+
+            given(applicationMapper.selectApplicationDetail(applicationId)).willReturn(detail);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectApplicationSlotDetails(applicationId)).willReturn(slots);
+
+            // when
+            ApplicationDetailResponse result = applicationService.getApplicationDetail(ownerId, applicationId);
+
+            // then: 신청 내용 + 슬롯 목록이 정확히 담겼는지 확인
+            assertThat(result.getApplicationId()).isEqualTo(applicationId);
+            assertThat(result.getPurpose()).isEqualTo("신제품 홍보 및 오프라인 판매");
+            assertThat(result.getSlots()).hasSize(2);
+            assertThat(result.getSlots().get(0).getSlotNumber()).isEqualTo("A-01");
+
+        }
+
+        @Test
+        @DisplayName("신청이 존재하지 않으면 예외를 던진다")
+        void throwsWhenApplicationNotFound() {
+
+            // given: 존재하지 않는 applicationId(매퍼가 null 리턴)
+            Long ownerId = 1L;
+            Long applicationId = 999L;
+
+            given(applicationMapper.selectApplicationDetail(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.getApplicationDetail(ownerId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("신청을 찾을 수 없습니다");
+
+            // 신청 자체가 없으니, 사업자 조회는 시도되면 안 됨
+            verify(businessMapper, never()).selectById(any());
+
+        }
+
+        @Test
+        @DisplayName("본인 소유의 신청이 아니면 예외를 던진다")
+        void throwsWhenNotOwner() {
+
+            // given: 신청의 사업자(1L) 실제 소유자는 2L인데, 요청자는 1L인 상황
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+
+            ApplicationDetailResponse detail = ApplicationDetailResponse.builder()
+                    .applicationId(applicationId)
+                    .businessId(1L)
+                    .build();
+
+            given(applicationMapper.selectApplicationDetail(applicationId)).willReturn(detail);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, 2L));
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.getApplicationDetail(ownerId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인 소유의 신청만");
+
+            // 소유 확인에서 막혔으니, 슬롯 조회는 실행되면 안 됨
+            verify(applicationMapper, never()).selectApplicationSlotDetails(any());
 
         }
 

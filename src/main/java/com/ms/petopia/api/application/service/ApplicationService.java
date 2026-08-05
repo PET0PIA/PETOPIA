@@ -4,6 +4,7 @@ import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
+import com.ms.petopia.api.application.dto.response.ApplicationDetailResponse;
 import com.ms.petopia.api.application.dto.response.ApplicationResponse;
 import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
 import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
@@ -213,6 +214,29 @@ public class ApplicationService {
     public List<ApplicationSummaryResponse> getMyApplications(Long ownerId, Long businessId) {
 
         return applicationMapper.selectMyApplications(ownerId, businessId);
+
+    }
+
+    // 신청 상세 조회
+    public ApplicationDetailResponse getApplicationDetail(Long ownerId, Long applicationId) {
+
+        ApplicationDetailResponse detail = applicationMapper.selectApplicationDetail(applicationId);
+
+        if(detail == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 본인 소유 사업자의 신청인지 확인
+        Business business = businessMapper.selectById(detail.getBusinessId());
+
+        if(business == null || !business.getOwnerId().equals(ownerId)) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 신청만 조회할 수 있습니다.");
+        }
+
+        // 선택 슬롯 목록 채우기
+        detail.setSlots(applicationMapper.selectApplicationSlotDetails(applicationId));
+
+        return detail;
 
     }
 

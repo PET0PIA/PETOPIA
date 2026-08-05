@@ -57,6 +57,7 @@ public enum ErrorCode {
     BOOTH_SLOT_ALREADY_LOCKED(HttpStatus.CONFLICT, "V009", "이미 다른 신청에서 선택된 부스 슬롯이 포함되어 있습니다."),
     TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "V010", "이용약관에 동의해야 신청서를 제출할 수 있습니다."),
     RECRUIT_CLOSED(HttpStatus.CONFLICT, "V011", "모집이 마감되어 신청할 수 없습니다."),
+    APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "V012", "신청을 찾을 수 없습니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),

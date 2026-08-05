@@ -3,6 +3,8 @@ package com.ms.petopia.api.application.mapper;
 import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
+import com.ms.petopia.api.application.dto.response.ApplicationDetailResponse;
+import com.ms.petopia.api.application.dto.response.ApplicationSlotDetailResponse;
 import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
 import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
 import org.apache.ibatis.annotations.Mapper;
@@ -43,5 +45,11 @@ public interface ApplicationMapper {
     // 내 신청 현황 목록 조회 (businessId는 선택적 필터)
     List<ApplicationSummaryResponse> selectMyApplications(@Param("ownerId") Long ownerId,
                                                           @Param("businessId") Long businessId);
+
+    // 신청 상세 조회 (application + application_form 조인, slots는 별도 조회)
+    ApplicationDetailResponse selectApplicationDetail(@Param("applicationId") Long applicationId);
+
+    // 신청 상세의 선택 슬롯 목록 조회
+    List<ApplicationSlotDetailResponse> selectApplicationSlotDetails(@Param("applicationId") Long applicationId);
 
 }
