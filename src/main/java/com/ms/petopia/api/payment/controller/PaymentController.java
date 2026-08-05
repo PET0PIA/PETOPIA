@@ -36,6 +36,13 @@ public class PaymentController {
         return paymentService.getPayment(paymentId);
     }
 
+    // 예약ID로 그 예약의 예약금 결제 조회. 예약 도메인이 취소 처리 중 환불 API(paymentId 기준)를
+    // 부르기 전에 paymentId를 알아내는 용도.
+    @GetMapping("/reservations/{reservationId}/payment")
+    public PaymentResponse getPaymentByReservation(@PathVariable Long reservationId) {
+        return paymentService.getByReservationId(reservationId);
+    }
+
     // 참가비 결제 생성. application 테이블은 조회하지 않고, 요청 바디로 받은
     // 금액을 그대로 신뢰해서 PENDING 상태 결제 건을 만든다(결제 승인은 별도 confirm 호출).
     @PostMapping("/vendor-applications/{applicationId}/payment")

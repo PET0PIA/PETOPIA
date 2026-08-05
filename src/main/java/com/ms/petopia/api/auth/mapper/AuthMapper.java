@@ -55,4 +55,13 @@ public interface AuthMapper {
 
     //내부 연동: 사업자 등록/삭제 시 role 부여·회수 (참가업체·부스 도메인이 호출)
     int updateUserRole(@Param("userId") Long userId, @Param("role") String role);
+
+    //로그인 상태에서 비밀번호 변경
+    int updateUserPassword(@Param("userId") Long userId, @Param("passwordHash") String passwordHash);
+
+    //비밀번호 재설정(분실)
+    UserToken selectUserTokenByHash(
+            @Param("tokenHash") String tokenHash,
+            @Param("purpose") String purpose
+    );
 }

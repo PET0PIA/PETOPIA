@@ -71,7 +71,7 @@ public class EmailVerificationService {
     public void resend(String email) {
         User user = authMapper.selectUserByEmail(email);
         if (user == null) {
-            throw new CommonException(ErrorCode.USER_NOT_FOUND);
+            return;
         }
         if (user.isEmailVerified()) {
             throw new CommonException(ErrorCode.EMAIL_ALREADY_VERIFIED);
