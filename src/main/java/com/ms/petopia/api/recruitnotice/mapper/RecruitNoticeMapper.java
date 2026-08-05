@@ -2,8 +2,11 @@ package com.ms.petopia.api.recruitnotice.mapper;
 
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
+import com.ms.petopia.api.recruitnotice.dto.response.BoothSlotStatusResponse;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 @Mapper
 public interface RecruitNoticeMapper {
@@ -19,5 +22,8 @@ public interface RecruitNoticeMapper {
 
     // 행사 취소/종료 상태 조회 (모집 공고 마감 판정용)
     FairStatusInfo selectFairStatusByFairId(@Param("fairId") Long fairId);
+
+    // 특정 행사의 부스 슬롯 현황(AVAILABLE/PENDING/CONFIRMED) + 확정 업체명 조회
+    List<BoothSlotStatusResponse> selectBoothSlotStatusesByFairId(@Param("fairId") Long fairId);
 
 }

@@ -2,6 +2,7 @@ package com.ms.petopia.api.recruitnotice.controller;
 
 import com.ms.petopia.api.recruitnotice.dto.request.RecruitNoticeRequest;
 import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeResponse;
+import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeUpsertResponse;
 import com.ms.petopia.api.recruitnotice.service.RecruitNoticeService;
 import com.ms.petopia.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -19,7 +20,7 @@ public class RecruitNoticeController {
     // 모집 공고 작성/수정
     // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @PutMapping("/recruit-notice")
-    public ResponseEntity<ApiResponse<RecruitNoticeResponse>> upsertNotice(
+    public ResponseEntity<ApiResponse<RecruitNoticeUpsertResponse>> upsertNotice(
             @PathVariable Long fairId,
             @RequestHeader(RecruitNoticeTemporaryAuthHeaders.USER_ID) Long writerId,
             @Valid @RequestBody RecruitNoticeRequest request

@@ -3,7 +3,9 @@ package com.ms.petopia.api.recruitnotice.service;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.dto.request.RecruitNoticeRequest;
+import com.ms.petopia.api.recruitnotice.dto.response.BoothSlotStatusResponse;
 import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeResponse;
+import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeUpsertResponse;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.BDDMockito.given;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,16 +105,13 @@ class RecruitNoticeServiceTest {
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
             given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null, savedNotice);
-            given(recruitNoticeMapper.selectFairStatusByFairId(fairId))
-                    .willReturn(createFairStatus(null, "IN_PROGRESS"));
 
             // when
-            RecruitNoticeResponse result = recruitNoticeService.upsertNotice(fairId, writerId, request);
+            RecruitNoticeUpsertResponse result = recruitNoticeService.upsertNotice(fairId, writerId, request);
 
             // then: 새로 만들어진 공고 정보가 응답에 정확히 담겼는지 확인
             assertThat(result.getRecruitNoticeId()).isEqualTo(1L);
             assertThat(result.getTitle()).isEqualTo("멍냥페스타 참가업체 모집");
-            assertThat(result.isClosed()).isFalse();
 
             // upsertNotice가 실제로 호출됐는지 확인
             verify(recruitNoticeMapper).upsertNotice(any(RecruitNotice.class));
@@ -134,11 +134,9 @@ class RecruitNoticeServiceTest {
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
             given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(existing, updated);
-            given(recruitNoticeMapper.selectFairStatusByFairId(fairId))
-                    .willReturn(createFairStatus(null, "IN_PROGRESS"));
 
             // when
-            RecruitNoticeResponse result = recruitNoticeService.upsertNotice(fairId, writerId, request);
+            RecruitNoticeUpsertResponse result = recruitNoticeService.upsertNotice(fairId, writerId, request);
 
             // then: 같은 PK(1L)를 유지한 채로 제목이 바뀌고, updatedAt이 채워졌는지 확인
             assertThat(result.getRecruitNoticeId()).isEqualTo(1L);
@@ -235,8 +233,6 @@ class RecruitNoticeServiceTest {
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
             given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null, savedNotice);
-            given(recruitNoticeMapper.selectFairStatusByFairId(fairId))
-                    .willReturn(createFairStatus(null, "IN_PROGRESS"));
 
             // ArgumentCaptor: "Service가 Mock한테 뭘 넘겼는지" 우리가 훔쳐봄 (Service가 보낸 값을 확인)
             ArgumentCaptor<RecruitNotice> captor = ArgumentCaptor.forClass(RecruitNotice.class);
@@ -372,6 +368,47 @@ class RecruitNoticeServiceTest {
 
             // 공고 자체가 없어 예외로 끝났으니, 그 뒤 fairs 상태 조회는 시도되면 안 됨
             verify(recruitNoticeMapper, never()).selectFairStatusByFairId(any());
+
+        }
+
+        @Test
+        @DisplayName("부스 슬롯 현황(상태 3단계 + 확정 업체명)을 응답에 담아 반환한다")
+        void includesBoothSlotStatusesInResponse() {
+
+            // given: 공고/행사는 정상, 부스 슬롯은 AVAILABLE/PENDING/CONFIRMED 각각 하나씩
+            Long fairId = 1L;
+
+            RecruitNotice notice = createNotice(1L, fairId, 1L, "멍냥페스타 참가업체 모집", null);
+            FairStatusInfo fairStatus = createFairStatus(null, "IN_PROGRESS");
+
+            List<BoothSlotStatusResponse> boothSlots = List.of(
+                    BoothSlotStatusResponse.builder()
+                            .boothSlotsId(501L).slotNumber("A-01").price(450000L)
+                            .status("AVAILABLE").businessName(null)
+                            .build(),
+                    BoothSlotStatusResponse.builder()
+                            .boothSlotsId(502L).slotNumber("A-02").price(450000L)
+                            .status("PENDING").businessName(null)
+                            .build(),
+                    BoothSlotStatusResponse.builder()
+                            .boothSlotsId(503L).slotNumber("A-03").price(450000L)
+                            .status("CONFIRMED").businessName("멍냥사료")
+                            .build()
+            );
+
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(fairStatus);
+            given(recruitNoticeMapper.selectBoothSlotStatusesByFairId(fairId)).willReturn(boothSlots);
+
+            // when
+            RecruitNoticeResponse result = recruitNoticeService.getNotice(fairId);
+
+            // then: 매퍼가 리턴한 슬롯 현황이 응답에 그대로 담기는지 확인
+            assertThat(result.getBoothSlots()).hasSize(3);
+            assertThat(result.getBoothSlots().get(0).getStatus()).isEqualTo("AVAILABLE");
+            assertThat(result.getBoothSlots().get(1).getStatus()).isEqualTo("PENDING");
+            assertThat(result.getBoothSlots().get(2).getStatus()).isEqualTo("CONFIRMED");
+            assertThat(result.getBoothSlots().get(2).getBusinessName()).isEqualTo("멍냥사료");
 
         }
 
