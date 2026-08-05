@@ -58,4 +58,26 @@ public class MailService {
             """.formatted(to, tempPassword));
         javaMailSender.send(simpleMailMessage);
     }
+
+    //비밀번호 재설정 메일
+    public void sendPasswordResetEmail(String to, String resetLink){
+        SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
+        simpleMailMessage.setFrom(fromEmail);
+        simpleMailMessage.setTo(to);
+        simpleMailMessage.setSubject("[PETOPIA] 비밀번호 재설정");
+        simpleMailMessage.setText("""
+            안녕하세요. PETOPIA 입니다.
+
+            비밀번호 재발급 링크를 전해드립니다.
+            링크를 클릭해 비밀번호를 변경해주세요.
+
+            [비밀번호 재발급 링크] %s
+
+            해당 링크는 발급 후 10분 동안만 유효합니다.
+
+            감사합니다.
+            PETOPIA 드림.
+            """.formatted(resetLink));
+        javaMailSender.send(simpleMailMessage);
+    }
 }

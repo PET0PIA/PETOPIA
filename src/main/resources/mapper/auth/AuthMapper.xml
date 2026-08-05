@@ -171,6 +171,7 @@
          LIMIT 1
     </select>
 
+
     <!-- 사용/폐기 여부와 상관없이 가장 최근 발급된 토큰 1건. 재발급 쿨다운 판단용 -->
     <select id="selectLatestToken" resultType="UserToken">
         SELECT token_id
@@ -241,5 +242,21 @@
              , updated_at = CURRENT_TIMESTAMP
          WHERE user_id = #{userId}
     </update>
+
+    <!-- 비밀번호 분실 시 비밀번호 재설정 -->
+    <select id="selectUserTokenByHash" resultType="UserToken">
+        SELECT token_id
+        , user_id
+        , token_hash
+        , purpose
+        , used_at
+        , attempt_count
+        , created_at
+        , expires_at
+        FROM user_tokens
+        WHERE token_hash = #{tokenHash}
+        AND purpose = #{purpose}
+        AND used_at IS NULL
+    </select>
 
 </mapper>

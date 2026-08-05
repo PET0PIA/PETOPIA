@@ -58,4 +58,10 @@ public interface AuthMapper {
 
     //로그인 상태에서 비밀번호 변경
     int updateUserPassword(@Param("userId") Long userId, @Param("passwordHash") String passwordHash);
+
+    //비밀번호 재설정(분실)
+    UserToken selectUserTokenByHash(
+            @Param("tokenHash") String tokenHash,
+            @Param("purpose") String purpose
+    );
 }
