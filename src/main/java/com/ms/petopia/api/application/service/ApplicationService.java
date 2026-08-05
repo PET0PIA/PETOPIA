@@ -19,6 +19,8 @@ import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -98,6 +100,9 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.RECRUIT_CLOSED);
         }
 
+        // 같은 사업자의 동시 신청 직렬화를 위해 business 행 자체를 잠금 (이미 2번 단계에서 존재 확인된 행)
+        businessMapper.lockBusinessForApplication(request.getBusinessId());
+
         // 4) 중복 신청 확인
         if(applicationMapper.existsActiveApplication(request.getBusinessId(), fairId)) {
             throw new CommonException(ErrorCode.APPLICATION_DUPLICATE_ACTIVE);
@@ -135,16 +140,34 @@ public class ApplicationService {
         }
 
         /*
-         * 최종 잠금 확인 — 이 시점 이후 커밋될 때까지 이 슬롯들은 다른 트랜잭션이 못 건드림.
-         * 락 확보(1단계)와 활성 여부 판단(2단계)을 분리해서, JOIN 실행 계획에 락 범위가
-         * 좌우되는 문제를 없앴다(코드래빗 리뷰 반영). 슬롯 ID는 정렬해서 잠가야 데드락 방지.
+         * 부스 슬롯별 애플리케이션 레벨 락. booth_slots/application_slot 테이블은 전혀 건드리지
+         * 않고, boothSlotId 문자열 이름에만 락을 걸어 동시 신청을 직렬화한다(코드래빗 리뷰 반영 —
+         * application_slot에 매칭 행이 없는 신규 슬롯은 FOR UPDATE로 잠글 대상 자체가 없었음).
+         * 데드락 방지를 위해 슬롯 ID는 정렬된 순서로 잠근다.
          */
         List<Long> sortedSlotIds = request.getBoothSlotIds().stream().sorted().toList();
 
-        // 1단계: application_slot을 booth_slot_id 기준으로 잠금
-        applicationMapper.lockApplicationSlotsByBoothSlotIds(sortedSlotIds);
+        for (Long boothSlotId : sortedSlotIds) {
 
-        // 2단계: 잠금 확보 후, 실제로 활성 신청에 걸린 슬롯이 있는지 확인
+            Integer locked = applicationMapper.acquireBoothSlotLock(boothSlotId);
+
+            if (locked == null || locked != 1) {
+                throw new CommonException(ErrorCode.BOOTH_SLOT_ALREADY_LOCKED);
+            }
+
+            // 락 하나 잡을 때마다 즉시 해제 예약 — 이후 슬롯에서 실패해도 이미 잡은 락은 안전하게 풀림
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+
+                @Override
+                public void afterCompletion(int status) {
+                    applicationMapper.releaseBoothSlotLock(boothSlotId);
+                }
+
+            });
+
+        }
+
+        // 락 확보 후, 실제로 활성 신청에 걸린 슬롯이 있는지 확인
         List<Long> lockedNow = applicationMapper.selectLockedBoothSlotIds(sortedSlotIds);
 
         if (!lockedNow.isEmpty()) {

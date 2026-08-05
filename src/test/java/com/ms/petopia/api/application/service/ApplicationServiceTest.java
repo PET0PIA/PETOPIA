@@ -10,13 +10,13 @@ import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,6 +33,11 @@ import static org.mockito.Mockito.verify;
  * 실제 DB(Mapper)는 Mock으로 대체하고, Service의 검증·조립 로직만 검증한다.
  * ApplicationMapper 외에 다른 도메인 매퍼(BusinessMapper, RecruitNoticeMapper)도
  * 그대로 Mock 처리한다 — 서비스가 실제로 그렇게 재사용하고 있기 때문.
+ *
+ * submitApplication()은 부스 슬롯별 GET_LOCK 락을 트랜잭션 커밋/롤백 완료 후에만
+ * 해제하도록 TransactionSynchronizationManager에 콜백을 등록한다. 테스트에는 진짜 DB
+ * 트랜잭션이 없어 그 콜백이 자동으로 실행되지 않으므로, setUp/tearDown으로 동기화를
+ * 수동 활성화하고, 필요한 테스트에서 등록된 콜백을 직접 실행해 커밋/롤백을 시뮬레이션한다.
  */
 @ExtendWith(MockitoExtension.class)
 class ApplicationServiceTest {
@@ -48,6 +53,22 @@ class ApplicationServiceTest {
 
     @InjectMocks
     private ApplicationService applicationService;
+
+    @BeforeEach
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
+
+    // submitApplication()이 등록해둔 트랜잭션 동기화 콜백을 실제 커밋/롤백이 일어난 것처럼 수동 실행
+    private void simulateTransactionCompletion(int status) {
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(sync -> sync.afterCompletion(status));
+    }
 
     // 테스트용 신청 요청 DTO. boothSlotIds만 테스트마다 다르게 주고 나머지는 고정값 사용
     private ApplicationSubmitRequest createRequest(List<Long> boothSlotIds) {
@@ -181,7 +202,12 @@ class ApplicationServiceTest {
                     createSlot(2L, false, 450000)
             );
             given(applicationMapper.selectBoothSlotsWithLockStatus(fairId)).willReturn(slots);
-            // FOR UPDATE 최종 확인에서도 잠긴 슬롯 없음(빈 리스트)
+
+            // 부스 슬롯별 GET_LOCK 획득 성공
+            given(applicationMapper.acquireBoothSlotLock(1L)).willReturn(1);
+            given(applicationMapper.acquireBoothSlotLock(2L)).willReturn(1);
+
+            // 락 확보 후 점유 여부 재확인에서도 잠긴 슬롯 없음(빈 리스트)
             given(applicationMapper.selectLockedBoothSlotIds(List.of(1L, 2L))).willReturn(List.of());
 
             // insert 후 재조회(selectById) 시 돌려줄 저장된 신청서
@@ -197,6 +223,9 @@ class ApplicationServiceTest {
             // when
             ApplicationResponse result = applicationService.submitApplication(ownerId, fairId, request);
 
+            // 실제 커밋 시점을 시뮬레이션 — 슬롯별로 등록해둔 락 해제 콜백을 수동 실행
+            simulateTransactionCompletion(TransactionSynchronization.STATUS_COMMITTED);
+
             // then: 응답 값 확인
             assertThat(result.getApplicationId()).isEqualTo(100L);
             assertThat(result.getStatus()).isEqualTo("PENDING_REVIEW");
@@ -207,6 +236,11 @@ class ApplicationServiceTest {
             verify(applicationMapper).insertApplicationForm(any());
             verify(applicationMapper, org.mockito.Mockito.times(2))
                     .insertApplicationSlot(any());
+            // 커밋 후 슬롯별 락이 각각 해제됐는지 확인
+            verify(applicationMapper).releaseBoothSlotLock(1L);
+            verify(applicationMapper).releaseBoothSlotLock(2L);
+            // 같은 사업자 동시 신청 직렬화용 락이 걸렸는지 확인
+            verify(businessMapper).lockBusinessForApplication(1L);
 
         }
 
@@ -469,7 +503,8 @@ class ApplicationServiceTest {
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("존재하지 않는 부스 슬롯");
 
-            // 슬롯 검증에서 막혔으니, FOR UPDATE 잠금 확인까지는 안 감
+            // 슬롯 검증에서 막혔으니, 락 획득/점유 확인까지는 안 감
+            verify(applicationMapper, never()).acquireBoothSlotLock(any());
             verify(applicationMapper, never()).selectLockedBoothSlotIds(any());
 
         }
@@ -494,16 +529,16 @@ class ApplicationServiceTest {
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("이미 다른 신청에서 선택된 부스 슬롯");
 
+            verify(applicationMapper, never()).acquireBoothSlotLock(any());
             verify(applicationMapper, never()).selectLockedBoothSlotIds(any());
 
         }
 
         @Test
-        @DisplayName("1차 조회 땐 안 잠겨있었지만 FOR UPDATE 시점엔 잠긴 슬롯이면 예외를 던진다")
-        void throwsWhenSlotLockedAtFinalCheck() {
+        @DisplayName("부스 슬롯 락 획득에 실패(타임아웃)하면 예외를 던진다")
+        void throwsWhenBoothSlotLockAcquisitionFails() {
 
-            // given: selectBoothSlotsWithLockStatus에선 locked=false로 나왔지만,
-            // (그 사이 다른 트랜잭션이 먼저 잠근 상황을 가정) FOR UPDATE 조회에선 잠긴 걸로 나옴
+            // given: 다른 요청이 이미 이 슬롯의 GET_LOCK을 잡고 있어서 타임아웃(0)이 리턴되는 상황
             Long ownerId = 1L;
             Long fairId = 1L;
             ApplicationSubmitRequest request = createRequest(List.of(1L));
@@ -513,6 +548,34 @@ class ApplicationServiceTest {
             given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(false);
             given(applicationMapper.selectBoothSlotsWithLockStatus(fairId))
                     .willReturn(List.of(createSlot(1L, false, 450000)));
+            given(applicationMapper.acquireBoothSlotLock(1L)).willReturn(0);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.submitApplication(ownerId, fairId, request))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("이미 다른 신청에서 선택된 부스 슬롯");
+
+            // 락 획득 자체가 실패했으니, 점유 여부 재확인 쿼리까지는 가면 안 됨
+            verify(applicationMapper, never()).selectLockedBoothSlotIds(any());
+
+        }
+
+        @Test
+        @DisplayName("1차 조회 땐 안 잠겨있었지만 최종 점유 확인 시점엔 잠긴 슬롯이면 예외를 던진다")
+        void throwsWhenSlotLockedAtFinalCheck() {
+
+            // given: selectBoothSlotsWithLockStatus에선 locked=false로 나왔지만,
+            // (그 사이 다른 트랜잭션이 먼저 잠근 상황을 가정) 점유 여부 재확인 쿼리에선 잠긴 걸로 나옴
+            Long ownerId = 1L;
+            Long fairId = 1L;
+            ApplicationSubmitRequest request = createRequest(List.of(1L));
+
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            stubRecruitOpen(fairId);
+            given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(false);
+            given(applicationMapper.selectBoothSlotsWithLockStatus(fairId))
+                    .willReturn(List.of(createSlot(1L, false, 450000)));
+            given(applicationMapper.acquireBoothSlotLock(1L)).willReturn(1);
             given(applicationMapper.selectLockedBoothSlotIds(List.of(1L)))
                     .willReturn(List.of(1L));
 
@@ -521,8 +584,13 @@ class ApplicationServiceTest {
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("이미 다른 신청에서 선택된 부스 슬롯");
 
+            // 실제로는 트랜잭션이 롤백되면서 afterCompletion(ROLLED_BACK)이 호출됨 — 시뮬레이션
+            simulateTransactionCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+
             // 최종 잠금 확인에서 막혔으니, 실제 저장(insert)은 전혀 실행되면 안 됨
             verify(applicationMapper, never()).insertApplication(any());
+            // 롤백되더라도 이미 잡았던 락(1L)은 반드시 해제돼야 함
+            verify(applicationMapper).releaseBoothSlotLock(1L);
 
         }
 

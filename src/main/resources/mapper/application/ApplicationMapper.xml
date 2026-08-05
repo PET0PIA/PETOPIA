@@ -88,18 +88,7 @@
         WHERE application_id = #{applicationId}
     </select>
 
-    <!-- 1단계: application_slot을 booth_slot_id 기준으로 잠금 (JOIN 없음 → 인덱스 스캔이라 갭 락 확실히 걸림) -->
-    <select id="lockApplicationSlotsByBoothSlotIds" resultType="long">
-        SELECT booth_slot_id
-        FROM application_slot
-        WHERE booth_slot_id IN
-        <foreach item="id" collection="boothSlotIds" open="(" separator="," close=")">
-            #{id}
-        </foreach>
-        FOR UPDATE
-    </select>
-
-    <!-- 2단계: 잠금 이후 실제 활성 신청에 걸린 슬롯만 조회 (락은 1단계에서 이미 확보됨) -->
+    <!-- 잠금 이후 실제 활성 신청에 걸린 슬롯만 조회 (락은 1단계에서 이미 확보됨) -->
     <select id="selectLockedBoothSlotIds" resultType="long">
         SELECT aps.booth_slot_id
         FROM application_slot aps
@@ -161,6 +150,16 @@
         JOIN booth_slots bs ON bs.booth_slot_id = aps.booth_slot_id
         WHERE aps.application_id = #{applicationId}
         ORDER BY bs.slot_number
+    </select>
+
+    <!-- boothSlotId별 동시 신청 직렬화용 애플리케이션 레벨 락. 테이블/행과 무관 -->
+    <select id="acquireBoothSlotLock" resultType="int">
+        SELECT GET_LOCK(CONCAT('booth_slot_apply_', #{boothSlotId}), 5)
+    </select>
+
+    <!-- 락 해제 -->
+    <select id="releaseBoothSlotLock" resultType="int">
+        SELECT RELEASE_LOCK(CONCAT('booth_slot_apply_', #{boothSlotId}))
     </select>
 
 </mapper>
