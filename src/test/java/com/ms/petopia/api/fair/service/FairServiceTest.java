@@ -11,6 +11,8 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,9 @@ class FairServiceTest {
     @Mock
     private FairTimeProvider timeProvider;
 
+    @Mock
+    private StorageService storageService;
+
     @InjectMocks
     private FairService fairService;
 
@@ -82,6 +87,33 @@ class FairServiceTest {
         assertThat(saved.getCreatedAt()).isEqualTo(NOW);
         assertThat(saved.getUpdatedAt()).isEqualTo(NOW);
         assertThat(saved.getStatus()).isNull();
+        verify(storageService, never()).confirm(any(), any());
+    }
+
+    @Test
+    @DisplayName("포스터 이미지 객체 키가 있으면 확정 처리 후 공개 URL을 저장한다")
+    void createApplication_포스터이미지있으면_확정후_URL을_저장한다() {
+        given(storageService.confirm("tmp/image/poster.jpg", UploadPolicy.IMAGE)).willReturn("uploads/image/poster.jpg");
+        given(storageService.toPublicUrl("uploads/image/poster.jpg")).willReturn("https://cdn.petopia.example/uploads/image/poster.jpg");
+        willAnswer(invocation -> {
+            Fair fair = invocation.getArgument(0);
+            fair.setFairId(FAIR_ID);
+            return 1;
+        }).given(fairMapper).insert(any(Fair.class));
+
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", "설명", "DOG", "tmp/image/poster.jpg", null,
+                "코엑스", "서울", "INDOOR",
+                null, null, null, null, null, null,
+                0L, null, null,
+                "김담당", "010-0000-0000", "manager@petopia.example"
+        );
+
+        fairService.createApplication(USER_ID, request);
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).insert(captor.capture());
+        assertThat(captor.getValue().getPosterImageUrl()).isEqualTo("https://cdn.petopia.example/uploads/image/poster.jpg");
     }
 
     @Test

@@ -36,6 +36,32 @@ class OnsiteSalesPolicyServiceTest {
     private OnsiteSalesPolicyService service;
 
     @Test
+    void returnsConfiguredDatePolicyForAuthorizedAdmin() {
+        given(mapper.selectFairDate(10L, 20L)).willReturn(fairDate());
+        given(mapper.selectPolicy(20L)).willReturn(policy(12_000, "OPEN", 3));
+
+        OnsiteSalesPolicyResponse response = service.get(10L, 20L, 30L);
+
+        assertThat(response.operationDate()).isEqualTo(LocalDate.of(2026, 8, 1));
+        assertThat(response.price()).isEqualTo(12_000);
+        assertThat(response.status()).isEqualTo("OPEN");
+        assertThat(response.version()).isEqualTo(3);
+    }
+
+    @Test
+    void returnsClosedDefaultsWhenPolicyIsNotConfigured() {
+        given(mapper.selectFairDate(10L, 20L)).willReturn(fairDate());
+        given(mapper.selectPolicy(20L)).willReturn(null);
+
+        OnsiteSalesPolicyResponse response = service.get(10L, 20L, 30L);
+
+        assertThat(response.price()).isZero();
+        assertThat(response.status()).isEqualTo("CLOSED");
+        assertThat(response.version()).isZero();
+        assertThat(response.updatedAt()).isNull();
+    }
+
+    @Test
     void createsDatePolicyWithClosedByExplicitRequest() {
         FairDateSnapshot fairDate = fairDate();
         OnsiteSalesPolicyRow saved = policy(0, "CLOSED", 0);

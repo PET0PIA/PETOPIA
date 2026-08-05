@@ -9,6 +9,8 @@ import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.fair.mapper.HallMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +42,9 @@ class HallServiceTest {
 
     @Mock
     private FairMapper fairMapper;
+
+    @Mock
+    private StorageService storageService;
 
     @InjectMocks
     private HallService hallService;
@@ -74,18 +79,36 @@ class HallServiceTest {
     @DisplayName("정상 입력이면 홀을 저장하고 응답으로 매핑한다")
     void create_정상입력이면_저장하고_매핑한다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(new Fair());
+        given(storageService.confirm("tmp/image/abc.jpg", UploadPolicy.IMAGE)).willReturn("uploads/image/abc.jpg");
+        given(storageService.toPublicUrl("uploads/image/abc.jpg")).willReturn("https://img");
         willAnswer(invocation -> {
             Hall hall = invocation.getArgument(0);
             hall.setHallId(HALL_ID);
             return 1;
         }).given(hallMapper).insert(any(Hall.class));
 
-        HallResponse response = hallService.create(FAIR_ID, new CreateHallRequest("A홀", "https://img"));
+        HallResponse response = hallService.create(FAIR_ID, new CreateHallRequest("A홀", "tmp/image/abc.jpg"));
 
         assertThat(response.hallId()).isEqualTo(HALL_ID);
         assertThat(response.fairId()).isEqualTo(FAIR_ID);
         assertThat(response.name()).isEqualTo("A홀");
         assertThat(response.floorPlanImageUrl()).isEqualTo("https://img");
+    }
+
+    @Test
+    @DisplayName("도면 이미지 객체 키가 없으면 이미지를 확정하지 않고 null로 저장한다")
+    void create_이미지객체키없으면_확정을_건너뛴다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(new Fair());
+        willAnswer(invocation -> {
+            Hall hall = invocation.getArgument(0);
+            hall.setHallId(HALL_ID);
+            return 1;
+        }).given(hallMapper).insert(any(Hall.class));
+
+        HallResponse response = hallService.create(FAIR_ID, new CreateHallRequest("A홀", null));
+
+        assertThat(response.floorPlanImageUrl()).isNull();
+        verify(storageService, never()).confirm(any(), any());
     }
 
     // ===== getHalls =====

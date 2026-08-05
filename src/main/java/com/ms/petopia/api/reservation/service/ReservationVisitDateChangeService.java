@@ -21,6 +21,7 @@ import java.util.List;
 public class ReservationVisitDateChangeService {
 
     private static final String CONFIRMED = "CONFIRMED";
+    private static final String ADVANCE = "ADVANCE";
     private static final long CHANGE_DEADLINE_HOURS = 12;
 
     private final ReservationChangeMapper changeMapper;
@@ -43,7 +44,8 @@ public class ReservationVisitDateChangeService {
         if (!userId.equals(reservation.getUserId())) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
-        if (!CONFIRMED.equals(reservation.getStatus())) {
+        if (!ADVANCE.equals(reservation.getReservationType())
+                || !CONFIRMED.equals(reservation.getStatus())) {
             throw new CommonException(ErrorCode.RESERVATION_STATUS_CONFLICT);
         }
 

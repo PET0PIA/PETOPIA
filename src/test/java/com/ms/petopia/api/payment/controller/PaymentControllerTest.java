@@ -1,5 +1,6 @@
 package com.ms.petopia.api.payment.controller;
 
+import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.payment.service.PaymentService;
@@ -55,7 +56,7 @@ class PaymentControllerTest {
         given(paymentService.getPayment(1L)).willReturn(
 
                 new PaymentResponse(
-                        1L, "VENDOR_FEE", 50000L, "COMPLETED", "MOCK",
+                        1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "TOSS",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, null, null, 40L
@@ -97,7 +98,7 @@ class PaymentControllerTest {
         // Arrange
         given(paymentService.payVendorFee(eq(40L),eq(99L),any(VendorFeePaymentRequest.class))).willReturn(
                 new PaymentResponse(
-                        1L, "VENDOR_FEE", 50000L, "COMPLETED", "MOCK",
+                        1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "PENDING", "TOSS",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, null, null, 40L
@@ -130,6 +131,100 @@ class PaymentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"fairId\":10,\"businessId\":20,\"amount\":50000}"))
                 .andExpect(status().isConflict()) // ErrorCode.PAYMENT_TARGET_NOT_PAYABLE이 HttpStatus.CONFLICT라서 409
+                .andExpect(jsonPath("$.code").value("P002"));
+    }
+
+    @Test
+    void confirmsPayment() throws Exception {
+        given(paymentService.confirmPayment(eq(1L), eq(99L), any(ConfirmPaymentRequest.class))).willReturn(
+                new PaymentResponse(
+                        1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "카드",
+                        LocalDateTime.of(2026, 8, 4, 10, 0),
+                        LocalDateTime.of(2026, 8, 3, 10, 0),
+                        10L, 20L, 99L, null, 40L
+                )
+        );
+
+        mockMvc.perform(post("/api/payments/1/confirm")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentKey\":\"5EnNZRJGvxNa2mzq\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.method").value("카드"));
+
+        verify(paymentService).confirmPayment(eq(1L), eq(99L), any(ConfirmPaymentRequest.class));
+    }
+
+    @Test
+    void returns403WhenConfirmingSomeoneElsesPayment() throws Exception {
+        // 다른 사람의 결제를 승인하려는 상황(IDOR 방지 확인)
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(paymentService).confirmPayment(eq(1L), eq(99L), any(ConfirmPaymentRequest.class));
+
+        mockMvc.perform(post("/api/payments/1/confirm")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentKey\":\"5EnNZRJGvxNa2mzq\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("A002"));
+    }
+
+    @Test
+    void returns400WhenPaymentKeyIsBlank() throws Exception {
+        // @NotBlank 검증 — 서비스까지 안 가고 컨트롤러 바인딩 단계에서 걸러져야 함
+        mockMvc.perform(post("/api/payments/1/confirm")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentKey\":\"\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createsReservationDepositPayment() throws Exception {
+        // Arrange: 예약금 결제는 요청 바디가 없음(금액을 클라이언트가 안 보냄 —
+        // 서비스가 예약 도메인 컨텍스트로 진짜 금액을 받아온다는 걸 컨트롤러 테스트에서는
+        // 그냥 신뢰하고, 여기선 "path variable/header가 잘 넘어가서 201로 응답하는지"만 본다).
+        given(paymentService.payReservationDeposit(eq(500L), eq(99L))).willReturn(
+                new PaymentResponse(
+                        2L, "PAYMENT_2", "RESERVATION_DEPOSIT", 30000L, "PENDING", "TOSS",
+                        null,
+                        LocalDateTime.of(2026, 8, 5, 10, 0),
+                        10L, null, 99L, 500L, null
+                )
+        );
+
+        mockMvc.perform(post("/api/reservations/500/payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+                .andExpect(status().isCreated()) // 컨트롤러가 201로 응답하는지
+                .andExpect(jsonPath("$.paymentType").value("RESERVATION_DEPOSIT"))
+                .andExpect(jsonPath("$.amount").value(30000))
+                .andExpect(jsonPath("$.reservationId").value(500));
+
+        verify(paymentService).payReservationDeposit(500L, 99L);
+    }
+
+    @Test
+    void returns403WhenPayingSomeoneElsesReservationDeposit() throws Exception {
+        // 다른 사람 소유의 예약에 예약금 결제를 시도하는 상황(IDOR 방지 확인)
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(paymentService).payReservationDeposit(eq(500L), eq(99L));
+
+        mockMvc.perform(post("/api/reservations/500/payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("A002"));
+    }
+
+    @Test
+    void returns409WhenReservationDepositAlreadyPaid() throws Exception {
+        // 이미 결제된 예약에 다시 예약금 결제를 시도하는 상황(idempotencyKey 중복)
+        willThrow(new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE))
+                .given(paymentService).payReservationDeposit(eq(500L), eq(99L));
+
+        mockMvc.perform(post("/api/reservations/500/payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("P002"));
     }
 

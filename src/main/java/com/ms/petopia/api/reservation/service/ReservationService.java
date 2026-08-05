@@ -142,7 +142,7 @@ public class ReservationService {
             throw new CommonException(ErrorCode.RESERVATION_NOT_OPEN);
         }
 
-        if (context.getOperationDate().isBefore(today)) {
+        if (!context.getOperationDate().isAfter(today)) {
             throw new CommonException(ErrorCode.RESERVATION_DATE_NOT_AVAILABLE);
         }
 

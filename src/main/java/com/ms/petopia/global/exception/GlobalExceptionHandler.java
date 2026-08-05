@@ -3,6 +3,7 @@ package com.ms.petopia.global.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.ServletRequestBindingException;
@@ -62,6 +63,18 @@ public class GlobalExceptionHandler {
         ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
         log.warn("[ServletRequestBindingException] uri={}, message={}", request.getRequestURI(), e.getMessage());
 
+        return ResponseEntity
+                .status(errorCode.getHttpStatus())
+                .body(ErrorResponse.of(errorCode, errorCode.getMessage(), request.getRequestURI()));
+    }
+
+    /** JSON 형식 오류 또는 enum 바인딩 실패. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException e, HttpServletRequest request) {
+
+        ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+        log.warn("[HttpMessageNotReadableException] uri={}", request.getRequestURI());
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
                 .body(ErrorResponse.of(errorCode, errorCode.getMessage(), request.getRequestURI()));

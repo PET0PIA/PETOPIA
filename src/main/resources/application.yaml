@@ -26,6 +26,19 @@ spring:
     # SQL 안의 ${...} 를 Flyway가 치환하려다 깨지는 사고를 막는다.
     placeholder-replacement: false
 
+petopia:
+  storage:
+    # 환경에 따라 달라지지 않는 항목만 여기 둔다.
+    # 환경마다 다른 bucket / public-base-url 은 application-local.yaml 과
+    # application-release.yaml 에서 각각 선언한다.
+    #
+    # prefix 두 개는 ObjectKeyGenerator 의 키 생성·검증이 함께 맞물려 있어
+    # 환경별로 달리하면 이미 저장된 키를 해석할 수 없게 된다. 바꾸지 않는다.
+    region: ${AWS_REGION:ap-northeast-2}
+    presign-expiry: ${S3_PRESIGN_EXPIRY:5m}
+    tmp-prefix: ${S3_TMP_PREFIX:tmp/}
+    confirmed-prefix: ${S3_CONFIRMED_PREFIX:uploads/}
+
 mybatis:
   # 매퍼 XML 위치. src/main/resources/mapper 아래 하위 디렉터리까지 모두 스캔한다.
   mapper-locations: classpath:mapper/**/*.xml
