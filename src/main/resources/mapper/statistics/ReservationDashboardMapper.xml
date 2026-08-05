@@ -35,6 +35,9 @@
             ON r.fair_id = fd.fair_id
             AND r.visit_date = fd.operation_date
         WHERE fd.fair_id = #{fairId}
+            <if test="date != null">
+                AND fd.operation_date = #{date}
+            </if>
         GROUP BY fd.fair_date_id,
             fd.operation_date,
             fd.capacity,
