@@ -61,6 +61,8 @@ public enum ErrorCode {
     RECRUIT_CLOSED(HttpStatus.CONFLICT, "V011", "모집이 마감되어 신청할 수 없습니다."),
     APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "V012", "신청을 찾을 수 없습니다."),
     BUSINESS_REGISTER_LOCK_TIMEOUT(HttpStatus.CONFLICT, "V013", "사업자 등록 처리 중입니다. 잠시 후 다시 시도해주세요."),
+    APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V014", "본인이 담당하는 행사가 아닙니다."),
+
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),

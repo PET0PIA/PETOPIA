@@ -162,4 +162,23 @@
         SELECT RELEASE_LOCK(CONCAT('booth_slot_apply_', #{boothSlotId}))
     </select>
 
+    <!-- 담당 행사에 들어온 신청 목록(행사 담당자용). status는 선택적 필터 -->
+    <select id="selectApplicationsByFair"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationReviewSummaryResponse">
+        SELECT a.application_id AS applicationId,
+            a.business_id AS businessId,
+            b.name AS businessName,
+            a.status AS status,
+            a.submitted_at AS submittedAt,
+            a.final_price AS finalPrice,
+            a.reject_reason AS rejectReason
+        FROM application a
+        JOIN business b ON b.business_id = a.business_id
+        WHERE a.fair_id = #{fairId}
+        <if test="status != null">
+            AND a.status = #{status}
+        </if>
+        ORDER BY a.submitted_at DESC
+    </select>
+
 </mapper>

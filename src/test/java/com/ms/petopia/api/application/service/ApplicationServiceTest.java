@@ -762,4 +762,98 @@ class ApplicationServiceTest {
 
     }
 
+    @Nested
+    @DisplayName("담당 행사의 신청 목록 조회(행사 담당자용)")
+    class GetApplicationsForFair {
+
+        @Test
+        @DisplayName("담당자 본인이면 신청 목록을 반환한다")
+        void returnsApplicationsWhenAdminMatches() {
+
+            // given: 이 행사의 담당자가 요청자 본인인 상황
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+
+            List<ApplicationReviewSummaryResponse> applications = List.of(
+                    ApplicationReviewSummaryResponse.builder()
+                            .applicationId(1L).businessId(10L).businessName("멍냥용품")
+                            .status("PENDING_REVIEW").submittedAt(LocalDateTime.now())
+                            .finalPrice(null).rejectReason(null)
+                            .build()
+            );
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectApplicationsByFair(fairId, null)).willReturn(applications);
+
+            // when
+            List<ApplicationReviewSummaryResponse> result =
+                    applicationService.getApplicationsForFair(adminUserId, fairId, null);
+
+            // then
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getBusinessName()).isEqualTo("멍냥용품");
+
+        }
+
+        @Test
+        @DisplayName("status 필터를 넘기면 매퍼에 그대로 전달된다")
+        void passesStatusFilterToMapper() {
+
+            // given
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+            String status = "PENDING_REVIEW";
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectApplicationsByFair(fairId, status)).willReturn(List.of());
+
+            // when
+            applicationService.getApplicationsForFair(adminUserId, fairId, status);
+
+            // then
+            verify(applicationMapper).selectApplicationsByFair(fairId, status);
+
+        }
+
+        @Test
+        @DisplayName("담당자가 배정되지 않은 행사면 예외를 던진다")
+        void throwsWhenNoAdminAssigned() {
+
+            // given: fair_admin_assignments에 담당자 자체가 없는 상황
+            Long adminUserId = 1L;
+            Long fairId = 999L;
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.getApplicationsForFair(adminUserId, fairId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("담당자가 배정되지 않은 행사입니다");
+
+            // 담당자 확인에서 막혔으니, 목록 조회 쿼리는 실행되면 안 됨
+            verify(applicationMapper, never()).selectApplicationsByFair(any(), any());
+
+        }
+
+        @Test
+        @DisplayName("본인이 담당하는 행사가 아니면 예외를 던진다")
+        void throwsWhenNotAssignedAdmin() {
+
+            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.getApplicationsForFair(adminUserId, fairId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+
+            verify(applicationMapper, never()).selectApplicationsByFair(any(), any());
+
+        }
+
+    }
+
 }

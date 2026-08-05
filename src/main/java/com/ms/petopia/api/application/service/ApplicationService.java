@@ -4,10 +4,7 @@ import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
-import com.ms.petopia.api.application.dto.response.ApplicationDetailResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
-import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
+import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -271,6 +268,23 @@ public class ApplicationService {
         detail.setSlots(applicationMapper.selectApplicationSlotDetails(applicationId));
 
         return detail;
+
+    }
+
+    // 담당 행사의 신청 목록 조회 (행사 담당자용)
+    public List<ApplicationReviewSummaryResponse> getApplicationsForFair(Long adminUserId, Long fairId, String status) {
+
+        Long fairAdminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
+
+        if(fairAdminUserId == null) {
+            throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "담당자가 배정되지 않은 행사입니다.");
+        }
+
+        if(!fairAdminUserId.equals(adminUserId)) {
+            throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "본인이 담당하는 행사가 아닙니다.");
+        }
+
+        return applicationMapper.selectApplicationsByFair(fairId, status);
 
     }
 
