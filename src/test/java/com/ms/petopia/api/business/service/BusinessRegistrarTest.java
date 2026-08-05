@@ -5,6 +5,8 @@ import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.global.exception.CommonException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +14,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -28,6 +32,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  * BusinessRegistrar 단위 테스트.
  * 실제 DB(BusinessMapper)는 Mock으로 대체하고, 중복 사업자등록번호 처리와
  * 동시 등록 직렬화용 락 처리 로직을 검증한다.
+ *
+ * save()는 트랜잭션 커밋/롤백 완료 후에 락을 해제하도록 TransactionSynchronizationManager에
+ * 콜백을 등록한다. 테스트에는 진짜 DB 트랜잭션이 없어 그 콜백이 자동으로 실행되지 않으므로,
+ * setUp/tearDown으로 동기화를 수동 활성화하고, 각 테스트에서 등록된 콜백을 직접 실행해
+ * "커밋/롤백 이후"를 시뮬레이션한다.
  */
 @ExtendWith(MockitoExtension.class)
 class BusinessRegistrarTest {
@@ -40,6 +49,22 @@ class BusinessRegistrarTest {
 
     @InjectMocks
     private BusinessRegistrar businessRegistrar;
+
+    @BeforeEach
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
+
+    // save()가 등록해둔 트랜잭션 동기화 콜백을 실제 커밋/롤백이 일어난 것처럼 수동 실행
+    private void simulateTransactionCompletion(int status) {
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(sync -> sync.afterCompletion(status));
+    }
 
     private BusinessRegisterRequest createRequest() {
 
@@ -95,7 +120,8 @@ class BusinessRegistrarTest {
         // 락을 못 잡았으니, 실제 저장 로직은 전혀 실행되면 안 됨
         verify(businessMapper, never()).selectByOwnerId(any());
         verify(businessMapper, never()).insertBusiness(any());
-        // 애초에 락을 못 잡았으니, 해제도 호출되면 안 됨
+
+        // 락 획득 자체를 실패했으니, 커밋 이후 콜백(해제)도 아예 등록되면 안 됨
         verify(businessMapper, never()).releaseRegistrationLock(any());
 
     }
@@ -118,10 +144,14 @@ class BusinessRegistrarTest {
                 .isInstanceOf(CommonException.class)
                 .hasMessageContaining("이미 등록된 사업자등록번호");
 
+        // 실제로는 트랜잭션이 롤백되면서 afterCompletion(ROLLED_BACK)이 호출됨 — 시뮬레이션
+        simulateTransactionCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
+
         // 저장이 실패했으니, 재조회(selectById)까지 가면 안 됨
         verify(businessMapper, never()).selectById(any());
         verify(userRoleService, never()).grantVendorRole(any());
-        // 예외가 나도 finally에서 락은 반드시 해제돼야 함
+
+        // 롤백되더라도 락은 반드시 해제돼야 함
         verify(businessMapper).releaseRegistrationLock(ownerId);
 
     }
@@ -143,7 +173,10 @@ class BusinessRegistrarTest {
         // when
         Business result = businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED);
 
-        // then: 락 획득 → insert → role 전환 → 재조회 → 락 해제, 전부 일어났는지 확인
+        // 실제 커밋 시점을 시뮬레이션 — save()가 등록해둔 동기화 콜백을 수동으로 실행
+        simulateTransactionCompletion(TransactionSynchronization.STATUS_COMMITTED);
+
+        // then: 락 획득 → insert → role 전환 → 재조회 → 커밋 후 락 해제, 전부 일어났는지 확인
         assertThat(result.getBusinessId()).isEqualTo(1L);
         assertThat(result.getVerifyStatus()).isEqualTo(Business.VerifyStatus.VERIFIED);
 
@@ -169,6 +202,9 @@ class BusinessRegistrarTest {
 
         // when
         businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED);
+
+        // 실제 커밋 시점을 시뮬레이션
+        simulateTransactionCompletion(TransactionSynchronization.STATUS_COMMITTED);
 
         // then: 이미 VENDOR였을 테니 role 전환 호출 자체가 없어야 함
         verify(businessMapper).insertBusiness(any(Business.class));

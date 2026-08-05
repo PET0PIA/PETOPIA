@@ -28,4 +28,7 @@ public interface BusinessMapper {
     // 락 해제 (반환: 1=성공, 0=락을 안 갖고 있었음, null=락이 존재하지 않음)
     Integer releaseRegistrationLock(@Param("ownerId") Long ownerId);
 
+    // 같은 사업자의 동시 신청 직렬화용 락 (application 도메인에서 호출)
+    Long lockBusinessForApplication(@Param("businessId") Long businessId);
+
 }

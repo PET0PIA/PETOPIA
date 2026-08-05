@@ -57,5 +57,10 @@
     <select id="releaseRegistrationLock" resultType="int">
         SELECT RELEASE_LOCK(CONCAT('business_register_', #{ownerId}))
     </select>
+
+    <!-- 같은 사업자의 동시 신청 직렬화를 위해 business 행 자체를 잠금 (이미 존재 확인된 행이라 항상 락 성공) -->
+    <select id="lockBusinessForApplication" resultType="long">
+        SELECT business_id FROM business WHERE business_id = #{businessId} FOR UPDATE
+    </select>
     
 </mapper>
