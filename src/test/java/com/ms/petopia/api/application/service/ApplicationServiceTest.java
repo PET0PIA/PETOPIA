@@ -3,6 +3,7 @@ package com.ms.petopia.api.application.service;
 import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.ApplicationResponse;
+import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
 import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.business.domain.Business;
@@ -533,6 +534,77 @@ class ApplicationServiceTest {
 
             // 최종 잠금 확인에서 막혔으니, 실제 저장(insert)은 전혀 실행되면 안 됨
             verify(applicationMapper, never()).insertApplication(any());
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("내 신청 현황 목록 조회")
+    class GetMyApplications {
+
+        @Test
+        @DisplayName("사업자 필터 없이 조회하면 내 신청 전체를 반환한다")
+        void returnsAllMyApplications() {
+
+            // given
+            Long ownerId = 1L;
+
+            List<ApplicationSummaryResponse> applications = List.of(
+                    ApplicationSummaryResponse.builder()
+                            .applicationId(1L).fairName("멍냥페스타 2026")
+                            .status("PENDING_REVIEW").finalPrice(null).rejectReason(null)
+                            .build(),
+                    ApplicationSummaryResponse.builder()
+                            .applicationId(2L).fairName("멍냥페스타 2027")
+                            .status("PAYMENT_PENDING").finalPrice(900000L).rejectReason(null)
+                            .build()
+            );
+
+            given(applicationMapper.selectMyApplications(ownerId, null)).willReturn(applications);
+
+            // when
+            List<ApplicationSummaryResponse> result = applicationService.getMyApplications(ownerId, null);
+
+            // then
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).getFairName()).isEqualTo("멍냥페스타 2026");
+            assertThat(result.get(1).getStatus()).isEqualTo("PAYMENT_PENDING");
+
+        }
+
+        @Test
+        @DisplayName("businessId를 넘기면 매퍼에 그대로 필터로 전달된다")
+        void passesBusinessIdFilterToMapper() {
+
+            // given
+            Long ownerId = 1L;
+            Long businessId = 5L;
+
+            given(applicationMapper.selectMyApplications(ownerId, businessId)).willReturn(List.of());
+
+            // when
+            applicationService.getMyApplications(ownerId, businessId);
+
+            // then: 서비스가 받은 businessId를 그대로 매퍼에 넘기는지 확인
+            verify(applicationMapper).selectMyApplications(ownerId, businessId);
+
+        }
+
+        @Test
+        @DisplayName("신청 이력이 없으면 빈 리스트를 반환한다")
+        void returnsEmptyListWhenNoApplications() {
+
+            // given
+            Long ownerId = 999L;
+
+            given(applicationMapper.selectMyApplications(ownerId, null)).willReturn(List.of());
+
+            // when
+            List<ApplicationSummaryResponse> result = applicationService.getMyApplications(ownerId, null);
+
+            // then
+            assertThat(result).isEmpty();
 
         }
 

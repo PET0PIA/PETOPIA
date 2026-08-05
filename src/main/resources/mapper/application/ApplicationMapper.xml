@@ -101,4 +101,22 @@
         FOR UPDATE
     </select>
 
+    <!-- 내 신청 현황 목록. business.owner_id로 본인 소유 신청만, businessId 있으면 추가 필터 -->
+    <select id="selectMyApplications"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse">
+        SELECT a.application_id AS applicationId,
+            f.name AS fairName,
+            a.status AS status,
+            a.final_price AS finalPrice,
+            a.reject_reason AS rejectReason
+        FROM application a
+        JOIN business b ON b.business_id = a.business_id
+        JOIN fairs f ON f.fair_id = a.fair_id
+        WHERE b.owner_id = #{ownerId}
+        <if test="businessId != null">
+            AND a.business_id = #{businessId}
+        </if>
+        ORDER BY a.submitted_at DESC
+    </select>
+
 </mapper>

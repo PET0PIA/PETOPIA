@@ -5,6 +5,7 @@ import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.ApplicationResponse;
+import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
 import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.business.domain.Business;
@@ -205,6 +206,13 @@ public class ApplicationService {
             applicationMapper.insertApplicationSlot(slot);
 
         }
+
+    }
+
+    // 내 신청 현황 목록 조회 (businessId는 선택적 필터)
+    public List<ApplicationSummaryResponse> getMyApplications(Long ownerId, Long businessId) {
+
+        return applicationMapper.selectMyApplications(ownerId, businessId);
 
     }
 

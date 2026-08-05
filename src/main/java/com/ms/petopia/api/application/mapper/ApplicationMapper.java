@@ -3,6 +3,7 @@ package com.ms.petopia.api.application.mapper;
 import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
+import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
 import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -38,5 +39,9 @@ public interface ApplicationMapper {
      * 동시에 같은 슬롯을 신청하는 걸 막는다 (application_slot/application, 우리 소유 테이블만 잠금)
      */
     List<Long> selectLockedBoothSlotIdsForUpdate(@Param("boothSlotIds") List<Long> boothSlotIds);
+
+    // 내 신청 현황 목록 조회 (businessId는 선택적 필터)
+    List<ApplicationSummaryResponse> selectMyApplications(@Param("ownerId") Long ownerId,
+                                                          @Param("businessId") Long businessId);
 
 }
