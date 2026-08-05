@@ -27,6 +27,7 @@ export function HallManagementPage() {
   const [editingHall, setEditingHall] = useState<Hall | null>(null);
   const [hallName, setHallName] = useState("");
   const [floorPlanImageObjectKey, setFloorPlanImageObjectKey] = useState<string | null>(null);
+  const [floorPlanImageUploading, setFloorPlanImageUploading] = useState(false);
   const [existingFloorPlanImageUrl, setExistingFloorPlanImageUrl] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -59,6 +60,7 @@ export function HallManagementPage() {
     setEditingHall(null);
     setHallName("");
     setFloorPlanImageObjectKey(null);
+    setFloorPlanImageUploading(false);
     setExistingFloorPlanImageUrl(null);
     setFormError(null);
     setDialogOpen(true);
@@ -68,6 +70,7 @@ export function HallManagementPage() {
     setEditingHall(hall);
     setHallName(hall.name);
     setFloorPlanImageObjectKey(null);
+    setFloorPlanImageUploading(false);
     setExistingFloorPlanImageUrl(hall.floorPlanImageUrl);
     setFormError(null);
     setDialogOpen(true);
@@ -78,6 +81,10 @@ export function HallManagementPage() {
     if (fairId === null) return;
     if (hallName.trim() === "") {
       setFormError("홀 이름을 입력해 주세요.");
+      return;
+    }
+    if (floorPlanImageUploading) {
+      setFormError("도면 이미지 업로드가 끝날 때까지 잠시만 기다려 주세요.");
       return;
     }
 
@@ -205,10 +212,13 @@ export function HallManagementPage() {
             label="도면 이미지"
             initialImageUrl={existingFloorPlanImageUrl}
             onObjectKeyChange={setFloorPlanImageObjectKey}
+            onUploadingChange={setFloorPlanImageUploading}
           />
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>취소</Button>
-            <Button type="submit" disabled={saving}>{saving ? "저장 중..." : "저장"}</Button>
+            <Button type="submit" disabled={saving || floorPlanImageUploading}>
+              {saving ? "저장 중..." : floorPlanImageUploading ? "이미지 업로드 중..." : "저장"}
+            </Button>
           </div>
         </form>
       </Dialog>

@@ -109,6 +109,7 @@ function toRequest(form: FormState, posterImageObjectKey: string | null): Create
 export function FairApplicationNewPage() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [posterImageObjectKey, setPosterImageObjectKey] = useState<string | null>(null);
+  const [posterImageUploading, setPosterImageUploading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -121,6 +122,7 @@ export function FairApplicationNewPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const validationErrors = validate(form);
+    if (posterImageUploading) validationErrors.push("포스터 이미지 업로드가 끝날 때까지 잠시만 기다려 주세요.");
     setErrors(validationErrors);
     if (validationErrors.length > 0) return;
 
@@ -201,6 +203,7 @@ export function FairApplicationNewPage() {
               <ImageUploadField
                 label="포스터 이미지"
                 onObjectKeyChange={setPosterImageObjectKey}
+                onUploadingChange={setPosterImageUploading}
               />
             </div>
             <div>
@@ -311,9 +314,9 @@ export function FairApplicationNewPage() {
         </section>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || posterImageUploading}>
             <Send size={16} />
-            {submitting ? "제출 중..." : "신청서 제출"}
+            {submitting ? "제출 중..." : posterImageUploading ? "이미지 업로드 중..." : "신청서 제출"}
           </Button>
         </div>
       </form>

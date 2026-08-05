@@ -8,6 +8,12 @@ interface ImageUploadFieldProps {
   initialImageUrl?: string | null;
   /** 업로드가 끝나 objectKey가 생기면 호출된다. 첨부를 취소/실패하면 null로 호출된다. */
   onObjectKeyChange: (objectKey: string | null) => void;
+  /**
+   * 업로드 진행 상태가 바뀔 때마다 호출된다. 호출부는 이 값을 들고 있다가 업로드 중에는
+   * 제출/저장 버튼을 막아야 한다 - 안 그러면 objectKey가 아직 null인 채로(또는 이전 값 그대로)
+   * 저장 요청이 나가서, 방금 고른 이미지가 저장에서 빠지고 업로드된 파일만 고아로 남는다.
+   */
+  onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
 }
 
@@ -16,7 +22,7 @@ interface ImageUploadFieldProps {
  * objectKey는 아직 tmp 상태라 폼을 실제로 저장(도메인 API 호출)해야 uploads로 확정된다 -
  * 이 컴포넌트는 파일 선택~objectKey 확보까지만 책임진다.
  */
-export function ImageUploadField({ label, initialImageUrl, onObjectKeyChange, disabled }: ImageUploadFieldProps) {
+export function ImageUploadField({ label, initialImageUrl, onObjectKeyChange, onUploadingChange, disabled }: ImageUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(initialImageUrl ?? null);
   const [uploading, setUploading] = useState(false);
@@ -36,6 +42,7 @@ export function ImageUploadField({ label, initialImageUrl, onObjectKeyChange, di
     setPreviewUrl(URL.createObjectURL(file));
     setError(null);
     setUploading(true);
+    onUploadingChange?.(true);
     onObjectKeyChange(null);
     try {
       const objectKey = await uploadImage(file);
@@ -45,6 +52,7 @@ export function ImageUploadField({ label, initialImageUrl, onObjectKeyChange, di
       setPreviewUrl(initialImageUrl ?? null);
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
     }
   }
 

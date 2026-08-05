@@ -41,6 +41,10 @@ export function FairDateManagementPage() {
   const [fairDates, setFairDates] = useState<FairDate[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // fairId가 이전과 같은 값이면 useState 갱신이 리렌더를 안 일으켜서 아래 조회 effect가
+  // 다시 안 돈다. "불러오기"를 다시 눌렀을 때(같은 행사 ID라도) 최신 상태를 다시 받아오도록
+  // 이 값을 강제로 바꿔 effect를 재실행시킨다.
+  const [reloadTick, setReloadTick] = useState(0);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFairDate, setEditingFairDate] = useState<FairDate | null>(null);
@@ -56,11 +60,18 @@ export function FairDateManagementPage() {
     setLoadError(null);
     getFairDates(fairId)
       .then((data) => { if (!ignore) setFairDates(data); })
-      .catch((error) => { if (!ignore) setLoadError(error instanceof ApiError ? error.message : "운영일 목록을 불러오지 못했어요."); })
+      .catch((error) => {
+        if (!ignore) {
+          // 조회 실패 시 이전 행사의 목록을 지운다 - 안 지우면 새 fairId 화면에 이전
+          // 행사의 운영일이 그대로 남아 보인다(수정·삭제 버튼도 그 데이터를 대상으로 동작함).
+          setFairDates([]);
+          setLoadError(error instanceof ApiError ? error.message : "운영일 목록을 불러오지 못했어요.");
+        }
+      })
       .finally(() => { if (!ignore) setLoading(false); });
 
     return () => { ignore = true; };
-  }, [fairId]);
+  }, [fairId, reloadTick]);
 
   function handleLoadFair(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,7 +80,11 @@ export function FairDateManagementPage() {
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
-    setFairId(parsed);
+    if (parsed === fairId) {
+      setReloadTick((tick) => tick + 1);
+    } else {
+      setFairId(parsed);
+    }
   }
 
   function openCreateDialog() {
