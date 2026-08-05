@@ -35,6 +35,7 @@ public enum ErrorCode {
     RESEND_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "A009", "인증 코드 재전송은 잠시 후 다시 시도해주세요."),
     EMAIL_NOT_VERIFIED(HttpStatus.UNAUTHORIZED, "A010", "이메일 인증이 완료되지 않은 이메일입니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "A011", "유효하지 않거나 만료된 토큰입니다. 다시 로그인해주세요."),
+    INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "A012", "현재 비밀번호가 일치하지 않습니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),

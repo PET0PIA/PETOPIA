@@ -232,4 +232,14 @@
          WHERE user_id = #{userId}
     </update>
 
+    <!-- ===== 비밀번호 변경 ===== -->
+
+    <!-- 로그인 상태에서 비밀번호 변경 -->
+    <update id="updateUserPassword">
+        UPDATE users
+           SET password_hash = #{passwordHash}
+             , updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+    </update>
+
 </mapper>

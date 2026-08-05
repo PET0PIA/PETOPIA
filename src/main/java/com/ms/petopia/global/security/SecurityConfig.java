@@ -3,6 +3,7 @@ package com.ms.petopia.global.security;
 
 import com.ms.petopia.global.security.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -37,9 +38,9 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
-                        //user 권한을 필요
-                        //.requestMatchers("/user").hasAuthority("ROLE_USER")
-                        //TODO 추후 구현
+                        //로그인한 본인만 비밀번호 변경 가능 - anyRequest().permitAll()보다 먼저 와야 함
+                        .requestMatchers(HttpMethod.PATCH, "/api/auth/password/change").authenticated()
+                        //TODO 추후 role 기반 가드 확장
                         .anyRequest().permitAll())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
