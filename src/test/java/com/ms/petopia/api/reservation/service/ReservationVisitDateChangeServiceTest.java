@@ -90,6 +90,22 @@ class ReservationVisitDateChangeServiceTest {
     }
 
     @Test
+    void rejectsOnsiteReservation() {
+        ReservationChangeReservationRow onsiteReservation = reservation("CONFIRMED");
+        onsiteReservation.setReservationType("ONSITE_DIRECT");
+        given(changeMapper.selectReservationForUpdate(RESERVATION_ID)).willReturn(onsiteReservation);
+
+        assertThatThrownBy(() -> service.changeVisitDate(
+                RESERVATION_ID, USER_ID, new UpdateReservationVisitDateRequest(TARGET_DATE)
+        ))
+                .isInstanceOf(CommonException.class)
+                .extracting(exception -> ((CommonException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.RESERVATION_STATUS_CONFLICT);
+
+        verify(changeMapper, never()).selectFairDatesForUpdate(any(), any());
+    }
+
+    @Test
     void rejectsChangeAfterTwelveHourDeadline() {
         given(changeMapper.selectReservationForUpdate(RESERVATION_ID)).willReturn(reservation("CONFIRMED"));
         given(changeMapper.selectFairDatesForUpdate(eq(FAIR_ID), any())).willReturn(List.of(
@@ -111,6 +127,7 @@ class ReservationVisitDateChangeServiceTest {
         row.setFairId(FAIR_ID);
         row.setUserId(USER_ID);
         row.setVisitDate(CURRENT_DATE);
+        row.setReservationType("ADVANCE");
         row.setStatus(status);
         return row;
     }

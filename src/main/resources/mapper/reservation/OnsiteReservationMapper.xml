@@ -38,7 +38,16 @@
           FROM fair_dates
          WHERE fair_id = #{fairId}
            AND fair_date_id = #{fairDateId}
-           FOR UPDATE
+         FOR UPDATE
+    </select>
+
+    <select id="selectFairDate" resultType="FairDateSnapshot">
+        SELECT fair_date_id
+             , fair_id
+             , operation_date
+          FROM fair_dates
+         WHERE fair_id = #{fairId}
+           AND fair_date_id = #{fairDateId}
     </select>
 
     <select id="selectPolicy" resultType="OnsiteSalesPolicyRow">
