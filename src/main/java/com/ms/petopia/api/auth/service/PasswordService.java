@@ -21,6 +21,7 @@ public class PasswordService {
 
     private static final String PURPOSE_PASSWORD_RESET = "PASSWORD_RESET";
     private static final long RESET_EXPIRATION_MINUTES = 10;
+    private static final long RESET_RESEND_COOLDOWN_SECONDS = 300;
     private final MailService mailService;
 
     @Value("${app.frontend-url}")
@@ -45,6 +46,15 @@ public class PasswordService {
     //비밀번호 재설정(분실용) 이메일 전송용 링크 메소드
     @Transactional
     public String issueResetLink(Long userId) {
+        //직전 토큰이 쿨다운 시간 내에 발급됐으면 재요청 거부
+        UserToken latestToken = authMapper.selectLatestToken(userId, PURPOSE_PASSWORD_RESET);
+        if (latestToken != null
+                && latestToken.getCreatedAt().isAfter(LocalDateTime.now().minusSeconds(RESET_RESEND_COOLDOWN_SECONDS))) {
+            throw new CommonException(ErrorCode.RESEND_COOLDOWN);
+        }
+
+        //재요청 전 기존에 살아있던 토큰은 무효화 (동시에 여러 토큰이 유효한 상태 방지)
+        authMapper.invalidateActiveTokens(userId, PURPOSE_PASSWORD_RESET);
 
         String rawToken = TokenHashUtil.generateRawToken();
         String tokenHash = TokenHashUtil.sha256(rawToken);
@@ -65,9 +75,16 @@ public class PasswordService {
     @Transactional
     public void requestPasswordReset(String email) {
         User user = authMapper.selectUserByEmail(email);
-        if(user != null) {
+        if (user == null) {
+            return;
+        }
+        try {
             String resetLink = issueResetLink(user.getUserId());
             mailService.sendPasswordResetEmail(email, resetLink);
+        } catch (CommonException e) {
+            if (e.getErrorCode() != ErrorCode.RESEND_COOLDOWN) {
+                throw e;
+            }
         }
     }
 

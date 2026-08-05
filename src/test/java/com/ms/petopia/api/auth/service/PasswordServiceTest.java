@@ -98,6 +98,40 @@ class PasswordServiceTest {
     }
 
     @Test
+    void issueResetLink_쿨다운시간내_재요청이면_RESEND_COOLDOWN을_던지고_기존토큰을_무효화하지않는다() {
+        UserToken recentToken = UserToken.builder()
+                .tokenId(TOKEN_ID)
+                .userId(USER_ID)
+                .createdAt(LocalDateTime.now().minusSeconds(10))
+                .build();
+        given(authMapper.selectLatestToken(USER_ID, "PASSWORD_RESET")).willReturn(recentToken);
+
+        assertThatThrownBy(() -> passwordService.issueResetLink(USER_ID))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.RESEND_COOLDOWN);
+
+        verify(authMapper, never()).invalidateActiveTokens(any(), any());
+        verify(authMapper, never()).insertUserToken(any());
+    }
+
+    @Test
+    void requestPasswordReset_쿨다운중이면_예외없이_조용히_끝난다() {
+        UserToken recentToken = UserToken.builder()
+                .tokenId(TOKEN_ID)
+                .userId(USER_ID)
+                .createdAt(LocalDateTime.now().minusSeconds(10))
+                .build();
+        given(authMapper.selectUserByEmail(EMAIL)).willReturn(user());
+        given(authMapper.selectLatestToken(USER_ID, "PASSWORD_RESET")).willReturn(recentToken);
+
+        passwordService.requestPasswordReset(EMAIL);
+
+        verify(authMapper, never()).insertUserToken(any());
+        verify(mailService, never()).sendPasswordResetEmail(any(), any());
+    }
+
+    @Test
     void requestPasswordReset_존재하지않는이메일이면_아무것도_하지않는다() {
         given(authMapper.selectUserByEmail(EMAIL)).willReturn(null);
 
