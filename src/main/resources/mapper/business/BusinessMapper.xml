@@ -47,5 +47,15 @@
         UPDATE business SET verify_status = #{verifyStatus}
         WHERE business_id = #{businessId}
     </update>
+
+    <!-- ownerId별 동시 등록 직렬화용 애플리케이션 레벨 락. 테이블/행과 무관, users 테이블에 전혀 영향 없음 -->
+    <select id="acquireRegistrationLock" resultType="int">
+        SELECT GET_LOCK(CONCAT('business_register_', #{ownerId}), 5)
+    </select>
+
+    <!-- 락 해제 -->
+    <select id="releaseRegistrationLock" resultType="int">
+        SELECT RELEASE_LOCK(CONCAT('business_register_', #{ownerId}))
+    </select>
     
 </mapper>

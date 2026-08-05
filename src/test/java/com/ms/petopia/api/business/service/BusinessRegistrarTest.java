@@ -26,7 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /*
  * BusinessRegistrar 단위 테스트.
- * 실제 DB(BusinessMapper)는 Mock으로 대체하고, 중복 사업자등록번호 처리 로직만 검증한다.
+ * 실제 DB(BusinessMapper)는 Mock으로 대체하고, 중복 사업자등록번호 처리와
+ * 동시 등록 직렬화용 락 처리 로직을 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 class BusinessRegistrarTest {
@@ -76,13 +77,38 @@ class BusinessRegistrarTest {
     }
 
     @Test
-    @DisplayName("이미 등록된 사업자등록번호면 BUSINESS_DUPLICATE 예외를 던진다")
-    void throwsWhenBizRegNoDuplicated() {
+    @DisplayName("동시 등록 락을 획득하지 못하면(타임아웃) 예외를 던진다")
+    void throwsWhenLockAcquisitionFails() {
 
-        // given: insert 시점에 DB unique 제약(biz_reg_no) 위반이 발생하는 상황을 재현
+        // given: 같은 ownerId로 이미 다른 요청이 락을 잡고 있어서 타임아웃(0)이 리턴되는 상황
         Long ownerId = 1L;
         BusinessRegisterRequest request = createRequest();
 
+        given(businessMapper.acquireRegistrationLock(ownerId)).willReturn(0);
+
+        // when & then
+        assertThatThrownBy(() ->
+                businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED))
+                .isInstanceOf(CommonException.class)
+                .hasMessageContaining("사업자 등록 처리 중입니다");
+
+        // 락을 못 잡았으니, 실제 저장 로직은 전혀 실행되면 안 됨
+        verify(businessMapper, never()).selectByOwnerId(any());
+        verify(businessMapper, never()).insertBusiness(any());
+        // 애초에 락을 못 잡았으니, 해제도 호출되면 안 됨
+        verify(businessMapper, never()).releaseRegistrationLock(any());
+
+    }
+
+    @Test
+    @DisplayName("이미 등록된 사업자등록번호면 BUSINESS_DUPLICATE 예외를 던진다")
+    void throwsWhenBizRegNoDuplicated() {
+
+        // given: 락은 정상 획득, insert 시점에 DB unique 제약(biz_reg_no) 위반이 발생하는 상황을 재현
+        Long ownerId = 1L;
+        BusinessRegisterRequest request = createRequest();
+
+        given(businessMapper.acquireRegistrationLock(ownerId)).willReturn(1);
         doThrow(new DuplicateKeyException("UK_BUSINESS_BIZ_REG_NO"))
                 .when(businessMapper).insertBusiness(any(Business.class));
 
@@ -95,6 +121,8 @@ class BusinessRegistrarTest {
         // 저장이 실패했으니, 재조회(selectById)까지 가면 안 됨
         verify(businessMapper, never()).selectById(any());
         verify(userRoleService, never()).grantVendorRole(any());
+        // 예외가 나도 finally에서 락은 반드시 해제돼야 함
+        verify(businessMapper).releaseRegistrationLock(ownerId);
 
     }
 
@@ -107,6 +135,7 @@ class BusinessRegistrarTest {
         BusinessRegisterRequest request = createRequest();
         Business saved = createBusiness(1L, ownerId, "1234567890", Business.VerifyStatus.VERIFIED);
 
+        given(businessMapper.acquireRegistrationLock(ownerId)).willReturn(1);
         // 첫 사업자
         given(businessMapper.selectByOwnerId(ownerId)).willReturn(List.of());
         given(businessMapper.selectById(any())).willReturn(saved);
@@ -114,12 +143,13 @@ class BusinessRegistrarTest {
         // when
         Business result = businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED);
 
-        // then: insert → role 전환 → 재조회, 세 가지가 다 일어났는지 확인
+        // then: 락 획득 → insert → role 전환 → 재조회 → 락 해제, 전부 일어났는지 확인
         assertThat(result.getBusinessId()).isEqualTo(1L);
         assertThat(result.getVerifyStatus()).isEqualTo(Business.VerifyStatus.VERIFIED);
 
         verify(businessMapper).insertBusiness(any(Business.class));
         verify(userRoleService).grantVendorRole(ownerId);
+        verify(businessMapper).releaseRegistrationLock(ownerId);
 
     }
 
@@ -133,6 +163,7 @@ class BusinessRegistrarTest {
         Business existing = createBusiness(1L, ownerId, "1234567890", Business.VerifyStatus.VERIFIED);
         Business saved = createBusiness(2L, ownerId, "9876543210", Business.VerifyStatus.VERIFIED);
 
+        given(businessMapper.acquireRegistrationLock(ownerId)).willReturn(1);
         given(businessMapper.selectByOwnerId(ownerId)).willReturn(List.of(existing));
         given(businessMapper.selectById(any())).willReturn(saved);
 
@@ -142,6 +173,7 @@ class BusinessRegistrarTest {
         // then: 이미 VENDOR였을 테니 role 전환 호출 자체가 없어야 함
         verify(businessMapper).insertBusiness(any(Business.class));
         verify(userRoleService, never()).grantVendorRole(any());
+        verify(businessMapper).releaseRegistrationLock(ownerId);
 
     }
 

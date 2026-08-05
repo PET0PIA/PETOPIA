@@ -28,41 +28,52 @@ public class BusinessRegistrar {
     @Transactional
     public Business save(Long ownerId, BusinessRegisterRequest request, Business.VerifyStatus verifyStatus) {
 
-        // insert 전에 먼저 확인 — 이번이 첫 사업자 등록인지
-        boolean isFirstBusiness = businessMapper.selectByOwnerId(ownerId).isEmpty();
+        // 동시 등록 방지: ownerId 단위 애플리케이션 락 (users 테이블에는 영향 없음)
+        Integer locked = businessMapper.acquireRegistrationLock(ownerId);
 
-        // 검증 결과까지 확정된 상태로 한 번에 저장
-        Business business = Business.builder()
-                .ownerId(ownerId)
-                .name(request.getName())
-                .ceoName(request.getCeoName())
-                .bizRegNo(request.getBizRegNo())
-                .startDate(request.getStartDate())
-                .address(request.getAddress())
-                .phone(request.getPhone())
-                .website(request.getWebsite())
-                .verifyStatus(verifyStatus)
-                .build();
+        if (locked == null || locked != 1) {
+            throw new CommonException(ErrorCode.BUSINESS_REGISTER_LOCK_TIMEOUT);
+        }
 
         try {
 
-            // 검증 결과까지 포함해서 한 번에 저장
-            businessMapper.insertBusiness(business);
+            // insert 전에 먼저 확인 — 이번이 첫 사업자 등록인지
+            boolean isFirstBusiness = businessMapper.selectByOwnerId(ownerId).isEmpty();
 
-        } catch (DuplicateKeyException e) {
-            throw new CommonException(ErrorCode.BUSINESS_DUPLICATE);
+            // 검증 결과까지 확정된 상태로 한 번에 저장
+            Business business = Business.builder()
+                    .ownerId(ownerId)
+                    .name(request.getName())
+                    .ceoName(request.getCeoName())
+                    .bizRegNo(request.getBizRegNo())
+                    .startDate(request.getStartDate())
+                    .address(request.getAddress())
+                    .phone(request.getPhone())
+                    .website(request.getWebsite())
+                    .verifyStatus(verifyStatus)
+                    .build();
+
+            try {
+                businessMapper.insertBusiness(business);
+            } catch (DuplicateKeyException e) {
+                throw new CommonException(ErrorCode.BUSINESS_DUPLICATE);
+            }
+
+            /*
+             * 첫 사업자 등록일 때만 role 전환 (두 번째부턴 이미 VENDOR라 건드릴 필요 없음)
+             * 사업자 저장과 role 전환을 같은 트랜잭션으로 묶는다 (하나 실패하면 둘 다 롤백)
+             */
+            if (isFirstBusiness) {
+                userRoleService.grantVendorRole(ownerId);
+            }
+
+            // 재조회(정확한 값으로 응답 만들기 위해) 값 반환
+            return businessMapper.selectById(business.getBusinessId());
+
+        } finally {
+            // 무조건 해제
+            businessMapper.releaseRegistrationLock(ownerId);
         }
-
-        /*
-         * 첫 사업자 등록일 때만 role 전환 (두 번째부턴 이미 VENDOR라 건드릴 필요 없음)
-         * 사업자 저장과 role 전환을 같은 트랜잭션으로 묶는다 (하나 실패하면 둘 다 롤백)
-         */
-        if (isFirstBusiness) {
-            userRoleService.grantVendorRole(ownerId);
-        }
-
-        // 재조회(정확한 값으로 응답 만들기 위해) 값 반환
-        return businessMapper.selectById(business.getBusinessId());
 
     }
 

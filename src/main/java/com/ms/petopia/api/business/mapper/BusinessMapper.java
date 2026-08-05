@@ -22,4 +22,10 @@ public interface BusinessMapper {
     void updateVerifyStatus(@Param("businessId") Long businessId,
                             @Param("verifyStatus") String verifyStatus);
 
+    // 동시 등록 직렬화용 락 획득 (반환: 1=성공, 0=타임아웃, null=에러)
+    Integer acquireRegistrationLock(@Param("ownerId") Long ownerId);
+
+    // 락 해제 (반환: 1=성공, 0=락을 안 갖고 있었음, null=락이 존재하지 않음)
+    Integer releaseRegistrationLock(@Param("ownerId") Long ownerId);
+
 }
