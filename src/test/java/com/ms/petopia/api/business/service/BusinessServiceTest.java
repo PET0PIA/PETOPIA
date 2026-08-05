@@ -110,6 +110,7 @@ class BusinessServiceTest {
             // then
             assertThat(result.getVerifyStatus()).isEqualTo("VERIFIED");
             verify(businessRegistrar).save(ownerId, request, Business.VerifyStatus.VERIFIED);
+
         }
 
         @Test
@@ -129,6 +130,7 @@ class BusinessServiceTest {
 
             // 검증 실패로 막혔으니, 저장 자체가 절대 호출되면 안 됨
             verify(businessRegistrar, never()).save(any(), any(), any());
+
         }
 
         @Test
@@ -149,6 +151,7 @@ class BusinessServiceTest {
 
             // API 자체가 실패했으니, 저장도 절대 호출되면 안 됨
             verify(businessRegistrar, never()).save(any(), any(), any());
+
         }
 
     }

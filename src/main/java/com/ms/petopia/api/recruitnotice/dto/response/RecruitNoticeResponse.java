@@ -4,6 +4,7 @@ import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -23,12 +24,11 @@ public class RecruitNoticeResponse {
     // 저장하지 않고 조회 시점마다 계산되는 값. true면 신청 버튼 비활성화 대상
     private boolean closed;
 
-    /*
-     * TODO: boothSlots 추가 필요 (부스 슬롯 현황 - AVAILABLE/PENDING/CONFIRMED)
-     * 확정 부스 안내판 기능이랑 같이 별도 작업으로 진행 예정
-     */
+    // 부스 슬롯 현황(AVAILABLE/PENDING/CONFIRMED) + 확정 업체명
+    private List<BoothSlotStatusResponse> boothSlots;
 
-    public static RecruitNoticeResponse from(RecruitNotice notice, boolean closed) {
+    public static RecruitNoticeResponse from(RecruitNotice notice, boolean closed,
+                                             List<BoothSlotStatusResponse> boothSlots) {
 
         return RecruitNoticeResponse.builder()
                 .recruitNoticeId(notice.getRecruitNoticeId())
@@ -39,6 +39,7 @@ public class RecruitNoticeResponse {
                 .recruitDeadline(notice.getRecruitDeadline())
                 .updatedAt(notice.getUpdatedAt())
                 .closed(closed)
+                .boothSlots(boothSlots)
                 .build();
 
     }
