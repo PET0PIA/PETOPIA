@@ -23,6 +23,13 @@ public interface PaymentMapper {
     PaymentRow selectById(@Param("paymentId") Long paymentId);
 
     /**
+     * 예약 PK로 그 예약의 결제를 조회한다(RESERVATION_DEPOSIT 전용). 예약 도메인이 환불 API를
+     * 부르기 전에 paymentId를 알아내는 용도. 여러 건이 있을 수 없다 — idempotencyKey가
+     * reservationId 기준이라 예약 하나당 예약금 결제는 최대 1건.
+     */
+    PaymentRow selectByReservationId(@Param("reservationId") Long reservationId);
+
+    /**
      * 결제 한 건을 생성한다. row.idempotencyKey가 이미 존재하면(동일 대상 중복결제)
      * DB의 UK_PAYMENT_IDEMPOTENCY_KEY 위반으로 DuplicateKeyException이 던져진다 —
      * 서비스 계층에서 잡아서 비즈니스 예외로 변환한다.

@@ -18,6 +18,12 @@ import java.time.LocalDateTime;
 public class RefundRow {
     private Long refundId;
     private Long paymentId;
+    /**
+     * REFUND 테이블 실제 컬럼이 아니다 — 조회 시(selectById/selectByPaymentId) payment와
+     * JOIN해서 채워 넣는 편의 필드. 예약 도메인이 응답만 보고 바로 어떤 예약 건인지 알 수 있게
+     * 하려고 추가함(VENDOR_FEE 결제의 환불이면 null).
+     */
+    private Long reservationId;
     private String refundReason;
     private String requestedByDomain;
     private Long refundAmount;

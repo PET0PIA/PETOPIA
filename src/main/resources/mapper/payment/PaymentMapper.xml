@@ -25,6 +25,23 @@
          WHERE payment_id = #{paymentId}
     </select>
 
+    <select id="selectByReservationId" resultType="PaymentRow">
+        SELECT payment_id
+             , payment_type
+             , amount
+             , status
+             , method
+             , paid_at
+             , created_at
+             , fair_id
+             , business_id
+             , payer_user_id
+             , reservation_id
+             , application_id
+          FROM payment
+         WHERE reservation_id = #{reservationId}
+    </select>
+
     <insert id="insert" parameterType="PaymentRow"
             useGeneratedKeys="true" keyProperty="paymentId">
         INSERT INTO payment (

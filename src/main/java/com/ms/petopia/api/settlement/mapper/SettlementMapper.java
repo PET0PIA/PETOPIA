@@ -25,6 +25,12 @@ public interface SettlementMapper {
     List<SettlementRow> selectByFairId(@Param("fairId") Long fairId);
 
     /**
+     * 결제 PK가 이미 어떤 정산에 포함됐는지 조회한다(UK_SETTLEMENT_ITEM_PAYMENT 덕분에 결제 1건당
+     * 최대 1행). 환불 서비스가 "이미 정산된 결제는 환불 금지" 방어에 쓴다.
+     */
+    SettlementItemRow selectItemByPaymentId(@Param("paymentId") Long paymentId);
+
+    /**
      * 정산 한 건을 생성한다(PENDING). 같은 행사·업체로 이미 계산된 정산이 있으면
      * UK_SETTLEMENT_FAIR_BUSINESS 위반으로 DuplicateKeyException — 서비스 계층에서
      * SETTLEMENT_ALREADY_EXISTS로 변환한다.

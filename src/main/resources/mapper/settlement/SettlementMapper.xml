@@ -41,6 +41,16 @@
          ORDER BY business_id
     </select>
 
+    <select id="selectItemByPaymentId" resultType="SettlementItemRow">
+        SELECT settlement_item_id
+             , settlement_id
+             , payment_id
+             , refund_id
+             , amount_included
+          FROM settlement_item
+         WHERE payment_id = #{paymentId}
+    </select>
+
     <insert id="insert" parameterType="SettlementRow"
             useGeneratedKeys="true" keyProperty="settlementId">
         INSERT INTO settlement (

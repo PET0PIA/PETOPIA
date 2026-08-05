@@ -45,7 +45,7 @@ class RefundControllerTest {
     void createsRefund() throws Exception {
         given(refundService.refund(eq(1L), eq(99L), any())).willReturn(
                 new RefundResponse(
-                        1L, 1L, "USER_CANCEL", "RESERVATION", 50000L, "COMPLETED",
+                        1L, 1L, 500L, "USER_CANCEL", "RESERVATION", 50000L, "COMPLETED",
                         LocalDateTime.of(2026, 8, 5, 10, 0),
                         LocalDateTime.of(2026, 8, 5, 10, 0)
                 )
@@ -127,7 +127,7 @@ class RefundControllerTest {
     void getsRefundDetailById() throws Exception {
         given(refundService.getRefund(1L)).willReturn(
                 new RefundResponse(
-                        1L, 1L, "USER_CANCEL", "RESERVATION", 50000L, "COMPLETED",
+                        1L, 1L, 500L, "USER_CANCEL", "RESERVATION", 50000L, "COMPLETED",
                         LocalDateTime.of(2026, 8, 5, 10, 0),
                         LocalDateTime.of(2026, 8, 5, 10, 0)
                 )

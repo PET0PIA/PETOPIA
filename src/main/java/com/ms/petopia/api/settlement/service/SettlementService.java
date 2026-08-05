@@ -27,6 +27,13 @@ import java.util.List;
  * <p>수수료율은 이번 스코프에서 COMMISSION_RATE 테이블·API 대신 상수로 고정한다
  * (WBS 5.1~5.5, [[project_petopia_refund_settlement_scope]] 참고). 나중에 전역·행사별
  * override를 지원하는 CommissionRate 조회로 교체될 자리다.
+ *
+ * <p><b>알려진 한계</b>: {@link #calculate}로 한 번 만들어진 정산(0원짜리 포함)은 재계산할 수
+ * 없다(CodeRabbit 리뷰 지적, PR #47) — {@code UK_SETTLEMENT_FAIR_BUSINESS} 때문에 같은
+ * 행사·업체 조합으로 다시 계산하면 무조건 {@link ErrorCode#SETTLEMENT_ALREADY_EXISTS}가 난다.
+ * 계산 이후 결제가 새로 완료되거나 환불이 들어와도 반영 안 됨 — 완전한 재계산/정정 절차는
+ * 무거워서 이번 스코프 밖으로 미뤘고, 대신 {@code RefundService}에서 "이미 정산에 포함된 결제는
+ * 환불 자체를 거부"하는 최소 방어만 둬서 정산 금액이 조용히 틀려지는 것만 막는다.
  */
 @Service
 @RequiredArgsConstructor

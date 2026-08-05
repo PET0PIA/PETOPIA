@@ -44,6 +44,21 @@ public class PaymentService {
     }
 
     /**
+     * 예약 ID로 그 예약의 예약금 결제를 조회한다. 예약 도메인이 취소 처리 중 환불 API를
+     * 부르기 전에 paymentId를 알아내는 용도(동기 호출 흐름: 예약취소 -> 이 API로 paymentId
+     * 조회 -> 환불 API 호출 -> 응답 받아서 예약 상태 전환).
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 그 예약으로 결제된 적이 없을 때
+     */
+    public PaymentResponse getByReservationId(Long reservationId) {
+        PaymentRow row = paymentMapper.selectByReservationId(reservationId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        return PaymentResponse.from(row);
+    }
+
+    /**
      * 참가비 결제를 생성한다. application 테이블은 조회하지 않으므로(애그리거트 간
      * ID 참조 원칙 유지) 금액·소속 정보는 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
      *
