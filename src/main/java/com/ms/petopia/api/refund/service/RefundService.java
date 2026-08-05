@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,6 +40,12 @@ import java.util.List;
  * 이번 스코프 밖이라, 대신 "이미 정산에 포함된 결제는 환불 자체를 거부"하는 최소 방어만 둔다 —
  * 정산 금액이 조용히 틀려지는 것(데이터 부정합)만 막고, 정말 그 결제를 환불해야 하는 예외 상황은
  * 정산 담당자가 수동으로 처리하는 걸 전제로 한다.
+ *
+ * <p><b>동시성</b>: {@link #refund}와 {@code SettlementService.calculate}가 동시에 같은
+ * 결제를 건드리면(정산 계산이 이 결제를 포함시키는 도중 환불이 끼어드는 경우) 정산 금액이
+ * 환불 반영 전 값으로 굳을 수 있었다(CodeRabbit 리뷰 지적, PR #47). 그래서 둘 다 같은
+ * {@code PAYMENT} 행을 {@code FOR UPDATE}로 잠그고 트랜잭션 안에서 처리하도록 맞춰서,
+ * 어느 쪽이 먼저 시작하든 나머지 하나가 끝날 때까지 기다렸다가 최신 상태를 보고 진행한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -62,8 +69,12 @@ public class RefundService {
      *         이미 정산에 포함된 결제일 때
      * @throws CommonException {@link ErrorCode#REFUND_ALREADY_PROCESSED} 이미 환불이 접수된 결제일 때
      */
+    @Transactional
     public RefundResponse refund(Long paymentId, Long actingUserId, RefundRequest request) {
-        PaymentRow payment = paymentMapper.selectById(paymentId);
+        // FOR UPDATE로 잠근다 — SettlementService.calculate()의 selectCompletedVendorFeePayments도
+        // 같은 결제 행을 잠그기 때문에, 둘 중 하나가 끝날 때까지 나머지가 대기하게 된다(위 클래스
+        // 문서 "동시성" 참고). selectById가 아니라 이 잠금 조회를 써야 경쟁 조건이 막힌다.
+        PaymentRow payment = paymentMapper.selectByIdForUpdate(paymentId);
         if (payment == null) {
             throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
         }

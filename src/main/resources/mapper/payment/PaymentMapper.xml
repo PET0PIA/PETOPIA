@@ -8,38 +8,41 @@
         map-underscore-to-camel-case: true 설정 덕분에 payment_id -> paymentId 처럼
         snake_case 컬럼이 PaymentRow의 camelCase 필드로 자동 매핑된다. 별도 resultMap 불필요.
     -->
+    <sql id="paymentColumns">
+        payment_id
+      , payment_type
+      , amount
+      , status
+      , method
+      , paid_at
+      , created_at
+      , fair_id
+      , business_id
+      , payer_user_id
+      , reservation_id
+      , application_id
+    </sql>
+
     <select id="selectById" resultType="PaymentRow">
-        SELECT payment_id
-             , payment_type
-             , amount
-             , status
-             , method
-             , paid_at
-             , created_at
-             , fair_id
-             , business_id
-             , payer_user_id
-             , reservation_id
-             , application_id
+        SELECT <include refid="paymentColumns"/>
           FROM payment
          WHERE payment_id = #{paymentId}
     </select>
 
+    <select id="selectByIdForUpdate" resultType="PaymentRow">
+        SELECT <include refid="paymentColumns"/>
+          FROM payment
+         WHERE payment_id = #{paymentId}
+           FOR UPDATE
+    </select>
+
+    <!-- RESERVATION_DEPOSIT 전용 계약이라 payment_type도 같이 건다 — reservation_id만으로
+         걸면 이론상 같은 reservation_id를 가진 다른 결제유형 행과 헷갈릴 수 있다. -->
     <select id="selectByReservationId" resultType="PaymentRow">
-        SELECT payment_id
-             , payment_type
-             , amount
-             , status
-             , method
-             , paid_at
-             , created_at
-             , fair_id
-             , business_id
-             , payer_user_id
-             , reservation_id
-             , application_id
+        SELECT <include refid="paymentColumns"/>
           FROM payment
          WHERE reservation_id = #{reservationId}
+           AND payment_type = 'RESERVATION_DEPOSIT'
     </select>
 
     <insert id="insert" parameterType="PaymentRow"
@@ -82,24 +85,17 @@
         AND status = 'PROCESSING'
     </update>
 
+    <!-- FOR UPDATE로 잠근다 — RefundService.refund()의 selectByIdForUpdate와 같은 결제 행을
+         두고 경쟁하게 만들어서, 정산 계산 도중 환불이 끼어드는 걸 막는다(위 selectByIdForUpdate
+         주석 참고). 호출자(SettlementService.calculate)가 반드시 트랜잭션 안에서 불러야 한다. -->
     <select id="selectCompletedVendorFeePayments" resultType="PaymentRow">
-        SELECT payment_id
-             , payment_type
-             , amount
-             , status
-             , method
-             , paid_at
-             , created_at
-             , fair_id
-             , business_id
-             , payer_user_id
-             , reservation_id
-             , application_id
+        SELECT <include refid="paymentColumns"/>
           FROM payment
          WHERE fair_id = #{fairId}
            AND business_id = #{businessId}
            AND payment_type = 'VENDOR_FEE'
            AND status = 'COMPLETED'
+           FOR UPDATE
     </select>
 
 </mapper>
