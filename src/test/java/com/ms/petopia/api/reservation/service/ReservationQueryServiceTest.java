@@ -32,13 +32,13 @@ class ReservationQueryServiceTest {
     private ReservationQueryService service;
 
     @Test
-    void returnsOnlyMapperResultsAndMarksUsableQrStatuses() {
+    void returnsOnlyMapperResultsAndMarksUsableQrAndPaymentStatuses() {
         given(reservationMapper.countMyReservations(20L)).willReturn(3L);
         given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
         given(reservationMapper.selectMyReservations(20L, 0, 20)).willReturn(List.of(
-                row(30L, "CONFIRMED", null),
-                row(31L, "CHECKED_IN", LocalDateTime.of(2026, 8, 2, 10, 5)),
-                row(32L, "PENDING_PAYMENT", null)
+                row(30L, "CONFIRMED", null, null),
+                row(31L, "CHECKED_IN", null, LocalDateTime.of(2026, 8, 2, 10, 5)),
+                row(32L, "PENDING_PAYMENT", LocalDateTime.of(2026, 8, 1, 9, 10), null)
         ));
 
         ReservationListResponse response = service.getMyReservations(20L, 0, 20);
@@ -46,6 +46,8 @@ class ReservationQueryServiceTest {
         assertThat(response.items()).hasSize(3);
         assertThat(response.items()).extracting(item -> item.qrAvailable())
                 .containsExactly(true, true, false);
+        assertThat(response.items()).extracting(item -> item.paymentAvailable())
+                .containsExactly(false, false, true);
         assertThat(response.items().get(1).checkedInAt()).isEqualTo(LocalDateTime.of(2026, 8, 2, 10, 5));
         assertThat(response.totalElements()).isEqualTo(3);
         assertThat(response.totalPages()).isEqualTo(1);
@@ -58,7 +60,7 @@ class ReservationQueryServiceTest {
         given(reservationMapper.countMyReservations(20L)).willReturn(1L);
         given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 2, 18, 0, 1));
         given(reservationMapper.selectMyReservations(20L, 0, 20)).willReturn(List.of(
-                row(30L, "CONFIRMED", null)
+                row(30L, "CONFIRMED", null, null)
         ));
 
         ReservationListResponse response = service.getMyReservations(20L, 0, 20);
@@ -75,7 +77,26 @@ class ReservationQueryServiceTest {
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
     }
 
-    private ReservationListRow row(Long reservationId, String status, LocalDateTime checkedInAt) {
+    @Test
+    void doesNotAllowPaymentResumeAtExactDeadline() {
+        given(reservationMapper.countMyReservations(20L)).willReturn(1L);
+        LocalDateTime deadline = LocalDateTime.of(2026, 8, 1, 9, 0);
+        given(timeProvider.now()).willReturn(deadline);
+        given(reservationMapper.selectMyReservations(20L, 0, 20)).willReturn(List.of(
+                row(30L, "PENDING_PAYMENT", deadline, null)
+        ));
+
+        ReservationListResponse response = service.getMyReservations(20L, 0, 20);
+
+        assertThat(response.items().getFirst().paymentAvailable()).isFalse();
+    }
+
+    private ReservationListRow row(
+            Long reservationId,
+            String status,
+            LocalDateTime paymentExpiresAt,
+            LocalDateTime checkedInAt
+    ) {
         ReservationListRow row = new ReservationListRow();
         row.setReservationId(reservationId);
         row.setFairName("서울 펫페어");
@@ -85,6 +106,7 @@ class ReservationQueryServiceTest {
         row.setReservationStatus(status);
         row.setAmount(10_000);
         row.setReservedAt(LocalDateTime.of(2026, 8, 1, 9, 0));
+        row.setPaymentExpiresAt(paymentExpiresAt);
         row.setCheckedInAt(checkedInAt);
         return row;
     }

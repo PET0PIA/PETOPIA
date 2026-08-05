@@ -19,5 +19,6 @@ public class ReservationListRow {
     private String reservationStatus;
     private long amount;
     private LocalDateTime reservedAt;
+    private LocalDateTime paymentExpiresAt;
     private LocalDateTime checkedInAt;
 }
