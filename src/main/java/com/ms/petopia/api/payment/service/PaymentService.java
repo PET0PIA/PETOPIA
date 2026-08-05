@@ -1,8 +1,7 @@
 package com.ms.petopia.api.payment.service;
 
-import com.ms.petopia.api.payment.dto.PaymentResponse;
-import com.ms.petopia.api.payment.dto.PaymentRow;
-import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
+import com.ms.petopia.api.payment.client.TossPaymentClient;
+import com.ms.petopia.api.payment.dto.*;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -24,6 +23,7 @@ import java.time.LocalDateTime;
 public class PaymentService {
 
     private final PaymentMapper paymentMapper;
+    private final TossPaymentClient tossPaymentClient;
 
     /**
      * 결제 ID로 상세 조회한다.
@@ -55,10 +55,9 @@ public class PaymentService {
         PaymentRow row = new PaymentRow();
         row.setPaymentType("VENDOR_FEE");
         row.setAmount(request.amount());
-        row.setStatus("COMPLETED");
-        row.setMethod("MOCK");
+        row.setStatus("PENDING");
+        row.setMethod("TOSS");
         row.setIdempotencyKey("VENDOR_FEE_" + applicationId);
-        row.setPaidAt(now);
         row.setCreatedAt(now);
         row.setUpdatedAt(now);
         row.setFairId(request.fairId());
@@ -75,6 +74,60 @@ public class PaymentService {
         return PaymentResponse.from(row);
     }
 
+    // 이 메서드는 일부러 @Transactional을 안 붙인다. markProcessing()의 커밋이
+    // 토스를 부르기 "전에" 완전히 끝나서 다른 동시 요청 눈에 즉시 보여야 하기 때문 —
+    // 하나의 트랜잭션으로 묶어버리면 markProcessing 변경이 메서드가 끝날 때까지
+    // 커밋 안 되고, 그 사이 다른 요청도 여전히 PENDING을 보고 똑같이 토스를 불러버릴
+    // 수 있다. 각 markXxx 호출은 UPDATE 한 줄짜리라 그 자체로 원자적이라
+    // 트랜잭션으로 묶지 않아도 개별 쓰기의 정합성은 깨지지 않는다.
+    public PaymentResponse confirmPayment(Long paymentId, Long userId, ConfirmPaymentRequest request) {
+        PaymentRow row = paymentMapper.selectById(paymentId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!userId.equals(row.getPayerUserId())) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+        if (!"PENDING".equals(row.getStatus())) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
 
+        // 토스를 부르기 전에 먼저 선점한다. 동시에 두 요청이 여기 도달해도 이 UPDATE는
+        // 원자적이라 딱 하나만 1을 받는다 — 선점 실패(0)면 토스 호출 자체를 안 하고 끝낸다.
+        int claimed = paymentMapper.markProcessing(paymentId, LocalDateTime.now());
+        if (claimed == 0) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        String orderId = "PAYMENT_" + row.getPaymentId();
+        TossPaymentResponse tossResponse;
+        try {
+            tossResponse = tossPaymentClient.confirmPayment(request.paymentKey(), orderId, row.getAmount());
+        } catch (CommonException e) {
+            // 토스가 확정적으로 거부한 경우(4xx)만 FAILED로 남긴다. 5xx(게이트웨이 장애)는
+            // 실제로는 승인이 처리됐을 수도 있어 여기서 실패로 단정하지 않고 PROCESSING
+            // 그대로 둔다 — 나중에 상태조회로 확인 후 재시도하는 흐름은 별도 구현 필요.
+            if (e.getErrorCode() == ErrorCode.PAYMENT_APPROVAL_FAILED) {
+                paymentMapper.markFailed(paymentId, LocalDateTime.now());
+            }
+            throw e;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        row.setStatus("COMPLETED");
+        row.setMethod(tossResponse.method());
+        row.setTossPaymentKey(tossResponse.paymentKey());
+        row.setPaidAt(now);
+        row.setUpdatedAt(now);
+
+        int updated = paymentMapper.markCompleted(row);
+        if (updated == 0) {
+            // markProcessing으로 선점에 성공한 요청만 여기 도달하므로 이론상 발생하지
+            // 않아야 하지만, 방어적으로 남겨둔다.
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        return PaymentResponse.from(row);
+
+    }
 
 }

@@ -1,5 +1,6 @@
-import { AlertCircle, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { AlertCircle, LayoutGrid, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { createHall, deleteHall, getHalls, updateHall, type Hall, type HallInput } from "../../api/fair";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -163,6 +164,9 @@ export function HallManagementPage() {
                 <td className="px-4 py-3 text-muted">{new Date(hall.createdAt).toLocaleDateString("ko-KR")}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
+                    <Link to={`/fair-admin/booths/${fairId}/${hall.hallId}`} aria-label={`${hall.name} 부스 배치 편집`} className="rounded-button p-2 text-muted hover:bg-page hover:text-ink">
+                      <LayoutGrid size={16} />
+                    </Link>
                     <button type="button" aria-label={`${hall.name} 수정`} className="rounded-button p-2 text-muted hover:bg-page hover:text-ink" onClick={() => openEditDialog(hall)}>
                       <Pencil size={16} />
                     </button>

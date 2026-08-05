@@ -119,7 +119,7 @@ class NotificationQueryServiceTest {
         row.setBody("결제가 완료됐습니다.");
         row.setLinkUrl(null);
         row.setCreatedAt(LocalDateTime.of(2026, 8, 1, 10, 0));
-        row.setRead(read);
+        row.setAlreadyRead(read);
         return row;
     }
 }

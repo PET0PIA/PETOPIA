@@ -28,6 +28,9 @@ public class Hall {
 
     private String floorPlanImageUrl;
 
+    /** 부스 배치(booth_slots) 낙관적 락 버전. 일괄저장 시 이 값이 요청의 expectedVersion과 다르면 거부한다. */
+    private Long boothLayoutVersion;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

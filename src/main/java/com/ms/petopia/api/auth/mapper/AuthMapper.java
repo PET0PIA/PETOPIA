@@ -18,6 +18,9 @@ public interface AuthMapper {
 
     User selectUserByEmail(@Param("email") String email);
 
+    //refresh 시 최신 role 조회용 - 쓰기가 없으니 락 안 걺
+    User selectUserById(@Param("userId") Long userId);
+
     //재전송 동시 요청을 직렬화하기 위한 행 잠금 조회 - user_tokens는 신규 유저에게 아직 없을 수 있어 users 행을 잠금
     User selectUserByIdForUpdate(@Param("userId") Long userId);
 
@@ -47,5 +50,9 @@ public interface AuthMapper {
 
     int markUserTokenUsed(@Param("tokenId") Long tokenId);
 
+    //인증 완료 기록
     int markEmailVerified(@Param("userId") Long userId);
+
+    //내부 연동: 사업자 등록/삭제 시 role 부여·회수 (참가업체·부스 도메인이 호출)
+    int updateUserRole(@Param("userId") Long userId, @Param("role") String role);
 }
