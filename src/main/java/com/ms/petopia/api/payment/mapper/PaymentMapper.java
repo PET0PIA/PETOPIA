@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * PAYMENT 테이블 조회용 매퍼.
@@ -20,6 +21,22 @@ public interface PaymentMapper {
      * 서비스 계층의 책임으로 남겨둔다).
      */
     PaymentRow selectById(@Param("paymentId") Long paymentId);
+
+    /**
+     * selectById와 동일하지만 {@code FOR UPDATE}로 행을 잠근다. 환불(RefundService)과 정산 계산
+     * (SettlementService)이 같은 결제 행을 동시에 건드릴 때 서로 직렬화시키는 용도 — 둘 다 이
+     * 잠금을 거쳐야 "정산 계산 중에 환불이 끼어들어 SETTLEMENT_ITEM 금액이 옛날 값으로 굳는"
+     * 경쟁 조건을 막을 수 있다(CodeRabbit 리뷰 지적, PR #47). 호출자가 반드시 트랜잭션
+     * 안에서 불러야 한다.
+     */
+    PaymentRow selectByIdForUpdate(@Param("paymentId") Long paymentId);
+
+    /**
+     * 예약 PK로 그 예약의 결제를 조회한다(RESERVATION_DEPOSIT 전용). 예약 도메인이 환불 API를
+     * 부르기 전에 paymentId를 알아내는 용도. 여러 건이 있을 수 없다 — idempotencyKey가
+     * reservationId 기준이라 예약 하나당 예약금 결제는 최대 1건.
+     */
+    PaymentRow selectByReservationId(@Param("reservationId") Long reservationId);
 
     /**
      * 결제 한 건을 생성한다. row.idempotencyKey가 이미 존재하면(동일 대상 중복결제)
@@ -46,4 +63,11 @@ public interface PaymentMapper {
      * markProcessing으로 선점에 성공한 요청만 호출하므로, 정상 흐름에서는 항상 1을 반환한다.
      */
     int markFailed(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * 정산 집계용 — 특정 행사·업체의 완료된 참가비(VENDOR_FEE) 결제 전체를 조회한다.
+     * 정산대상은 "결제완료된 참가비"만이라 status/paymentType을 XML에서 고정한다.
+     */
+    List<PaymentRow> selectCompletedVendorFeePayments(
+            @Param("fairId") Long fairId, @Param("businessId") Long businessId);
 }
