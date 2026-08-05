@@ -29,7 +29,6 @@ public class GateEntryController {
                 fairId,
                 actorUserId,
                 request.qrToken(),
-                request.gateName(),
                 request.deviceInfo()
         );
     }

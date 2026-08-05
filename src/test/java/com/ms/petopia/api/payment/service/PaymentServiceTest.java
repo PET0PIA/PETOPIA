@@ -1,10 +1,13 @@
 package com.ms.petopia.api.payment.service;
 
 
+import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.PaymentRow;
+import com.ms.petopia.api.payment.dto.ReservationPaymentCompletionResult;
+import com.ms.petopia.api.payment.dto.ReservationPaymentContext;
 import com.ms.petopia.api.payment.dto.TossPaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
@@ -29,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 
@@ -44,6 +48,11 @@ class PaymentServiceTest {
     // "토스가 이렇게 응답했다고 치자"를 흉내내는 데 씀.
     @Mock
     private TossPaymentClient tossPaymentClient;
+
+    // 예약 도메인 내부 계약 API를 실제로 호출하지 않도록 가짜로 대체.
+    // payReservationDeposit(컨텍스트 조회)와 confirmPayment(완료 통지) 양쪽 테스트에서 씀.
+    @Mock
+    private ReservationPaymentContractClient reservationPaymentContractClient;
 
     // PaymentService 생성자가 PaymentMapper를 받는 구조여야 동작함
     // (@RequiredArgsConstructor 패턴).
@@ -144,6 +153,67 @@ class PaymentServiceTest {
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
 
+    }
+
+    @Test
+    @DisplayName("예약금 결제를 요청하면 예약 도메인의 결제 컨텍스트 금액으로 결제가 생성된다")
+    void payReservationDeposit_결제생성_성공() {
+        // Arrange: 예약 도메인이 진짜 금액/소유자를 알려주는 상황을 흉내냄
+        // (클라이언트가 금액을 안 보내고, 서버가 예약 도메인에 물어봐서 받아온 값을 그대로 씀)
+        ReservationPaymentContext context = new ReservationPaymentContext(
+                500L, 10L, 90L, "GENERAL", 30000L, LocalDateTime.now().plusMinutes(30)
+        );
+        given(reservationPaymentContractClient.getPaymentContext(500L)).willReturn(context);
+
+        // Act
+        PaymentResponse result = paymentService.payReservationDeposit(500L, 90L);
+
+        // Assert: 응답에 컨텍스트 값(금액 포함)과 기본값(PENDING/TOSS)이 제대로 들어갔는지
+        assertThat(result.paymentType()).isEqualTo("RESERVATION_DEPOSIT");
+        assertThat(result.amount()).isEqualTo(30000L);
+        assertThat(result.status()).isEqualTo("PENDING");
+        assertThat(result.method()).isEqualTo("TOSS");
+        assertThat(result.fairId()).isEqualTo(10L);
+        assertThat(result.reservationId()).isEqualTo(500L);
+        assertThat(result.payerUserId()).isEqualTo(90L);
+
+        // idempotencyKey가 reservationId 기준으로 만들어졌는지(중복결제 방지의 핵심 값)
+        verify(paymentMapper).insert(argThat(row -> "RESERVATION_DEPOSIT_500".equals(row.getIdempotencyKey())));
+    }
+
+    @Test
+    @DisplayName("예약 소유자가 아닌 사용자가 예약금 결제를 요청하면 예외를 던진다")
+    void payReservationDeposit_소유자아님_예외를던진다() {
+        // Arrange: 컨텍스트의 payerUserId(90L)와 다른 사용자(999L)가 요청하는 상황(IDOR 방지 확인)
+        ReservationPaymentContext context = new ReservationPaymentContext(
+                500L, 10L, 90L, "GENERAL", 30000L, LocalDateTime.now().plusMinutes(30)
+        );
+        given(reservationPaymentContractClient.getPaymentContext(500L)).willReturn(context);
+
+        assertThatThrownBy(() -> paymentService.payReservationDeposit(500L, 999L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        // 소유자 검증에서 걸렸으면 결제 row 자체를 만들면 안 됨
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("이미 결제된 예약에 다시 예약금 결제를 요청하면 예외를 던진다")
+    void payReservationDeposit_중복결제_예외를던진다() {
+        // Arrange: idempotencyKey UNIQUE 제약 위반(=이미 결제된 예약)을 흉내냄
+        ReservationPaymentContext context = new ReservationPaymentContext(
+                500L, 10L, 90L, "GENERAL", 30000L, LocalDateTime.now().plusMinutes(30)
+        );
+        given(reservationPaymentContractClient.getPaymentContext(500L)).willReturn(context);
+        willThrow(new DuplicateKeyException("idempotency key violation"))
+                .given(paymentMapper).insert(any(PaymentRow.class));
+
+        assertThatThrownBy(() -> paymentService.payReservationDeposit(500L, 90L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
     }
 
     // PENDING 상태의 결제 하나를 미리 만들어두는 헬퍼. confirmPayment 테스트들이
@@ -273,6 +343,119 @@ class PaymentServiceTest {
         // markFailed/markCompleted 둘 다 호출되면 안 됨 — 상태는 선점된 PROCESSING 그대로 유지
         verify(paymentMapper, never()).markFailed(any(), any());
         verify(paymentMapper, never()).markCompleted(any());
+    }
+
+    // PENDING 상태의 예약금 결제 하나를 미리 만들어두는 헬퍼. pendingRow()와 거의 같지만
+    // paymentType/reservationId가 예약금 결제 케이스에 맞춰져 있음.
+    private PaymentRow pendingReservationDepositRow() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(2L);
+        row.setPaymentType("RESERVATION_DEPOSIT");
+        row.setAmount(30000L);
+        row.setStatus("PENDING");
+        row.setMethod("TOSS");
+        row.setPayerUserId(90L);
+        row.setFairId(10L);
+        row.setReservationId(500L);
+        return row;
+    }
+
+    @Test
+    @DisplayName("예약금 결제 승인이 완료되면 예약 도메인에 결제완료를 통지한다")
+    void confirmPayment_예약금결제완료시_예약도메인에통지한다() {
+        // Arrange
+        PaymentRow row = pendingReservationDepositRow();
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+
+        // Act
+        PaymentResponse result = paymentService.confirmPayment(2L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        // Assert: 결제 자체는 정상 완료되고
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        // 예약 도메인에 completePayment로 통지까지 갔는지 확인
+        // (eventId는 "PAYMENT_" + paymentId 규칙 — 예약 쪽 멱등 처리 키로 쓰임)
+        verify(reservationPaymentContractClient).completePayment(
+                eq("PAYMENT_2"), eq(2L), eq(500L), eq(30000L), any(LocalDateTime.class)
+        );
+    }
+
+    @Test
+    @DisplayName("참가비 결제가 완료되면 예약 도메인에는 통지하지 않는다")
+    void confirmPayment_참가비결제완료시_예약도메인통지안함() {
+        // Arrange: VENDOR_FEE 결제라 예약 도메인과 아무 관련 없는 상황
+        PaymentRow row = pendingRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+
+        // Act
+        paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        // Assert: paymentType 분기가 제대로 걸러서 예약 도메인은 아예 안 부르는지
+        verify(reservationPaymentContractClient, never()).completePayment(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("예약 도메인 통지가 실패해도 결제 응답 자체는 성공으로 반환한다")
+    void confirmPayment_예약도메인통지실패해도_결제응답은성공이다() {
+        // Arrange
+        PaymentRow row = pendingReservationDepositRow();
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+        // 예약 도메인 통지 자체가 터지는 상황(네트워크 장애 등)을 흉내냄
+        willThrow(new RuntimeException("connection refused"))
+                .given(reservationPaymentContractClient).completePayment(any(), any(), any(), any(), any());
+
+        // Act & Assert: 통지가 실패해도 예외가 밖으로 안 새고 결제는 COMPLETED로 정상 반환돼야 함
+        // ("결제는 됐는데 예약 확정 통지만 실패"는 로그만 남기고 응답은 성공 처리하기로 한 설계상 결정)
+        PaymentResponse result = paymentService.confirmPayment(2L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+        assertThat(result.status()).isEqualTo("COMPLETED");
+
+        // 계속 실패해도 포기하기 전까지 최대 재시도 횟수(3번)만큼은 시도했는지
+        verify(reservationPaymentContractClient, times(3)).completePayment(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("예약 도메인 통지가 첫 시도에만 실패해도 재시도해서 결국 성공한다")
+    void confirmPayment_통지일시적실패_재시도로성공한다() {
+        // Arrange
+        PaymentRow row = pendingReservationDepositRow();
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+        // 첫 번째 시도만 실패하고 두 번째 시도부터는 성공하는 상황(일시적 네트워크 장애를 흉내냄).
+        // completePayment는 void가 아니라 값을 리턴하는 메서드라 willDoNothing()은 못 쓰고,
+        // 두 번째 호출부터는 willReturn으로 정상 응답을 흉내낸다(서비스가 리턴값을 안 쓰긴 하지만).
+        // eventId가 매 시도 동일해서 예약 도메인이 멱등 처리해준다는 전제가 있어야 안전한 재시도임.
+        given(reservationPaymentContractClient.completePayment(any(), any(), any(), any(), any()))
+                .willThrow(new RuntimeException("timeout"))
+                .willReturn(new ReservationPaymentCompletionResult(500L, "CONFIRMED", false, "qr-token"));
+
+        // Act
+        PaymentResponse result = paymentService.confirmPayment(2L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        // Assert: 결제는 정상 완료되고, 통지는 재시도 끝에 두 번째 시도에서 성공해서 멈췄는지
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        verify(reservationPaymentContractClient, times(2)).completePayment(any(), any(), any(), any(), any());
     }
 
 }

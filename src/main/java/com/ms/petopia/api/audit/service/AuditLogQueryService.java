@@ -23,16 +23,22 @@ public class AuditLogQueryService {
     ){
         long offset = (long) page * size;
         List<AuditLogRow> items;
+        long total;
 
         if(targetType != null && targetId != null){
             items = auditLogMapper.selectByTarget(targetType, targetId, offset, size);
+            total = auditLogMapper.countByTarget(targetType, targetId);
         }else if(actorUserId != null){
             items = auditLogMapper.selectByActorUserId(actorUserId, offset, size);
+            total = auditLogMapper.countByActorUserId(actorUserId);
         } else if (actionType != null) {
             items = auditLogMapper.selectByActionType(actionType, offset, size);
+            total = auditLogMapper.countByActionType(actionType);
         } else {
             items = List.of();
+            total = 0;
         }
-        return new AuditLogListResponse(items, page, size);
+        boolean hasNext = offset + items.size() < total;
+        return new AuditLogListResponse(items, page, size, total, hasNext);
     }
 }

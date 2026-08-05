@@ -33,6 +33,22 @@ public class EntryQrService {
         return issue(context);
     }
 
+    /**
+     * 결제 완료 처리용 QR을 발급한다. 입장 종료 후에는 결제 완료를 방해하지 않고 QR 없이 반환한다.
+     */
+    @Transactional
+    public String issueForPaymentCompletion(Long reservationId) {
+        if (reservationId == null || reservationId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        EntryQrIssueContext context = entryMapper.selectQrIssueContext(reservationId);
+        if (context == null) {
+            throw new CommonException(ErrorCode.RESERVATION_NOT_FOUND);
+        }
+        return issueIfAvailable(context);
+    }
+
     /** 임시 사용자 헤더로 요청한 본인의 예약에만 QR을 반환한다. */
     @Transactional
     public String issueForUser(Long reservationId, Long userId) {
@@ -50,6 +66,14 @@ public class EntryQrService {
     }
 
     private String issue(EntryQrIssueContext context) {
+        return issue(context, true);
+    }
+
+    private String issueIfAvailable(EntryQrIssueContext context) {
+        return issue(context, false);
+    }
+
+    private String issue(EntryQrIssueContext context, boolean failWhenUnavailable) {
         if (!("CONFIRMED".equals(context.getReservationStatus())
                 || "CHECKED_IN".equals(context.getReservationStatus()))) {
             throw new CommonException(ErrorCode.RESERVATION_STATUS_CONFLICT);
@@ -59,16 +83,24 @@ public class EntryQrService {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
+        LocalDateTime now = timeProvider.now();
+        LocalDateTime expiresAt = LocalDateTime.of(context.getVisitDate(), context.getEntryEndTime());
+        if (now.isAfter(expiresAt)) {
+            if (failWhenUnavailable) {
+                throw new CommonException(ErrorCode.ENTRY_QR_NOT_AVAILABLE);
+            }
+            return null;
+        }
+
         Long reservationId = context.getReservationId();
         String token = tokenService.tokenForReservation(reservationId);
         if (!entryMapper.existsEntryQr(reservationId)) {
-            LocalDateTime now = timeProvider.now();
             try {
                 entryMapper.insertEntryQr(
                         reservationId,
                         tokenService.hash(token),
                         LocalDateTime.of(context.getVisitDate(), context.getEntryStartTime()),
-                        LocalDateTime.of(context.getVisitDate(), context.getEntryEndTime()),
+                        expiresAt,
                         now
                 );
             } catch (DuplicateKeyException exception) {

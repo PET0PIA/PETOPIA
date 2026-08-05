@@ -77,6 +77,10 @@ public enum ErrorCode {
     BOOTH_SLOT_DUPLICATE_NUMBER(HttpStatus.BAD_REQUEST, "F010", "같은 홀 안에 중복된 부스 번호가 있습니다."),
     BOOTH_LAYOUT_VERSION_CONFLICT(HttpStatus.CONFLICT, "F011", "다른 곳에서 이미 이 홀의 배치를 저장했습니다. 최신 상태를 다시 불러와 주세요."),
     BOOTH_SLOT_DUPLICATE_REFERENCE(HttpStatus.BAD_REQUEST, "F012", "같은 부스 슬롯을 요청 안에서 두 번 이상 참조했습니다."),
+    FAIR_DATE_NOT_FOUND(HttpStatus.NOT_FOUND, "F013", "존재하지 않는 운영일이거나 해당 행사의 운영일이 아닙니다."),
+    FAIR_DATE_DUPLICATE(HttpStatus.CONFLICT, "F014", "이미 등록된 운영 날짜입니다."),
+    FAIR_DATE_OUT_OF_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F015", "운영 날짜가 행사 운영 기간을 벗어났습니다."),
+    FAIR_DATE_INVALID_ENTRY_TIME(HttpStatus.BAD_REQUEST, "F016", "입장 종료 시간이 입장 시작 시간보다 빠릅니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -97,6 +101,7 @@ public enum ErrorCode {
     ENTRY_QR_NOT_AVAILABLE(HttpStatus.CONFLICT, "R016", "현재 사용할 수 없는 입장 QR입니다."),
     ENTRY_FAIR_MISMATCH(HttpStatus.FORBIDDEN, "R017", "해당 행사의 입장 QR이 아닙니다."),
     RESERVATION_CHANGE_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R018", "방문 날짜 변경 가능 시간이 지났습니다."),
+    RESERVATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R019", "예약 취소 가능 시간이 지났습니다."),
 
     // ===== Notification =====
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),
