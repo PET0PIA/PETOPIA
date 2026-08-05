@@ -36,11 +36,11 @@ public interface ApplicationMapper {
     // 재조회(submitted_at 등 DB 기본값 반영해서 정확한 응답 만들기 위해)
     Application selectById(@Param("applicationId") Long applicationId);
 
-    /*
-     * 요청한 슬롯들 중, 이미 활성 신청에 걸려있는 슬롯만 리턴. FOR UPDATE로 락까지 걸어서
-     * 동시에 같은 슬롯을 신청하는 걸 막는다 (application_slot/application, 우리 소유 테이블만 잠금)
-     */
-    List<Long> selectLockedBoothSlotIdsForUpdate(@Param("boothSlotIds") List<Long> boothSlotIds);
+    // 1단계: application_slot을 booth_slot_id 기준으로 잠금 (JOIN 없는 단일 테이블 조회라 갭 락이 확실히 걸림)
+    void lockApplicationSlotsByBoothSlotIds(@Param("boothSlotIds") List<Long> boothSlotIds);
+
+    // 2단계: 잠금 확보 후, 실제로 활성 신청에 걸린 슬롯만 조회 (1단계에서 이미 잠겼으니 FOR UPDATE 불필요)
+    List<Long> selectLockedBoothSlotIds(@Param("boothSlotIds") List<Long> boothSlotIds);
 
     // 내 신청 현황 목록 조회 (businessId는 선택적 필터)
     List<ApplicationSummaryResponse> selectMyApplications(@Param("ownerId") Long ownerId,

@@ -88,17 +88,27 @@
         WHERE application_id = #{applicationId}
     </select>
 
-    <!-- 요청한 슬롯 중 활성 신청에 걸린 것만 조회 + FOR UPDATE로 잠금 (동시성 방지) -->
-    <select id="selectLockedBoothSlotIdsForUpdate" resultType="long">
+    <!-- 1단계: application_slot을 booth_slot_id 기준으로 잠금 (JOIN 없음 → 인덱스 스캔이라 갭 락 확실히 걸림) -->
+    <select id="lockApplicationSlotsByBoothSlotIds" resultType="long">
+        SELECT booth_slot_id
+        FROM application_slot
+        WHERE booth_slot_id IN
+        <foreach item="id" collection="boothSlotIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        FOR UPDATE
+    </select>
+
+    <!-- 2단계: 잠금 이후 실제 활성 신청에 걸린 슬롯만 조회 (락은 1단계에서 이미 확보됨) -->
+    <select id="selectLockedBoothSlotIds" resultType="long">
         SELECT aps.booth_slot_id
         FROM application_slot aps
         JOIN application a ON a.application_id = aps.application_id
         WHERE aps.booth_slot_id IN
-            <foreach item="id" collection="boothSlotIds" open="(" separator="," close=")">
-                #{id}
-            </foreach>
+        <foreach item="id" collection="boothSlotIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
         AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
-        FOR UPDATE
     </select>
 
     <!-- 내 신청 현황 목록. business.owner_id로 본인 소유 신청만, businessId 있으면 추가 필터 -->

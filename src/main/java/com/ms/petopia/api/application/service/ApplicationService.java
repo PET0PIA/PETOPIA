@@ -87,13 +87,14 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 사업자만 신청할 수 있습니다.");
         }
 
-        // 3) 행사 존재 확인
-        if(!applicationMapper.existsFair(fairId)) {
+        // 3) 행사 존재 확인 + 3-1) 모집 마감 여부 확인 (fairStatus 한 번 조회해서 같이 처리)
+        FairStatusInfo fairStatus = recruitNoticeMapper.selectFairStatusByFairId(fairId);
+
+        if (fairStatus == null) {
             throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
         }
 
-        // 3-1) 모집 마감 여부 확인 (RecruitNoticeService.isClosed()와 같은 기준)
-        if(isRecruitClosed(fairId)) {
+        if (isRecruitClosed(fairId, fairStatus)) {
             throw new CommonException(ErrorCode.RECRUIT_CLOSED);
         }
 
@@ -103,6 +104,11 @@ public class ApplicationService {
         }
 
         // 5) 슬롯 중복 선택 확인 + 존재/잠금 확인 (GET에서 쓴 쿼리 재사용)
+        // 슬롯을 최소 1개 선택했는지 확인 (컨트롤러의 @NotEmpty가 항상 걸러주지만, 서비스 단독 호출 대비 방어)
+        if (request.getBoothSlotIds() == null || request.getBoothSlotIds().isEmpty()) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE, "부스 슬롯을 최소 1개 선택해야 합니다.");
+        }
+
         // 같은 슬롯을 중복으로 선택했는지 확인
         if (new HashSet<>(request.getBoothSlotIds()).size() != request.getBoothSlotIds().size()) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE, "같은 부스 슬롯을 중복으로 선택할 수 없습니다.");
@@ -129,11 +135,17 @@ public class ApplicationService {
         }
 
         /*
-         * 최종 잠금 확인 (FOR UPDATE) — 이 시점 이후 커밋될 때까지 이 슬롯들은 다른 트랜잭션이 못 건드림
-         * 슬롯 ID를 정렬해서 잠가야 여러 슬롯 잠금 시 데드락이 안 생김
+         * 최종 잠금 확인 — 이 시점 이후 커밋될 때까지 이 슬롯들은 다른 트랜잭션이 못 건드림.
+         * 락 확보(1단계)와 활성 여부 판단(2단계)을 분리해서, JOIN 실행 계획에 락 범위가
+         * 좌우되는 문제를 없앴다(코드래빗 리뷰 반영). 슬롯 ID는 정렬해서 잠가야 데드락 방지.
          */
         List<Long> sortedSlotIds = request.getBoothSlotIds().stream().sorted().toList();
-        List<Long> lockedNow = applicationMapper.selectLockedBoothSlotIdsForUpdate(sortedSlotIds);
+
+        // 1단계: application_slot을 booth_slot_id 기준으로 잠금
+        applicationMapper.lockApplicationSlotsByBoothSlotIds(sortedSlotIds);
+
+        // 2단계: 잠금 확보 후, 실제로 활성 신청에 걸린 슬롯이 있는지 확인
+        List<Long> lockedNow = applicationMapper.selectLockedBoothSlotIds(sortedSlotIds);
 
         if (!lockedNow.isEmpty()) {
             throw new CommonException(ErrorCode.BOOTH_SLOT_ALREADY_LOCKED);
@@ -144,10 +156,9 @@ public class ApplicationService {
     }
 
     // 모집 공고 마감 판정 (RecruitNoticeService.isClosed()와 동일 기준: 마감일 지남/행사취소/행사종료)
-    private boolean isRecruitClosed(Long fairId) {
+    private boolean isRecruitClosed(Long fairId, FairStatusInfo fairStatus) {
 
         RecruitNotice notice = recruitNoticeMapper.selectByFairId(fairId);
-        FairStatusInfo fairStatus = recruitNoticeMapper.selectFairStatusByFairId(fairId);
 
         boolean deadlinePassed = notice != null &&
                 !LocalDateTime.now().isBefore(notice.getRecruitDeadline());

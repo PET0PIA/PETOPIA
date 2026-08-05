@@ -172,7 +172,6 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(1L, 2L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
             stubRecruitOpen(fairId);
             given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(false);
 
@@ -183,7 +182,7 @@ class ApplicationServiceTest {
             );
             given(applicationMapper.selectBoothSlotsWithLockStatus(fairId)).willReturn(slots);
             // FOR UPDATE 최종 확인에서도 잠긴 슬롯 없음(빈 리스트)
-            given(applicationMapper.selectLockedBoothSlotIdsForUpdate(List.of(1L, 2L))).willReturn(List.of());
+            given(applicationMapper.selectLockedBoothSlotIds(List.of(1L, 2L))).willReturn(List.of());
 
             // insert 후 재조회(selectById) 시 돌려줄 저장된 신청서
             Application saved = Application.builder()
@@ -299,20 +298,20 @@ class ApplicationServiceTest {
         @DisplayName("행사가 존재하지 않으면 예외를 던진다")
         void throwsWhenFairNotFoundOnSubmit() {
 
-            // given: 사업자 소유 확인은 통과, 행사가 없는 상황
+            // given: 사업자 소유 확인은 통과, fairStatus 조회 결과가 없는(행사 없음) 상황
             Long ownerId = 1L;
             Long fairId = 999L;
             ApplicationSubmitRequest request = createRequest(List.of(1L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(false);
+            given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(null);
 
             // when & then
             assertThatThrownBy(() -> applicationService.submitApplication(ownerId, fairId, request))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("존재하지 않는 행사입니다");
 
-            // 행사 확인에서 막혔으니, 모집 마감 조회 이후 단계는 실행되면 안 됨
+            // 행사 확인에서 막혔으니, 모집 마감 판정(selectByFairId) 이후 단계는 실행되면 안 됨
             verify(recruitNoticeMapper, never()).selectByFairId(any());
 
         }
@@ -327,7 +326,6 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(1L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
 
             RecruitNotice notice = RecruitNotice.builder()
                     .recruitDeadline(LocalDateTime.now().minusDays(1))
@@ -336,8 +334,8 @@ class ApplicationServiceTest {
             fairStatus.setCanceledAt(null);
             fairStatus.setStatus("IN_PROGRESS");
 
-            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
             given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(fairStatus);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
 
             // when & then
             assertThatThrownBy(() -> applicationService.submitApplication(ownerId, fairId, request))
@@ -359,7 +357,6 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(1L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
 
             RecruitNotice notice = RecruitNotice.builder()
                     .recruitDeadline(LocalDateTime.now().plusDays(1))
@@ -368,8 +365,8 @@ class ApplicationServiceTest {
             fairStatus.setCanceledAt(LocalDateTime.now().minusDays(1));
             fairStatus.setStatus("IN_PROGRESS");
 
-            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
             given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(fairStatus);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
 
             // when & then
             assertThatThrownBy(() -> applicationService.submitApplication(ownerId, fairId, request))
@@ -388,7 +385,6 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(1L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
 
             RecruitNotice notice = RecruitNotice.builder()
                     .recruitDeadline(LocalDateTime.now().plusDays(1))
@@ -397,8 +393,8 @@ class ApplicationServiceTest {
             fairStatus.setCanceledAt(null);
             fairStatus.setStatus("ENDED");
 
-            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
             given(recruitNoticeMapper.selectFairStatusByFairId(fairId)).willReturn(fairStatus);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(notice);
 
             // when & then
             assertThatThrownBy(() -> applicationService.submitApplication(ownerId, fairId, request))
@@ -417,7 +413,6 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(1L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
             stubRecruitOpen(fairId);
             given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(true);
 
@@ -441,7 +436,6 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(1L, 1L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
             stubRecruitOpen(fairId);
             given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(false);
 
@@ -465,7 +459,6 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(999L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
             stubRecruitOpen(fairId);
             given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(false);
             given(applicationMapper.selectBoothSlotsWithLockStatus(fairId))
@@ -477,7 +470,7 @@ class ApplicationServiceTest {
                     .hasMessageContaining("존재하지 않는 부스 슬롯");
 
             // 슬롯 검증에서 막혔으니, FOR UPDATE 잠금 확인까지는 안 감
-            verify(applicationMapper, never()).selectLockedBoothSlotIdsForUpdate(any());
+            verify(applicationMapper, never()).selectLockedBoothSlotIds(any());
 
         }
 
@@ -491,7 +484,6 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(1L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
             stubRecruitOpen(fairId);
             given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(false);
             given(applicationMapper.selectBoothSlotsWithLockStatus(fairId))
@@ -502,7 +494,7 @@ class ApplicationServiceTest {
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("이미 다른 신청에서 선택된 부스 슬롯");
 
-            verify(applicationMapper, never()).selectLockedBoothSlotIdsForUpdate(any());
+            verify(applicationMapper, never()).selectLockedBoothSlotIds(any());
 
         }
 
@@ -517,12 +509,11 @@ class ApplicationServiceTest {
             ApplicationSubmitRequest request = createRequest(List.of(1L));
 
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
-            given(applicationMapper.existsFair(fairId)).willReturn(true);
             stubRecruitOpen(fairId);
             given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(false);
             given(applicationMapper.selectBoothSlotsWithLockStatus(fairId))
                     .willReturn(List.of(createSlot(1L, false, 450000)));
-            given(applicationMapper.selectLockedBoothSlotIdsForUpdate(List.of(1L)))
+            given(applicationMapper.selectLockedBoothSlotIds(List.of(1L)))
                     .willReturn(List.of(1L));
 
             // when & then
