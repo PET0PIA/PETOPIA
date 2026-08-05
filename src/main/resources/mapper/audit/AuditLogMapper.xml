@@ -57,4 +57,10 @@
         FROM audit_log
         WHERE user_id = #{userId}
     </select>
+
+    <select id="countByActionType" resultType="long">
+        SELECT COUNT(*)
+        FROM audit_log
+        WHERE action_type = #{actionType}
+    </select>
 </mapper>

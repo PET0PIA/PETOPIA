@@ -40,7 +40,7 @@ class AuditLogControllerTest {
     @DisplayName("targetType과 targetId로 조회하면 200 OK와 결과를 반환한다")
     void getAuditLogs_targetType과targetId로_조회하면_200_OK() throws Exception {
         given(auditLogQueryService.query("FAIR", 3L, null, null, 0, 20))
-                .willReturn(new AuditLogListResponse(List.of(), 0, 20));
+                .willReturn(new AuditLogListResponse(List.of(), 0, 20, 0L, false));
 
         mockMvc.perform(get("/api/admin/audit-logs")
                         .header("X-User-Id", 99)
@@ -49,9 +49,10 @@ class AuditLogControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.page").value(0))
-                .andExpect(jsonPath("$.size").value(20));
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.hasNext").value(false));
 
-        // 컨트롤러가 쿼리 파라미터를 서비스에 올바르게 전달했는지 검증
         verify(auditLogQueryService).query("FAIR", 3L, null, null, 0, 20);
     }
 
@@ -66,7 +67,7 @@ class AuditLogControllerTest {
     @DisplayName("파라미터 없이 조회해도 200 OK를 반환하고 서비스에 null을 전달한다")
     void getAuditLogs_파라미터없어도_200_OK() throws Exception {
         given(auditLogQueryService.query(null, null, null, null, 0, 20))
-                .willReturn(new AuditLogListResponse(List.of(), 0, 20));
+                .willReturn(new AuditLogListResponse(List.of(), 0, 20, 0L, false));
 
         mockMvc.perform(get("/api/admin/audit-logs")
                         .header("X-User-Id", 99))
@@ -79,7 +80,7 @@ class AuditLogControllerTest {
     @DisplayName("actorUserId로 조회하면 서비스에 올바르게 전달한다")
     void getAuditLogs_actorUserId로_조회하면_서비스에_전달한다() throws Exception {
         given(auditLogQueryService.query(null, null, 7L, null, 0, 20))
-                .willReturn(new AuditLogListResponse(List.of(), 0, 20));
+                .willReturn(new AuditLogListResponse(List.of(), 0, 20, 0L, false));
 
         mockMvc.perform(get("/api/admin/audit-logs")
                         .header("X-User-Id", 99)

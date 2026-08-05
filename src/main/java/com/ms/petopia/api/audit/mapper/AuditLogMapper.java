@@ -39,4 +39,6 @@ public interface AuditLogMapper {
     );
 
     Long countByActorUserId(@Param("userId") Long userId);
+
+    Long countByActionType(@Param("actionType") String actionType);
 }
