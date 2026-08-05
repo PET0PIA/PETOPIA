@@ -19,6 +19,7 @@ public class ReservationQueryService {
 
     private static final String CONFIRMED = "CONFIRMED";
     private static final String CHECKED_IN = "CHECKED_IN";
+    private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final int MAX_PAGE_SIZE = 50;
 
     private final ReservationMapper reservationMapper;
@@ -56,6 +57,9 @@ public class ReservationQueryService {
         boolean ended = row.getVisitDate() != null
                 && row.getEntryEndTime() != null
                 && now.isAfter(LocalDateTime.of(row.getVisitDate(), row.getEntryEndTime()));
+        boolean paymentAvailable = PENDING_PAYMENT.equals(status)
+                && row.getPaymentExpiresAt() != null
+                && now.isBefore(row.getPaymentExpiresAt());
         return new ReservationListItemResponse(
                 row.getReservationId(),
                 row.getFairName(),
@@ -66,6 +70,7 @@ public class ReservationQueryService {
                 status,
                 ended,
                 !ended && (CONFIRMED.equals(status) || CHECKED_IN.equals(status)),
+                paymentAvailable,
                 row.getAmount(),
                 row.getReservedAt(),
                 row.getCheckedInAt()

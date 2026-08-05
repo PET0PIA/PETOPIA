@@ -259,6 +259,25 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("당일 사전예약은 생성할 수 없다")
+    void create_당일사전예약_방문일선택불가예외를던진다() {
+        ReservationCreationContext context = reservableContext(0);
+        context.setOperationDate(TODAY);
+        given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE)).willReturn(context);
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.RESERVATION_DATE_NOT_AVAILABLE
+        );
+
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
     @DisplayName("행사는 있지만 해당 방문일 운영일이 없으면 방문일을 선택할 수 없다")
     void create_행사있음운영일없음_방문일선택불가예외를던진다() {
         given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE)).willReturn(null);
