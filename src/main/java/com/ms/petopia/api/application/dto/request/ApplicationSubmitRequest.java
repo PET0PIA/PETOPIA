@@ -34,7 +34,6 @@ public class ApplicationSubmitRequest {
     @Email
     private String managerEmail;
 
-    @AssertTrue(message = "이용약관에 동의해야 신청서를 제출할 수 있습니다.")
     private Boolean agreedTerms; // 제출 시 true 필수
 
     private String attachmentUrl; // 제출서류 zip URL, 선택 입력

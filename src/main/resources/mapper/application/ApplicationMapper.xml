@@ -4,6 +4,18 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ms.petopia.api.application.mapper.ApplicationMapper">
 
+    <resultMap id="applicationResultMap" type="com.ms.petopia.api.application.domain.Application">
+        <id property="applicationId" column="application_id" />
+        <result property="businessId" column="business_id" />
+        <result property="fairId" column="fair_id" />
+        <result property="status" column="status" />
+        <result property="rejectReason" column="reject_reason" />
+        <result property="finalPrice" column="final_price" />
+        <result property="submittedAt" column="submitted_at" />
+        <result property="reviewedAt" column="reviewed_at" />
+        <result property="paymentDueAt" column="payment_due_at" />
+    </resultMap>
+
     <!--
         특정 행사의 사용 가능한(is_active) 부스 슬롯 + 잠금 상태.
         locked: 이 슬롯을 참조하는 활성(PENDING_REVIEW/PAYMENT_PENDING/CONFIRMED) 신청이 있으면 true.
@@ -35,6 +47,58 @@
     <!-- 행사 존재 확인 (fair_id를 가진 행이 있는지만 확인, true/false) -->
     <select id="existsFair" parameterType="long" resultType="boolean">
         SELECT EXISTS (SELECT 1 FROM fairs WHERE fair_id = #{fairId})
+    </select>
+
+    <!-- 신청서 저장. status(PENDING_REVIEW)/submitted_at은 DB DEFAULT로 채워지므로 컬럼에서 뺌 -->
+    <insert id="insertApplication" parameterType="com.ms.petopia.api.application.domain.Application"
+            useGeneratedKeys="true" keyProperty="applicationId">
+        INSERT INTO application (business_id, fair_id, reject_reason, final_price, reviewed_at, payment_due_at)
+        VALUES (#{businessId}, #{fairId}, #{rejectReason}, #{finalPrice}, #{reviewedAt}, #{paymentDueAt})
+    </insert>
+
+    <!-- 신청서 제출 내용 저장 (application과 1:1) -->
+    <insert id="insertApplicationForm" parameterType="com.ms.petopia.api.application.domain.ApplicationForm"
+            useGeneratedKeys="true" keyProperty="applicationFormId">
+        INSERT INTO application_form (application_id, purpose, items_desc, manager_name, manager_phone, manager_email, agreed_terms, attachment_url)
+        VALUES (#{applicationId}, #{purpose}, #{itemsDesc}, #{managerName}, #{managerPhone}, #{managerEmail}, #{agreedTerms}, #{attachmentUrl})
+    </insert>
+
+    <!-- 신청-부스슬롯 매핑 저장 (선택한 슬롯 개수만큼 반복 호출) -->
+    <insert id="insertApplicationSlot" parameterType="com.ms.petopia.api.application.domain.ApplicationSlot"
+            useGeneratedKeys="true" keyProperty="applicationSlotId">
+        INSERT INTO application_slot (application_id, booth_slot_id, price_at_selection)
+        VALUES (#{applicationId}, #{boothSlotId}, #{priceAtSelection})
+    </insert>
+
+    <!-- 같은 사업자·같은 행사에 활성 신청이 있는지 확인 -->
+    <select id="existsActiveApplication" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM application
+            WHERE business_id = #{businessId}
+            AND fair_id = #{fairId}
+            AND status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+        )
+    </select>
+
+    <!-- 신청 상세 재조회 -->
+    <select id="selectById" resultMap="applicationResultMap">
+        SELECT application_id, business_id, fair_id, status, reject_reason, final_price,
+            submitted_at, reviewed_at, payment_due_at
+        FROM application
+        WHERE application_id = #{applicationId}
+    </select>
+
+    <!-- 요청한 슬롯 중 활성 신청에 걸린 것만 조회 + FOR UPDATE로 잠금 (동시성 방지) -->
+    <select id="selectLockedBoothSlotIdsForUpdate" resultType="long">
+        SELECT aps.booth_slot_id
+        FROM application_slot aps
+        JOIN application a ON a.application_id = aps.application_id
+        WHERE aps.booth_slot_id IN
+            <foreach item="id" collection="boothSlotIds" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+        AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+        FOR UPDATE
     </select>
 
 </mapper>

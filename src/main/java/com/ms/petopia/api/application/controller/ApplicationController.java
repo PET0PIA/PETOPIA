@@ -1,14 +1,15 @@
 package com.ms.petopia.api.application.controller;
 
+import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
+import com.ms.petopia.api.application.dto.response.ApplicationResponse;
 import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.global.response.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -25,6 +26,21 @@ public class ApplicationController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(applicationService.getBoothSlots(fairId)));
+
+    }
+
+    // 참가 신청서 제출
+    @PostMapping("/fairs/{fairId}/applications")
+    public ResponseEntity<ApiResponse<ApplicationResponse>> submitApplication(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @PathVariable Long fairId,
+            @Valid @RequestBody ApplicationSubmitRequest request
+    ) {
+
+        ApplicationResponse response = applicationService.submitApplication(ownerId, fairId, request);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED, response));
 
     }
 
