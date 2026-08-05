@@ -112,6 +112,9 @@ class AuditLogQueryServiceTest {
         verify(auditLogMapper, never()).selectByTarget(any(), any(), anyLong(), anyInt());
         verify(auditLogMapper, never()).selectByActorUserId(any(), anyLong(), anyInt());
         verify(auditLogMapper, never()).selectByActionType(any(), anyLong(), anyInt());
+        verify(auditLogMapper, never()).countByTarget(any(), any());
+        verify(auditLogMapper, never()).countByActorUserId(any());
+        verify(auditLogMapper, never()).countByActionType(any());
     }
 
     // ===== 페이지네이션 offset 계산 =====
