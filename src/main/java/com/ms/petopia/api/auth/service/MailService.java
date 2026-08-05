@@ -36,4 +36,26 @@ public class MailService {
             """.formatted(verificationCode));
         javaMailSender.send(simpleMailMessage);
     }
+
+    //관리자 계정 발급 메일
+    public void sendAdminAccountIssueEmail(String to, String tempPassword){
+        SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
+        simpleMailMessage.setFrom(fromEmail);
+        simpleMailMessage.setTo(to);
+        simpleMailMessage.setSubject("[PETOPIA] 행사 관리자 계정이 발급되었습니다");
+        simpleMailMessage.setText("""
+            안녕하세요. PETOPIA 입니다.
+
+            행사 승인이 완료되어 행사 관리자 계정이 발급되었습니다.
+
+            [아이디] %s
+            [임시 비밀번호] %s
+
+            로그인 후 반드시 비밀번호를 변경해 주세요.
+
+            감사합니다.
+            PETOPIA 드림.
+            """.formatted(to, tempPassword));
+        javaMailSender.send(simpleMailMessage);
+    }
 }
