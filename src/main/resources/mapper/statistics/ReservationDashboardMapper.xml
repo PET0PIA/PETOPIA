@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.statistics.mapper.ReservationDashboardMapper">
+    <resultMap id="dateSummaryResultMap" type="com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto">
+        <result column="fair_date_id" property="fairDateId"/>
+        <result column="operation_date" property="operationDate"/>
+        <result column="capacity" property="capacity"/>
+        <result column="entry_start_time" property="entryStartTime"/>
+        <result column="entry_end_time" property="entryStartTime"/>
+        <result column="entry_end_time" property="entryEndTime"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="confirmed_count" property="confirmedCount"/>
+        <result column="checked_in_count" property="checkedInCount"/>
+        <result column="pending_count" property="pendingCount"/>
+        <result column="canceled_count" property="canceledCount"/>
+        <result column="expired_count" property="expiredCount"/>
+        <result column="remaining_capacity" property="remainingCapacity"/>
+    </resultMap>
+    <select id="selectDateSummaryList" parameterType="long" resultMap="dateSummaryResultMap">
+        SELECT fd.fair_date_id,
+            fd.operation_date,
+            fd.capacity,
+            fd.entry_start_time,
+            fd.entry_end_time,
+            COUNT(r.reservation_id) AS total_count,
+            SUM(CASE WHEN r.status = 'CONFIRMED' THEN 1 ELSE 0 END) AS confirmed_count,
+            SUM(CASE WHEN r.status = 'CHECKED_IN' THEN 1 ELSE 0 END) AS checked_in_count,
+            SUM(CASE WHEN r.status = 'PENDING_PAYMENT' THEN 1 ELSE 0 END) AS pending_count,
+            SUM(CASE WHEN r.status = 'CANCELED' THEN 1 ELSE 0 END) AS canceled_count,
+            SUM(CASE WHEN r.status = 'EXPIRED' THEN 1 ELSE 0 END) AS expired_count,
+            fd.capacity - SUM(CASE WHEN r.status IN('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN') THEN 1 ELSE 0 END) AS remaining_capacity
+        FROM fair_dates fd
+            LEFT JOIN reservations r
+            ON r.fair_id = fd.fair_id
+            AND r.visit_date = fd.operation_date
+        WHERE fd.fair_id = #{fairId}
+        GROUP BY fd.fair_date_id,
+            fd.operation_date,
+            fd.capacity,
+            fd.entry_start_time,
+            fd.entry_end_time
+        ORDER BY fd.operation_date ASC
+    </select>
+</mapper>
