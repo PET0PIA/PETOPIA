@@ -45,7 +45,7 @@ class ReservationPaymentCompletionServiceTest {
         given(mapper.selectReservationForUpdate(10L)).willReturn(pendingReservation(15_000));
         given(timeProvider.now()).willReturn(RECEIVED_AT);
         given(mapper.confirmPendingReservation(10L, PAID_AT, RECEIVED_AT)).willReturn(1);
-        given(entryQrService.issueForReservation(10L)).willReturn("qr-token");
+        given(entryQrService.issueForPaymentCompletion(10L)).willReturn("qr-token");
 
         ReservationPaymentCompletionResponse response = service.complete(COMMAND);
 
@@ -65,13 +65,31 @@ class ReservationPaymentCompletionServiceTest {
         receipt.setPaidAmount(15_000);
         receipt.setPaidAt(PAID_AT);
         given(mapper.selectReceiptByEventId("event-1")).willReturn(receipt);
-        given(entryQrService.issueForReservation(10L)).willReturn("qr-token");
+        given(entryQrService.issueForPaymentCompletion(10L)).willReturn("qr-token");
 
         ReservationPaymentCompletionResponse response = service.complete(COMMAND);
 
         assertThat(response.idempotentReplay()).isTrue();
         verify(mapper, never()).selectReservationForUpdate(10L);
         verify(mapper, never()).insertReceipt(COMMAND, RECEIVED_AT);
+    }
+
+    @Test
+    void returnsConfirmedWithoutQrWhenReplayArrivesAfterEntryEnds() {
+        ReservationPaymentReceiptRow receipt = new ReservationPaymentReceiptRow();
+        receipt.setEventId("event-1");
+        receipt.setPaymentId(20L);
+        receipt.setReservationId(10L);
+        receipt.setPaidAmount(15_000);
+        receipt.setPaidAt(PAID_AT);
+        given(mapper.selectReceiptByEventId("event-1")).willReturn(receipt);
+        given(entryQrService.issueForPaymentCompletion(10L)).willReturn(null);
+
+        ReservationPaymentCompletionResponse response = service.complete(COMMAND);
+
+        assertThat(response.reservationStatus()).isEqualTo("CONFIRMED");
+        assertThat(response.idempotentReplay()).isTrue();
+        assertThat(response.entryQrToken()).isNull();
     }
 
     @Test

@@ -37,7 +37,7 @@ public class ReservationPaymentCompletionService {
                     replay.getReservationId(),
                     "CONFIRMED",
                     true,
-                    entryQrService.issueForReservation(replay.getReservationId())
+                    entryQrService.issueForPaymentCompletion(replay.getReservationId())
             );
         }
 
@@ -55,7 +55,7 @@ public class ReservationPaymentCompletionService {
                     existing.getReservationId(),
                     "CONFIRMED",
                     true,
-                    entryQrService.issueForReservation(existing.getReservationId())
+                    entryQrService.issueForPaymentCompletion(existing.getReservationId())
             );
         }
         if ("EXPIRED".equals(reservation.getStatus())) {
@@ -99,7 +99,7 @@ public class ReservationPaymentCompletionService {
                 command.reservationId(),
                 "CONFIRMED",
                 false,
-                entryQrService.issueForReservation(command.reservationId())
+                entryQrService.issueForPaymentCompletion(command.reservationId())
         );
     }
 

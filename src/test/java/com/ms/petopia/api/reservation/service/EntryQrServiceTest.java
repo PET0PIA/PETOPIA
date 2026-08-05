@@ -97,6 +97,18 @@ class EntryQrServiceTest {
     }
 
     @Test
+    @DisplayName("결제 완료 처리에서는 입장 종료 후 QR 없이 성공한다")
+    void returnsNullForPaymentCompletionAfterEntryEnds() {
+        given(entryMapper.selectQrIssueContext(RESERVATION_ID)).willReturn(issuableContext("CONFIRMED"));
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 18, 0, 1));
+
+        assertThat(service.issueForPaymentCompletion(RESERVATION_ID)).isNull();
+
+        verify(tokenService, never()).tokenForReservation(any());
+        verify(entryMapper, never()).insertEntryQr(any(), any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("결제 대기처럼 확정되지 않은 예약에는 QR을 발급하지 않는다")
     void rejectsQrForNotConfirmedReservation() {
         given(entryMapper.selectQrIssueContext(RESERVATION_ID))
