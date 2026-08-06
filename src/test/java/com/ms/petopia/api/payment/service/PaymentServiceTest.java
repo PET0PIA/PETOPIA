@@ -97,6 +97,41 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("예약ID로 조회하면 그 예약의 예약금 결제 상세를 반환한다")
+    void getByReservationId_존재하는예약_결제상세를반환한다() {
+        // Arrange: 예약 도메인이 환불 API를 부르기 전에 paymentId를 알아내는 흐름을 흉내냄
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(2L);
+        row.setPaymentType("RESERVATION_DEPOSIT");
+        row.setAmount(30000L);
+        row.setStatus("COMPLETED");
+        row.setMethod("TOSS");
+        row.setFairId(10L);
+        row.setPayerUserId(90L);
+        row.setReservationId(500L);
+        given(paymentMapper.selectByReservationId(500L)).willReturn(row);
+
+        // Act
+        PaymentResponse result = paymentService.getByReservationId(500L);
+
+        // Assert
+        assertThat(result.paymentId()).isEqualTo(2L);
+        assertThat(result.reservationId()).isEqualTo(500L);
+        assertThat(result.status()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    @DisplayName("결제된 적 없는 예약ID로 조회하면 예외를 던진다")
+    void getByReservationId_결제없음_예외를던진다() {
+        given(paymentMapper.selectByReservationId(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> paymentService.getByReservationId(999L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+    }
+
+    @Test
     @DisplayName("존재하지 않는 결제ID를 조회하면 예외를 던진다")
     void getPayment_존재하지않는결제_예외를던진다() {
         //Arrange: 999L로 조회하면 매퍼가 null을 리턴하는 상황(=DB에 없는 상황)을 흉내냄.

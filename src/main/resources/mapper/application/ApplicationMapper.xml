@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.application.mapper.ApplicationMapper">
+
+    <resultMap id="applicationResultMap" type="com.ms.petopia.api.application.domain.Application">
+        <id property="applicationId" column="application_id" />
+        <result property="businessId" column="business_id" />
+        <result property="fairId" column="fair_id" />
+        <result property="status" column="status" />
+        <result property="rejectReason" column="reject_reason" />
+        <result property="finalPrice" column="final_price" />
+        <result property="submittedAt" column="submitted_at" />
+        <result property="reviewedAt" column="reviewed_at" />
+        <result property="paymentDueAt" column="payment_due_at" />
+    </resultMap>
+
+    <!--
+        특정 행사의 사용 가능한(is_active) 부스 슬롯 + 잠금 상태.
+        locked: 이 슬롯을 참조하는 활성(PENDING_REVIEW/PAYMENT_PENDING/CONFIRMED) 신청이 있으면 true.
+        booth_slots/halls는 도메인2 소유 테이블이라 직접 SQL로 조회함.
+    -->
+    <select id="selectBoothSlotsWithLockStatus" parameterType="long"
+            resultType="com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse">
+        SELECT bs.booth_slot_id AS boothSlotsId,
+            bs.slot_number AS slotNumber,
+            bs.pos_x AS posX,
+            bs.pos_y AS posY,
+            bs.width AS width,
+            bs.height AS height,
+            bs.price AS price,
+            EXISTS (
+                SELECT 1
+                FROM application_slot aps
+                JOIN application a ON a.application_id = aps.application_id
+                WHERE aps.booth_slot_id = bs.booth_slot_id
+                AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+            ) AS locked
+        FROM booth_slots bs
+        JOIN halls h ON bs.hall_id = h.hall_id
+        WHERE h.fair_id = #{fairId}
+        AND bs.is_active = TRUE
+        ORDER BY bs.slot_number
+    </select>
+
+    <!-- 행사 존재 확인 (fair_id를 가진 행이 있는지만 확인, true/false) -->
+    <select id="existsFair" parameterType="long" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM fairs WHERE fair_id = #{fairId})
+    </select>
+
+    <!-- 신청서 저장. status(PENDING_REVIEW)/submitted_at은 DB DEFAULT로 채워지므로 컬럼에서 뺌 -->
+    <insert id="insertApplication" parameterType="com.ms.petopia.api.application.domain.Application"
+            useGeneratedKeys="true" keyProperty="applicationId">
+        INSERT INTO application (business_id, fair_id, reject_reason, final_price, reviewed_at, payment_due_at)
+        VALUES (#{businessId}, #{fairId}, #{rejectReason}, #{finalPrice}, #{reviewedAt}, #{paymentDueAt})
+    </insert>
+
+    <!-- 신청서 제출 내용 저장 (application과 1:1) -->
+    <insert id="insertApplicationForm" parameterType="com.ms.petopia.api.application.domain.ApplicationForm"
+            useGeneratedKeys="true" keyProperty="applicationFormId">
+        INSERT INTO application_form (application_id, purpose, items_desc, manager_name, manager_phone, manager_email, agreed_terms, attachment_url)
+        VALUES (#{applicationId}, #{purpose}, #{itemsDesc}, #{managerName}, #{managerPhone}, #{managerEmail}, #{agreedTerms}, #{attachmentUrl})
+    </insert>
+
+    <!-- 신청-부스슬롯 매핑 저장 (선택한 슬롯 개수만큼 반복 호출) -->
+    <insert id="insertApplicationSlot" parameterType="com.ms.petopia.api.application.domain.ApplicationSlot"
+            useGeneratedKeys="true" keyProperty="applicationSlotId">
+        INSERT INTO application_slot (application_id, booth_slot_id, price_at_selection)
+        VALUES (#{applicationId}, #{boothSlotId}, #{priceAtSelection})
+    </insert>
+
+    <!-- 같은 사업자·같은 행사에 활성 신청이 있는지 확인 -->
+    <select id="existsActiveApplication" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM application
+            WHERE business_id = #{businessId}
+            AND fair_id = #{fairId}
+            AND status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+        )
+    </select>
+
+    <!-- 신청 상세 재조회 -->
+    <select id="selectById" resultMap="applicationResultMap">
+        SELECT application_id, business_id, fair_id, status, reject_reason, final_price,
+            submitted_at, reviewed_at, payment_due_at
+        FROM application
+        WHERE application_id = #{applicationId}
+    </select>
+
+    <!-- 잠금 이후 실제 활성 신청에 걸린 슬롯만 조회 (락은 1단계에서 이미 확보됨) -->
+    <select id="selectLockedBoothSlotIds" resultType="long">
+        SELECT aps.booth_slot_id
+        FROM application_slot aps
+        JOIN application a ON a.application_id = aps.application_id
+        WHERE aps.booth_slot_id IN
+        <foreach item="id" collection="boothSlotIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+    </select>
+
+    <!-- 내 신청 현황 목록. business.owner_id로 본인 소유 신청만, businessId 있으면 추가 필터 -->
+    <select id="selectMyApplications"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse">
+        SELECT a.application_id AS applicationId,
+            f.name AS fairName,
+            a.status AS status,
+            a.final_price AS finalPrice,
+            a.reject_reason AS rejectReason
+        FROM application a
+        JOIN business b ON b.business_id = a.business_id
+        JOIN fairs f ON f.fair_id = a.fair_id
+        WHERE b.owner_id = #{ownerId}
+        <if test="businessId != null">
+            AND a.business_id = #{businessId}
+        </if>
+        ORDER BY a.submitted_at DESC
+    </select>
+
+    <!-- 신청 상세 (application + application_form 조인). slots는 별도 쿼리로 채움 -->
+    <select id="selectApplicationDetail"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationDetailResponse">
+        SELECT a.application_id AS applicationId,
+            a.fair_id AS fairId,
+            a.business_id AS businessId,
+            a.status AS status,
+            af.purpose AS purpose,
+            af.items_desc AS itemsDesc,
+            af.manager_name AS managerName,
+            af.manager_phone AS managerPhone,
+            af.manager_email AS managerEmail,
+            a.final_price AS finalPrice,
+            a.reject_reason AS rejectReason,
+            af.attachment_url AS attachmentUrl,
+            a.submitted_at AS submittedAt,
+            a.reviewed_at AS reviewedAt
+        FROM application a
+        JOIN application_form af ON af.application_id = a.application_id
+        WHERE a.application_id = #{applicationId}
+    </select>
+
+    <!-- 신청이 선택한 부스 슬롯 목록. slot_number는 booth_slots에서 참조 -->
+    <select id="selectApplicationSlotDetails"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationSlotDetailResponse">
+        SELECT aps.booth_slot_id AS boothSlotsId,
+            bs.slot_number AS slotNumber,
+            aps.price_at_selection AS priceAtSelection
+        FROM application_slot aps
+        JOIN booth_slots bs ON bs.booth_slot_id = aps.booth_slot_id
+        WHERE aps.application_id = #{applicationId}
+        ORDER BY bs.slot_number
+    </select>
+
+    <!-- boothSlotId별 동시 신청 직렬화용 애플리케이션 레벨 락. 테이블/행과 무관 -->
+    <select id="acquireBoothSlotLock" resultType="int">
+        SELECT GET_LOCK(CONCAT('booth_slot_apply_', #{boothSlotId}), 5)
+    </select>
+
+    <!-- 락 해제 -->
+    <select id="releaseBoothSlotLock" resultType="int">
+        SELECT RELEASE_LOCK(CONCAT('booth_slot_apply_', #{boothSlotId}))
+    </select>
+
+</mapper>

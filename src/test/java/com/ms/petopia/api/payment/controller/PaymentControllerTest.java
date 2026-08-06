@@ -80,6 +80,33 @@ class PaymentControllerTest {
     }
 
     @Test
+    void getsPaymentByReservationId() throws Exception {
+        given(paymentService.getByReservationId(500L)).willReturn(
+                new PaymentResponse(
+                        2L, "PAYMENT_2", "RESERVATION_DEPOSIT", 30000L, "COMPLETED", "TOSS",
+                        LocalDateTime.of(2026, 8, 5, 10, 0),
+                        LocalDateTime.of(2026, 8, 5, 10, 0),
+                        10L, null, 90L, 500L, null
+                )
+        );
+
+        mockMvc.perform(get("/api/reservations/500/payment"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paymentId").value(2))
+                .andExpect(jsonPath("$.reservationId").value(500));
+    }
+
+    @Test
+    void returns404WhenNoPaymentForReservation() throws Exception {
+        willThrow(new CommonException(ErrorCode.PAYMENT_NOT_FOUND))
+                .given(paymentService).getByReservationId(999L);
+
+        mockMvc.perform(get("/api/reservations/999/payment"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("P001"));
+    }
+
+    @Test
     void returns404WhenPaymentNotFound() throws Exception {
         // Arrange: 서비스가 예외를 던지는 상황을 흉내냄
         // (PaymentServiceTest에서 이미 검증한 "존재하지 않으면 예외" 로직을,

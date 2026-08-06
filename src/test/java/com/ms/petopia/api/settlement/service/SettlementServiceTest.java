@@ -1,0 +1,250 @@
+package com.ms.petopia.api.settlement.service;
+
+import com.ms.petopia.api.payment.dto.PaymentRow;
+import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.refund.dto.RefundRow;
+import com.ms.petopia.api.refund.mapper.RefundMapper;
+import com.ms.petopia.api.settlement.dto.SettlementItemRow;
+import com.ms.petopia.api.settlement.dto.SettlementResponse;
+import com.ms.petopia.api.settlement.dto.SettlementRow;
+import com.ms.petopia.api.settlement.mapper.SettlementMapper;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+@ExtendWith(MockitoExtension.class)
+class SettlementServiceTest {
+
+    @Mock
+    private SettlementMapper settlementMapper;
+
+    @Mock
+    private PaymentMapper paymentMapper;
+
+    @Mock
+    private RefundMapper refundMapper;
+
+    @InjectMocks
+    private SettlementService settlementService;
+
+    private PaymentRow vendorFeePayment(Long paymentId, long amount) {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(paymentId);
+        row.setPaymentType("VENDOR_FEE");
+        row.setAmount(amount);
+        row.setStatus("COMPLETED");
+        row.setFairId(10L);
+        row.setBusinessId(20L);
+        return row;
+    }
+
+    @Test
+    @DisplayName("환불 없는 완료 참가비 결제들로 정산을 계산하면 수수료율만큼 차감된 지급액이 나온다")
+    void calculate_환불없음_성공() {
+        // Arrange: 참가비 결제 두 건, 합계 150000원, 환불 없음
+        given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(null);
+        given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of(
+                vendorFeePayment(1L, 100000L),
+                vendorFeePayment(2L, 50000L)
+        ));
+        given(refundMapper.selectByPaymentId(1L)).willReturn(null);
+        given(refundMapper.selectByPaymentId(2L)).willReturn(null);
+
+        // Act
+        SettlementResponse result = settlementService.calculate(10L, 20L);
+
+        // Assert: gross 150000, refund 0, commission 150000*0.05=7500, net 142500
+        assertThat(result.grossAmount()).isEqualTo(150000L);
+        assertThat(result.refundAmount()).isEqualTo(0L);
+        assertThat(result.commissionRate()).isEqualByComparingTo(new BigDecimal("0.0500"));
+        assertThat(result.commissionAmount()).isEqualTo(7500L);
+        assertThat(result.netAmount()).isEqualTo(142500L);
+        assertThat(result.status()).isEqualTo("PENDING");
+
+        verify(settlementMapper).insertItems(anyList());
+    }
+
+    @Test
+    @DisplayName("환불된 결제가 섞여 있으면 환불금액만큼 차감한 뒤 수수료를 계산한다")
+    void calculate_환불포함_차감후계산() {
+        // Arrange: 결제1(100000원, 전액환불) + 결제2(50000원, 환불없음)
+        given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(null);
+        given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of(
+                vendorFeePayment(1L, 100000L),
+                vendorFeePayment(2L, 50000L)
+        ));
+        RefundRow refund = new RefundRow();
+        refund.setRefundId(5L);
+        refund.setStatus("COMPLETED");
+        refund.setRefundAmount(100000L);
+        given(refundMapper.selectByPaymentId(1L)).willReturn(refund);
+        given(refundMapper.selectByPaymentId(2L)).willReturn(null);
+
+        // Act
+        SettlementResponse result = settlementService.calculate(10L, 20L);
+
+        // Assert: gross 150000, refund 100000, 정산대상 50000, commission 50000*0.05=2500, net 47500
+        assertThat(result.grossAmount()).isEqualTo(150000L);
+        assertThat(result.refundAmount()).isEqualTo(100000L);
+        assertThat(result.commissionAmount()).isEqualTo(2500L);
+        assertThat(result.netAmount()).isEqualTo(47500L);
+    }
+
+    @Test
+    @DisplayName("완료된 참가비 결제가 하나도 없으면 0원 정산으로 계산되고 상세내역은 저장하지 않는다")
+    void calculate_결제없음_0원정산() {
+        given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(null);
+        given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of());
+
+        SettlementResponse result = settlementService.calculate(10L, 20L);
+
+        assertThat(result.grossAmount()).isEqualTo(0L);
+        assertThat(result.netAmount()).isEqualTo(0L);
+        verify(settlementMapper, never()).insertItems(anyList());
+    }
+
+    @Test
+    @DisplayName("이미 계산된 정산이 있으면 다시 계산할 수 없다")
+    void calculate_이미존재_예외를던진다() {
+        SettlementRow existing = new SettlementRow();
+        existing.setSettlementId(1L);
+        given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(existing);
+
+        assertThatThrownBy(() -> settlementService.calculate(10L, 20L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_ALREADY_EXISTS);
+    }
+
+    @Test
+    @DisplayName("동시에 계산 요청이 들어와 UK 제약을 위반하면 이미 존재하는 정산으로 처리한다")
+    void calculate_동시계산_중복키_예외를던진다() {
+        given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(null);
+        given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of());
+        willThrow(new DuplicateKeyException("settlement fair-business unique violation"))
+                .given(settlementMapper).insert(any(SettlementRow.class));
+
+        assertThatThrownBy(() -> settlementService.calculate(10L, 20L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_ALREADY_EXISTS);
+    }
+
+    private SettlementRow pendingSettlementRow() {
+        SettlementRow row = new SettlementRow();
+        row.setSettlementId(1L);
+        row.setFairId(10L);
+        row.setBusinessId(20L);
+        row.setGrossAmount(150000L);
+        row.setRefundAmount(0L);
+        row.setCommissionRate(new BigDecimal("0.0500"));
+        row.setCommissionAmount(7500L);
+        row.setNetAmount(142500L);
+        row.setStatus("PENDING");
+        return row;
+    }
+
+    @Test
+    @DisplayName("PENDING 정산을 확정하면 CONFIRMED로 바뀐다")
+    void confirm_성공() {
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+        given(settlementMapper.confirm(eq(1L), eq(99L), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(1);
+
+        SettlementResponse result = settlementService.confirm(1L, 99L);
+
+        assertThat(result.status()).isEqualTo("CONFIRMED");
+        assertThat(result.confirmedByUserId()).isEqualTo(99L);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 정산을 확정하려 하면 예외를 던진다")
+    void confirm_존재하지않음_예외를던진다() {
+        given(settlementMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> settlementService.confirm(999L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("이미 확정된 정산을 다시 확정하려 하면 예외를 던진다")
+    void confirm_PENDING아님_예외를던진다() {
+        SettlementRow row = pendingSettlementRow();
+        row.setStatus("CONFIRMED");
+        given(settlementMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);
+    }
+
+    @Test
+    @DisplayName("동시에 두 번 확정 요청이 들어오면 나중 요청은 예외를 던진다")
+    void confirm_동시확정_예외를던진다() {
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+        given(settlementMapper.confirm(eq(1L), eq(99L), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(0);
+
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);
+    }
+
+    @Test
+    @DisplayName("행사·업체로 정산을 조회하면 상세를 반환한다")
+    void getByFairAndBusiness_존재_상세반환() {
+        given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(pendingSettlementRow());
+
+        SettlementResponse result = settlementService.getByFairAndBusiness(10L, 20L);
+
+        assertThat(result.settlementId()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("계산된 적 없는 행사·업체로 조회하면 예외를 던진다")
+    void getByFairAndBusiness_없음_예외를던진다() {
+        given(settlementMapper.selectByFairAndBusiness(10L, 30L)).willReturn(null);
+
+        assertThatThrownBy(() -> settlementService.getByFairAndBusiness(10L, 30L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("행사 하나에 속한 정산 목록을 조회한다")
+    void getByFair_목록반환() {
+        SettlementRow other = pendingSettlementRow();
+        other.setSettlementId(2L);
+        other.setBusinessId(30L);
+        given(settlementMapper.selectByFairId(10L)).willReturn(List.of(pendingSettlementRow(), other));
+
+        List<SettlementResponse> results = settlementService.getByFair(10L);
+
+        assertThat(results).hasSize(2);
+    }
+}
