@@ -25,10 +25,22 @@ public interface SettlementMapper {
     List<SettlementRow> selectByFairId(@Param("fairId") Long fairId);
 
     /**
-     * 결제 PK가 이미 어떤 정산에 포함됐는지 조회한다(UK_SETTLEMENT_ITEM_PAYMENT 덕분에 결제 1건당
-     * 최대 1행). 환불 서비스가 "이미 정산된 결제는 환불 금지" 방어에 쓴다.
+     * 결제 PK가 포함된 정산의 PK를 조회한다(UK_SETTLEMENT_ITEM_PAYMENT 덕분에 결제 1건당 최대
+     * 1행). 포함된 정산이 없으면 null. {@link #markNeedsRecalculation} 호출 대상을 찾는 데 쓴다.
+     *
+     * <p>여기엔 별도 잠금이 없지만, 호출자(RefundService.refund)가 이미 같은 결제 행을
+     * {@code FOR UPDATE}로 잠근 상태라 calculate()/recalculate()가 이 결제를 새 정산에
+     * 포함시키는 것도 그 잠금에 걸려 기다리므로 안전하다.
      */
-    SettlementItemRow selectItemByPaymentId(@Param("paymentId") Long paymentId);
+    Long selectSettlementIdByPaymentId(@Param("paymentId") Long paymentId);
+
+    /**
+     * PENDING 정산에 "재계산 필요" 표시를 원자적으로 남긴다. {@code status = 'PENDING'} 조건
+     * 덕분에 {@link #confirm}의 원자적 확정 UPDATE와 경쟁해도 같은 SETTLEMENT 행을 두고
+     * 먼저 커밋하는 쪽이 이긴다(CodeRabbit 리뷰 지적, PR #54). 환불 서비스가 이 반환값으로
+     * "이 결제를 환불해도 되는지"(0이면 이미 PENDING이 아니라는 뜻이라 거부) 판단한다.
+     */
+    int markNeedsRecalculation(@Param("settlementId") Long settlementId);
 
     /**
      * 정산 한 건을 생성한다(PENDING). 같은 행사·업체로 이미 계산된 정산이 있으면
@@ -40,12 +52,28 @@ public interface SettlementMapper {
     /** 정산 감사근거 상세 내역 일괄 저장. items가 비어있으면 호출하지 않는다(서비스 책임). */
     void insertItems(@Param("items") List<SettlementItemRow> items);
 
+    /** 재계산 전 기존 감사근거 내역을 전부 지운다(SettlementService.recalculate 전용). */
+    int deleteItemsBySettlementId(@Param("settlementId") Long settlementId);
+
     /**
-     * PENDING -> CONFIRMED로 원자적으로 확정한다. 이미 확정됐거나 없는 정산이면 0을 반환한다
-     * (동시 확정 요청 방어 — 결제 markProcessing과 같은 패턴).
+     * PENDING -> CONFIRMED로 원자적으로 확정한다. 이미 확정됐거나, 없는 정산이거나, 재계산이
+     * 필요한 상태(needs_recalculation)면 0을 반환한다(동시 확정 요청 방어 — 결제 markProcessing과
+     * 같은 패턴, needs_recalculation 조건은 CodeRabbit 리뷰 지적, PR #54).
      */
     int confirm(@Param("settlementId") Long settlementId,
                 @Param("confirmedByUserId") Long confirmedByUserId,
                 @Param("confirmedAt") LocalDateTime confirmedAt,
                 @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * 재계산된 금액을 PENDING 상태인 정산에만 원자적으로 반영한다. selectById로 PENDING을
+     * 확인한 뒤에도 이 UPDATE 사이에 다른 요청이 먼저 확정해버릴 수 있어(동시성 방어),
+     * WHERE 절에 status='PENDING'을 같이 걸고 영향받은 행 수로 성공 여부를 판단한다.
+     */
+    int updateAggregates(@Param("settlementId") Long settlementId,
+                          @Param("grossAmount") Long grossAmount,
+                          @Param("refundAmount") Long refundAmount,
+                          @Param("commissionAmount") Long commissionAmount,
+                          @Param("netAmount") Long netAmount,
+                          @Param("updatedAt") LocalDateTime updatedAt);
 }

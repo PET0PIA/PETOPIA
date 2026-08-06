@@ -14,6 +14,7 @@
       , commission_amount
       , net_amount
       , status
+      , needs_recalculation
       , paid_at
       , confirmed_at
       , confirmed_by_user_id
@@ -41,15 +42,18 @@
          ORDER BY business_id
     </select>
 
-    <select id="selectItemByPaymentId" resultType="SettlementItemRow">
-        SELECT settlement_item_id
-             , settlement_id
-             , payment_id
-             , refund_id
-             , amount_included
+    <select id="selectSettlementIdByPaymentId" resultType="long">
+        SELECT settlement_id
           FROM settlement_item
          WHERE payment_id = #{paymentId}
     </select>
+
+    <update id="markNeedsRecalculation">
+        UPDATE settlement
+        SET needs_recalculation = TRUE
+        WHERE settlement_id = #{settlementId}
+        AND status = 'PENDING'
+    </update>
 
     <insert id="insert" parameterType="SettlementRow"
             useGeneratedKeys="true" keyProperty="settlementId">
@@ -72,11 +76,29 @@
         </foreach>
     </insert>
 
+    <delete id="deleteItemsBySettlementId">
+        DELETE FROM settlement_item
+         WHERE settlement_id = #{settlementId}
+    </delete>
+
     <update id="confirm">
         UPDATE settlement
         SET status = 'CONFIRMED',
         confirmed_by_user_id = #{confirmedByUserId},
         confirmed_at = #{confirmedAt},
+        updated_at = #{updatedAt}
+        WHERE settlement_id = #{settlementId}
+        AND status = 'PENDING'
+        AND needs_recalculation = FALSE
+    </update>
+
+    <update id="updateAggregates">
+        UPDATE settlement
+        SET gross_amount = #{grossAmount},
+        refund_amount = #{refundAmount},
+        commission_amount = #{commissionAmount},
+        net_amount = #{netAmount},
+        needs_recalculation = FALSE,
         updated_at = #{updatedAt}
         WHERE settlement_id = #{settlementId}
         AND status = 'PENDING'

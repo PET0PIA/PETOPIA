@@ -100,6 +100,35 @@ class SettlementControllerTest {
     }
 
     @Test
+    void recalculatesSettlement() throws Exception {
+        given(settlementService.recalculate(1L)).willReturn(sampleResponse("PENDING"));
+
+        mockMvc.perform(put("/api/settlements/1/recalculate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.grossAmount").value(150000));
+    }
+
+    @Test
+    void returns409WhenRecalculatingConfirmedSettlement() throws Exception {
+        willThrow(new CommonException(ErrorCode.SETTLEMENT_NOT_RECALCULABLE))
+                .given(settlementService).recalculate(1L);
+
+        mockMvc.perform(put("/api/settlements/1/recalculate"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ST004"));
+    }
+
+    @Test
+    void returns404WhenRecalculatingNonExistentSettlement() throws Exception {
+        willThrow(new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND))
+                .given(settlementService).recalculate(999L);
+
+        mockMvc.perform(put("/api/settlements/999/recalculate"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ST001"));
+    }
+
+    @Test
     void getsSettlementDetail() throws Exception {
         given(settlementService.getByFairAndBusiness(10L, 20L)).willReturn(sampleResponse("PENDING"));
 
