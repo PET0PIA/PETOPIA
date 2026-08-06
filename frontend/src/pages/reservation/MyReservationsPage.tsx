@@ -1,0 +1,90 @@
+import { ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { EmptyState } from "../../components/common/EmptyState";
+import { PageHeader } from "../../components/common/PageHeader";
+import { Badge } from "../../components/ui/Badge";
+import { Table } from "../../components/ui/Table";
+import { mockReservations, type ReservationStatus } from "../../mocks/reservations";
+
+// 예약 상태 표시 규칙(AI_UI_RULES 색 규칙):
+// 빨강=결제 대기(사용자가 이어서 결제해야 하는 핵심 행동), 초록=확정·입장 완료(정상),
+// 회색=취소·만료(무효/종료).
+const statusLabels: Record<ReservationStatus, string> = {
+  PENDING_PAYMENT: "결제 대기",
+  CONFIRMED: "예약 확정",
+  CHECKED_IN: "입장 완료",
+  CANCELED: "취소됨",
+  EXPIRED: "만료됨",
+};
+const statusTones: Record<ReservationStatus, "primary" | "leaf" | "neutral"> = {
+  PENDING_PAYMENT: "primary",
+  CONFIRMED: "leaf",
+  CHECKED_IN: "leaf",
+  CANCELED: "neutral",
+  EXPIRED: "neutral",
+};
+
+function formatTime(time: string) {
+  return time.slice(0, 5);
+}
+
+export function MyReservationsPage() {
+  const navigate = useNavigate();
+
+  // 백엔드 연동 전이라 mock 데이터를 그대로 그린다.
+  const reservations = mockReservations;
+
+  return (
+    <div className="mx-auto max-w-5xl py-2">
+      <PageHeader
+        eyebrow="내 예약"
+        title="내 예약 목록"
+        description="예매한 행사를 눌러 방문일·입장 정보와 입장 QR을 확인하고, 예약을 변경하거나 취소할 수 있어요."
+      />
+
+      {reservations.length === 0 ? (
+        <EmptyState
+          title="아직 예약한 행사가 없어요."
+          description="티켓 예매에서 관심 있는 행사를 예약하면 이곳에서 확인할 수 있어요."
+          actionTo="/tickets"
+          actionLabel="티켓 예매하러 가기"
+        />
+      ) : (
+        <Table>
+          <thead>
+            <tr className="border-b border-line text-xs font-bold text-muted">
+              <th className="px-4 py-3">행사</th>
+              <th className="px-4 py-3">방문일</th>
+              <th className="px-4 py-3">입장 시간</th>
+              <th className="px-4 py-3">상태</th>
+              <th className="px-4 py-3" aria-label="상세" />
+            </tr>
+          </thead>
+          <tbody>
+            {reservations.map((item) => (
+              <tr
+                key={item.reservationId}
+                onClick={() => navigate(`/reservations/me/${item.reservationId}`)}
+                className="cursor-pointer border-b border-line last:border-0 hover:bg-page"
+              >
+                <td className="px-4 py-3 font-bold">{item.fairName}</td>
+                <td className="px-4 py-3 text-muted">{item.visitDate}</td>
+                <td className="px-4 py-3 text-muted">
+                  {formatTime(item.entryStartTime)} ~ {formatTime(item.entryEndTime)}
+                </td>
+                <td className="px-4 py-3">
+                  <Badge tone={statusTones[item.reservationStatus]}>
+                    {statusLabels[item.reservationStatus]}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-right text-muted">
+                  <ChevronRight size={16} className="inline" aria-hidden="true" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </div>
+  );
+}
