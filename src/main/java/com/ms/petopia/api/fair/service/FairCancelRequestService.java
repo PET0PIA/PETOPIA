@@ -14,6 +14,7 @@ import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +52,14 @@ public class FairCancelRequestService {
 
     /**
      * 취소를 신청한다. PENDING 상태로 등록되고, SUPER_ADMIN의 검토를 기다린다.
+     *
+     * <p>{@code selectPendingByFairId} 확인 후 insert하는 방식이라 애플리케이션 레벨의
+     * 체크만으로는 두 요청이 동시에 들어오면 둘 다 통과해 PENDING이 중복 생성될 수 있다.
+     * 그래서 이 체크는 "흔한 경우를 빨리 걸러 불필요한 제약 위반 예외를 피하는" 용도로만
+     * 남겨두고, 실제 방어는 {@code fair_cancel_requests.pending_key} 부분 유니크 제약
+     * (V11 마이그레이션, {@code application.active_key}와 동일한 패턴)이 DB 레벨에서
+     * 맡는다. 그 제약을 위반하면(동시에 들어온 다른 요청이 먼저 커밋됐으면)
+     * {@link DuplicateKeyException}을 잡아 동일한 에러 코드로 변환한다.
      */
     @Transactional
     public FairCancelRequestResponse create(Long fairId, Long requestedBy, CreateFairCancelRequestRequest request) {
@@ -75,7 +84,11 @@ public class FairCancelRequestService {
         cancelRequest.setReason(request.reason().trim());
         cancelRequest.setCreatedAt(timeProvider.now());
 
-        cancelRequestMapper.insert(cancelRequest);
+        try {
+            cancelRequestMapper.insert(cancelRequest);
+        } catch (DuplicateKeyException e) {
+            throw new CommonException(ErrorCode.FAIR_CANCEL_NOT_REQUESTABLE);
+        }
         return toResponse(cancelRequest);
     }
 
@@ -94,6 +107,12 @@ public class FairCancelRequestService {
      * 취소 신청을 승인하거나 반려한다. PENDING 상태의 신청만 검토할 수 있다.
      * 승인 시 fairs.canceled_at을 채운다 - fairs.status는 바꾸지 않는다(취소는 상태값이 아니라
      * 플래그로 관리한다는 기존 설계, {@link FairStatus} javadoc 참고).
+     *
+     * <p>PENDING 여부는 미리 SELECT로 확인하지 않고 UPDATE의 WHERE 절이 직접 검증한다
+     * ({@link com.ms.petopia.api.fair.mapper.FairCancelRequestMapper#update} 참고).
+     * "확인 후 갱신" 순서로 하면 두 검토 요청이 동시에 PENDING을 읽어 둘 다 통과해버릴 수
+     * 있는데, 조건부 UPDATE는 그 경합을 DB가 원자적으로 해소하게 해서
+     * 둘 중 먼저 커밋된 하나만 실제로 반영되고 나머지는 영향 행 0건으로 실패한다.
      */
     @Transactional
     public ReviewFairCancelRequestResponse review(
@@ -102,10 +121,9 @@ public class FairCancelRequestService {
         if (reviewerId == null || reviewerId <= 0 || request == null || request.decision() == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        FairCancelRequest cancelRequest = findCancelRequestInFair(fairId, cancelRequestId);
-        if (cancelRequest.getStatus() != FairCancelRequestStatus.PENDING) {
-            throw new CommonException(ErrorCode.FAIR_CANCEL_REQUEST_NOT_PENDING);
-        }
+        // fairId 소속 여부(404) 확인용. 존재 자체는 레이스가 없는 값이라 미리 조회해도 안전하다 -
+        // 상태(PENDING) 판단만 아래 조건부 UPDATE로 넘긴다.
+        findCancelRequestInFair(fairId, cancelRequestId);
         boolean approved = request.decision() == FairReviewDecision.APPROVE;
         if (!approved && (request.rejectReason() == null || request.rejectReason().isBlank())) {
             throw new CommonException(ErrorCode.FAIR_CANCEL_REJECT_REASON_REQUIRED);
@@ -123,7 +141,10 @@ public class FairCancelRequestService {
             update.setStatus(FairCancelRequestStatus.REJECTED);
             update.setRejectReason(request.rejectReason().trim());
         }
-        cancelRequestMapper.update(update);
+        int updated = cancelRequestMapper.update(update);
+        if (updated == 0) {
+            throw new CommonException(ErrorCode.FAIR_CANCEL_REQUEST_NOT_PENDING);
+        }
 
         LocalDateTime canceledAt = null;
         if (approved) {

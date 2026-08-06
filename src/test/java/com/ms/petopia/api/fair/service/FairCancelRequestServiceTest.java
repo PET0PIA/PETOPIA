@@ -21,6 +21,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -142,6 +144,25 @@ class FairCancelRequestServiceTest {
         verify(cancelRequestMapper, never()).insert(any());
     }
 
+    /**
+     * selectPendingByFairId 확인과 insert 사이의 레이스로 다른 트랜잭션이 먼저 PENDING을
+     * 커밋하면, 이 트랜잭션의 insert는 pending_key 유니크 제약(V11 마이그레이션)에 걸려
+     * DuplicateKeyException을 던진다. 이 케이스를 같은 에러 코드로 변환하는지 검증한다.
+     */
+    @Test
+    @DisplayName("insert 시점에 유니크 제약을 위반하면(동시 신청) FAIR_CANCEL_NOT_REQUESTABLE로 변환한다")
+    void create_동시신청으로_유니크제약위반되면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+        given(cancelRequestMapper.selectPendingByFairId(FAIR_ID)).willReturn(null);
+        willThrow(new DuplicateKeyException("UK_FAIR_CANCEL_REQUESTS_PENDING"))
+                .given(cancelRequestMapper).insert(any());
+
+        assertErrorCode(
+                () -> cancelRequestService.create(FAIR_ID, REQUESTED_BY, new CreateFairCancelRequestRequest("사유")),
+                ErrorCode.FAIR_CANCEL_NOT_REQUESTABLE
+        );
+    }
+
     // ===== getCancelRequests =====
 
     @Test
@@ -169,6 +190,7 @@ class FairCancelRequestServiceTest {
     @DisplayName("PENDING 취소 신청을 승인하면 APPROVED로 바뀌고 fairs.canceled_at을 채운다")
     void review_승인하면_행사canceledAt을_채운다() {
         given(cancelRequestMapper.selectById(CANCEL_REQUEST_ID)).willReturn(cancelRequest(FairCancelRequestStatus.PENDING));
+        given(cancelRequestMapper.update(any())).willReturn(1);
 
         ReviewFairCancelRequestResponse response = cancelRequestService.review(
                 FAIR_ID, CANCEL_REQUEST_ID, REVIEWER_ID, new ReviewFairCancelRequestRequest(FairReviewDecision.APPROVE, null)
@@ -193,6 +215,7 @@ class FairCancelRequestServiceTest {
     @DisplayName("PENDING 취소 신청을 사유와 함께 반려하면 REJECTED로 바뀌고 fairs는 건드리지 않는다")
     void review_반려하면_행사는_건드리지않는다() {
         given(cancelRequestMapper.selectById(CANCEL_REQUEST_ID)).willReturn(cancelRequest(FairCancelRequestStatus.PENDING));
+        given(cancelRequestMapper.update(any())).willReturn(1);
 
         ReviewFairCancelRequestResponse response = cancelRequestService.review(
                 FAIR_ID, CANCEL_REQUEST_ID, REVIEWER_ID,
@@ -225,6 +248,8 @@ class FairCancelRequestServiceTest {
     @DisplayName("이미 검토된(PENDING이 아닌) 취소 신청은 FAIR_CANCEL_REQUEST_NOT_PENDING을 던진다")
     void review_이미검토된신청이면_예외를_던진다() {
         given(cancelRequestMapper.selectById(CANCEL_REQUEST_ID)).willReturn(cancelRequest(FairCancelRequestStatus.APPROVED));
+        // status = 'PENDING' 조건부 UPDATE라 이미 APPROVED인 행은 실제로 0건 갱신된다.
+        given(cancelRequestMapper.update(any())).willReturn(0);
 
         assertErrorCode(
                 () -> cancelRequestService.review(
@@ -233,7 +258,28 @@ class FairCancelRequestServiceTest {
                 ),
                 ErrorCode.FAIR_CANCEL_REQUEST_NOT_PENDING
         );
-        verify(cancelRequestMapper, never()).update(any());
+        verify(fairMapper, never()).update(any());
+    }
+
+    /**
+     * 조건부 UPDATE(동시성 방어)의 핵심 케이스: selectById로 읽은 시점엔 PENDING이었지만,
+     * 그 사이 다른 트랜잭션이 먼저 검토를 끝내서 실제 UPDATE는 0건 갱신되는 경우다.
+     * FairTransitionServiceTest의 "갱신 0건" 케이스와 같은 방식으로 검증한다.
+     */
+    @Test
+    @DisplayName("조회 이후 이미 다른 트랜잭션이 검토를 끝냈으면(갱신 0건) fairs를 건드리지 않고 FAIR_CANCEL_REQUEST_NOT_PENDING을 던진다")
+    void review_동시검토로_이미처리됐으면_fairs를_건드리지않는다() {
+        given(cancelRequestMapper.selectById(CANCEL_REQUEST_ID)).willReturn(cancelRequest(FairCancelRequestStatus.PENDING));
+        given(cancelRequestMapper.update(any())).willReturn(0);
+
+        assertErrorCode(
+                () -> cancelRequestService.review(
+                        FAIR_ID, CANCEL_REQUEST_ID, REVIEWER_ID,
+                        new ReviewFairCancelRequestRequest(FairReviewDecision.APPROVE, null)
+                ),
+                ErrorCode.FAIR_CANCEL_REQUEST_NOT_PENDING
+        );
+        verify(fairMapper, never()).update(any());
     }
 
     @Test
