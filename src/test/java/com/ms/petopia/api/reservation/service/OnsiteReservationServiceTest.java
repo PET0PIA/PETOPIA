@@ -16,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDate;
@@ -48,6 +49,8 @@ class OnsiteReservationServiceTest {
     private ReservationTimeProvider timeProvider;
     @Mock
     private EntryQrService entryQrService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private OnsiteReservationService service;

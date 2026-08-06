@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class ReservationPaymentCompletionServiceTest {
 
+    private static final Long FAIR_ID = 100L;
     private static final LocalDateTime PAID_AT = LocalDateTime.of(2026, 8, 1, 10, 5);
     private static final LocalDateTime RECEIVED_AT = LocalDateTime.of(2026, 8, 1, 10, 5, 1);
     private static final ReservationPaymentCompletedCommand COMMAND =
@@ -37,6 +39,8 @@ class ReservationPaymentCompletionServiceTest {
     private EntryQrService entryQrService;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     @InjectMocks
     private ReservationPaymentCompletionService service;
 
@@ -132,6 +136,7 @@ class ReservationPaymentCompletionServiceTest {
     private PaymentConfirmationReservationRow pendingReservation(long amount) {
         PaymentConfirmationReservationRow row = new PaymentConfirmationReservationRow();
         row.setReservationId(10L);
+        row.setFairId(FAIR_ID);
         row.setStatus("PENDING_PAYMENT");
         row.setReservationAmount(amount);
         row.setPaymentExpiresAt(PAID_AT.plusMinutes(5));

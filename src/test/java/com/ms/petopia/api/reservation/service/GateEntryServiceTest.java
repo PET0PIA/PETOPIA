@@ -9,6 +9,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.context.ApplicationEventPublisher;
+
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +32,8 @@ class GateEntryServiceTest {
     private ReservationOperatorAccessService operatorAccessService;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     @InjectMocks
     private GateEntryService service;
 
