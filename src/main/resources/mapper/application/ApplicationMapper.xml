@@ -107,10 +107,17 @@
             f.name AS fairName,
             a.status AS status,
             a.final_price AS finalPrice,
-            a.reject_reason AS rejectReason
+            a.reject_reason AS rejectReason,
+            acr.status AS cancelRequestStatus
         FROM application a
         JOIN business b ON b.business_id = a.business_id
         JOIN fairs f ON f.fair_id = a.fair_id
+        LEFT JOIN application_cancel_request acr
+            ON acr.application_id = a.application_id
+            AND acr.cancel_request_id = (
+                SELECT MAX(cancel_request_id) FROM application_cancel_request
+                WHERE application_id = a.application_id
+            )
         WHERE b.owner_id = #{ownerId}
         <if test="businessId != null">
             AND a.business_id = #{businessId}
@@ -134,9 +141,18 @@
             a.reject_reason AS rejectReason,
             af.attachment_url AS attachmentUrl,
             a.submitted_at AS submittedAt,
-            a.reviewed_at AS reviewedAt
+            a.reviewed_at AS reviewedAt,
+            acr.status AS cancelRequestStatus,
+            acr.reason AS cancelReason,
+            acr.decided_at AS cancelDecidedAt
         FROM application a
         JOIN application_form af ON af.application_id = a.application_id
+        LEFT JOIN application_cancel_request acr
+            ON acr.application_id = a.application_id
+            AND acr.cancel_request_id = (
+                SELECT MAX(cancel_request_id) FROM application_cancel_request
+                WHERE application_id = a.application_id
+            )
         WHERE a.application_id = #{applicationId}
     </select>
 

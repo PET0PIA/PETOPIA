@@ -29,4 +29,9 @@ public class ApplicationDetailResponse {
     private LocalDateTime submittedAt;
     private LocalDateTime reviewedAt; // 심사 전이면 null
 
+    // 신청 취소 시
+    private String cancelRequestStatus; // 최신 취소 요청 상태(REQUESTED/APPROVED/REJECTED), 요청한 적 없으면 null
+    private String cancelReason; // 취소 요청 사유, 없으면 null
+    private LocalDateTime cancelDecidedAt; // 담당자가 취소 요청 처리한 시각, 미처리/없으면 null
+
 }
