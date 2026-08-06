@@ -283,6 +283,16 @@ public class ApplicationService {
 
     }
 
+    // 담당 행사의 취소 요청 목록 조회 (행사 담당자용)
+    public List<ApplicationCancelRequestSummaryResponse> getCancelRequestsForFair(Long adminUserId, Long fairId, String status) {
+
+        // 이 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, fairId);
+
+        return applicationMapper.selectCancelRequestsByFair(fairId, status);
+
+    }
+
     // 참가 신청서 승인 (행사 담당자용)
     @Transactional
     public ApplicationReviewResultResponse approveApplication(Long adminUserId, Long applicationId, ApplicationApproveRequest request) {

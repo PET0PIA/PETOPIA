@@ -71,4 +71,8 @@ public interface ApplicationMapper {
                                   @Param("rejectReason") String rejectReason,
                                   @Param("reviewedAt") LocalDateTime reviewedAt);
 
+    // 담당 행사에 들어온 취소 요청 목록 조회 (status는 선택적 필터)
+    List<ApplicationCancelRequestSummaryResponse> selectCancelRequestsByFair(@Param("fairId") Long fairId,
+                                                                             @Param("status") String status);
+
 }

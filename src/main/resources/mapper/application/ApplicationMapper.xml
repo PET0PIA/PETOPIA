@@ -209,4 +209,25 @@
         AND status = 'PENDING_REVIEW'
     </update>
 
+    <!-- 담당 행사에 들어온 취소 요청 목록(행사 담당자용). status는 선택적 필터 -->
+    <select id="selectCancelRequestsByFair"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationCancelRequestSummaryResponse">
+        SELECT acr.cancel_request_id AS cancelRequestId,
+            acr.application_id AS applicationId,
+            a.business_id AS businessId,
+            b.name AS businessName,
+            acr.reason AS reason,
+            acr.status AS status,
+            acr.requested_at AS requestedAt,
+            acr.decided_at AS decidedAt
+        FROM application_cancel_request acr
+        JOIN application a ON a.application_id = acr.application_id
+        JOIN business b ON b.business_id = a.business_id
+        WHERE a.fair_id = #{fairId}
+        <if test="status != null and status != ''">
+            AND acr.status = #{status}
+        </if>
+        ORDER BY acr.requested_at DESC
+    </select>
+
 </mapper>

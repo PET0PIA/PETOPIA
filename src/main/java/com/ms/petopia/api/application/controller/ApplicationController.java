@@ -111,4 +111,18 @@ public class ApplicationController {
 
     }
 
+    // 담당 행사의 취소 요청 목록 조회 (행사 담당자용)
+    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
+    @GetMapping("/fairs/{fairId}/cancel-requests")
+    public ResponseEntity<ApiResponse<List<ApplicationCancelRequestSummaryResponse>>> getCancelRequestsForFair(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long fairId,
+            @RequestParam(required = false) String status
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.getCancelRequestsForFair(adminUserId, fairId, status)));
+
+    }
+
 }
