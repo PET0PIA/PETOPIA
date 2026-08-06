@@ -45,6 +45,12 @@
            AND payment_type = 'RESERVATION_DEPOSIT'
     </select>
 
+    <select id="selectByIdempotencyKey" resultType="PaymentRow">
+        SELECT <include refid="paymentColumns"/>
+          FROM payment
+         WHERE idempotency_key = #{idempotencyKey}
+    </select>
+
     <insert id="insert" parameterType="PaymentRow"
             useGeneratedKeys="true" keyProperty="paymentId">
         INSERT INTO payment (
@@ -83,6 +89,19 @@
         updated_at = #{updatedAt}
         WHERE payment_id = #{paymentId}
         AND status = 'PROCESSING'
+    </update>
+
+    <!-- FAILED 행을 PENDING으로 되돌려 재사용한다(재결제 허용). markProcessing과 같은 이유로
+         WHERE status = 'FAILED' 가드를 원자적 선점 조건으로 쓴다. -->
+    <update id="resetFailedToPending">
+        UPDATE payment
+        SET status = 'PENDING',
+        amount = #{amount},
+        toss_payment_key = NULL,
+        paid_at = NULL,
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'FAILED'
     </update>
 
     <!-- FOR UPDATE로 잠근다 — RefundService.refund()의 selectByIdForUpdate와 같은 결제 행을
