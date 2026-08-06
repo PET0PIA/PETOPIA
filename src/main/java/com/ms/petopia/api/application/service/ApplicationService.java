@@ -499,4 +499,51 @@ public class ApplicationService {
 
     }
 
+    // 참가 취소 요청 승인 (행사 담당자용) — application.status도 CANCELED로 함께 전환
+    @Transactional
+    public ApplicationCancelRequestResultResponse approveCancelRequest(Long adminUserId, Long applicationId) {
+        
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, application.getFairId());
+
+        // 처리 대기 중인 취소 요청 존재 확인
+        ApplicationCancelRequest cancelRequest = applicationMapper.selectPendingCancelRequest(applicationId);
+
+        if(cancelRequest == null) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        LocalDateTime decidedAt = LocalDateTime.now();
+
+        // 취소 요청 승인 처리 (동시 처리 방지)
+        int cancelRequestUpdated = applicationMapper.updateCancelRequestApproved(cancelRequest.getCancelRequestId(), decidedAt);
+
+        if(cancelRequestUpdated == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        // 신청 상태를 CANCELED로 전환 (동시 처리 방지)
+        int applicationUpdated = applicationMapper.updateApplicationCanceled(applicationId);
+
+        if(applicationUpdated == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_CANCELABLE);
+        }
+
+        return ApplicationCancelRequestResultResponse.builder()
+                .cancelRequestId(cancelRequest.getCancelRequestId())
+                .applicationId(applicationId)
+                .status(ApplicationCancelRequest.Status.APPROVED.name())
+                .applicationStatus(Application.Status.CANCELED.name())
+                .decidedAt(decidedAt)
+                .build();
+        
+    }
+
 }

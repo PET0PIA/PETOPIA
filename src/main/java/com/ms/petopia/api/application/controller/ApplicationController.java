@@ -141,4 +141,18 @@ public class ApplicationController {
 
     }
 
+    // 참가 취소 요청 승인 (행사 담당자용)
+    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
+    @PutMapping("/applications/{applicationId}/cancel-requests/approve")
+    public ResponseEntity<ApiResponse<ApplicationCancelRequestResultResponse>> approveCancelRequest(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long applicationId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.approveCancelRequest(adminUserId, applicationId)));
+
+    }
+
+
 }

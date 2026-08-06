@@ -13,10 +13,10 @@ public class ApplicationCancelRequest {
 
     private Long cancelRequestId;
     private Long applicationId;
-    private String reason;
-    private Status status;
-    private LocalDateTime requestedAt;
-    private LocalDateTime decidedAt;
+    private String reason; // 취소 이유
+    private Status status; // 취소 상태
+    private LocalDateTime requestedAt; // 취소 요청 일시
+    private LocalDateTime decidedAt; // 담당자 취소 요청 처리 일시
 
     /*
      * 취소 요청 처리 상태.

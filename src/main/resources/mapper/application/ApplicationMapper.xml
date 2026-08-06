@@ -265,4 +265,27 @@
         SELECT operation_start_date FROM fairs WHERE fair_id = #{fairId}
     </select>
 
+    <!-- 이 신청서의 현재 처리 대기 중인(REQUESTED) 취소 요청 조회 -->
+    <select id="selectPendingCancelRequest" resultType="com.ms.petopia.api.application.domain.ApplicationCancelRequest">
+        SELECT cancel_request_id AS cancelRequestId, application_id AS applicationId,
+            reason, status, requested_at AS requestedAt, decided_at AS decidedAt
+        FROM application_cancel_request
+        WHERE application_id = #{applicationId} AND status = 'REQUESTED'
+    </select>
+
+    <!-- 취소 요청 승인 처리: REQUESTED일 때만 전환 (동시 처리 방지) -->
+    <update id="updateCancelRequestApproved">
+        UPDATE application_cancel_request
+        SET status = 'APPROVED', decided_at = #{decidedAt}
+        WHERE cancel_request_id = #{cancelRequestId} AND status = 'REQUESTED'
+    </update>
+
+    <!-- 취소 요청 승인에 따른 신청 상태 전환: PAYMENT_PENDING/CONFIRMED일 때만 CANCELED로 (동시 처리 방지) -->
+    <update id="updateApplicationCanceled">
+        UPDATE application
+        SET status = 'CANCELED'
+        WHERE application_id = #{applicationId}
+        AND status IN ('PAYMENT_PENDING', 'CONFIRMED')
+    </update>
+
 </mapper>

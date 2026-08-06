@@ -86,4 +86,14 @@ public interface ApplicationMapper {
     // 행사 운영 시작일 조회 (취소 요청 마감 기한 판정용)
     LocalDate selectOperationStartDateByFairId(@Param("fairId") Long fairId);
 
+    // 이 신청서의 현재 처리 대기 중인(REQUESTED) 취소 요청 조회
+    ApplicationCancelRequest selectPendingCancelRequest(@Param("applicationId") Long applicationId);
+
+    // 취소 요청 승인 처리 (반환: 영향받은 행 수)
+    int updateCancelRequestApproved(@Param("cancelRequestId") Long cancelRequestId,
+                                    @Param("decidedAt") LocalDateTime decidedAt);
+
+    // 취소 요청 승인에 따른 신청 상태 전환 (반환: 영향받은 행 수)
+    int updateApplicationCanceled(@Param("applicationId") Long applicationId);
+
 }

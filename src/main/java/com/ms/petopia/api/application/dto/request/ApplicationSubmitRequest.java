@@ -36,6 +36,6 @@ public class ApplicationSubmitRequest {
 
     private Boolean agreedTerms; // 제출 시 true 필수
 
-    private String attachmentUrl; // 제출서류 zip URL, 선택 입력
+    private String attachmentUrl; // 사업자등록증·인증서 등 제출서류를 PDF 하나로 합쳐서 업로드, 선택 입력
 
 }
