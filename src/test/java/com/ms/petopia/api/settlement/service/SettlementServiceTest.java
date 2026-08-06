@@ -1,5 +1,6 @@
 package com.ms.petopia.api.settlement.service;
 
+import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.refund.dto.RefundRow;
@@ -44,6 +45,9 @@ class SettlementServiceTest {
     @Mock
     private RefundMapper refundMapper;
 
+    @Mock
+    private CommissionRateService commissionRateService;
+
     @InjectMocks
     private SettlementService settlementService;
 
@@ -69,6 +73,7 @@ class SettlementServiceTest {
         ));
         given(refundMapper.selectByPaymentId(1L)).willReturn(null);
         given(refundMapper.selectByPaymentId(2L)).willReturn(null);
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.0500"));
 
         // Act
         SettlementResponse result = settlementService.calculate(10L, 20L);
@@ -99,6 +104,7 @@ class SettlementServiceTest {
         refund.setRefundAmount(100000L);
         given(refundMapper.selectByPaymentId(1L)).willReturn(refund);
         given(refundMapper.selectByPaymentId(2L)).willReturn(null);
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.0500"));
 
         // Act
         SettlementResponse result = settlementService.calculate(10L, 20L);
@@ -115,6 +121,7 @@ class SettlementServiceTest {
     void calculate_결제없음_0원정산() {
         given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(null);
         given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of());
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.0500"));
 
         SettlementResponse result = settlementService.calculate(10L, 20L);
 
@@ -141,6 +148,7 @@ class SettlementServiceTest {
     void calculate_동시계산_중복키_예외를던진다() {
         given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(null);
         given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of());
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.0500"));
         willThrow(new DuplicateKeyException("settlement fair-business unique violation"))
                 .given(settlementMapper).insert(any(SettlementRow.class));
 
