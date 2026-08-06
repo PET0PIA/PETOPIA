@@ -7,12 +7,9 @@ import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 // @RestController = @Controller + @ResponseBody 합친 것.
@@ -25,8 +22,6 @@ import org.springframework.web.bind.annotation.*;
 // PaymentService를 필드로 받는 생성자를 롬복이 자동으로 만들어줌
 // (= 스프링이 PaymentService 빈을 여기 주입해줌, 의존성 주입)
 @RequiredArgsConstructor
-// getPayments/getMyPayments의 @Min/@Max(메서드 파라미터 단위 검증)가 동작하려면 클래스에 필요.
-@Validated
 public class PaymentController {
 
     private final PaymentService paymentService;
@@ -103,25 +98,28 @@ public class PaymentController {
     }
 
     // 조건별 결제 목록(관리자용). fairId·businessId·paymentType·status 전부 선택적 필터.
+    // page/size 범위 검증은 여기 어노테이션이 아니라 PaymentService에서 한다 — standaloneSetup
+    // 기반 컨트롤러 테스트에서 메서드 파라미터 검증(@Min/@Max)이 실제로 안 걸리는 걸 확인해서
+    // (CodeRabbit 리뷰 지적, PR #62), 프레임워크 동작에 기대지 않기로 함.
     @GetMapping("/payments")
     public PaymentListResponse getPayments(
             @RequestParam(required = false) Long fairId,
             @RequestParam(required = false) Long businessId,
             @RequestParam(required = false) String paymentType,
             @RequestParam(required = false) String status,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
         // TODO 인증 도메인 완성 후 event_admin(담당행사)/super_admin 권한 검증 추가
         return paymentService.getPayments(fairId, businessId, paymentType, status, page, size);
     }
 
-    // 로그인 사용자 본인의 결제 내역(마이페이지).
+    // 로그인 사용자 본인의 결제 내역(마이페이지). page/size 검증은 위와 동일하게 서비스 계층에서.
     @GetMapping("/me/payments")
     public PaymentListResponse getMyPayments(
             @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
-            @RequestParam(defaultValue = "0") @Min(0) int page,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
         return paymentService.getMyPayments(userId, page, size);
     }

@@ -171,22 +171,43 @@ public class PaymentService {
     /**
      * 조건별 결제 목록 조회(관리자용). fairId·businessId·paymentType·status 전부 선택적이고
      * 넘긴 값들은 AND로 조합된다.
+     *
+     * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} page·size가 범위를 벗어났을 때
      */
     public PaymentListResponse getPayments(
             Long fairId, Long businessId, String paymentType, String status, int page, int size
     ) {
+        validatePageAndSize(page, size);
         long offset = (long) page * size;
         List<PaymentRow> rows = paymentMapper.selectByFilter(fairId, businessId, paymentType, status, null, offset, size);
         long total = paymentMapper.countByFilter(fairId, businessId, paymentType, status, null);
         return PaymentListResponse.of(rows, page, size, total);
     }
 
-    /** 로그인 사용자 본인의 결제 내역 조회(마이페이지). 다른 필터 없이 payerUserId만 건다. */
+    /**
+     * 로그인 사용자 본인의 결제 내역 조회(마이페이지). 다른 필터 없이 payerUserId만 건다.
+     *
+     * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} page·size가 범위를 벗어났을 때
+     */
     public PaymentListResponse getMyPayments(Long userId, int page, int size) {
+        validatePageAndSize(page, size);
         long offset = (long) page * size;
         List<PaymentRow> rows = paymentMapper.selectByFilter(null, null, null, null, userId, offset, size);
         long total = paymentMapper.countByFilter(null, null, null, null, userId);
         return PaymentListResponse.of(rows, page, size, total);
+    }
+
+    /**
+     * 컨트롤러의 {@code @Min}/{@code @Max} 어노테이션은 여기서 검증을 대신하지 않는다 —
+     * 이 프로젝트가 쓰는 {@code standaloneSetup} 기반 컨트롤러 테스트에서 메서드 파라미터
+     * 검증이 실제로 안 걸리는 걸 확인해서(CodeRabbit 리뷰 지적, PR #62), 프레임워크 동작에
+     * 기대지 않고 서비스 계층에서 명시적으로 막는다. 특히 page < 0이면 SQL의
+     * {@code OFFSET}이 음수가 돼서 DB 에러로 이어질 수 있어 이 검증이 실질적으로도 중요하다.
+     */
+    private void validatePageAndSize(int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
     }
 
 

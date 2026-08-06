@@ -594,6 +594,44 @@ class PaymentServiceTest {
         verify(paymentMapper).selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), eq(0L), eq(20));
     }
 
+    // page/size 검증은 컨트롤러의 @Min/@Max가 아니라 여기(서비스 계층)에서 한다 —
+    // standaloneSetup 기반 컨트롤러 테스트에서 메서드 파라미터 검증이 실제로 안 걸리는 걸
+    // 확인해서(CodeRabbit 리뷰 지적, PR #62) 프레임워크 동작에 기대지 않기로 했다. page가
+    // 음수면 SQL의 OFFSET이 음수가 돼서 DB 에러로 이어질 수 있어 특히 중요한 방어다.
+    @Test
+    @DisplayName("페이지 번호가 음수면 예외를 던진다")
+    void getPayments_페이지음수_예외를던진다() {
+        assertThatThrownBy(() -> paymentService.getPayments(null, null, null, null, -1, 20))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+        verify(paymentMapper, never()).selectByFilter(any(), any(), any(), any(), any(), anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("페이지 크기가 0 이하이거나 100을 초과하면 예외를 던진다")
+    void getPayments_페이지크기범위밖_예외를던진다() {
+        assertThatThrownBy(() -> paymentService.getPayments(null, null, null, null, 0, 0))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+        assertThatThrownBy(() -> paymentService.getPayments(null, null, null, null, 0, 101))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    @Test
+    @DisplayName("내 결제내역도 페이지 범위를 벗어나면 예외를 던진다")
+    void getMyPayments_페이지범위밖_예외를던진다() {
+        assertThatThrownBy(() -> paymentService.getMyPayments(90L, -1, 20))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
 }
 
 

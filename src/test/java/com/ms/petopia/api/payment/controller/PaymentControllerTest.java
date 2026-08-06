@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
@@ -306,6 +307,22 @@ class PaymentControllerTest {
     }
 
     @Test
+    void returns400WhenOpeningFeeAmountIsZeroOrNegative() throws Exception {
+        // @Positive 검증(CodeRabbit 리뷰 지적, PR #62) — 0원/음수 결제 요청은 서비스까지 안 감
+        mockMvc.perform(post("/api/fairs/10/opening-payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":0}"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/fairs/10/opening-payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amount\":-1000}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void getsPaymentListFilteredByFair() throws Exception {
         given(paymentService.getPayments(eq(10L), isNull(), isNull(), isNull(), eq(0), eq(20))).willReturn(
                 new PaymentListResponse(List.of(
@@ -325,6 +342,38 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.totalPages").value(1));
 
         verify(paymentService).getPayments(eq(10L), isNull(), isNull(), isNull(), eq(0), eq(20));
+    }
+
+    @Test
+    void returns400WhenPageIsNegative() throws Exception {
+        // page/size 검증은 서비스 계층 책임(PaymentServiceTest 참고) — 여기선 그 예외가
+        // 컨트롤러까지 올라왔을 때 400으로 잘 변환되는지만 확인
+        willThrow(new CommonException(ErrorCode.INVALID_INPUT_VALUE))
+                .given(paymentService).getPayments(any(), any(), any(), any(), eq(-1), anyInt());
+
+        mockMvc.perform(get("/api/payments").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("C001"));
+    }
+
+    @Test
+    void returns400WhenSizeIsZero() throws Exception {
+        willThrow(new CommonException(ErrorCode.INVALID_INPUT_VALUE))
+                .given(paymentService).getPayments(any(), any(), any(), any(), anyInt(), eq(0));
+
+        mockMvc.perform(get("/api/payments").param("size", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("C001"));
+    }
+
+    @Test
+    void returns400WhenSizeExceedsMax() throws Exception {
+        willThrow(new CommonException(ErrorCode.INVALID_INPUT_VALUE))
+                .given(paymentService).getPayments(any(), any(), any(), any(), anyInt(), eq(101));
+
+        mockMvc.perform(get("/api/payments").param("size", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("C001"));
     }
 
     @Test

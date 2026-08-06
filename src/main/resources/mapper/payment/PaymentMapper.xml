@@ -113,7 +113,7 @@
         SELECT <include refid="paymentColumns"/>
           FROM payment
         <include refid="filterConditions"/>
-         ORDER BY created_at DESC
+         ORDER BY created_at DESC, payment_id DESC
          LIMIT #{size} OFFSET #{offset}
     </select>
 
