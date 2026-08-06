@@ -41,6 +41,13 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/api/v1/reservations/**",
+                                "/api/v1/fairs/*/reservations",
+                                "/api/v1/fairs/*/onsite-reservations"
+                        ).authenticated()
+                        .requestMatchers("/api/v1/admin/fairs/**")
+                        .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         //로그인한 본인만 비밀번호 변경 가능 - anyRequest().permitAll()보다 먼저 와야 함
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/password/change").authenticated()
                         //TODO 추후 role 기반 가드 확장

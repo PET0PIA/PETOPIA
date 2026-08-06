@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.settlement.mapper.SettlementMapper">
+
+    <sql id="settlementColumns">
+        settlement_id
+      , fair_id
+      , business_id
+      , gross_amount
+      , refund_amount
+      , commission_rate
+      , commission_amount
+      , net_amount
+      , status
+      , paid_at
+      , confirmed_at
+      , confirmed_by_user_id
+      , created_at
+      , updated_at
+    </sql>
+
+    <select id="selectById" resultType="SettlementRow">
+        SELECT <include refid="settlementColumns"/>
+          FROM settlement
+         WHERE settlement_id = #{settlementId}
+    </select>
+
+    <select id="selectByFairAndBusiness" resultType="SettlementRow">
+        SELECT <include refid="settlementColumns"/>
+          FROM settlement
+         WHERE fair_id = #{fairId}
+           AND business_id = #{businessId}
+    </select>
+
+    <select id="selectByFairId" resultType="SettlementRow">
+        SELECT <include refid="settlementColumns"/>
+          FROM settlement
+         WHERE fair_id = #{fairId}
+         ORDER BY business_id
+    </select>
+
+    <select id="selectItemByPaymentId" resultType="SettlementItemRow">
+        SELECT settlement_item_id
+             , settlement_id
+             , payment_id
+             , refund_id
+             , amount_included
+          FROM settlement_item
+         WHERE payment_id = #{paymentId}
+    </select>
+
+    <insert id="insert" parameterType="SettlementRow"
+            useGeneratedKeys="true" keyProperty="settlementId">
+        INSERT INTO settlement (
+            fair_id, business_id, gross_amount, refund_amount,
+            commission_rate, commission_amount, net_amount, status,
+            created_at, updated_at
+        ) VALUES (
+            #{fairId}, #{businessId}, #{grossAmount}, #{refundAmount},
+            #{commissionRate}, #{commissionAmount}, #{netAmount}, #{status},
+            #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <insert id="insertItems" useGeneratedKeys="true" keyProperty="settlementItemId">
+        INSERT INTO settlement_item (settlement_id, payment_id, refund_id, amount_included)
+        VALUES
+        <foreach collection="items" item="item" separator=",">
+            (#{item.settlementId}, #{item.paymentId}, #{item.refundId}, #{item.amountIncluded})
+        </foreach>
+    </insert>
+
+    <update id="confirm">
+        UPDATE settlement
+        SET status = 'CONFIRMED',
+        confirmed_by_user_id = #{confirmedByUserId},
+        confirmed_at = #{confirmedAt},
+        updated_at = #{updatedAt}
+        WHERE settlement_id = #{settlementId}
+        AND status = 'PENDING'
+    </update>
+
+</mapper>

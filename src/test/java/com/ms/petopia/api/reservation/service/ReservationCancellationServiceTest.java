@@ -18,6 +18,7 @@ import java.time.LocalTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -68,6 +69,22 @@ class ReservationCancellationServiceTest {
 
         verify(cancellationMapper).cancelReservation(
                 RESERVATION_ID, "CONFIRMED", null, USER_ID, NOW
+        );
+    }
+
+    @Test
+    void rejectsCancellationRequestFromAnotherUser() {
+        ReservationCancellationContext context = context("PENDING_PAYMENT", "ADVANCE", 10_000);
+        context.setUserId(99L);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+
+        assertError(() -> service.cancel(RESERVATION_ID, USER_ID, null), ErrorCode.ACCESS_DENIED);
+
+        verify(cancellationMapper, never()).cancelReservation(
+                any(), any(), any(), any(), any()
+        );
+        verify(cancellationMapper, never()).insertCanceledHistory(
+                any(), any(), any(), any(), any()
         );
     }
 

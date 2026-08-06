@@ -112,6 +112,16 @@ public enum ErrorCode {
     // ===== Notification =====
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),
     NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "N002", "해당 알림에 접근 권한이 없습니다."),
+
+    // ===== Refund =====
+    REFUND_NOT_FOUND(HttpStatus.NOT_FOUND, "RF001", "존재하지 않는 환불입니다."),
+    REFUND_TARGET_NOT_REFUNDABLE(HttpStatus.CONFLICT, "RF002", "환불할 수 없는 결제 상태입니다."),
+    REFUND_ALREADY_PROCESSED(HttpStatus.CONFLICT, "RF003", "이미 환불이 접수된 결제입니다."),
+
+    // ===== Settlement =====
+    SETTLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "ST001", "존재하지 않는 정산입니다."),
+    SETTLEMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ST002", "이미 계산된 정산이 있습니다."),
+    SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
     ;
 
     private final HttpStatus httpStatus;
