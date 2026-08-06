@@ -16,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.sql.SQLException;
@@ -52,6 +53,8 @@ class ReservationServiceTest {
 
     @Mock
     private EntryQrService entryQrService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -244,6 +247,25 @@ class ReservationServiceTest {
     void create_지난운영일_방문일선택불가예외를던진다() {
         ReservationCreationContext context = reservableContext(0);
         context.setOperationDate(TODAY.minusDays(1));
+        given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE)).willReturn(context);
+
+        assertErrorCode(
+                () -> reservationService.create(
+                        FAIR_ID,
+                        USER_ID,
+                        new CreateReservationRequest(VISIT_DATE, null, null)
+                ),
+                ErrorCode.RESERVATION_DATE_NOT_AVAILABLE
+        );
+
+        verify(reservationMapper, never()).insertReservation(any());
+    }
+
+    @Test
+    @DisplayName("당일 사전예약은 생성할 수 없다")
+    void create_당일사전예약_방문일선택불가예외를던진다() {
+        ReservationCreationContext context = reservableContext(0);
+        context.setOperationDate(TODAY);
         given(reservationMapper.selectCreationContextForUpdate(FAIR_ID, VISIT_DATE)).willReturn(context);
 
         assertErrorCode(

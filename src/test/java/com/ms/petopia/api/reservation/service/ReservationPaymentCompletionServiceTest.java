@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class ReservationPaymentCompletionServiceTest {
 
+    private static final Long FAIR_ID = 100L;
     private static final LocalDateTime PAID_AT = LocalDateTime.of(2026, 8, 1, 10, 5);
     private static final LocalDateTime RECEIVED_AT = LocalDateTime.of(2026, 8, 1, 10, 5, 1);
     private static final ReservationPaymentCompletedCommand COMMAND =
@@ -37,6 +39,8 @@ class ReservationPaymentCompletionServiceTest {
     private EntryQrService entryQrService;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     @InjectMocks
     private ReservationPaymentCompletionService service;
 
@@ -45,7 +49,7 @@ class ReservationPaymentCompletionServiceTest {
         given(mapper.selectReservationForUpdate(10L)).willReturn(pendingReservation(15_000));
         given(timeProvider.now()).willReturn(RECEIVED_AT);
         given(mapper.confirmPendingReservation(10L, PAID_AT, RECEIVED_AT)).willReturn(1);
-        given(entryQrService.issueForReservation(10L)).willReturn("qr-token");
+        given(entryQrService.issueForPaymentCompletion(10L)).willReturn("qr-token");
 
         ReservationPaymentCompletionResponse response = service.complete(COMMAND);
 
@@ -65,13 +69,31 @@ class ReservationPaymentCompletionServiceTest {
         receipt.setPaidAmount(15_000);
         receipt.setPaidAt(PAID_AT);
         given(mapper.selectReceiptByEventId("event-1")).willReturn(receipt);
-        given(entryQrService.issueForReservation(10L)).willReturn("qr-token");
+        given(entryQrService.issueForPaymentCompletion(10L)).willReturn("qr-token");
 
         ReservationPaymentCompletionResponse response = service.complete(COMMAND);
 
         assertThat(response.idempotentReplay()).isTrue();
         verify(mapper, never()).selectReservationForUpdate(10L);
         verify(mapper, never()).insertReceipt(COMMAND, RECEIVED_AT);
+    }
+
+    @Test
+    void returnsConfirmedWithoutQrWhenReplayArrivesAfterEntryEnds() {
+        ReservationPaymentReceiptRow receipt = new ReservationPaymentReceiptRow();
+        receipt.setEventId("event-1");
+        receipt.setPaymentId(20L);
+        receipt.setReservationId(10L);
+        receipt.setPaidAmount(15_000);
+        receipt.setPaidAt(PAID_AT);
+        given(mapper.selectReceiptByEventId("event-1")).willReturn(receipt);
+        given(entryQrService.issueForPaymentCompletion(10L)).willReturn(null);
+
+        ReservationPaymentCompletionResponse response = service.complete(COMMAND);
+
+        assertThat(response.reservationStatus()).isEqualTo("CONFIRMED");
+        assertThat(response.idempotentReplay()).isTrue();
+        assertThat(response.entryQrToken()).isNull();
     }
 
     @Test
@@ -102,9 +124,19 @@ class ReservationPaymentCompletionServiceTest {
         assertError(() -> service.complete(COMMAND), ErrorCode.RESERVATION_PAYMENT_EXPIRED);
     }
 
+    @Test
+    void rejectsPaymentAtExactReservationDeadline() {
+        PaymentConfirmationReservationRow row = pendingReservation(15_000);
+        row.setPaymentExpiresAt(PAID_AT);
+        given(mapper.selectReservationForUpdate(10L)).willReturn(row);
+
+        assertError(() -> service.complete(COMMAND), ErrorCode.RESERVATION_PAYMENT_EXPIRED);
+    }
+
     private PaymentConfirmationReservationRow pendingReservation(long amount) {
         PaymentConfirmationReservationRow row = new PaymentConfirmationReservationRow();
         row.setReservationId(10L);
+        row.setFairId(FAIR_ID);
         row.setStatus("PENDING_PAYMENT");
         row.setReservationAmount(amount);
         row.setPaymentExpiresAt(PAID_AT.plusMinutes(5));

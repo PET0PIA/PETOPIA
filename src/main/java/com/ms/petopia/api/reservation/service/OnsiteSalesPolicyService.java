@@ -22,6 +22,43 @@ public class OnsiteSalesPolicyService {
     private final ReservationOperatorAccessService operatorAccessService;
     private final ReservationTimeProvider timeProvider;
 
+    /** 관리자 화면에 표시할 운영일별 현장예매 정책을 반환한다. */
+    @Transactional(readOnly = true)
+    public OnsiteSalesPolicyResponse get(Long fairId, Long fairDateId, Long actorUserId) {
+        if (fairId == null || fairId <= 0
+                || fairDateId == null || fairDateId <= 0
+                || actorUserId == null || actorUserId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        operatorAccessService.assertCanManageFair(fairId, actorUserId);
+
+        FairDateSnapshot fairDate = onsiteReservationMapper.selectFairDate(fairId, fairDateId);
+        if (fairDate == null) {
+            throw new CommonException(ErrorCode.RESERVATION_DATE_NOT_AVAILABLE);
+        }
+        OnsiteSalesPolicyRow policy = onsiteReservationMapper.selectPolicy(fairDateId);
+        if (policy == null) {
+            return new OnsiteSalesPolicyResponse(
+                    fairId,
+                    fairDateId,
+                    fairDate.getOperationDate(),
+                    0,
+                    OnsiteSalesStatus.CLOSED.name(),
+                    0,
+                    null
+            );
+        }
+        return new OnsiteSalesPolicyResponse(
+                fairId,
+                fairDateId,
+                fairDate.getOperationDate(),
+                policy.getPrice(),
+                policy.getStatus(),
+                policy.getVersion(),
+                policy.getUpdatedAt()
+        );
+    }
+
     /**
      * 운영일별 현장예매 가격과 접수 상태를 생성하거나 변경한다.
      * EVENT_ADMIN은 배정된 행사만, SUPER_ADMIN은 모든 행사를 변경할 수 있다.

@@ -19,6 +19,9 @@ repositories {
 }
 
 dependencies {
+    implementation platform('software.amazon.awssdk:bom:2.31.0')
+    implementation 'software.amazon.awssdk:s3'
+
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     // MyBatis는 Spring Boot BOM이 버전을 관리하지 않으므로 직접 명시한다. 4.1.0은 Boot 4.1.0 기준으로 빌드됐다.
@@ -51,6 +54,7 @@ dependencies {
 
     // 이메일 발송을 위한 의존성
     implementation 'org.springframework.boot:spring-boot-starter-mail'
+
 }
 
 tasks.named('test') {

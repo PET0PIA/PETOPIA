@@ -18,5 +18,5 @@ public class NotificationListRow {
     private String body;
     private String linkUrl;
     private LocalDateTime createdAt;
-    private boolean read;
+    private boolean alreadyRead;
 }

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.refund.mapper.RefundMapper">
+
+    <!--
+        reservation_id는 refund 테이블 실제 컬럼이 아니다 — payment와 조인해서 편의상
+        RefundRow.reservationId에 채워 넣는다(예약금 결제의 환불이 아니면 NULL).
+    -->
+    <sql id="refundColumnsWithReservation">
+        r.refund_id
+      , r.payment_id
+      , p.reservation_id
+      , r.refund_reason
+      , r.requested_by_domain
+      , r.refund_amount
+      , r.status
+      , r.requested_at
+      , r.processed_at
+      , r.created_at
+      , r.updated_at
+    </sql>
+
+    <select id="selectById" resultType="RefundRow">
+        SELECT <include refid="refundColumnsWithReservation"/>
+          FROM refund r
+          JOIN payment p ON p.payment_id = r.payment_id
+         WHERE r.refund_id = #{refundId}
+    </select>
+
+    <select id="selectByPaymentId" resultType="RefundRow">
+        SELECT <include refid="refundColumnsWithReservation"/>
+          FROM refund r
+          JOIN payment p ON p.payment_id = r.payment_id
+         WHERE r.payment_id = #{paymentId}
+    </select>
+
+    <insert id="insert" parameterType="RefundRow"
+            useGeneratedKeys="true" keyProperty="refundId">
+        INSERT INTO refund (
+            payment_id, refund_reason, requested_by_domain, refund_amount, status,
+            requested_at, processed_at, created_at, updated_at
+        ) VALUES (
+            #{paymentId}, #{refundReason}, #{requestedByDomain}, #{refundAmount}, #{status},
+            #{requestedAt}, #{processedAt}, #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+</mapper>

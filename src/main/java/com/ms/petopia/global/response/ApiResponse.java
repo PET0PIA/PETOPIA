@@ -16,4 +16,6 @@ public record ApiResponse<T>(
     public static <T> ApiResponse<T> success(T data) {
         return new ApiResponse<>(true, HttpStatus.OK.value(), "SUCCESS", null, data);
     }
+
+
 }

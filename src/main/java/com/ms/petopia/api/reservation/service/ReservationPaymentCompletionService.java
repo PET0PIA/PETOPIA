@@ -5,9 +5,11 @@ import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletedCommand;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletionResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentReceiptRow;
 import com.ms.petopia.api.reservation.mapper.ReservationPaymentConfirmationMapper;
+import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실시간 통계 확인용
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher; // 실시간 통계 확인용
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,7 @@ public class ReservationPaymentCompletionService {
     private final ReservationPaymentConfirmationMapper confirmationMapper;
     private final EntryQrService entryQrService;
     private final ReservationTimeProvider timeProvider;
+    private final ApplicationEventPublisher eventPublisher; // 실시간 통계 확인용
 
     /**
      * 결제 도메인이 검증한 성공 통지를 예약 상태에 반영한다.
@@ -37,7 +40,7 @@ public class ReservationPaymentCompletionService {
                     replay.getReservationId(),
                     "CONFIRMED",
                     true,
-                    entryQrService.issueForReservation(replay.getReservationId())
+                    entryQrService.issueForPaymentCompletion(replay.getReservationId())
             );
         }
 
@@ -55,7 +58,7 @@ public class ReservationPaymentCompletionService {
                     existing.getReservationId(),
                     "CONFIRMED",
                     true,
-                    entryQrService.issueForReservation(existing.getReservationId())
+                    entryQrService.issueForPaymentCompletion(existing.getReservationId())
             );
         }
         if ("EXPIRED".equals(reservation.getStatus())) {
@@ -68,7 +71,7 @@ public class ReservationPaymentCompletionService {
             throw new CommonException(ErrorCode.RESERVATION_PAYMENT_AMOUNT_MISMATCH);
         }
         if (reservation.getPaymentExpiresAt() == null
-                || command.paidAt().isAfter(reservation.getPaymentExpiresAt())) {
+                || !command.paidAt().isBefore(reservation.getPaymentExpiresAt())) {
             throw new CommonException(ErrorCode.RESERVATION_PAYMENT_EXPIRED);
         }
 
@@ -95,11 +98,13 @@ public class ReservationPaymentCompletionService {
                 receivedAt
         );
 
+        eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
+
         return new ReservationPaymentCompletionResponse(
                 command.reservationId(),
                 "CONFIRMED",
                 false,
-                entryQrService.issueForReservation(command.reservationId())
+                entryQrService.issueForPaymentCompletion(command.reservationId())
         );
     }
 

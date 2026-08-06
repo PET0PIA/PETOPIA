@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,12 +20,15 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class ReservationExpirationServiceTest {
 
+    private static final Long FAIR_ID = 10L;
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 1, 10, 10);
 
     @Mock
     private ReservationExpirationMapper mapper;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     @InjectMocks
     private ReservationExpirationService service;
 
@@ -32,6 +36,7 @@ class ReservationExpirationServiceTest {
     void expiresLockedPendingReservationsAndWritesHistory() {
         ExpiringReservationRow row = new ExpiringReservationRow();
         row.setReservationId(10L);
+        row.setFairId(FAIR_ID);
         given(timeProvider.now()).willReturn(NOW);
         given(mapper.selectDueReservationsForUpdate(NOW, 200)).willReturn(List.of(row));
         given(mapper.expirePendingReservation(10L, NOW)).willReturn(1);
@@ -44,6 +49,7 @@ class ReservationExpirationServiceTest {
     void skipsHistoryWhenConcurrentConfirmationAlreadyChangedStatus() {
         ExpiringReservationRow row = new ExpiringReservationRow();
         row.setReservationId(10L);
+        row.setFairId(FAIR_ID);
         given(timeProvider.now()).willReturn(NOW);
         given(mapper.selectDueReservationsForUpdate(NOW, 200)).willReturn(List.of(row));
         given(mapper.expirePendingReservation(10L, NOW)).willReturn(0);

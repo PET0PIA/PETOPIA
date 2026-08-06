@@ -9,6 +9,7 @@
              , fair_id
              , user_id
              , visit_date
+             , reservation_type
              , status
           FROM reservations
          WHERE reservation_id = #{reservationId}

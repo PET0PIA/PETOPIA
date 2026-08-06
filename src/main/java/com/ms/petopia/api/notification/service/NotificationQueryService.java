@@ -31,7 +31,7 @@ public class NotificationQueryService {
                 .stream()
                 .map(row -> new NotificationListItemResponse(
                         row.getNotificationId(), row.getType(), row.getTitle(),
-                        row.getBody(), row.getLinkUrl(), row.getCreatedAt(), row.isRead()
+                        row.getBody(), row.getLinkUrl(), row.getCreatedAt(), row.isAlreadyRead()
                 ))
                 .toList();
         return new NotificationListResponse(items, page, size, totalElements, totalPages, page + 1 < totalPages);

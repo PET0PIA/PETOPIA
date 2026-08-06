@@ -7,9 +7,11 @@ import com.ms.petopia.api.reservation.dto.ReservationInsertRow;
 import com.ms.petopia.api.reservation.dto.ReservationUserSnapshot;
 import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.api.reservation.model.ReservationType;
+import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,9 @@ public class ReservationService {
     private final ReservationNumberGenerator reservationNumberGenerator;
     private final ReservationTimeProvider timeProvider;
     private final EntryQrService entryQrService;
+
+    // 실시간 예약현황 이벤트 발행
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 본인 1인 1매 예약을 생성한다.
@@ -109,6 +114,9 @@ public class ReservationService {
         reservationMapper.insertCreatedHistory(row.getReservationId(), userId, status);
         String entryQrToken = paymentRequired ? null : entryQrService.issueForReservation(row.getReservationId());
 
+        // 실시간 예약 현황용
+        eventPublisher.publishEvent(new ReservationStatusChangedEvent(fairId));
+
         return new CreateReservationResponse(
                 row.getReservationId(),
                 reservationNo,
@@ -142,7 +150,7 @@ public class ReservationService {
             throw new CommonException(ErrorCode.RESERVATION_NOT_OPEN);
         }
 
-        if (context.getOperationDate().isBefore(today)) {
+        if (!context.getOperationDate().isAfter(today)) {
             throw new CommonException(ErrorCode.RESERVATION_DATE_NOT_AVAILABLE);
         }
 

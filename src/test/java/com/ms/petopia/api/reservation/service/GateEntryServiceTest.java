@@ -9,6 +9,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.context.ApplicationEventPublisher;
+
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,6 +32,8 @@ class GateEntryServiceTest {
     private ReservationOperatorAccessService operatorAccessService;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     @InjectMocks
     private GateEntryService service;
 
@@ -39,13 +43,13 @@ class GateEntryServiceTest {
         given(entryMapper.selectQrForUpdate("hash")).willReturn(validContext(null));
         given(entryMapper.markReservationCheckedIn(30L, NOW)).willReturn(1);
 
-        GateScanResponse response = service.scan(FAIR_ID, ADMIN_ID, "token", "A게이트", "device");
+        GateScanResponse response = service.scan(FAIR_ID, ADMIN_ID, "token", "device");
 
         assertThat(response.resultCode()).isEqualTo("FIRST_ENTRY");
         assertThat(response.firstEntry()).isTrue();
         assertThat(response.entrySource()).isEqualTo("ONSITE_DIRECT");
         verify(entryMapper).insertEntryRecord(
-                FAIR_ID, 30L, 40L, "ONSITE_DIRECT", NOW, ADMIN_ID, "A게이트");
+                FAIR_ID, 30L, 40L, "ONSITE_DIRECT", NOW, ADMIN_ID, "MAIN_GATE");
         verify(entryMapper).insertCheckedInHistory(30L, ADMIN_ID, NOW);
     }
 
@@ -57,7 +61,7 @@ class GateEntryServiceTest {
         context.setFirstCheckedInAt(NOW.minusMinutes(1));
         given(entryMapper.selectQrForUpdate("hash")).willReturn(context);
 
-        GateScanResponse response = service.scan(FAIR_ID, ADMIN_ID, "token", "A게이트", "device");
+        GateScanResponse response = service.scan(FAIR_ID, ADMIN_ID, "token", "device");
 
         assertThat(response.resultCode()).isEqualTo("ALREADY_CHECKED_IN");
         assertThat(response.firstEntry()).isFalse();
@@ -68,11 +72,11 @@ class GateEntryServiceTest {
     void unknownQrIsLoggedAndReturnedWithoutThrowing() {
         givenCommonScan();
 
-        GateScanResponse response = service.scan(FAIR_ID, ADMIN_ID, "token", "A게이트", "device");
+        GateScanResponse response = service.scan(FAIR_ID, ADMIN_ID, "token", "device");
 
         assertThat(response.resultCode()).isEqualTo("NOT_FOUND");
         verify(entryMapper).insertGateScanLog(
-                null, null, FAIR_ID, "NOT_FOUND", NOW, ADMIN_ID, "A게이트", "device");
+                null, null, FAIR_ID, "NOT_FOUND", NOW, ADMIN_ID, "MAIN_GATE", "device");
     }
 
     private void givenCommonScan() {

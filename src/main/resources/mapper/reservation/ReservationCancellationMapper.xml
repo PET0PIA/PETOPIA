@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.ReservationCancellationMapper">
+
+    <select id="selectCancellationContextForUpdate" resultType="ReservationCancellationContext">
+        SELECT r.reservation_id
+             , r.fair_id        <!-- 실시간 통계 확인용 -->
+             , r.user_id
+             , r.visit_date
+             , r.reservation_type
+             , r.status
+             , r.reservation_amount
+             , f.reservation_cancel_deadline_hours AS cancel_deadline_hours
+             , fd.entry_start_time
+          FROM reservations r
+          JOIN fairs f
+            ON f.fair_id = r.fair_id
+          JOIN fair_dates fd
+            ON fd.fair_id = r.fair_id
+           AND fd.operation_date = r.visit_date
+         WHERE r.reservation_id = #{reservationId}
+         FOR UPDATE OF r
+    </select>
+
+    <update id="cancelReservation">
+        UPDATE reservations
+           SET status = 'CANCELED'
+             , canceled_at = #{now}
+             , cancel_reason = #{reason}
+             , canceled_by = #{canceledBy}
+             , updated_at = #{now}
+         WHERE reservation_id = #{reservationId}
+           AND status = #{expectedStatus}
+    </update>
+
+    <insert id="insertCanceledHistory">
+        INSERT INTO reservation_histories (
+               reservation_id
+             , action_type
+             , before_data
+             , after_data
+             , changed_by
+             , actor_type
+             , is_admin_action
+             , change_reason
+             , created_at
+        ) VALUES (
+               #{reservationId}
+             , 'RESERVATION_CANCELED'
+             , JSON_OBJECT('status', #{previousStatus})
+             , JSON_OBJECT('status', 'CANCELED')
+             , #{changedBy}
+             , 'USER'
+             , FALSE
+             , #{reason}
+             , #{now}
+        )
+    </insert>
+
+</mapper>

@@ -18,17 +18,29 @@
     </insert>
 
     <select id="selectById" resultType="Hall">
-        SELECT hall_id, fair_id, name, floor_plan_image_url, created_at, updated_at
+        SELECT hall_id, fair_id, name, floor_plan_image_url, booth_layout_version, created_at, updated_at
           FROM halls
          WHERE hall_id = #{hallId}
     </select>
 
     <select id="selectByFairId" resultType="Hall">
-        SELECT hall_id, fair_id, name, floor_plan_image_url, created_at, updated_at
+        SELECT hall_id, fair_id, name, floor_plan_image_url, booth_layout_version, created_at, updated_at
           FROM halls
          WHERE fair_id = #{fairId}
          ORDER BY hall_id
     </select>
+
+    <!--
+        부스 슬롯 일괄저장의 낙관적 락. WHERE 절에 기대 버전을 같이 걸어서 조회-후-갱신
+        사이 다른 저장이 끼어들 수 없게 한다(원자적 검증+증가). 영향받은 행이 0이면
+        BoothSlotService가 버전 충돌로 판단해 409를 던진다.
+    -->
+    <update id="bumpBoothLayoutVersion">
+        UPDATE halls
+           SET booth_layout_version = booth_layout_version + 1
+         WHERE hall_id = #{hallId}
+           AND booth_layout_version = #{expectedVersion}
+    </update>
 
     <update id="update">
         UPDATE halls

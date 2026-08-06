@@ -3,6 +3,7 @@ package com.ms.petopia.api.fair.controller;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
+import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.service.FairService;
@@ -48,5 +49,14 @@ public class FairController {
     ) {
         // TODO 인증 도메인 완성 후 X-User-Id 대신 SUPER_ADMIN 인증 Principal에서 reviewerId를 가져온다.
         return fairService.review(fairId, reviewerId, request);
+    }
+
+    @PatchMapping("/{fairId}/publish")
+    public PublishFairResponse publish(
+            @PathVariable Long fairId,
+            @RequestHeader(FairTemporaryAuthHeaders.USER_ID) Long actorId
+    ) {
+        // TODO 인증 도메인 완성 후 X-User-Id 대신 SUPER_ADMIN 인증 Principal에서 actorId를 가져온다.
+        return fairService.publish(fairId, actorId);
     }
 }

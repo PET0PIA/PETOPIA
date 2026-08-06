@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.auth.mapper.FairAdminAssignmentMapper">
+
+    <insert id="insertFairAdminAssignment">
+        INSERT INTO fair_admin_assignments (
+               admin_user_id
+             , requester_user_id
+             , fair_id
+        ) VALUES (
+               #{adminUserId}
+             , #{requesterUserId}
+             , #{fairId}
+        )
+    </insert>
+
+</mapper>
