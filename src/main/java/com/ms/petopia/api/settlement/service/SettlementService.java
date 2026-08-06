@@ -1,5 +1,6 @@
 package com.ms.petopia.api.settlement.service;
 
+import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.refund.dto.RefundRow;
@@ -24,9 +25,10 @@ import java.util.List;
 /**
  * 정산 계산·확정·조회 서비스.
  *
- * <p>수수료율은 이번 스코프에서 COMMISSION_RATE 테이블·API 대신 상수로 고정한다
- * (WBS 5.1~5.5, [[project_petopia_refund_settlement_scope]] 참고). 나중에 전역·행사별
- * override를 지원하는 CommissionRate 조회로 교체될 자리다.
+ * <p>수수료율은 {@link CommissionRateService}가 전역 기본값 + 행사별 override 2단계로
+ * 관리한다(WBS 5.1~5.5). {@link #calculate}가 정산 생성 시점에 "지금 적용될" 요율을 조회해서
+ * {@code settlement.commission_rate}에 스냅샷으로 저장하고, 이후 요율이 바뀌어도 그 정산은
+ * 영향받지 않는다 — {@link #recalculate}도 새로 조회하지 않고 이 스냅샷을 그대로 재사용한다.
  *
  * <p>{@link #calculate}로 한 번 만들어진 정산은 같은 행사·업체 조합으로 다시 계산 요청하면
  * {@code UK_SETTLEMENT_FAIR_BUSINESS} 때문에 {@link ErrorCode#SETTLEMENT_ALREADY_EXISTS}가
@@ -38,15 +40,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SettlementService {
 
-    // TODO CommissionRate 엔티티/API 생기면 전역 기본값 + 행사별 override 조회로 교체한다.
-    private static final BigDecimal DEFAULT_COMMISSION_RATE = new BigDecimal("0.0500");
-
     private static final String PENDING = "PENDING";
     private static final String COMPLETED = "COMPLETED";
 
     private final SettlementMapper settlementMapper;
     private final PaymentMapper paymentMapper;
     private final RefundMapper refundMapper;
+    private final CommissionRateService commissionRateService;
 
     /**
      * 특정 행사·업체의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
@@ -67,7 +67,11 @@ public class SettlementService {
             throw new CommonException(ErrorCode.SETTLEMENT_ALREADY_EXISTS);
         }
 
-        Aggregate aggregate = aggregate(fairId, businessId);
+        // 정산 생성 시점에 "지금 적용될" 요율을 딱 한 번 조회해서 이 정산에 스냅샷으로 고정한다
+        // (행사별 override가 있으면 그게 우선, 없으면 전역 기본값). 이후 요율이 바뀌어도
+        // 이미 만들어진 정산에는 영향 없다 — recalculate()도 이 값을 새로 조회하지 않고 재사용.
+        BigDecimal commissionRate = commissionRateService.resolveEffectiveRate(fairId);
+        Aggregate aggregate = aggregate(fairId, businessId, commissionRate);
 
         LocalDateTime now = LocalDateTime.now();
         SettlementRow row = new SettlementRow();
@@ -75,7 +79,7 @@ public class SettlementService {
         row.setBusinessId(businessId);
         row.setGrossAmount(aggregate.grossAmount());
         row.setRefundAmount(aggregate.refundAmount());
-        row.setCommissionRate(DEFAULT_COMMISSION_RATE);
+        row.setCommissionRate(commissionRate);
         row.setCommissionAmount(aggregate.commissionAmount());
         row.setNetAmount(aggregate.netAmount());
         row.setStatus(PENDING);
@@ -113,7 +117,9 @@ public class SettlementService {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_RECALCULABLE);
         }
 
-        Aggregate aggregate = aggregate(row.getFairId(), row.getBusinessId());
+        // commission_rate는 calculate() 때 스냅샷해둔 값을 그대로 재사용한다 — 새로 조회하면
+        // 그 사이 바뀐 요율이 이미 PENDING인 정산에 몰래 끼어들게 된다(클래스 문서 참고).
+        Aggregate aggregate = aggregate(row.getFairId(), row.getBusinessId(), row.getCommissionRate());
 
         LocalDateTime now = LocalDateTime.now();
         int updated = settlementMapper.updateAggregates(settlementId,
@@ -152,9 +158,10 @@ public class SettlementService {
     /**
      * 정산대상은 "결제완료된 참가비"만이고, 그 중 환불완료된 금액은 차감한다
      * (예약금·행사개설비는 운영매출 조회대상일 뿐 참가업체 정산대상 아님).
-     * calculate·recalculate가 공유하는 집계 로직.
+     * calculate·recalculate가 공유하는 집계 로직. commissionRate는 호출자가 정한다 —
+     * calculate()는 새로 조회한 값을, recalculate()는 기존 스냅샷을 넘긴다.
      */
-    private Aggregate aggregate(Long fairId, Long businessId) {
+    private Aggregate aggregate(Long fairId, Long businessId, BigDecimal commissionRate) {
         List<PaymentRow> payments = paymentMapper.selectCompletedVendorFeePayments(fairId, businessId);
 
         long grossAmount = 0L;
@@ -176,7 +183,7 @@ public class SettlementService {
         }
 
         long netBeforeCommission = grossAmount - refundAmount;
-        long commissionAmount = DEFAULT_COMMISSION_RATE
+        long commissionAmount = commissionRate
                 .multiply(BigDecimal.valueOf(netBeforeCommission))
                 .setScale(0, RoundingMode.HALF_UP)
                 .longValueExact();

@@ -64,6 +64,9 @@ public enum ErrorCode {
     APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V014", "본인이 담당하는 행사가 아닙니다."),
     APPLICATION_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "V015", "심사 대기 중인 신청서만 검토할 수 있습니다."),
     APPLICATION_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V016", "반려 시 반려 사유를 입력해야 합니다."),
+    APPLICATION_NOT_CANCELABLE(HttpStatus.CONFLICT, "V017", "취소 요청은 결제 대기 또는 확정된 신청서만 가능합니다."),
+    APPLICATION_CANCEL_REQUEST_DUPLICATE(HttpStatus.CONFLICT, "V018", "이미 처리 대기 중인 취소 요청이 있습니다."),
+    APPLICATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "V019", "취소 요청은 행사 시작 7일 전까지만 가능합니다."),
 
 
     // ===== Payment =====
@@ -132,6 +135,9 @@ public enum ErrorCode {
     SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
     SETTLEMENT_NOT_RECALCULABLE(HttpStatus.CONFLICT, "ST004", "재계산할 수 없는 정산 상태입니다."),
     SETTLEMENT_RECALCULATION_REQUIRED(HttpStatus.CONFLICT, "ST005", "재계산이 필요한 정산은 확정할 수 없습니다. 먼저 재계산해 주세요."),
+
+    // ===== Commission Rate (수수료율) =====
+    COMMISSION_RATE_INVALID_SCOPE(HttpStatus.BAD_REQUEST, "CR001", "scope와 fairId 조합이 올바르지 않습니다(GLOBAL은 fairId 없이, FAIR는 fairId와 함께)."),
     ;
 
     private final HttpStatus httpStatus;
