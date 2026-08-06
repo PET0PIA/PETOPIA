@@ -98,4 +98,29 @@
            FOR UPDATE
     </select>
 
+    <!-- selectByFilter/countByFilter가 공유하는 동적 WHERE 조각. 넘어온 파라미터만 조건에 건다. -->
+    <sql id="filterConditions">
+        <where>
+            <if test="fairId != null">AND fair_id = #{fairId}</if>
+            <if test="businessId != null">AND business_id = #{businessId}</if>
+            <if test="paymentType != null">AND payment_type = #{paymentType}</if>
+            <if test="status != null">AND status = #{status}</if>
+            <if test="payerUserId != null">AND payer_user_id = #{payerUserId}</if>
+        </where>
+    </sql>
+
+    <select id="selectByFilter" resultType="PaymentRow">
+        SELECT <include refid="paymentColumns"/>
+          FROM payment
+        <include refid="filterConditions"/>
+         ORDER BY created_at DESC, payment_id DESC
+         LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countByFilter" resultType="long">
+        SELECT COUNT(*)
+          FROM payment
+        <include refid="filterConditions"/>
+    </select>
+
 </mapper>

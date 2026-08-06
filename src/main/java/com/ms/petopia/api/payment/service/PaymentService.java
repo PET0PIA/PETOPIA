@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 결제 조회를 담당하는 서비스.
@@ -127,6 +128,86 @@ public class PaymentService {
         }
 
         return PaymentResponse.from(row);
+    }
+
+    /**
+     * 행사개설비 결제를 생성한다. 참가비와 동일 구조로 fair 테이블은 조회하지 않으므로(애그리거트
+     * 간 ID 참조 원칙 유지) 금액은 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
+     * fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
+     *
+     * <p>결제 완료 후 행사 상태를 "준비중"으로 전이하는 건 이 메서드 책임이 아니다 — 행사 도메인이
+     * 결제 완료를 어떻게 감지할지(폴링/이벤트 발행) 아직 미정이라 API 명세서에 "미확정"으로
+     * 남아있다. 지금은 결제 자체만 처리하고 크로스도메인 통지는 하지 않는다(참가비와 동일).
+     *
+     * <p>동일 행사에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
+     * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사일 때
+     */
+    @Transactional
+    public PaymentResponse payFairOpeningFee(Long fairId, Long userId, OpeningFeePaymentRequest request) {
+        LocalDateTime now = LocalDateTime.now();
+
+        PaymentRow row = new PaymentRow();
+        row.setPaymentType("FAIR_OPENING_FEE");
+        row.setAmount(request.amount());
+        row.setStatus("PENDING");
+        row.setMethod("TOSS");
+        row.setIdempotencyKey("FAIR_OPENING_FEE_" + fairId);
+        row.setCreatedAt(now);
+        row.setUpdatedAt(now);
+        row.setFairId(fairId);
+        row.setPayerUserId(userId);
+
+        try {
+            paymentMapper.insert(row);
+        } catch (DuplicateKeyException e) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 조건별 결제 목록 조회(관리자용). fairId·businessId·paymentType·status 전부 선택적이고
+     * 넘긴 값들은 AND로 조합된다.
+     *
+     * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} page·size가 범위를 벗어났을 때
+     */
+    public PaymentListResponse getPayments(
+            Long fairId, Long businessId, String paymentType, String status, int page, int size
+    ) {
+        validatePageAndSize(page, size);
+        long offset = (long) page * size;
+        List<PaymentRow> rows = paymentMapper.selectByFilter(fairId, businessId, paymentType, status, null, offset, size);
+        long total = paymentMapper.countByFilter(fairId, businessId, paymentType, status, null);
+        return PaymentListResponse.of(rows, page, size, total);
+    }
+
+    /**
+     * 로그인 사용자 본인의 결제 내역 조회(마이페이지). 다른 필터 없이 payerUserId만 건다.
+     *
+     * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} page·size가 범위를 벗어났을 때
+     */
+    public PaymentListResponse getMyPayments(Long userId, int page, int size) {
+        validatePageAndSize(page, size);
+        long offset = (long) page * size;
+        List<PaymentRow> rows = paymentMapper.selectByFilter(null, null, null, null, userId, offset, size);
+        long total = paymentMapper.countByFilter(null, null, null, null, userId);
+        return PaymentListResponse.of(rows, page, size, total);
+    }
+
+    /**
+     * 컨트롤러의 {@code @Min}/{@code @Max} 어노테이션은 여기서 검증을 대신하지 않는다 —
+     * 이 프로젝트가 쓰는 {@code standaloneSetup} 기반 컨트롤러 테스트에서 메서드 파라미터
+     * 검증이 실제로 안 걸리는 걸 확인해서(CodeRabbit 리뷰 지적, PR #62), 프레임워크 동작에
+     * 기대지 않고 서비스 계층에서 명시적으로 막는다. 특히 page < 0이면 SQL의
+     * {@code OFFSET}이 음수가 돼서 DB 에러로 이어질 수 있어 이 검증이 실질적으로도 중요하다.
+     */
+    private void validatePageAndSize(int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
     }
 
 

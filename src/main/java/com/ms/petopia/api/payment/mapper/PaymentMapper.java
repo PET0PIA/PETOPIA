@@ -70,4 +70,26 @@ public interface PaymentMapper {
      */
     List<PaymentRow> selectCompletedVendorFeePayments(
             @Param("fairId") Long fairId, @Param("businessId") Long businessId);
+
+    /**
+     * 조건별 결제 목록 조회. {@code GET /api/payments}(관리자용, fairId·businessId·paymentType·
+     * status 조합)와 {@code GET /api/me/payments}(마이페이지, payerUserId만)가 같이 쓴다.
+     * 파라미터가 null이면 그 조건은 걸지 않는다(전부 AND로 조합).
+     */
+    List<PaymentRow> selectByFilter(
+            @Param("fairId") Long fairId,
+            @Param("businessId") Long businessId,
+            @Param("paymentType") String paymentType,
+            @Param("status") String status,
+            @Param("payerUserId") Long payerUserId,
+            @Param("offset") long offset,
+            @Param("size") int size);
+
+    /** selectByFilter와 동일 조건으로 전체 건수만 센다(페이지네이션 totalElements용). */
+    long countByFilter(
+            @Param("fairId") Long fairId,
+            @Param("businessId") Long businessId,
+            @Param("paymentType") String paymentType,
+            @Param("status") String status,
+            @Param("payerUserId") Long payerUserId);
 }
