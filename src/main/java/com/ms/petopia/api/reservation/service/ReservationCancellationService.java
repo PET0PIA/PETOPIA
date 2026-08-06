@@ -4,9 +4,11 @@ import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
 import com.ms.petopia.api.reservation.mapper.ReservationCancellationMapper;
+import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실시간 통계 확인용
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher; // 실시간 통계 확인용
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +26,7 @@ public class ReservationCancellationService {
 
     private final ReservationCancellationMapper cancellationMapper;
     private final ReservationTimeProvider timeProvider;
+    private final ApplicationEventPublisher eventPublisher; // 실시간 통계 확인용
 
     /** 결제 전 예약 또는 무료 사전예약을 취소한다. */
     @Transactional
@@ -64,6 +67,8 @@ public class ReservationCancellationService {
                 userId,
                 now
         );
+
+        eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
 
         return new CancelReservationResponse(reservationId, CANCELED, now);
     }
