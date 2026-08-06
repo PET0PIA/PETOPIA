@@ -14,6 +14,7 @@ import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * 결제 조회를 담당하는 서비스.
@@ -71,26 +72,23 @@ public class PaymentService {
 
     @Transactional
     public PaymentResponse payVendorFee(Long applicationId,Long userId, VendorFeePaymentRequest request) {
-        LocalDateTime now = LocalDateTime.now();
-
-        PaymentRow row = new PaymentRow();
-        row.setPaymentType("VENDOR_FEE");
-        row.setAmount(request.amount());
-        row.setStatus("PENDING");
-        row.setMethod("TOSS");
-        row.setIdempotencyKey("VENDOR_FEE_" + applicationId);
-        row.setCreatedAt(now);
-        row.setUpdatedAt(now);
-        row.setFairId(request.fairId());
-        row.setBusinessId(request.businessId());
-        row.setPayerUserId(userId);
-        row.setApplicationId(applicationId);
-
-        try {
-            paymentMapper.insert(row);
-        } catch (DuplicateKeyException e) {
-            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
-        }
+        String idempotencyKey = "VENDOR_FEE_" + applicationId;
+        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
+            LocalDateTime now = LocalDateTime.now();
+            PaymentRow newRow = new PaymentRow();
+            newRow.setPaymentType("VENDOR_FEE");
+            newRow.setAmount(request.amount());
+            newRow.setStatus("PENDING");
+            newRow.setMethod("TOSS");
+            newRow.setIdempotencyKey(idempotencyKey);
+            newRow.setCreatedAt(now);
+            newRow.setUpdatedAt(now);
+            newRow.setFairId(request.fairId());
+            newRow.setBusinessId(request.businessId());
+            newRow.setPayerUserId(userId);
+            newRow.setApplicationId(applicationId);
+            return newRow;
+        });
 
         return PaymentResponse.from(row);
     }
@@ -108,24 +106,22 @@ public class PaymentService {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        PaymentRow row = new PaymentRow();
-        row.setPaymentType("RESERVATION_DEPOSIT");
-        row.setAmount(context.amount());
-        row.setStatus("PENDING");
-        row.setMethod("TOSS");
-        row.setIdempotencyKey("RESERVATION_DEPOSIT_" + reservationId);
-        row.setCreatedAt(now);
-        row.setUpdatedAt(now);
-        row.setFairId(context.fairId());
-        row.setPayerUserId(userId);
-        row.setReservationId(reservationId);
-
-        try {
-            paymentMapper.insert(row);
-        } catch (DuplicateKeyException e) {
-            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
-        }
+        String idempotencyKey = "RESERVATION_DEPOSIT_" + reservationId;
+        PaymentRow row = createOrRetryPayment(idempotencyKey, context.amount(), userId, () -> {
+            LocalDateTime now = LocalDateTime.now();
+            PaymentRow newRow = new PaymentRow();
+            newRow.setPaymentType("RESERVATION_DEPOSIT");
+            newRow.setAmount(context.amount());
+            newRow.setStatus("PENDING");
+            newRow.setMethod("TOSS");
+            newRow.setIdempotencyKey(idempotencyKey);
+            newRow.setCreatedAt(now);
+            newRow.setUpdatedAt(now);
+            newRow.setFairId(context.fairId());
+            newRow.setPayerUserId(userId);
+            newRow.setReservationId(reservationId);
+            return newRow;
+        });
 
         return PaymentResponse.from(row);
     }
@@ -146,26 +142,83 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponse payFairOpeningFee(Long fairId, Long userId, OpeningFeePaymentRequest request) {
-        LocalDateTime now = LocalDateTime.now();
+        String idempotencyKey = "FAIR_OPENING_FEE_" + fairId;
+        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
+            LocalDateTime now = LocalDateTime.now();
+            PaymentRow newRow = new PaymentRow();
+            newRow.setPaymentType("FAIR_OPENING_FEE");
+            newRow.setAmount(request.amount());
+            newRow.setStatus("PENDING");
+            newRow.setMethod("TOSS");
+            newRow.setIdempotencyKey(idempotencyKey);
+            newRow.setCreatedAt(now);
+            newRow.setUpdatedAt(now);
+            newRow.setFairId(fairId);
+            newRow.setPayerUserId(userId);
+            return newRow;
+        });
 
-        PaymentRow row = new PaymentRow();
-        row.setPaymentType("FAIR_OPENING_FEE");
-        row.setAmount(request.amount());
-        row.setStatus("PENDING");
-        row.setMethod("TOSS");
-        row.setIdempotencyKey("FAIR_OPENING_FEE_" + fairId);
-        row.setCreatedAt(now);
-        row.setUpdatedAt(now);
-        row.setFairId(fairId);
-        row.setPayerUserId(userId);
+        return PaymentResponse.from(row);
+    }
 
+    /**
+     * 결제 생성(pay*) 3종이 공유하는 공통 로직 — 결제 3종 공통 후속과제(2026-08-06 CodeRabbit
+     * 지적, 실패 결제 재시도 불가) 해결.
+     *
+     * <p>동일 idempotencyKey로 이전 시도가 있었는지 먼저 확인해서:
+     * <ul>
+     *   <li>없으면 새로 insert(기존과 동일, 동시 첫 시도 경쟁은 DuplicateKeyException으로 처리)</li>
+     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용)</li>
+     *   <li>FAILED로 남아있지만 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재시도 금지)</li>
+     *   <li>PENDING/PROCESSING/COMPLETED면 여전히 중복결제로 막음(기존 동작 유지)</li>
+     * </ul>
+     *
+     * @param idempotencyKey 원업무 식별자 기준 키(예: {@code "VENDOR_FEE_" + applicationId})
+     * @param amount 이번 시도의 결제 금액 — 재사용 시에도 이 값으로 갱신한다(재시도 시점에
+     *               금액이 달라질 수 있어서, 예: 참가비 재승인 등)
+     * @param userId 재시도를 요청한 사용자. 기존 FAILED 행의 payerUserId와 다르면 남의 결제를
+     *               멋대로 PENDING으로 되돌리는 셈이라 막는다(CodeRabbit 지적, PR #63).
+     * @param newRowSupplier 이전 시도가 아예 없을 때 삽입할 새 PaymentRow를 만드는 함수
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 기존 FAILED 결제의 결제자가 아닐 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제 진행/완료 중이거나,
+     *         다른 요청이 먼저 재시도를 선점했을 때
+     */
+    private PaymentRow createOrRetryPayment(
+            String idempotencyKey, Long amount, Long userId, Supplier<PaymentRow> newRowSupplier
+    ) {
+        PaymentRow existing = paymentMapper.selectByIdempotencyKey(idempotencyKey);
+        if (existing != null) {
+            if (!"FAILED".equals(existing.getStatus())) {
+                throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+            }
+            if (!userId.equals(existing.getPayerUserId())) {
+                throw new CommonException(ErrorCode.ACCESS_DENIED);
+            }
+
+            LocalDateTime now = LocalDateTime.now();
+            int reset = paymentMapper.resetFailedToPending(existing.getPaymentId(), amount, now);
+            if (reset == 0) {
+                // 우리가 조회한 뒤, 다른 요청이 먼저 재시도를 선점했거나 상태가 바뀐 경우 — 충돌로 처리.
+                throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+            }
+
+            existing.setStatus("PENDING");
+            existing.setAmount(amount);
+            existing.setUpdatedAt(now);
+            existing.setTossPaymentKey(null);
+            existing.setPaidAt(null);
+            return existing;
+        }
+
+        PaymentRow row = newRowSupplier.get();
         try {
             paymentMapper.insert(row);
         } catch (DuplicateKeyException e) {
+            // selectByIdempotencyKey로는 못 찾았는데 그 사이 다른 요청이 먼저 insert에 성공한
+            // 경우(첫 결제 동시요청 경쟁) — 기존과 동일하게 충돌 처리.
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
         }
-
-        return PaymentResponse.from(row);
+        return row;
     }
 
     /**
