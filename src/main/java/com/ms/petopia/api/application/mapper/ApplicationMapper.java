@@ -96,4 +96,8 @@ public interface ApplicationMapper {
     // 취소 요청 승인에 따른 신청 상태 전환 (반환: 영향받은 행 수)
     int updateApplicationCanceled(@Param("applicationId") Long applicationId);
 
+    // 취소 요청 반려 처리 (반환: 영향받은 행 수)
+    int updateCancelRequestRejected(@Param("cancelRequestId") Long cancelRequestId,
+                                    @Param("decidedAt") LocalDateTime decidedAt);
+
 }

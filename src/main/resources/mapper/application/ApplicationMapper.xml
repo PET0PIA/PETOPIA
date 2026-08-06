@@ -288,4 +288,11 @@
         AND status IN ('PAYMENT_PENDING', 'CONFIRMED')
     </update>
 
+    <!-- 취소 요청 반려 처리: REQUESTED일 때만 전환 (동시 처리 방지) -->
+    <update id="updateCancelRequestRejected">
+        UPDATE application_cancel_request
+        SET status = 'REJECTED', decided_at = #{decidedAt}
+        WHERE cancel_request_id = #{cancelRequestId} AND status = 'REQUESTED'
+    </update>
+
 </mapper>

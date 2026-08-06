@@ -546,4 +546,44 @@ public class ApplicationService {
         
     }
 
+    // 참가 취소 요청 반려 (행사 담당자용) — application.status는 그대로 유지
+    @Transactional
+    public ApplicationCancelRequestResultResponse rejectCancelRequest(Long adminUserId, Long applicationId) {
+
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, application.getFairId());
+
+        // 처리 대기 중인 취소 요청 존재 확인
+        ApplicationCancelRequest cancelRequest = applicationMapper.selectPendingCancelRequest(applicationId);
+
+        if(cancelRequest == null) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        LocalDateTime decidedAt = LocalDateTime.now();
+
+        // 취소 요청 반려 처리 (동시 처리 방지)
+        int updated = applicationMapper.updateCancelRequestRejected(cancelRequest.getCancelRequestId(), decidedAt);
+
+        if(updated == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        return ApplicationCancelRequestResultResponse.builder()
+                .cancelRequestId(cancelRequest.getCancelRequestId())
+                .applicationId(applicationId)
+                .status(ApplicationCancelRequest.Status.REJECTED.name())
+                .applicationStatus(application.getStatus().name())
+                .decidedAt(decidedAt)
+                .build();
+
+    }
+
 }

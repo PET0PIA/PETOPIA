@@ -154,5 +154,16 @@ public class ApplicationController {
 
     }
 
+    // 참가 취소 요청 반려 (행사 담당자용)
+    @PutMapping("/applications/{applicationId}/cancel-requests/reject")
+    public ResponseEntity<ApiResponse<ApplicationCancelRequestResultResponse>> rejectCancelRequest(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long applicationId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.rejectCancelRequest(adminUserId, applicationId)));
+
+    }
 
 }
