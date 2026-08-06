@@ -303,9 +303,11 @@ class PaymentServiceTest {
     @DisplayName("이전 시도가 FAILED로 남은 참가비 결제를 다시 요청하면 그 행을 PENDING으로 재사용한다")
     void payVendorFee_FAILED재시도_기존행을PENDING으로재사용한다() {
         // Arrange: 같은 applicationId로 이전에 시도했다가 실패한 행이 이미 있는 상황
+        // (요청자 90L 본인이 결제자였던 행이라 재시도 가능)
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(1L);
         failedRow.setStatus("FAILED");
+        failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
         given(paymentMapper.resetFailedToPending(eq(1L), eq(60000L), any())).willReturn(1);
 
@@ -328,6 +330,7 @@ class PaymentServiceTest {
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(1L);
         failedRow.setStatus("FAILED");
+        failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
         given(paymentMapper.resetFailedToPending(eq(1L), any(), any())).willReturn(0);
 
@@ -337,6 +340,28 @@ class PaymentServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+    }
+
+    @Test
+    @DisplayName("다른 사용자가 남의 FAILED 참가비 결제를 재시도하면 예외를 던진다")
+    void payVendorFee_FAILED재시도_결제자아님_예외를던진다() {
+        // Arrange: 원래 결제자는 90L인데, 다른 사용자(999L)가 같은 applicationId로 재시도하는 상황
+        // (CodeRabbit 지적, PR #63 — 남의 FAILED 결제를 PENDING으로 되돌려 잠가버릴 수 있던 문제)
+        PaymentRow failedRow = new PaymentRow();
+        failedRow.setPaymentId(1L);
+        failedRow.setStatus("FAILED");
+        failedRow.setPayerUserId(90L);
+        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
+
+        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
+
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 999L, request))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        // 결제자가 아니면 재시도 자체(선점 시도)를 하면 안 됨
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any());
     }
 
     @Test
@@ -368,6 +393,7 @@ class PaymentServiceTest {
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(2L);
         failedRow.setStatus("FAILED");
+        failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("RESERVATION_DEPOSIT_500")).willReturn(failedRow);
         given(paymentMapper.resetFailedToPending(eq(2L), eq(30000L), any())).willReturn(1);
 
@@ -384,6 +410,7 @@ class PaymentServiceTest {
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(3L);
         failedRow.setStatus("FAILED");
+        failedRow.setPayerUserId(3L);
         given(paymentMapper.selectByIdempotencyKey("FAIR_OPENING_FEE_10")).willReturn(failedRow);
         given(paymentMapper.resetFailedToPending(eq(3L), eq(500000L), any())).willReturn(1);
 
@@ -394,6 +421,24 @@ class PaymentServiceTest {
         assertThat(result.paymentId()).isEqualTo(3L);
         assertThat(result.status()).isEqualTo("PENDING");
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("다른 사용자가 남의 FAILED 개설비 결제를 재시도하면 예외를 던진다")
+    void payFairOpeningFee_FAILED재시도_결제자아님_예외를던진다() {
+        PaymentRow failedRow = new PaymentRow();
+        failedRow.setPaymentId(3L);
+        failedRow.setStatus("FAILED");
+        failedRow.setPayerUserId(3L);
+        given(paymentMapper.selectByIdempotencyKey("FAIR_OPENING_FEE_10")).willReturn(failedRow);
+
+        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
+
+        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 999L, request))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any());
     }
 
     // PENDING 상태의 결제 하나를 미리 만들어두는 헬퍼. confirmPayment 테스트들이

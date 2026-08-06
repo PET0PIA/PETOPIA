@@ -73,7 +73,7 @@ public class PaymentService {
     @Transactional
     public PaymentResponse payVendorFee(Long applicationId,Long userId, VendorFeePaymentRequest request) {
         String idempotencyKey = "VENDOR_FEE_" + applicationId;
-        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), () -> {
+        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
             LocalDateTime now = LocalDateTime.now();
             PaymentRow newRow = new PaymentRow();
             newRow.setPaymentType("VENDOR_FEE");
@@ -107,7 +107,7 @@ public class PaymentService {
         }
 
         String idempotencyKey = "RESERVATION_DEPOSIT_" + reservationId;
-        PaymentRow row = createOrRetryPayment(idempotencyKey, context.amount(), () -> {
+        PaymentRow row = createOrRetryPayment(idempotencyKey, context.amount(), userId, () -> {
             LocalDateTime now = LocalDateTime.now();
             PaymentRow newRow = new PaymentRow();
             newRow.setPaymentType("RESERVATION_DEPOSIT");
@@ -143,7 +143,7 @@ public class PaymentService {
     @Transactional
     public PaymentResponse payFairOpeningFee(Long fairId, Long userId, OpeningFeePaymentRequest request) {
         String idempotencyKey = "FAIR_OPENING_FEE_" + fairId;
-        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), () -> {
+        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
             LocalDateTime now = LocalDateTime.now();
             PaymentRow newRow = new PaymentRow();
             newRow.setPaymentType("FAIR_OPENING_FEE");
@@ -168,22 +168,31 @@ public class PaymentService {
      * <p>동일 idempotencyKey로 이전 시도가 있었는지 먼저 확인해서:
      * <ul>
      *   <li>없으면 새로 insert(기존과 동일, 동시 첫 시도 경쟁은 DuplicateKeyException으로 처리)</li>
-     *   <li>FAILED로 남아있으면 그 행을 PENDING으로 되돌려 재사용(재결제 허용)</li>
+     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용)</li>
+     *   <li>FAILED로 남아있지만 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재시도 금지)</li>
      *   <li>PENDING/PROCESSING/COMPLETED면 여전히 중복결제로 막음(기존 동작 유지)</li>
      * </ul>
      *
      * @param idempotencyKey 원업무 식별자 기준 키(예: {@code "VENDOR_FEE_" + applicationId})
      * @param amount 이번 시도의 결제 금액 — 재사용 시에도 이 값으로 갱신한다(재시도 시점에
      *               금액이 달라질 수 있어서, 예: 참가비 재승인 등)
+     * @param userId 재시도를 요청한 사용자. 기존 FAILED 행의 payerUserId와 다르면 남의 결제를
+     *               멋대로 PENDING으로 되돌리는 셈이라 막는다(CodeRabbit 지적, PR #63).
      * @param newRowSupplier 이전 시도가 아예 없을 때 삽입할 새 PaymentRow를 만드는 함수
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 기존 FAILED 결제의 결제자가 아닐 때
      * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제 진행/완료 중이거나,
      *         다른 요청이 먼저 재시도를 선점했을 때
      */
-    private PaymentRow createOrRetryPayment(String idempotencyKey, Long amount, Supplier<PaymentRow> newRowSupplier) {
+    private PaymentRow createOrRetryPayment(
+            String idempotencyKey, Long amount, Long userId, Supplier<PaymentRow> newRowSupplier
+    ) {
         PaymentRow existing = paymentMapper.selectByIdempotencyKey(idempotencyKey);
         if (existing != null) {
             if (!"FAILED".equals(existing.getStatus())) {
                 throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+            }
+            if (!userId.equals(existing.getPayerUserId())) {
+                throw new CommonException(ErrorCode.ACCESS_DENIED);
             }
 
             LocalDateTime now = LocalDateTime.now();
