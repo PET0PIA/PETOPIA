@@ -1,12 +1,14 @@
 package com.ms.petopia.api.application.mapper;
 
 import com.ms.petopia.api.application.domain.Application;
+import com.ms.petopia.api.application.domain.ApplicationCancelRequest;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
 import com.ms.petopia.api.application.dto.response.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -70,5 +72,18 @@ public interface ApplicationMapper {
     int updateApplicationRejected(@Param("applicationId") Long applicationId,
                                   @Param("rejectReason") String rejectReason,
                                   @Param("reviewedAt") LocalDateTime reviewedAt);
+
+    // 담당 행사에 들어온 취소 요청 목록 조회 (status는 선택적 필터)
+    List<ApplicationCancelRequestSummaryResponse> selectCancelRequestsByFair(@Param("fairId") Long fairId,
+                                                                             @Param("status") String status);
+
+    // 이 신청서에 처리 대기 중(REQUESTED)인 취소 요청이 있는지 확인
+    boolean existsPendingCancelRequest(@Param("applicationId") Long applicationId);
+
+    // 취소 요청 저장 (status는 DB DEFAULT 'REQUESTED' 활용)
+    void insertApplicationCancelRequest(ApplicationCancelRequest cancelRequest);
+
+    // 행사 운영 시작일 조회 (취소 요청 마감 기한 판정용)
+    LocalDate selectOperationStartDateByFairId(@Param("fairId") Long fairId);
 
 }
