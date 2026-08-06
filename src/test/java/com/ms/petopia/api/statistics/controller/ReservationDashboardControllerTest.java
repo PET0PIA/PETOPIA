@@ -2,6 +2,7 @@ package com.ms.petopia.api.statistics.controller;
 
 import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
+import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
@@ -29,6 +30,9 @@ class ReservationDashboardControllerTest {
 
     @MockitoBean
     private ReservationDashboardService dashboardService;
+
+    @MockitoBean
+    private DashboardEmitterRegistry emitterRegistry;
 
     // SecurityConfig → JwtAuthenticationFilter → JwtTokenProvider 의존성 체인을 끊기 위해 등록
     // anyRequest().permitAll() 설정으로 인증 없이 테스트 요청이 통과된다

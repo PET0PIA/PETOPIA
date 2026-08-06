@@ -6,6 +6,7 @@
 
     <select id="selectCancellationContextForUpdate" resultType="ReservationCancellationContext">
         SELECT r.reservation_id
+             , r.fair_id        <!-- 실시간 통계 확인용 -->
              , r.user_id
              , r.visit_date
              , r.reservation_type

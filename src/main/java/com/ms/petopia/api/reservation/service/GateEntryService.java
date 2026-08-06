@@ -3,9 +3,11 @@ package com.ms.petopia.api.reservation.service;
 import com.ms.petopia.api.reservation.dto.EntryQrScanContext;
 import com.ms.petopia.api.reservation.dto.GateScanResponse;
 import com.ms.petopia.api.reservation.mapper.EntryMapper;
+import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,9 @@ public class GateEntryService {
     private final EntryQrTokenService tokenService;
     private final ReservationOperatorAccessService operatorAccessService;
     private final ReservationTimeProvider timeProvider;
+
+    // 실시간 예약 현황 확인용
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 게이트 QR 스캔을 처리한다. 유효하지 않은 QR도 예외 대신 결과 코드로 반환해
@@ -102,6 +107,9 @@ public class GateEntryService {
         entryMapper.insertCheckedInHistory(context.getReservationId(), processedBy, now);
         logScan(context.getEntryQrId(), context.getReservationId(), fairId,
                 FIRST_ENTRY, now, processedBy, deviceInfo);
+
+        // 실시간 예약 현황 확인용
+        eventPublisher.publishEvent(new ReservationStatusChangedEvent(fairId));
 
         return new GateScanResponse(FIRST_ENTRY, true, context.getReservationType(), now);
     }
