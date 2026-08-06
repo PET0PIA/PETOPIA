@@ -12,6 +12,7 @@ import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.storage.StorageService;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -19,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import com.ms.petopia.global.storage.UploadPolicy;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -53,6 +55,9 @@ class ApplicationServiceTest {
 
     @Mock
     private RecruitNoticeMapper recruitNoticeMapper;
+
+    @Mock
+    private StorageService storageService;
 
     @InjectMocks
     private ApplicationService applicationService;
@@ -594,6 +599,48 @@ class ApplicationServiceTest {
             verify(applicationMapper, never()).insertApplication(any());
             // 롤백되더라도 이미 잡았던 락(1L)은 반드시 해제돼야 함
             verify(applicationMapper).releaseBoothSlotLock(1L);
+
+        }
+
+        @Test
+        @DisplayName("첨부파일 객체 키가 있으면 확정(confirm) 후 공개 URL로 변환해서 저장한다")
+        void resolvesAttachmentUrlWhenObjectKeyProvided() {
+
+            // given: 첨부파일 objectKey를 포함한 요청
+            Long ownerId = 1L;
+            Long fairId = 1L;
+            ApplicationSubmitRequest request = createRequest(List.of(1L));
+            request.setAttachmentObjectKey("tmp/document/abc123.pdf");
+
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            stubRecruitOpen(fairId);
+            given(applicationMapper.existsActiveApplication(1L, fairId)).willReturn(false);
+            given(applicationMapper.selectBoothSlotsWithLockStatus(fairId))
+                    .willReturn(List.of(createSlot(1L, false, 450000)));
+            given(applicationMapper.acquireBoothSlotLock(1L)).willReturn(1);
+            given(applicationMapper.selectLockedBoothSlotIds(List.of(1L))).willReturn(List.of());
+
+            // 스토리지 확정 흐름 스텁
+            given(storageService.confirm("tmp/document/abc123.pdf", UploadPolicy.DOCUMENT))
+                    .willReturn("uploads/document/2026/08/06/abc123.pdf");
+            given(storageService.toPublicUrl("uploads/document/2026/08/06/abc123.pdf"))
+                    .willReturn("https://d2jl6zs612zyt4.cloudfront.net/uploads/document/2026/08/06/abc123.pdf");
+
+            Application saved = Application.builder()
+                    .applicationId(200L)
+                    .businessId(1L)
+                    .fairId(fairId)
+                    .status(Application.Status.PENDING_REVIEW)
+                    .submittedAt(LocalDateTime.now())
+                    .build();
+            given(applicationMapper.selectById(any())).willReturn(saved);
+
+            // when
+            ApplicationResponse result = applicationService.submitApplication(ownerId, fairId, request);
+
+            // then: 최종 공개 URL이 응답에 그대로 반영됐는지 확인
+            assertThat(result.getAttachmentUrl())
+                    .isEqualTo("https://d2jl6zs612zyt4.cloudfront.net/uploads/document/2026/08/06/abc123.pdf");
 
         }
 

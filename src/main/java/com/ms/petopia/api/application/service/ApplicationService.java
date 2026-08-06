@@ -17,6 +17,8 @@ import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,7 @@ public class ApplicationService {
     private final ApplicationMapper applicationMapper;
     private final BusinessMapper businessMapper;
     private final RecruitNoticeMapper recruitNoticeMapper;
+    private final StorageService storageService;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -220,7 +223,7 @@ public class ApplicationService {
                 .managerPhone(request.getManagerPhone())
                 .managerEmail(request.getManagerEmail())
                 .agreedTerms(request.getAgreedTerms())
-                .attachmentUrl(request.getAttachmentUrl())
+                .attachmentUrl(resolveAttachmentUrl(request.getAttachmentObjectKey()))
                 .build();
 
         applicationMapper.insertApplicationForm(form);
@@ -244,6 +247,22 @@ public class ApplicationService {
             applicationMapper.insertApplicationSlot(slot);
 
         }
+
+    }
+
+    /*
+     * presigned 업로드로 받은 임시 객체 키를 확정(tmp → uploads)하고 공개 URL로 바꾼다.
+     * 키가 없으면(첨부파일을 안 넣었으면) null을 그대로 반환한다.
+     */
+    private String resolveAttachmentUrl(String temporaryObjectKey) {
+
+        if (temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
+            return null;
+        }
+
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.DOCUMENT);
+
+        return storageService.toPublicUrl(confirmedKey);
 
     }
 
