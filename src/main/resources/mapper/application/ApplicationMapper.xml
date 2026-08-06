@@ -162,4 +162,51 @@
         SELECT RELEASE_LOCK(CONCAT('booth_slot_apply_', #{boothSlotId}))
     </select>
 
+    <!-- 담당 행사에 들어온 신청 목록(행사 담당자용). status는 선택적 필터 -->
+    <select id="selectApplicationsByFair"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationReviewSummaryResponse">
+        SELECT a.application_id AS applicationId,
+            a.business_id AS businessId,
+            b.name AS businessName,
+            a.status AS status,
+            a.submitted_at AS submittedAt,
+            a.final_price AS finalPrice,
+            a.reject_reason AS rejectReason
+        FROM application a
+        JOIN business b ON b.business_id = a.business_id
+        WHERE a.fair_id = #{fairId}
+        <if test="status != null and status != ''">
+            AND a.status = #{status}
+        </if>
+        ORDER BY a.submitted_at DESC
+    </select>
+
+    <!-- 신청이 선택한 슬롯들의 가격 합계 (승인 시 final_price 자동 산출용) -->
+    <select id="sumSlotPricesByApplicationId" resultType="long">
+        SELECT COALESCE(SUM(price_at_selection), 0)
+        FROM application_slot
+        WHERE application_id = #{applicationId}
+    </select>
+
+    <!-- 승인 처리: PENDING_REVIEW 상태일 때만 전환 (WHERE 조건 + 영향받은 행 수로 동시 처리 방지) -->
+    <update id="updateApplicationApproved">
+        UPDATE application
+        SET status = 'PAYMENT_PENDING',
+            final_price = #{finalPrice},
+            payment_due_at = #{paymentDueAt},
+            reviewed_at = #{reviewedAt}
+        WHERE application_id = #{applicationId}
+        AND status = 'PENDING_REVIEW'
+    </update>
+
+    <!-- 반려 처리: PENDING_REVIEW 상태일 때만 전환 (동시 처리 방지 동일 적용) -->
+    <update id="updateApplicationRejected">
+        UPDATE application
+        SET status = 'REJECTED',
+            reject_reason = #{rejectReason},
+            reviewed_at = #{reviewedAt}
+        WHERE application_id = #{applicationId}
+        AND status = 'PENDING_REVIEW'
+    </update>
+
 </mapper>

@@ -3,11 +3,10 @@ package com.ms.petopia.api.application.service;
 import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
+import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
-import com.ms.petopia.api.application.dto.response.ApplicationDetailResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
-import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
+import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -271,6 +270,123 @@ public class ApplicationService {
         detail.setSlots(applicationMapper.selectApplicationSlotDetails(applicationId));
 
         return detail;
+
+    }
+
+    // 담당 행사의 신청 목록 조회 (행사 담당자용)
+    public List<ApplicationReviewSummaryResponse> getApplicationsForFair(Long adminUserId, Long fairId, String status) {
+
+        // 이 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, fairId);
+
+        return applicationMapper.selectApplicationsByFair(fairId, status);
+
+    }
+
+    // 참가 신청서 승인 (행사 담당자용)
+    @Transactional
+    public ApplicationReviewResultResponse approveApplication(Long adminUserId, Long applicationId, ApplicationApproveRequest request) {
+
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, application.getFairId());
+
+        // 심사 대기 상태인지 확인 (이미 승인/반려된 신청서는 재처리 불가)
+        if(application.getStatus() != Application.Status.PENDING_REVIEW) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
+        }
+
+        // 최종 가격 확정 — 담당자가 직접 finalPrice를 넣으면 그 값을, 안 넣으면(null) 슬롯 가격 합계를 사용
+        Long finalPrice = (request != null && request.getFinalPrice() != null)
+                ? request.getFinalPrice()
+                : applicationMapper.sumSlotPricesByApplicationId(applicationId);
+
+        // 승인 처리: PAYMENT_PENDING 전환 + 결제 마감일(3일 뒤) 확정
+        LocalDateTime reviewedAt = LocalDateTime.now();
+        LocalDateTime paymentDueAt = reviewedAt.plusDays(3);
+
+        // WHERE status='PENDING_REVIEW' 조건에 안 걸리면(동시에 이미 처리됨) 0행 반영 -> 예외
+        int updatedRows = applicationMapper.updateApplicationApproved(applicationId, finalPrice, paymentDueAt, reviewedAt);
+
+        if (updatedRows == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
+        }
+
+        return ApplicationReviewResultResponse.builder()
+                .applicationId(applicationId)
+                .status(Application.Status.PAYMENT_PENDING.name())
+                .finalPrice(finalPrice)
+                .paymentDueAt(paymentDueAt)
+                .reviewedAt(reviewedAt)
+                .build();
+
+    }
+
+    // 참가 신청서 반려 (행사 담당자용)
+    @Transactional
+    public ApplicationReviewResultResponse rejectApplication(Long adminUserId, Long applicationId, ApplicationRejectRequest request) {
+
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, application.getFairId());
+
+        // 심사 대기 상태인지 확인
+        if(application.getStatus() != Application.Status.PENDING_REVIEW) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
+        }
+
+        /*
+         * 반려 사유 필수 확인 — DTO에 @NotBlank 대신 여기서 직접 검증
+         * (구체적인 에러코드 APPLICATION_REJECT_REASON_REQUIRED를 반환하기 위해, TERMS_NOT_AGREED와 동일한 이유)
+         */
+        if(request.getRejectReason() == null || request.getRejectReason().isBlank()) {
+            throw new CommonException(ErrorCode.APPLICATION_REJECT_REASON_REQUIRED);
+        }
+
+        // 반려 처리: PENDING_REVIEW 상태일 때만 전환 (동시 처리 방지)
+        LocalDateTime reviewedAt = LocalDateTime.now();
+
+        int updatedRows = applicationMapper.updateApplicationRejected(applicationId, request.getRejectReason(), reviewedAt);
+
+        if(updatedRows == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
+        }
+
+        return ApplicationReviewResultResponse.builder()
+                .applicationId(applicationId)
+                .status(Application.Status.REJECTED.name())
+                .rejectReason(request.getRejectReason())
+                .reviewedAt(reviewedAt)
+                .build();
+
+    }
+
+    // 담당자 권한 확인 공용 헬퍼
+    private void verifyFairAdmin(Long adminUserId, Long fairId) {
+
+        Long fairAdminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
+
+        // 담당자가 아예 배정 안 된 행사인 경우
+        if(fairAdminUserId == null) {
+            throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "담당자가 배정되지 않은 행사입니다.");
+        }
+
+        // 담당자는 있지만 요청자 본인이 아닌 경우
+        if(!fairAdminUserId.equals(adminUserId)) {
+            throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "본인이 담당하는 행사가 아닙니다.");
+        }
 
     }
 

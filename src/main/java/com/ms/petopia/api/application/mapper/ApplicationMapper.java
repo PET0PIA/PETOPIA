@@ -3,13 +3,11 @@ package com.ms.petopia.api.application.mapper;
 import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
-import com.ms.petopia.api.application.dto.response.ApplicationDetailResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationSlotDetailResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
-import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
+import com.ms.petopia.api.application.dto.response.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -54,5 +52,23 @@ public interface ApplicationMapper {
 
     // 락 해제
     Integer releaseBoothSlotLock(@Param("boothSlotId") Long boothSlotId);
+
+    // 담당 행사에 들어온 신청 목록 조회 (status는 선택적 필터)
+    List<ApplicationReviewSummaryResponse> selectApplicationsByFair(@Param("fairId") Long fairId,
+                                                                    @Param("status") String status);
+
+    // 신청이 선택한 슬롯들의 가격 합계 (승인 시 final_price 자동 산출용)
+    Long sumSlotPricesByApplicationId(@Param("applicationId") Long applicationId);
+
+    // 승인 처리 (반환: 영향받은 행 수. 0이면 이미 다른 요청이 먼저 처리한 것)
+    int updateApplicationApproved(@Param("applicationId") Long applicationId,
+                                  @Param("finalPrice") Long finalPrice,
+                                  @Param("paymentDueAt") LocalDateTime paymentDueAt,
+                                  @Param("reviewedAt") LocalDateTime reviewedAt);
+
+    // 반려 처리 (반환: 영향받은 행 수. 0이면 이미 다른 요청이 먼저 처리한 것)
+    int updateApplicationRejected(@Param("applicationId") Long applicationId,
+                                  @Param("rejectReason") String rejectReason,
+                                  @Param("reviewedAt") LocalDateTime reviewedAt);
 
 }
