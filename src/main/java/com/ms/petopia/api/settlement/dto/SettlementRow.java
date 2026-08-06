@@ -21,6 +21,8 @@ public class SettlementRow {
     private Long commissionAmount;
     private Long netAmount;
     private String status;
+    /** PENDING 정산에 포함된 결제가 환불돼서 재계산이 필요한 상태. confirm()이 이 값이면 거부한다(PR #54). */
+    private boolean needsRecalculation;
     private LocalDateTime paidAt;
     private LocalDateTime confirmedAt;
     private Long confirmedByUserId;

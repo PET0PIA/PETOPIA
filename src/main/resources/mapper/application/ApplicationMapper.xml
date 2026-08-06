@@ -107,10 +107,17 @@
             f.name AS fairName,
             a.status AS status,
             a.final_price AS finalPrice,
-            a.reject_reason AS rejectReason
+            a.reject_reason AS rejectReason,
+            acr.status AS cancelRequestStatus
         FROM application a
         JOIN business b ON b.business_id = a.business_id
         JOIN fairs f ON f.fair_id = a.fair_id
+        LEFT JOIN application_cancel_request acr
+            ON acr.application_id = a.application_id
+            AND acr.cancel_request_id = (
+                SELECT MAX(cancel_request_id) FROM application_cancel_request
+                WHERE application_id = a.application_id
+            )
         WHERE b.owner_id = #{ownerId}
         <if test="businessId != null">
             AND a.business_id = #{businessId}
@@ -134,9 +141,18 @@
             a.reject_reason AS rejectReason,
             af.attachment_url AS attachmentUrl,
             a.submitted_at AS submittedAt,
-            a.reviewed_at AS reviewedAt
+            a.reviewed_at AS reviewedAt,
+            acr.status AS cancelRequestStatus,
+            acr.reason AS cancelReason,
+            acr.decided_at AS cancelDecidedAt
         FROM application a
         JOIN application_form af ON af.application_id = a.application_id
+        LEFT JOIN application_cancel_request acr
+            ON acr.application_id = a.application_id
+            AND acr.cancel_request_id = (
+                SELECT MAX(cancel_request_id) FROM application_cancel_request
+                WHERE application_id = a.application_id
+            )
         WHERE a.application_id = #{applicationId}
     </select>
 
@@ -160,6 +176,93 @@
     <!-- 락 해제 -->
     <select id="releaseBoothSlotLock" resultType="int">
         SELECT RELEASE_LOCK(CONCAT('booth_slot_apply_', #{boothSlotId}))
+    </select>
+
+    <!-- 담당 행사에 들어온 신청 목록(행사 담당자용). status는 선택적 필터 -->
+    <select id="selectApplicationsByFair"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationReviewSummaryResponse">
+        SELECT a.application_id AS applicationId,
+            a.business_id AS businessId,
+            b.name AS businessName,
+            a.status AS status,
+            a.submitted_at AS submittedAt,
+            a.final_price AS finalPrice,
+            a.reject_reason AS rejectReason
+        FROM application a
+        JOIN business b ON b.business_id = a.business_id
+        WHERE a.fair_id = #{fairId}
+        <if test="status != null and status != ''">
+            AND a.status = #{status}
+        </if>
+        ORDER BY a.submitted_at DESC
+    </select>
+
+    <!-- 신청이 선택한 슬롯들의 가격 합계 (승인 시 final_price 자동 산출용) -->
+    <select id="sumSlotPricesByApplicationId" resultType="long">
+        SELECT COALESCE(SUM(price_at_selection), 0)
+        FROM application_slot
+        WHERE application_id = #{applicationId}
+    </select>
+
+    <!-- 승인 처리: PENDING_REVIEW 상태일 때만 전환 (WHERE 조건 + 영향받은 행 수로 동시 처리 방지) -->
+    <update id="updateApplicationApproved">
+        UPDATE application
+        SET status = 'PAYMENT_PENDING',
+            final_price = #{finalPrice},
+            payment_due_at = #{paymentDueAt},
+            reviewed_at = #{reviewedAt}
+        WHERE application_id = #{applicationId}
+        AND status = 'PENDING_REVIEW'
+    </update>
+
+    <!-- 반려 처리: PENDING_REVIEW 상태일 때만 전환 (동시 처리 방지 동일 적용) -->
+    <update id="updateApplicationRejected">
+        UPDATE application
+        SET status = 'REJECTED',
+            reject_reason = #{rejectReason},
+            reviewed_at = #{reviewedAt}
+        WHERE application_id = #{applicationId}
+        AND status = 'PENDING_REVIEW'
+    </update>
+
+    <!-- 담당 행사에 들어온 취소 요청 목록(행사 담당자용). status는 선택적 필터 -->
+    <select id="selectCancelRequestsByFair"
+            resultType="com.ms.petopia.api.application.dto.response.ApplicationCancelRequestSummaryResponse">
+        SELECT acr.cancel_request_id AS cancelRequestId,
+            acr.application_id AS applicationId,
+            a.business_id AS businessId,
+            b.name AS businessName,
+            acr.reason AS reason,
+            acr.status AS status,
+            acr.requested_at AS requestedAt,
+            acr.decided_at AS decidedAt
+        FROM application_cancel_request acr
+        JOIN application a ON a.application_id = acr.application_id
+        JOIN business b ON b.business_id = a.business_id
+        WHERE a.fair_id = #{fairId}
+        <if test="status != null and status != ''">
+            AND acr.status = #{status}
+        </if>
+        ORDER BY acr.requested_at DESC
+    </select>
+
+    <!-- 이 신청서에 처리 대기 중(REQUESTED)인 취소 요청이 있는지 확인 -->
+    <select id="existsPendingCancelRequest" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM application_cancel_request
+            WHERE application_id = #{applicationId} AND status = 'REQUESTED'
+        )
+    </select>
+
+    <!-- 취소 요청 저장 (status는 DB DEFAULT 'REQUESTED' 활용) -->
+    <insert id="insertApplicationCancelRequest" useGeneratedKeys="true" keyProperty="cancelRequestId">
+        INSERT INTO application_cancel_request (application_id, reason)
+        VALUES (#{applicationId}, #{reason})
+    </insert>
+
+    <!-- 행사 운영 시작일 조회 (취소 요청 마감 기한 판정용) -->
+    <select id="selectOperationStartDateByFairId" resultType="java.time.LocalDate">
+        SELECT operation_start_date FROM fairs WHERE fair_id = #{fairId}
     </select>
 
 </mapper>
