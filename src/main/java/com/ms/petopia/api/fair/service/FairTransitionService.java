@@ -21,6 +21,11 @@ import java.util.List;
  *
  * <p>변경 이력(감사 로그)은 이번 범위에 포함하지 않았다. audit 도메인의 {@code ActionType}에
  * 자동전이용 값을 추가해야 하는데, 이 enum은 다른 도메인 소유라 별도 확인 후 진행한다.
+ *
+ * <p>세 조회 쿼리 모두 {@code canceled_at IS NOT NULL}인 행사는 제외한다 - 취소된 행사를
+ * 계속 자동전이시켜 봐야 의미가 없고, status만 계속 바뀌면 관리자 화면에서 취소된 행사가
+ * 마치 계속 진행 중인 것처럼 보일 수 있다. 취소 여부 자체는 status가 아니라
+ * {@code fairs.canceled_at}로 별도 관리한다({@link com.ms.petopia.api.fair.dto.FairStatus} 참고).
  */
 @Service
 @RequiredArgsConstructor

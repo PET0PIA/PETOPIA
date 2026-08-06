@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fair.mapper.FairCancelRequestMapper">
+
+    <!-- fair_id/requested_by/reason/created_at은 DDL상 NOT NULL이고 기본값이 없어 서비스 레이어가
+         항상 채워 넣는다는 전제로 고정 바인딩한다. status는 DDL DEFAULT 'PENDING'에 맡긴다. -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="fairCancelRequestId" keyColumn="fair_cancel_request_id">
+        INSERT INTO fair_cancel_requests
+            (fair_id, requested_by, reason, created_at)
+        VALUES
+            (#{fairId}, #{requestedBy}, #{reason}, #{createdAt})
+    </insert>
+
+    <select id="selectById" resultType="FairCancelRequest">
+        SELECT fair_cancel_request_id, fair_id, requested_by, reason,
+               status, reject_reason, reviewed_by, reviewed_at, created_at
+          FROM fair_cancel_requests
+         WHERE fair_cancel_request_id = #{fairCancelRequestId}
+    </select>
+
+    <select id="selectByFairId" resultType="FairCancelRequest">
+        SELECT fair_cancel_request_id, fair_id, requested_by, reason,
+               status, reject_reason, reviewed_by, reviewed_at, created_at
+          FROM fair_cancel_requests
+         WHERE fair_id = #{fairId}
+         ORDER BY created_at DESC
+    </select>
+
+    <select id="selectPendingByFairId" resultType="FairCancelRequest">
+        SELECT fair_cancel_request_id, fair_id, requested_by, reason,
+               status, reject_reason, reviewed_by, reviewed_at, created_at
+          FROM fair_cancel_requests
+         WHERE fair_id = #{fairId}
+           AND status = 'PENDING'
+         LIMIT 1
+    </select>
+
+    <update id="update">
+        UPDATE fair_cancel_requests
+        <set>
+            <if test="status != null">status = #{status},</if>
+            <if test="rejectReason != null">reject_reason = #{rejectReason},</if>
+            <if test="reviewedBy != null">reviewed_by = #{reviewedBy},</if>
+            <if test="reviewedAt != null">reviewed_at = #{reviewedAt},</if>
+        </set>
+        WHERE fair_cancel_request_id = #{fairCancelRequestId}
+    </update>
+
+</mapper>

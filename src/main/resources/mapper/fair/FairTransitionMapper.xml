@@ -8,6 +8,7 @@
         SELECT fair_id
           FROM fairs
          WHERE status = 'PAYMENT_PENDING'
+           AND canceled_at IS NULL
            AND payment_due_at IS NOT NULL
            AND payment_due_at &lt;= #{now}
          ORDER BY payment_due_at, fair_id
@@ -29,6 +30,7 @@
         SELECT fair_id
           FROM fairs
          WHERE status = 'PREPARING'
+           AND canceled_at IS NULL
            AND operation_start_date IS NOT NULL
            AND operation_start_date &lt;= #{today}
          ORDER BY operation_start_date, fair_id
@@ -48,6 +50,7 @@
         SELECT fair_id
           FROM fairs
          WHERE status = 'IN_PROGRESS'
+           AND canceled_at IS NULL
            AND operation_end_date IS NOT NULL
            AND operation_end_date &lt; #{today}
          ORDER BY operation_end_date, fair_id
