@@ -181,4 +181,22 @@
         ORDER BY a.submitted_at DESC
     </select>
 
+    <!-- 신청이 선택한 슬롯들의 가격 합계 (승인 시 final_price 자동 산출용) -->
+    <select id="sumSlotPricesByApplicationId" resultType="long">
+        SELECT COALESCE(SUM(price_at_selection), 0)
+        FROM application_slot
+        WHERE application_id = #{applicationId}
+    </select>
+
+    <!-- 승인 처리: PENDING_REVIEW 상태일 때만 전환 (WHERE 조건 + 영향받은 행 수로 동시 처리 방지) -->
+    <update id="updateApplicationApproved">
+        UPDATE application
+        SET status = 'PAYMENT_PENDING',
+            final_price = #{finalPrice},
+            payment_due_at = #{paymentDueAt},
+            reviewed_at = #{reviewedAt}
+        WHERE application_id = #{applicationId}
+        AND status = 'PENDING_REVIEW'
+    </update>
+
 </mapper>

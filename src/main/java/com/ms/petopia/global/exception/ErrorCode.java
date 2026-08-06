@@ -62,6 +62,8 @@ public enum ErrorCode {
     APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "V012", "신청을 찾을 수 없습니다."),
     BUSINESS_REGISTER_LOCK_TIMEOUT(HttpStatus.CONFLICT, "V013", "사업자 등록 처리 중입니다. 잠시 후 다시 시도해주세요."),
     APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V014", "본인이 담당하는 행사가 아닙니다."),
+    APPLICATION_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "V015", "심사 대기 중인 신청서만 검토할 수 있습니다."),
+    APPLICATION_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V016", "반려 시 반려 사유를 입력해야 합니다."),
 
 
     // ===== Payment =====
