@@ -1,22 +1,22 @@
 package com.ms.petopia.api.notification.dto;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 @Getter
 @Setter
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString
-public class Notification {
+public class NotificationListRow {
     private Long notificationId;
-    private Long userId; // 수신자
-    private RecipientType recipientType;
-    private NotificationType type;
+    private String type;
     private String title;
     private String body;
     private String linkUrl;
     private LocalDateTime createdAt;
+    private boolean alreadyRead;
 }

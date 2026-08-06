@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
  */
 public record PaymentResponse(
         Long paymentId,
+        String orderId,
         String paymentType,
         Long amount,
         String status,
@@ -45,6 +46,7 @@ public record PaymentResponse(
     public static PaymentResponse from(PaymentRow row) {
         return new PaymentResponse(
                 row.getPaymentId(),
+                "PAYMENT_" + row.getPaymentId(),
                 row.getPaymentType(),
                 row.getAmount(),
                 row.getStatus(),

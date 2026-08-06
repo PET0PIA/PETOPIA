@@ -8,6 +8,8 @@ import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.fair.mapper.HallMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ public class HallService {
 
     private final HallMapper hallMapper;
     private final FairMapper fairMapper;
+    private final StorageService storageService;
 
     @Transactional
     public HallResponse create(Long fairId, CreateHallRequest request) {
@@ -36,7 +39,7 @@ public class HallService {
         Hall hall = new Hall();
         hall.setFairId(fairId);
         hall.setName(request.name());
-        hall.setFloorPlanImageUrl(request.floorPlanImageUrl());
+        hall.setFloorPlanImageUrl(resolveImageUrl(request.floorPlanImageObjectKey()));
         hall.setCreatedAt(now);
         hall.setUpdatedAt(now);
 
@@ -65,7 +68,7 @@ public class HallService {
         hall.setHallId(hallId);
         if (request != null) {
             hall.setName(request.name());
-            hall.setFloorPlanImageUrl(request.floorPlanImageUrl());
+            hall.setFloorPlanImageUrl(resolveImageUrl(request.floorPlanImageObjectKey()));
         }
         hallMapper.update(hall);
 
@@ -97,6 +100,19 @@ public class HallService {
         if (fairId == null || fairId <= 0 || fairMapper.selectById(fairId) == null) {
             throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
         }
+    }
+
+    /**
+     * presigned 업로드로 받은 임시 객체 키를 확정(tmp → uploads)하고 공개 URL로 바꾼다.
+     * 키가 없으면(새로 첨부한 이미지가 없으면) null을 그대로 반환한다 - update()에서는 이 null이
+     * "변경하지 않음"으로 처리된다({@link com.ms.petopia.api.fair.mapper.HallMapper#update} 참고).
+     */
+    private String resolveImageUrl(String temporaryObjectKey) {
+        if (temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
+            return null;
+        }
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
+        return storageService.toPublicUrl(confirmedKey);
     }
 
     private HallResponse toResponse(Hall hall) {

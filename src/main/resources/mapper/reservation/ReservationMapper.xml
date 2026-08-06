@@ -28,7 +28,7 @@
            AND r.reservation_type = 'ADVANCE'
            AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
          WHERE fd.fair_id = #{fairId}
-           AND fd.operation_date >= #{today}
+           AND fd.operation_date > #{today}
          GROUP BY fd.fair_date_id, fd.operation_date, fd.entry_start_time, fd.entry_end_time, fd.capacity
          ORDER BY fd.operation_date ASC
     </select>
@@ -43,6 +43,7 @@
              , r.status AS reservation_status
              , r.reservation_amount AS amount
              , r.reserved_at
+             , r.payment_expires_at
              , er.first_checked_in_at AS checked_in_at
           FROM reservations r
           JOIN fairs f

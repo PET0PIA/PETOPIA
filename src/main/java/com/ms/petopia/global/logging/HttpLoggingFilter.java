@@ -66,7 +66,7 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
 
     /** 바디에서 마스킹할 JSON 필드명. */
     private static final String SENSITIVE_FIELD_PATTERN =
-            "(?i)\"(password|passwd|pwd|secret|token|accessToken|refreshToken|authorization)\"\\s*:\\s*\"[^\"]*\"";
+            "(?i)\"(password|passwd|pwd|secret|token|accessToken|refreshToken|authorization|uploadUrl)\"\\s*:\\s*\"[^\"]*\"";
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {

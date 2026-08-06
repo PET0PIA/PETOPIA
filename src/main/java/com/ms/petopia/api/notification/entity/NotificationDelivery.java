@@ -1,5 +1,7 @@
-package com.ms.petopia.api.notification.dto;
+package com.ms.petopia.api.notification.entity;
 
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.DeliveryStatus;
 import lombok.*;
 
 import java.time.LocalDateTime;

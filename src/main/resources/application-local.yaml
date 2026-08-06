@@ -65,5 +65,19 @@ petopia:
     secret-key: ${TOSS_SECRET_KEY}
     security-key: ${TOSS_SECURITY_KEY}
     api-version: ${TOSS_API_VERSION:2024-06-01}
+  storage:
+    # 개발용 버킷과 CloudFront 배포. 버킷 이름과 배포 도메인은 응답 URL 로 어차피
+    # 공개되는 값이라 비밀이 아니다. 그래서 실값을 기본값으로 둬서, 팀원이 환경변수를
+    # 세팅하지 않아도 로컬 기동과 테스트가 그대로 되게 한다.
+    #
+    # 기본값을 지우고 ${S3_BUCKET} 형태로만 적지 않는다. 테스트는 프로필을 지정하지
+    # 않아 local 로 뜨므로(spring.profiles.default), 기본값이 사라지면 CI 의
+    # @SpringBootTest 전체가 PlaceholderResolutionException 으로 죽는다.
+    # (2026-08-04 NTS_SERVICE_KEY 로 같은 실패를 겪었다.)
+    bucket: ${S3_BUCKET:petopia-bucket}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:https://d2jl6zs612zyt4.cloudfront.net}
+
+nts:
+  service-key: ${NTS_SERVICE_KEY}
 
 

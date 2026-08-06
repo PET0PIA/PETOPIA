@@ -15,7 +15,8 @@ export interface CreateFairApplicationRequest {
   name: string;
   description?: string;
   category?: FairCategory;
-  posterImageUrl?: string;
+  /** presigned 업로드로 받은 임시 객체 키(파일 자체가 아니라 objectKey를 보낸다). */
+  posterImageObjectKey?: string;
   noticeText?: string;
   placeName?: string;
   address?: string;
@@ -116,7 +117,8 @@ export interface Hall {
 
 export interface HallInput {
   name: string;
-  floorPlanImageUrl?: string;
+  /** presigned 업로드로 받은 임시 객체 키. 이미지를 바꾸지 않으면 생략한다(기존 이미지 유지). */
+  floorPlanImageObjectKey?: string;
 }
 
 export function getHalls(fairId: number) {
@@ -133,4 +135,99 @@ export function updateHall(fairId: number, hallId: number, payload: HallInput) {
 
 export function deleteHall(fairId: number, hallId: number) {
   return apiClient.delete<void>(`/api/fairs/${fairId}/halls/${hallId}`);
+}
+
+export interface BoothSlot {
+  boothSlotId: number;
+  hallId: number;
+  slotNumber: string;
+  posX: number;
+  posY: number;
+  width: number;
+  height: number;
+  price: number;
+  active: boolean;
+  memo: string | null;
+  lockedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BoothSlotItem {
+  boothSlotId?: number;
+  slotNumber: string;
+  posX: number;
+  posY: number;
+  width: number;
+  height: number;
+  price: number;
+  memo?: string;
+}
+
+export interface BulkSaveBoothSlotsRequest {
+  slots: BoothSlotItem[];
+  /**
+   * 이 홀을 조회했을 때 받은 boothLayoutVersion. 서버가 halls.booth_layout_version과
+   * 비교해서 다르면(그 사이 다른 곳에서 먼저 저장했으면) 409로 거부한다.
+   */
+  expectedVersion: number;
+}
+
+export interface BoothLayoutResponse {
+  slots: BoothSlot[];
+  boothLayoutVersion: number;
+}
+
+export function getBoothSlots(fairId: number, hallId: number) {
+  return apiClient.get<BoothLayoutResponse>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`);
+}
+
+export function bulkSaveBoothSlots(fairId: number, hallId: number, payload: BulkSaveBoothSlotsRequest) {
+  return apiClient.put<BoothLayoutResponse>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`, payload);
+}
+
+export interface FairDate {
+  fairDateId: number;
+  fairId: number;
+  /** YYYY-MM-DD */
+  operationDate: string;
+  capacity: number;
+  /** HH:mm 또는 HH:mm:ss */
+  entryStartTime: string;
+  entryEndTime: string;
+  /** 유효 상태(PENDING_PAYMENT/CONFIRMED/CHECKED_IN)의 사전예약 건수. 정원 축소·삭제 전 경고용 참고값 */
+  reservedCount: number;
+  /** 이 운영일에 현장예매 정책이 설정돼 있는지. 삭제 전 경고용 참고값 */
+  onsiteSalesConfigured: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFairDateRequest {
+  operationDate: string;
+  capacity: number;
+  entryStartTime: string;
+  entryEndTime: string;
+}
+
+export interface UpdateFairDateRequest {
+  capacity: number;
+  entryStartTime: string;
+  entryEndTime: string;
+}
+
+export function getFairDates(fairId: number) {
+  return apiClient.get<FairDate[]>(`/api/fairs/${fairId}/fair-dates`);
+}
+
+export function createFairDate(fairId: number, payload: CreateFairDateRequest) {
+  return apiClient.post<FairDate>(`/api/fairs/${fairId}/fair-dates`, payload);
+}
+
+export function updateFairDate(fairId: number, fairDateId: number, payload: UpdateFairDateRequest) {
+  return apiClient.put<FairDate>(`/api/fairs/${fairId}/fair-dates/${fairDateId}`, payload);
+}
+
+export function deleteFairDate(fairId: number, fairDateId: number) {
+  return apiClient.delete<void>(`/api/fairs/${fairId}/fair-dates/${fairDateId}`);
 }

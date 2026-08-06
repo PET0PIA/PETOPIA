@@ -11,6 +11,8 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +33,7 @@ public class FairService {
 
     private final FairMapper fairMapper;
     private final FairTimeProvider timeProvider;
+    private final StorageService storageService;
 
     /**
      * 행사 신청서를 등록한다. 심사 전 상태이므로 status는 채우지 않고 DDL 기본값(RECEIVED)에
@@ -47,7 +50,7 @@ public class FairService {
         fair.setName(request.name());
         fair.setDescription(request.description());
         fair.setCategory(request.category());
-        fair.setPosterImageUrl(request.posterImageUrl());
+        fair.setPosterImageUrl(resolveImageUrl(request.posterImageObjectKey()));
         fair.setNoticeText(request.noticeText());
         fair.setPlaceName(request.placeName());
         fair.setAddress(request.address());
@@ -211,5 +214,17 @@ public class FairService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    /**
+     * presigned 업로드로 받은 임시 객체 키를 확정(tmp → uploads)하고 공개 URL로 바꾼다.
+     * 키가 없으면(이미지를 첨부하지 않았으면) null을 그대로 반환한다.
+     */
+    private String resolveImageUrl(String temporaryObjectKey) {
+        if (isBlank(temporaryObjectKey)) {
+            return null;
+        }
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
+        return storageService.toPublicUrl(confirmedKey);
     }
 }

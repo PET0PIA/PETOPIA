@@ -12,5 +12,6 @@ public class ReservationChangeReservationRow {
     private Long fairId;
     private Long userId;
     private LocalDate visitDate;
+    private String reservationType;
     private String status;
 }

@@ -1,11 +1,10 @@
 package com.ms.petopia.api.notification.service;
 
-import com.ms.petopia.api.notification.dto.SaveNotificationRequest;
-import com.ms.petopia.api.notification.dto.SaveNotificationResponse;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.DeliveryStatus;
-import com.ms.petopia.api.notification.dto.Notification;
-import com.ms.petopia.api.notification.dto.NotificationDelivery;
+import com.ms.petopia.api.notification.entity.Notification;
+import com.ms.petopia.api.notification.entity.NotificationDelivery;
 import com.ms.petopia.api.notification.mapper.NotificationDeliveryMapper;
 import com.ms.petopia.api.notification.mapper.NotificationMapper;
 import com.ms.petopia.global.exception.CommonException;
@@ -26,7 +25,7 @@ public class NotificationService {
     private final EmailSenderService emailSenderService;
 
     @Transactional
-    public SaveNotificationResponse save(SaveNotificationRequest request) {
+    public SaveNotificationDto.Response save(SaveNotificationDto.Request request) {
         if (request.channels().size() != new HashSet<>(request.channels()).size()) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE, "channels에 중복된 값이 있습니다");
         }
@@ -59,10 +58,10 @@ public class NotificationService {
                 sendEmail(delivery, request);
             }
         }
-        return new SaveNotificationResponse(notification.getNotificationId());
+        return new SaveNotificationDto.Response(notification.getNotificationId());
     }
 
-    private void sendEmail(NotificationDelivery delivery, SaveNotificationRequest request){
+    private void sendEmail(NotificationDelivery delivery, SaveNotificationDto.Request request){
         try{
             emailSenderService.send(
                     delivery.getRecipientContact(),
@@ -83,5 +82,31 @@ public class NotificationService {
                     e.getMessage()
             );
         }
+    }
+
+    @Transactional
+    public void markAsRead(Long notificationId, Long userId){
+        Notification notification = notificationMapper.selectById(notificationId);
+
+        if(notification == null){
+            throw new CommonException(ErrorCode.NOTIFICATION_NOT_FOUND);
+        }
+        if(!notification.getUserId().equals(userId)){
+            throw new CommonException(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+        }
+        NotificationDelivery delivery = notificationDeliveryMapper
+                .selectByNotificationIdAndChannel(notificationId, DeliveryChannel.IN_APP);
+        if (delivery == null) {
+            throw new CommonException(ErrorCode.NOTIFICATION_NOT_FOUND); // IN_APP 알림이 아님
+        }
+        if (delivery.getReadAt() != null) {
+            return; // 이미 읽음
+        }
+        notificationDeliveryMapper.updateReadAt(delivery.getDeliveryId(), LocalDateTime.now());
+    }
+
+    @Transactional
+    public void markAllAsRead(Long userId){
+        notificationDeliveryMapper.updateReadAtAllInApp(userId, LocalDateTime.now());
     }
 }
