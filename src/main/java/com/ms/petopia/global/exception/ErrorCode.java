@@ -120,6 +120,7 @@ public enum ErrorCode {
     SETTLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "ST001", "존재하지 않는 정산입니다."),
     SETTLEMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ST002", "이미 계산된 정산이 있습니다."),
     SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
+    SETTLEMENT_NOT_RECALCULABLE(HttpStatus.CONFLICT, "ST004", "재계산할 수 없는 정산 상태입니다."),
     ;
 
     private final HttpStatus httpStatus;

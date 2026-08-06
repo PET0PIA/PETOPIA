@@ -41,14 +41,11 @@
          ORDER BY business_id
     </select>
 
-    <select id="selectItemByPaymentId" resultType="SettlementItemRow">
-        SELECT settlement_item_id
-             , settlement_id
-             , payment_id
-             , refund_id
-             , amount_included
-          FROM settlement_item
-         WHERE payment_id = #{paymentId}
+    <select id="selectSettlementStatusByPaymentId" resultType="string">
+        SELECT s.status
+          FROM settlement_item si
+          JOIN settlement s ON s.settlement_id = si.settlement_id
+         WHERE si.payment_id = #{paymentId}
     </select>
 
     <insert id="insert" parameterType="SettlementRow"
@@ -72,11 +69,27 @@
         </foreach>
     </insert>
 
+    <delete id="deleteItemsBySettlementId">
+        DELETE FROM settlement_item
+         WHERE settlement_id = #{settlementId}
+    </delete>
+
     <update id="confirm">
         UPDATE settlement
         SET status = 'CONFIRMED',
         confirmed_by_user_id = #{confirmedByUserId},
         confirmed_at = #{confirmedAt},
+        updated_at = #{updatedAt}
+        WHERE settlement_id = #{settlementId}
+        AND status = 'PENDING'
+    </update>
+
+    <update id="updateAggregates">
+        UPDATE settlement
+        SET gross_amount = #{grossAmount},
+        refund_amount = #{refundAmount},
+        commission_amount = #{commissionAmount},
+        net_amount = #{netAmount},
         updated_at = #{updatedAt}
         WHERE settlement_id = #{settlementId}
         AND status = 'PENDING'

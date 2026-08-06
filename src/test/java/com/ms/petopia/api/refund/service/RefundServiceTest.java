@@ -11,7 +11,6 @@ import com.ms.petopia.api.refund.dto.RefundResponse;
 import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.mapper.RefundMapper;
-import com.ms.petopia.api.settlement.dto.SettlementItemRow;
 import com.ms.petopia.api.settlement.mapper.SettlementMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -97,17 +96,12 @@ class RefundServiceTest {
     }
 
     @Test
-    @DisplayName("이미 정산에 포함된 결제는 환불할 수 없다")
-    void refund_이미정산됨_예외를던진다() {
-        // Arrange: 이 결제가 이미 어느 정산의 SETTLEMENT_ITEM으로 들어가 있는 상황
-        // (정산 계산 이후 환불을 허용하면 정산 금액이 옛날 값으로 굳어버리는 걸 방지하는 방어 로직)
+    @DisplayName("이미 CONFIRMED 정산에 포함된 결제는 환불할 수 없다")
+    void refund_확정정산에포함됨_예외를던진다() {
+        // Arrange: 이 결제가 이미 확정(CONFIRMED)된 정산에 들어가 있는 상황 — 확정 이후 금액은
+        // 불변이라는 규칙 때문에 재계산으로도 되돌릴 수 없어서 환불 자체를 막는다
         given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
-        SettlementItemRow item = new SettlementItemRow();
-        item.setSettlementItemId(1L);
-        item.setSettlementId(5L);
-        item.setPaymentId(1L);
-        item.setAmountIncluded(50000L);
-        given(settlementMapper.selectItemByPaymentId(1L)).willReturn(item);
+        given(settlementMapper.selectSettlementStatusByPaymentId(1L)).willReturn("CONFIRMED");
 
         assertThatThrownBy(() -> refundService.refund(1L, 99L, USER_CANCEL_REQUEST))
                 .isInstanceOf(CommonException.class)
@@ -116,6 +110,19 @@ class RefundServiceTest {
 
         // 정산 위반으로 걸렸으면 환불 row 자체를 만들면 안 됨
         verify(refundMapper, never()).insert(any(RefundRow.class));
+    }
+
+    @Test
+    @DisplayName("PENDING 정산에 포함된 결제는 환불할 수 있다 (재계산으로 나중에 반영)")
+    void refund_대기중정산에포함됨_환불허용() {
+        // Arrange: 정산이 아직 PENDING이면 환불 이후 담당자가 재계산을 호출해서 금액을 바로잡을
+        // 수 있으므로, CONFIRMED와 달리 환불 자체는 막지 않는다
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(settlementMapper.selectSettlementStatusByPaymentId(1L)).willReturn("PENDING");
+
+        RefundResponse result = refundService.refund(1L, 99L, USER_CANCEL_REQUEST);
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
     }
 
     @Test
