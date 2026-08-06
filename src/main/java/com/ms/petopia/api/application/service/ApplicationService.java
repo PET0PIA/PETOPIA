@@ -4,6 +4,7 @@ import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
 import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
@@ -327,6 +328,48 @@ public class ApplicationService {
 
     }
 
+    // 참가 신청서 반려 (행사 담당자용)
+    @Transactional
+    public ApplicationReviewResultResponse rejectApplication(Long adminUserId, Long applicationId, ApplicationRejectRequest request) {
+
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, application.getFairId());
+
+        // 심사 대기 상태인지 확인
+        if(application.getStatus() != Application.Status.PENDING_REVIEW) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
+        }
+
+        // 반려 사유 필수 확인 (컨트롤러 @NotBlank로도 걸러지지만 서비스 단독 호출 대비 방어)
+        if(request.getRejectReason() == null || request.getRejectReason().isBlank()) {
+            throw new CommonException(ErrorCode.APPLICATION_REJECT_REASON_REQUIRED);
+        }
+
+        // 반려 처리: PENDING_REVIEW 상태일 때만 전환 (동시 처리 방지)
+        LocalDateTime reviewedAt = LocalDateTime.now();
+
+        int updatedRows = applicationMapper.updateApplicationRejected(applicationId, request.getRejectReason(), reviewedAt);
+
+        if(updatedRows == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
+        }
+
+        return ApplicationReviewResultResponse.builder()
+                .applicationId(applicationId)
+                .status(Application.Status.REJECTED.name())
+                .rejectReason(request.getRejectReason())
+                .reviewedAt(reviewedAt)
+                .build();
+
+    }
+
     // 담당자 권한 확인 공용 헬퍼
     private void verifyFairAdmin(Long adminUserId, Long fairId) {
 
@@ -343,7 +386,5 @@ public class ApplicationService {
         }
 
     }
-
-
 
 }

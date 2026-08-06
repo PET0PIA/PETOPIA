@@ -199,4 +199,14 @@
         AND status = 'PENDING_REVIEW'
     </update>
 
+    <!-- 반려 처리: PENDING_REVIEW 상태일 때만 전환 (동시 처리 방지 동일 적용) -->
+    <update id="updateApplicationRejected">
+        UPDATE application
+        SET status = 'REJECTED',
+            reject_reason = #{rejectReason},
+            reviewed_at = #{reviewedAt}
+        WHERE application_id = #{applicationId}
+        AND status = 'PENDING_REVIEW'
+    </update>
+
 </mapper>

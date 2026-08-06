@@ -1,6 +1,5 @@
 package com.ms.petopia.api.application.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,7 +8,6 @@ import lombok.Setter;
 @Setter
 public class ApplicationRejectRequest {
 
-    @NotBlank
     private String rejectReason; // 반려 이유
 
 }

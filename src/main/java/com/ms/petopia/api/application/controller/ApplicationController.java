@@ -1,6 +1,7 @@
 package com.ms.petopia.api.application.controller;
 
 import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.service.ApplicationService;
@@ -93,6 +94,20 @@ public class ApplicationController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(applicationService.approveApplication(adminUserId, applicationId, request)));
+
+    }
+
+    // 참가 신청서 반려 (행사 담당자용)
+    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
+    @PutMapping("/applications/{applicationId}/reject")
+    public ResponseEntity<ApiResponse<ApplicationReviewResultResponse>> rejectApplication(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long applicationId,
+            @Valid @RequestBody ApplicationRejectRequest request
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.rejectApplication(adminUserId, applicationId, request)));
 
     }
 

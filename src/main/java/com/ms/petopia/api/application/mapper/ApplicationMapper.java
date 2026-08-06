@@ -66,4 +66,9 @@ public interface ApplicationMapper {
                                   @Param("paymentDueAt") LocalDateTime paymentDueAt,
                                   @Param("reviewedAt") LocalDateTime reviewedAt);
 
+    // 반려 처리 (반환: 영향받은 행 수. 0이면 이미 다른 요청이 먼저 처리한 것)
+    int updateApplicationRejected(@Param("applicationId") Long applicationId,
+                                  @Param("rejectReason") String rejectReason,
+                                  @Param("reviewedAt") LocalDateTime reviewedAt);
+
 }
