@@ -6,6 +6,7 @@ import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
 import com.ms.petopia.api.fair.dto.FairStatus;
+import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.mapper.FairMapper;
@@ -283,6 +284,74 @@ class FairServiceTest {
                 ErrorCode.INVALID_INPUT_VALUE
         );
         verify(fairMapper, never()).update(any());
+    }
+
+    // ===== publish =====
+
+    @Test
+    @DisplayName("PAYMENT_PENDING 상태의 행사를 공개하면 published_at을 채운다")
+    void publish_공개가능상태면_publishedAt을_설정한다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+
+        PublishFairResponse response = fairService.publish(FAIR_ID, REVIEWER_ID);
+
+        assertThat(response.fairId()).isEqualTo(FAIR_ID);
+        assertThat(response.status()).isEqualTo(FairStatus.PAYMENT_PENDING.name());
+        assertThat(response.publishedAt()).isEqualTo(NOW);
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).update(captor.capture());
+        Fair updated = captor.getValue();
+        assertThat(updated.getFairId()).isEqualTo(FAIR_ID);
+        assertThat(updated.getPublishedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("이미 공개된 행사를 다시 공개하면 갱신 없이 최초 공개 일시를 그대로 반환한다")
+    void publish_이미공개됐으면_멱등하게_기존값을_반환한다() {
+        Fair fair = fairWithStatus(FairStatus.PAYMENT_PENDING);
+        LocalDateTime firstPublishedAt = NOW.minusDays(1);
+        fair.setPublishedAt(firstPublishedAt);
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        PublishFairResponse response = fairService.publish(FAIR_ID, REVIEWER_ID);
+
+        assertThat(response.publishedAt()).isEqualTo(firstPublishedAt);
+        verify(fairMapper, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("RECEIVED 상태의 행사는 공개할 수 없어 FAIR_NOT_PUBLISHABLE을 던진다")
+    void publish_심사전이면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+
+        assertErrorCode(() -> fairService.publish(FAIR_ID, REVIEWER_ID), ErrorCode.FAIR_NOT_PUBLISHABLE);
+        verify(fairMapper, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("취소된 행사는 공개할 수 없어 FAIR_NOT_PUBLISHABLE을 던진다")
+    void publish_취소됐으면_예외를_던진다() {
+        Fair fair = fairWithStatus(FairStatus.PAYMENT_PENDING);
+        fair.setCanceledAt(NOW.minusHours(1));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        assertErrorCode(() -> fairService.publish(FAIR_ID, REVIEWER_ID), ErrorCode.FAIR_NOT_PUBLISHABLE);
+        verify(fairMapper, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 행사를 공개하면 FAIR_NOT_FOUND를 던진다")
+    void publish_존재하지않으면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(null);
+        assertErrorCode(() -> fairService.publish(FAIR_ID, REVIEWER_ID), ErrorCode.FAIR_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("actorId가 없으면 INVALID_INPUT_VALUE를 던진다")
+    void publish_actorId없으면_예외를_던진다() {
+        assertErrorCode(() -> fairService.publish(FAIR_ID, null), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).selectById(any());
     }
 
     // ===== fixtures =====
