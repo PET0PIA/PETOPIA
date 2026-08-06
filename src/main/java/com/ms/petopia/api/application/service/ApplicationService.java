@@ -254,8 +254,8 @@ public class ApplicationService {
 
     }
 
-    // 신청 상세 조회
-    public ApplicationDetailResponse getApplicationDetail(Long ownerId, Long applicationId) {
+    // 신청 상세 조회 (사업자 본인 또는 담당 행사 관리자 조회 가능)
+    public ApplicationDetailResponse getApplicationDetail(Long userId, Long applicationId) {
 
         ApplicationDetailResponse detail = applicationMapper.selectApplicationDetail(applicationId);
 
@@ -265,16 +265,29 @@ public class ApplicationService {
 
         // 본인 소유 사업자의 신청인지 확인
         Business business = businessMapper.selectById(detail.getBusinessId());
+        boolean isOwner = business != null && business.getOwnerId().equals(userId);
 
-        if(business == null || !business.getOwnerId().equals(ownerId)) {
-            throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 신청만 조회할 수 있습니다.");
+        // 본인 소유가 아니면, 이 신청이 속한 행사의 담당자인지 확인
+        boolean isFairAdmin = false;
+
+        if(!isOwner) {
+
+            Long fairAdminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(detail.getFairId());
+            isFairAdmin = fairAdminUserId != null && fairAdminUserId.equals(userId);
+
+        }
+
+        if(!isOwner && !isFairAdmin) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 신청이거나 담당 행사여야 조회할 수 있습니다.");
         }
 
         // 선택 슬롯 목록 채우기
         detail.setSlots(applicationMapper.selectApplicationSlotDetails(applicationId));
 
-        // 취소 요청 가능 여부 계산 (프론트 버튼 활성화 판단용)
-        detail.setCancelable(isCancelable(detail));
+        // 취소 요청 가능 여부는 사업자 본인 관점에서만 의미 있음 (담당자는 취소 요청 주체가 아님)
+        if(isOwner) {
+            detail.setCancelable(isCancelable(detail));
+        }
 
         return detail;
 

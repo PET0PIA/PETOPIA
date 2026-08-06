@@ -756,7 +756,7 @@ class ApplicationServiceTest {
             // when & then
             assertThatThrownBy(() -> applicationService.getApplicationDetail(ownerId, applicationId))
                     .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인 소유의 신청만");
+                    .hasMessageContaining("담당 행사여야 조회할 수 있습니다");
 
             // 소유 확인에서 막혔으니, 슬롯 조회는 실행되면 안 됨
             verify(applicationMapper, never()).selectApplicationSlotDetails(any());

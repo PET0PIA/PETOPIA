@@ -58,15 +58,15 @@ public class ApplicationController {
 
     }
 
-    // 신청 상세 조회
+    // 신청 상세 조회 (사업자 본인 또는 담당 행사 관리자 조회 가능)
     @GetMapping("/applications/{applicationId}")
     public ResponseEntity<ApiResponse<ApplicationDetailResponse>> getApplicationDetail(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long userId,
             @PathVariable Long applicationId
     ) {
 
         return ResponseEntity.ok(
-                ApiResponse.success(applicationService.getApplicationDetail(ownerId, applicationId)));
+                ApiResponse.success(applicationService.getApplicationDetail(userId, applicationId)));
 
     }
 
