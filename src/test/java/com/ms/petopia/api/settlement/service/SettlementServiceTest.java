@@ -202,6 +202,23 @@ class SettlementServiceTest {
     }
 
     @Test
+    @DisplayName("재계산이 필요한 정산은 확정할 수 없다")
+    void confirm_재계산필요_예외를던진다() {
+        // Arrange: PENDING이긴 하지만 환불로 인해 needs_recalculation이 서 있는 상황
+        // (CodeRabbit 리뷰 지적, PR #54 — recalculate 없이 confirm하면 옛날 금액으로 굳어버림)
+        SettlementRow row = pendingSettlementRow();
+        row.setNeedsRecalculation(true);
+        given(settlementMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_RECALCULATION_REQUIRED);
+
+        verify(settlementMapper, never()).confirm(any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("동시에 두 번 확정 요청이 들어오면 나중 요청은 예외를 던진다")
     void confirm_동시확정_예외를던진다() {
         given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());

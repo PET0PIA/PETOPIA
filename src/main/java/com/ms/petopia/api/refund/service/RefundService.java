@@ -37,8 +37,11 @@ import java.util.List;
  *
  * <p><b>정산과의 관계</b>: 결제가 이미 CONFIRMED 정산에 포함돼 있으면 환불을 거부한다(확정 이후
  * 금액은 불변이라는 규칙, PR #47 CodeRabbit 리뷰 지적). PENDING 정산에 포함된 결제는 환불을
- * 허용하는 대신, 정산 담당자가 {@code SettlementService.recalculate}를 호출해서 최신 완료/환불
- * 상태를 반영한 금액으로 다시 계산하는 걸 전제로 한다.
+ * 허용하는 대신 그 정산에 "재계산 필요"(needs_recalculation) 표시를 원자적으로 남긴다 —
+ * {@code SettlementService.confirm}은 이 표시가 있으면 확정을 거부하고, 정산 담당자가
+ * {@code recalculate}를 호출해서 최신 완료/환불 상태를 반영한 금액으로 다시 계산한 뒤에야
+ * 확정할 수 있다(PR #54 CodeRabbit 리뷰 지적 — 표시 없이 상태만 읽던 예전 방식은 환불과
+ * confirm이 동시에 일어나면 옛날 금액이 그대로 확정돼버리는 경쟁 조건이 있었다).
  *
  * <p><b>동시성</b>: {@link #refund}와 {@code SettlementService.calculate}/{@code recalculate}가
  * 동시에 같은 결제를 건드리면(정산 집계가 이 결제를 포함시키는 도중 환불이 끼어드는 경우) 정산
@@ -80,11 +83,15 @@ public class RefundService {
         if (!COMPLETED.equals(payment.getStatus())) {
             throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE);
         }
-        // 이미 CONFIRMED 정산에 포함된 결제면 환불을 막는다 — 확정 이후 금액은 불변이라는
-        // 규칙 때문에 재계산으로도 되돌릴 수 없다. PENDING 정산에 포함된 결제는 환불을 허용하고,
-        // 정산 담당자가 SettlementService.recalculate로 나중에 금액을 바로잡는 걸 전제로 한다.
-        String settlementStatus = settlementMapper.selectSettlementStatusByPaymentId(paymentId);
-        if ("CONFIRMED".equals(settlementStatus)) {
+        // 이 결제가 정산에 포함돼 있으면(PENDING일 때만) "재계산 필요" 표시를 원자적으로 남기고
+        // 환불을 허용한다 — 정산 담당자가 SettlementService.recalculate로 나중에 금액을 바로잡는
+        // 걸 전제로 한다. markNeedsRecalculation의 WHERE status='PENDING' 조건이
+        // SettlementService.confirm()의 원자적 확정 UPDATE와 같은 SETTLEMENT 행을 두고 경쟁하므로,
+        // 둘 중 먼저 커밋한 쪽이 이긴다(CodeRabbit 리뷰 지적, PR #54 — 예전엔 상태만 읽고 끝나서
+        // "PENDING 확인 직후 confirm이 먼저 끝나버리는" 경쟁을 못 막았다). 이미 CONFIRMED로
+        // 넘어간 정산이면 이 UPDATE가 0행이라 환불을 거부한다.
+        Long settlementId = settlementMapper.selectSettlementIdByPaymentId(paymentId);
+        if (settlementId != null && settlementMapper.markNeedsRecalculation(settlementId) == 0) {
             throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE,
                     "이미 확정된 정산에 포함된 결제는 환불할 수 없습니다. 정산 담당자에게 문의해 주세요.");
         }

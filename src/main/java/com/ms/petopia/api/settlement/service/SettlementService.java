@@ -196,6 +196,8 @@ public class SettlementService {
      *
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_FOUND} 존재하지 않는 정산일 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_CONFIRMABLE} PENDING이 아닐 때
+     * @throws CommonException {@link ErrorCode#SETTLEMENT_RECALCULATION_REQUIRED} 재계산이
+     *         필요한 상태(needs_recalculation)일 때 — 먼저 {@link #recalculate}를 호출해야 한다
      */
     public SettlementResponse confirm(Long settlementId, Long confirmedByUserId) {
         SettlementRow row = settlementMapper.selectById(settlementId);
@@ -205,11 +207,17 @@ public class SettlementService {
         if (!PENDING.equals(row.getStatus())) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);
         }
+        if (row.isNeedsRecalculation()) {
+            // 환불로 인해 재계산이 필요하다고 표시된 정산 — recalculate 없이 그냥 확정하면
+            // 옛날(환불 반영 전) 금액으로 굳어버린다(CodeRabbit 리뷰 지적, PR #54)
+            throw new CommonException(ErrorCode.SETTLEMENT_RECALCULATION_REQUIRED);
+        }
 
         LocalDateTime now = LocalDateTime.now();
         int updated = settlementMapper.confirm(settlementId, confirmedByUserId, now, now);
         if (updated == 0) {
-            // selectById 이후 이 UPDATE 사이에 동시에 다른 요청이 먼저 확정한 경우(동시성 방어)
+            // selectById 이후 이 UPDATE 사이에 동시에 다른 요청이 먼저 확정했거나, 환불이 먼저
+            // needs_recalculation을 세워버린 경우(둘 다 동시성 방어, 뒤쪽은 PR #54 지적사항)
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);
         }
 

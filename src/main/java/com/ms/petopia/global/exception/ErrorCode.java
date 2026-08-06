@@ -121,6 +121,7 @@ public enum ErrorCode {
     SETTLEMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ST002", "이미 계산된 정산이 있습니다."),
     SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
     SETTLEMENT_NOT_RECALCULABLE(HttpStatus.CONFLICT, "ST004", "재계산할 수 없는 정산 상태입니다."),
+    SETTLEMENT_RECALCULATION_REQUIRED(HttpStatus.CONFLICT, "ST005", "재계산이 필요한 정산은 확정할 수 없습니다. 먼저 재계산해 주세요."),
     ;
 
     private final HttpStatus httpStatus;
