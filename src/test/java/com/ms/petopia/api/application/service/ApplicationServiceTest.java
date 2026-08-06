@@ -1,7 +1,9 @@
 package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.domain.Application;
+import com.ms.petopia.api.application.domain.ApplicationCancelRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
@@ -18,10 +20,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.global.storage.UploadPolicy;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -32,6 +36,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 
 /*
  * ApplicationService 단위 테스트.
@@ -1226,6 +1231,632 @@ class ApplicationServiceTest {
                     applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("심사 대기 중인 신청서만");
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("담당 행사의 취소 요청 목록 조회")
+    class GetCancelRequestsForFair {
+
+        @Test
+        @DisplayName("담당자 본인이면 취소 요청 목록을 반환한다")
+        void returnsCancelRequestsWhenAdminMatches() {
+
+            // given: 이 행사의 담당자가 요청자 본인인 상황
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+
+            List<ApplicationCancelRequestSummaryResponse> requests = List.of(
+                    ApplicationCancelRequestSummaryResponse.builder()
+                            .cancelRequestId(1L).applicationId(10L).businessId(5L).businessName("멍냥용품")
+                            .reason("일정 겹침").status("REQUESTED").requestedAt(LocalDateTime.now())
+                            .build()
+            );
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectCancelRequestsByFair(fairId, null)).willReturn(requests);
+
+            // when
+            List<ApplicationCancelRequestSummaryResponse> result =
+                    applicationService.getCancelRequestsForFair(adminUserId, fairId, null);
+
+            // then
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getBusinessName()).isEqualTo("멍냥용품");
+
+        }
+
+        @Test
+        @DisplayName("status 필터를 넘기면 매퍼에 그대로 전달된다")
+        void passesStatusFilterToMapper() {
+
+            // given
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+            String status = "REQUESTED";
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectCancelRequestsByFair(fairId, status)).willReturn(List.of());
+
+            // when
+            applicationService.getCancelRequestsForFair(adminUserId, fairId, status);
+
+            // then
+            verify(applicationMapper).selectCancelRequestsByFair(fairId, status);
+
+        }
+
+        @Test
+        @DisplayName("담당자가 배정되지 않은 행사면 예외를 던진다")
+        void throwsWhenNoAdminAssigned() {
+
+            // given: fair_admin_assignments에 담당자 자체가 없는 상황
+            Long adminUserId = 1L;
+            Long fairId = 999L;
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.getCancelRequestsForFair(adminUserId, fairId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("담당자가 배정되지 않은 행사입니다");
+
+            // 담당자 확인에서 막혔으니, 목록 조회 쿼리는 실행되면 안 됨
+            verify(applicationMapper, never()).selectCancelRequestsByFair(any(), any());
+
+        }
+
+        @Test
+        @DisplayName("본인이 담당하는 행사가 아니면 예외를 던진다")
+        void throwsWhenNotAssignedAdmin() {
+
+            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.getCancelRequestsForFair(adminUserId, fairId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+
+            verify(applicationMapper, never()).selectCancelRequestsByFair(any(), any());
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("참가 취소 요청 제출")
+    class SubmitCancelRequest {
+
+        // 테스트용 취소 요청 제출 DTO
+        private ApplicationCancelRequestSubmitRequest createCancelSubmitRequest(String reason) {
+
+            ApplicationCancelRequestSubmitRequest request = new ApplicationCancelRequestSubmitRequest();
+            request.setReason(reason);
+
+            return request;
+
+        }
+
+        @Test
+        @DisplayName("정상적으로 취소 요청을 제출한다")
+        void submitsSuccessfully() {
+
+            // given: 결제 대기 상태(취소 가능), 행사 시작까지 여유 있음(마감 기한 안 넘음), 기존 대기 요청 없음
+            Long ownerId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).businessId(1L).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectOperationStartDateByFairId(fairId))
+                    .willReturn(LocalDate.now().plusDays(30));
+            given(applicationMapper.existsPendingCancelRequest(applicationId)).willReturn(false);
+
+            // when
+            applicationService.submitCancelRequest(ownerId, applicationId, createCancelSubmitRequest("일정 겹침"));
+
+            // then: application_cancel_request에 실제로 저장 시도됐는지 확인
+            verify(applicationMapper).insertApplicationCancelRequest(any());
+
+        }
+
+        @Test
+        @DisplayName("신청이 존재하지 않으면 예외를 던진다")
+        void throwsWhenApplicationNotFound() {
+
+            // given: 존재하지 않는 applicationId
+            Long ownerId = 1L;
+            Long applicationId = 999L;
+
+            given(applicationMapper.selectById(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.submitCancelRequest(ownerId, applicationId, createCancelSubmitRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("신청을 찾을 수 없습니다");
+
+        }
+
+        @Test
+        @DisplayName("본인 소유의 신청이 아니면 예외를 던진다")
+        void throwsWhenNotOwner() {
+
+            // given: 신청의 사업자 실제 소유자는 2L인데, 요청자는 1L
+            Long ownerId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).businessId(1L).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, 2L));
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.submitCancelRequest(ownerId, applicationId, createCancelSubmitRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인 소유의 신청만");
+
+            // 소유권 확인에서 막혔으니, 그 이후 단계는 실행되면 안 됨
+            verify(applicationMapper, never()).existsPendingCancelRequest(any());
+
+        }
+
+        @Test
+        @DisplayName("취소 가능한 상태가 아니면 예외를 던진다")
+        void throwsWhenNotCancelable() {
+
+            // given: 아직 심사 대기 중인 신청서(승인/확정 전이라 취소할 게 없음)
+            Long ownerId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).businessId(1L).fairId(fairId)
+                    .status(Application.Status.PENDING_REVIEW)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.submitCancelRequest(ownerId, applicationId, createCancelSubmitRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("결제 대기 또는 확정된 신청서만");
+
+            verify(applicationMapper, never()).existsPendingCancelRequest(any());
+
+        }
+
+        @Test
+        @DisplayName("행사 시작 7일 이내면 마감 기한 초과 예외를 던진다")
+        void throwsWhenDeadlineExceeded() {
+
+            // given: 행사가 6일 뒤 시작(취소 요청 마감 기한 이미 지남)
+            Long ownerId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).businessId(1L).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectOperationStartDateByFairId(fairId))
+                    .willReturn(LocalDate.now().plusDays(6));
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.submitCancelRequest(ownerId, applicationId, createCancelSubmitRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("행사 시작 7일 전까지만");
+
+            // 마감 기한에서 막혔으니, 중복 요청 확인까지는 안 감
+            verify(applicationMapper, never()).existsPendingCancelRequest(any());
+
+        }
+
+        @Test
+        @DisplayName("이미 처리 대기 중인 취소 요청이 있으면 예외를 던진다")
+        void throwsWhenDuplicatePendingRequest() {
+
+            // given: 이미 REQUESTED 상태인 취소 요청이 존재
+            Long ownerId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).businessId(1L).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectOperationStartDateByFairId(fairId))
+                    .willReturn(LocalDate.now().plusDays(30));
+            given(applicationMapper.existsPendingCancelRequest(applicationId)).willReturn(true);
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.submitCancelRequest(ownerId, applicationId, createCancelSubmitRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("이미 처리 대기 중인 취소 요청이 있습니다");
+
+            verify(applicationMapper, never()).insertApplicationCancelRequest(any());
+
+        }
+
+        @Test
+        @DisplayName("동시 요청으로 DB 유니크 제약에 걸리면 예외를 던진다")
+        void throwsWhenDuplicateKeyExceptionOnInsert() {
+
+            /*
+             * given: 사전 체크(existsPendingCancelRequest)는 통과했지만, insert 시점에
+             * 동시 요청이 먼저 들어가 UK_APPLICATION_CANCEL_ACTIVE 유니크 제약에 걸리는 상황.
+             * 실제 방어선은 이 DB 제약이고, 사전 체크는 빠른 실패용일 뿐이라는 걸 검증.
+             */
+            Long ownerId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).businessId(1L).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectOperationStartDateByFairId(fairId))
+                    .willReturn(LocalDate.now().plusDays(30));
+            given(applicationMapper.existsPendingCancelRequest(applicationId)).willReturn(false);
+            doThrow(new DuplicateKeyException("UK_APPLICATION_CANCEL_ACTIVE"))
+                    .when(applicationMapper).insertApplicationCancelRequest(any());
+
+            // when & then: DuplicateKeyException을 catch해서 같은 에러코드로 변환하는지 확인
+            assertThatThrownBy(() ->
+                    applicationService.submitCancelRequest(ownerId, applicationId, createCancelSubmitRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("이미 처리 대기 중인 취소 요청이 있습니다");
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("참가 취소 요청 승인")
+    class ApproveCancelRequest {
+
+        // 테스트용 처리 대기 중인 취소 요청
+        private ApplicationCancelRequest createCancelRequest(Long cancelRequestId, Long applicationId) {
+
+            return ApplicationCancelRequest.builder()
+                    .cancelRequestId(cancelRequestId)
+                    .applicationId(applicationId)
+                    .reason("일정 겹침")
+                    .status(ApplicationCancelRequest.Status.REQUESTED)
+                    .requestedAt(LocalDateTime.now())
+                    .build();
+
+        }
+
+        @Test
+        @DisplayName("정상적으로 승인 처리하고 신청을 CANCELED로 전환한다")
+        void approvesSuccessfully() {
+
+            // given: 처리 대기 중인 취소 요청이 있고, 담당자 본인이 승인하는 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+
+            // when
+            ApplicationCancelRequestResultResponse result =
+                    applicationService.approveCancelRequest(adminUserId, applicationId);
+
+            // then: 취소 요청은 APPROVED로, 신청은 CANCELED로 같이 전환됐는지 확인
+            assertThat(result.getStatus()).isEqualTo("APPROVED");
+            assertThat(result.getApplicationStatus()).isEqualTo("CANCELED");
+
+        }
+
+        @Test
+        @DisplayName("신청이 존재하지 않으면 예외를 던진다")
+        void throwsWhenApplicationNotFound() {
+
+            // given: 존재하지 않는 applicationId
+            Long adminUserId = 1L;
+            Long applicationId = 999L;
+
+            given(applicationMapper.selectById(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.approveCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("신청을 찾을 수 없습니다");
+
+        }
+
+        @Test
+        @DisplayName("담당자가 아니면 예외를 던진다")
+        void throwsWhenNotAssignedAdmin() {
+
+            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.approveCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+
+            // 담당자 확인에서 막혔으니, 취소 요청 조회까지는 안 감
+            verify(applicationMapper, never()).selectPendingCancelRequest(any());
+
+        }
+
+        @Test
+        @DisplayName("처리 대기 중인 취소 요청이 없으면 예외를 던진다")
+        void throwsWhenNoPendingCancelRequest() {
+
+            // given: 이미 처리됐거나 아예 요청된 적 없는 신청서
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.approveCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("처리 대기 중인 취소 요청을 찾을 수 없습니다");
+
+        }
+
+        @Test
+        @DisplayName("동시 처리로 취소 요청 UPDATE가 0행 반영되면 예외를 던진다")
+        void throwsWhenCancelRequestUpdateFails() {
+
+            // given: 조회 시점엔 REQUESTED였지만, UPDATE 시점엔 다른 요청이 먼저 처리해버린 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(0);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.approveCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("처리 대기 중인 취소 요청을 찾을 수 없습니다");
+
+            // 취소 요청 전환이 실패했으니, 신청 상태 전환은 시도되면 안 됨
+            verify(applicationMapper, never()).updateApplicationCanceled(any());
+
+        }
+
+        @Test
+        @DisplayName("동시 처리로 신청 상태 UPDATE가 0행 반영되면 예외를 던진다")
+        void throwsWhenApplicationUpdateFails() {
+
+            // given: 취소 요청은 승인 처리됐지만, 그 사이 신청 상태가 바뀌어(예: 다른 경로로 이미 CANCELED)
+            // application.status를 CANCELED로 전환하는 UPDATE가 0행 반영되는 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(0);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.approveCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("취소 요청은 결제 대기 또는 확정된 신청서만");
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("참가 취소 요청 반려")
+    class RejectCancelRequest {
+
+        // 테스트용 처리 대기 중인 취소 요청
+        private ApplicationCancelRequest createCancelRequest(Long cancelRequestId, Long applicationId) {
+
+            return ApplicationCancelRequest.builder()
+                    .cancelRequestId(cancelRequestId)
+                    .applicationId(applicationId)
+                    .reason("일정 겹침")
+                    .status(ApplicationCancelRequest.Status.REQUESTED)
+                    .requestedAt(LocalDateTime.now())
+                    .build();
+
+        }
+
+        @Test
+        @DisplayName("정상적으로 반려 처리하고 신청 상태는 유지한다")
+        void rejectsSuccessfully() {
+
+            // given: 처리 대기 중인 취소 요청이 있고, 담당자가 반려 처리하는 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestRejected(eq(10L), any())).willReturn(1);
+
+            // when
+            ApplicationCancelRequestResultResponse result =
+                    applicationService.rejectCancelRequest(adminUserId, applicationId);
+
+            // then: 취소 요청만 REJECTED로 바뀌고, application.status는 그대로인지 확인
+            assertThat(result.getStatus()).isEqualTo("REJECTED");
+            assertThat(result.getApplicationStatus()).isEqualTo("PAYMENT_PENDING");
+
+        }
+
+        @Test
+        @DisplayName("신청이 존재하지 않으면 예외를 던진다")
+        void throwsWhenApplicationNotFound() {
+
+            // given: 존재하지 않는 applicationId
+            Long adminUserId = 1L;
+            Long applicationId = 999L;
+
+            given(applicationMapper.selectById(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("신청을 찾을 수 없습니다");
+
+        }
+
+        @Test
+        @DisplayName("담당자가 아니면 예외를 던진다")
+        void throwsWhenNotAssignedAdmin() {
+
+            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+
+            verify(applicationMapper, never()).selectPendingCancelRequest(any());
+
+        }
+
+        @Test
+        @DisplayName("처리 대기 중인 취소 요청이 없으면 예외를 던진다")
+        void throwsWhenNoPendingCancelRequest() {
+
+            // given: 이미 처리됐거나 아예 요청된 적 없는 신청서
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("처리 대기 중인 취소 요청을 찾을 수 없습니다");
+
+        }
+
+        @Test
+        @DisplayName("동시 처리로 UPDATE가 0행 반영되면 예외를 던진다")
+        void throwsWhenConcurrentUpdateFails() {
+
+            // given: 조회 시점엔 REQUESTED였지만, UPDATE 시점엔 다른 요청이 먼저 처리해버린 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestRejected(eq(10L), any())).willReturn(0);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("처리 대기 중인 취소 요청을 찾을 수 없습니다");
 
         }
 
