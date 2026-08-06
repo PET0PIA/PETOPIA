@@ -89,7 +89,7 @@ public class ApplicationController {
     public ResponseEntity<ApiResponse<ApplicationReviewResultResponse>> approveApplication(
             @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
             @PathVariable Long applicationId,
-            @RequestBody(required = false) ApplicationApproveRequest request
+            @Valid @RequestBody(required = false) ApplicationApproveRequest request
     ) {
 
         return ResponseEntity.ok(

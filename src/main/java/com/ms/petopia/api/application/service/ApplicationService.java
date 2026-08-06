@@ -347,7 +347,10 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
         }
 
-        // 반려 사유 필수 확인 (컨트롤러 @NotBlank로도 걸러지지만 서비스 단독 호출 대비 방어)
+        /*
+         * 반려 사유 필수 확인 — DTO에 @NotBlank 대신 여기서 직접 검증
+         * (구체적인 에러코드 APPLICATION_REJECT_REASON_REQUIRED를 반환하기 위해, TERMS_NOT_AGREED와 동일한 이유)
+         */
         if(request.getRejectReason() == null || request.getRejectReason().isBlank()) {
             throw new CommonException(ErrorCode.APPLICATION_REJECT_REASON_REQUIRED);
         }

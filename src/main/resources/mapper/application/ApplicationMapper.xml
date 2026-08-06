@@ -175,7 +175,7 @@
         FROM application a
         JOIN business b ON b.business_id = a.business_id
         WHERE a.fair_id = #{fairId}
-        <if test="status != null">
+        <if test="status != null and status != ''">
             AND a.status = #{status}
         </if>
         ORDER BY a.submitted_at DESC
