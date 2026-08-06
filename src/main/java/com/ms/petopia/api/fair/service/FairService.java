@@ -6,6 +6,7 @@ import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
 import com.ms.petopia.api.fair.dto.FairStatus;
+import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.mapper.FairMapper;
@@ -20,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +33,15 @@ public class FairService {
      * TODO 정책(결제 기한 일수) 확정되면 상수를 교체하거나 행사별 설정으로 옮긴다.
      */
     private static final Duration PAYMENT_DUE_PERIOD = Duration.ofDays(7);
+
+    /**
+     * 공개(publish)를 허용하는 상태. 심사 승인 이후(PAYMENT_PENDING~IN_PROGRESS)에만 공개할 수 있고,
+     * 심사 전(RECEIVED)이거나 더 이상 진행되지 않는 상태(REJECTED/EXPIRED/ENDED)는 제외한다.
+     * TODO PAYMENT_PENDING -> PREPARING 자동전이(개설비 결제 연동)가 구현되기 전까지는 실질적으로
+     *      PAYMENT_PENDING 상태에서만 호출된다. 스케줄러(상태 자동전이) 작업에서 재검토한다.
+     */
+    private static final Set<FairStatus> PUBLISHABLE_STATUSES =
+            EnumSet.of(FairStatus.PAYMENT_PENDING, FairStatus.PREPARING, FairStatus.IN_PROGRESS);
 
     private final FairMapper fairMapper;
     private final FairTimeProvider timeProvider;
@@ -127,6 +139,36 @@ public class FairService {
                 update.getPaymentDueAt(),
                 update.getRejectReason()
         );
+    }
+
+    /**
+     * 행사를 공개해 예약을 받을 수 있게 한다. reservation 도메인은
+     * {@code fairs.published_at IS NOT NULL}만 보고 예약 가능 여부를 판단하므로(취소·예약기간은
+     * reservation 도메인이 별도로 검증) 여기서는 published_at만 채운다.
+     *
+     * <p>이미 공개된 행사를 다시 호출하면 에러 없이 최초 공개 결과를 그대로 반환한다(멱등).
+     */
+    @Transactional
+    public PublishFairResponse publish(Long fairId, Long actorId) {
+        if (actorId == null || actorId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        Fair fair = findFairOrThrow(fairId);
+
+        if (fair.getPublishedAt() != null) {
+            return new PublishFairResponse(fairId, fair.getStatus().name(), fair.getPublishedAt());
+        }
+        if (fair.getCanceledAt() != null || !PUBLISHABLE_STATUSES.contains(fair.getStatus())) {
+            throw new CommonException(ErrorCode.FAIR_NOT_PUBLISHABLE);
+        }
+
+        LocalDateTime now = timeProvider.now();
+        Fair update = new Fair();
+        update.setFairId(fairId);
+        update.setPublishedAt(now);
+        fairMapper.update(update);
+
+        return new PublishFairResponse(fairId, fair.getStatus().name(), now);
     }
 
     private void validateReviewRequest(Long reviewerId, ReviewFairApplicationRequest request) {
