@@ -1,0 +1,399 @@
+import { AlertCircle, Calculator, Check, RefreshCw, Search } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { ApiError } from "../../api/client";
+import {
+  calculateSettlement,
+  confirmSettlement,
+  getSettlementsByFair,
+  recalculateSettlement,
+  type SettlementResponse,
+  type SettlementStatus,
+} from "../../api/settlement";
+import {
+  getCommissionRate,
+  setCommissionRate,
+  type CommissionRateResponse,
+  type CommissionRateScope,
+} from "../../api/commissionRate";
+import { Badge } from "../../components/ui/Badge";
+import { Button } from "../../components/ui/Button";
+import { Card } from "../../components/ui/Card";
+import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Select";
+import { Table } from "../../components/ui/Table";
+import { PageHeader } from "../../components/common/PageHeader";
+import { SectionHeader } from "../../components/common/SectionHeader";
+import { EmptyState } from "../../components/common/EmptyState";
+import { useConfirm } from "../../components/ui/useConfirm";
+
+const statusLabels: Record<SettlementStatus, string> = {
+  PENDING: "대기 중",
+  CONFIRMED: "확정됨",
+  PAID: "지급 완료",
+};
+
+const statusTones: Record<SettlementStatus, "sun" | "leaf" | "primary"> = {
+  PENDING: "sun",
+  CONFIRMED: "leaf",
+  PAID: "primary",
+};
+
+function formatWon(value: number) {
+  return `${value.toLocaleString("ko-KR")}원`;
+}
+
+function formatRatePercent(rate: number) {
+  return `${(rate * 100).toFixed(2)}%`;
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("ko-KR");
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof ApiError ? error.message : fallback;
+}
+
+export function SettlementPage() {
+  const { confirm, confirmDialog } = useConfirm();
+
+  // ── 수수료율 관리 ──
+  const [globalRate, setGlobalRate] = useState<CommissionRateResponse | null>(null);
+  const [rateLoading, setRateLoading] = useState(true);
+  const [rateLoadError, setRateLoadError] = useState<string | null>(null);
+
+  const [rateScope, setRateScope] = useState<CommissionRateScope>("GLOBAL");
+  const [rateFairIdInput, setRateFairIdInput] = useState("");
+  const [ratePercentInput, setRatePercentInput] = useState("");
+  const [rateSubmitting, setRateSubmitting] = useState(false);
+  const [rateFormError, setRateFormError] = useState<string | null>(null);
+  const [rateFormSuccess, setRateFormSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    getCommissionRate()
+      .then((data) => { if (!ignore) setGlobalRate(data); })
+      .catch((error) => { if (!ignore) setRateLoadError(errorMessage(error, "수수료율을 불러오지 못했어요.")); })
+      .finally(() => { if (!ignore) setRateLoading(false); });
+    return () => { ignore = true; };
+  }, []);
+
+  async function handleRateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setRateFormError(null);
+    setRateFormSuccess(null);
+
+    const percent = Number(ratePercentInput);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      setRateFormError("요율은 0~100 사이의 숫자(%)로 입력해 주세요.");
+      return;
+    }
+
+    let fairId: number | undefined;
+    if (rateScope === "FAIR") {
+      const parsed = Number(rateFairIdInput);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        setRateFormError("행사별 요율은 행사 ID를 1 이상의 숫자로 입력해 주세요.");
+        return;
+      }
+      fairId = parsed;
+    }
+
+    setRateSubmitting(true);
+    try {
+      const result = await setCommissionRate({ scope: rateScope, fairId, rate: percent / 100 });
+      setRateFormSuccess(
+        rateScope === "GLOBAL"
+          ? `전역 기본 요율이 ${formatRatePercent(result.rate)}로 설정됐어요.`
+          : `행사 #${result.fairId} 전용 요율이 ${formatRatePercent(result.rate)}로 설정됐어요.`,
+      );
+      if (rateScope === "GLOBAL") {
+        setGlobalRate(result);
+      }
+      setRatePercentInput("");
+      setRateFairIdInput("");
+    } catch (error) {
+      setRateFormError(errorMessage(error, "요율 설정에 실패했어요."));
+    } finally {
+      setRateSubmitting(false);
+    }
+  }
+
+  // ── 정산 조회/계산 ──
+  const [fairIdInput, setFairIdInput] = useState("");
+  const [loadedFairId, setLoadedFairId] = useState<number | null>(null);
+  const [settlements, setSettlements] = useState<SettlementResponse[] | null>(null);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+
+  const [calcBusinessIdInput, setCalcBusinessIdInput] = useState("");
+  const [calcSubmitting, setCalcSubmitting] = useState(false);
+  const [calcError, setCalcError] = useState<string | null>(null);
+
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actioningSettlementId, setActioningSettlementId] = useState<number | null>(null);
+
+  async function loadSettlements(fairId: number) {
+    setListLoading(true);
+    setListError(null);
+    setActionError(null);
+    try {
+      const data = await getSettlementsByFair(fairId);
+      setSettlements(data);
+      setLoadedFairId(fairId);
+    } catch (error) {
+      setSettlements(null);
+      setListError(errorMessage(error, "정산 목록을 불러오지 못했어요."));
+    } finally {
+      setListLoading(false);
+    }
+  }
+
+  function handleLoadSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Number(fairIdInput);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setListError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+    loadSettlements(parsed);
+  }
+
+  async function handleCalcSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loadedFairId === null) return;
+
+    const parsed = Number(calcBusinessIdInput);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setCalcError("업체 ID는 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+
+    setCalcSubmitting(true);
+    setCalcError(null);
+    try {
+      const created = await calculateSettlement(loadedFairId, parsed);
+      setSettlements((current) => (current ? [...current, created] : [created]));
+      setCalcBusinessIdInput("");
+    } catch (error) {
+      setCalcError(errorMessage(error, "정산 계산에 실패했어요."));
+    } finally {
+      setCalcSubmitting(false);
+    }
+  }
+
+  function updateSettlementInList(updated: SettlementResponse) {
+    setSettlements((current) =>
+      current ? current.map((row) => (row.settlementId === updated.settlementId ? updated : row)) : current,
+    );
+  }
+
+  async function handleConfirm(settlement: SettlementResponse) {
+    const ok = await confirm({
+      title: "정산 확정",
+      description: `업체 #${settlement.businessId} 정산(${formatWon(settlement.netAmount)})을 확정할까요?\n확정 이후에는 금액을 되돌릴 수 없어요.`,
+      confirmLabel: "확정",
+    });
+    if (!ok) return;
+
+    setActionError(null);
+    setActioningSettlementId(settlement.settlementId);
+    try {
+      const result = await confirmSettlement(settlement.settlementId);
+      updateSettlementInList(result);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "ST005") {
+        setActionError(`정산 #${settlement.settlementId}: 계산 이후 환불이 반영되지 않았어요. 먼저 "재계산"을 눌러 주세요.`);
+      } else {
+        setActionError(errorMessage(error, "정산 확정에 실패했어요."));
+      }
+    } finally {
+      setActioningSettlementId(null);
+    }
+  }
+
+  async function handleRecalculate(settlement: SettlementResponse) {
+    setActionError(null);
+    setActioningSettlementId(settlement.settlementId);
+    try {
+      const result = await recalculateSettlement(settlement.settlementId);
+      updateSettlementInList(result);
+    } catch (error) {
+      setActionError(errorMessage(error, "정산 재계산에 실패했어요."));
+    } finally {
+      setActioningSettlementId(null);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl py-2">
+      <PageHeader eyebrow="전체 운영" title="정산·수수료율" description="참가업체 정산을 계산·확정하고 플랫폼 수수료율을 관리해요." />
+
+      <section className="mb-10">
+        <SectionHeader title="수수료율 관리" description="전역 기본값과 행사별 override를 설정해요. 새로 설정한 값은 이후 계산되는 정산부터 적용돼요." />
+
+        <Card className="mb-4 p-6">
+          <h3 className="mb-2 text-sm font-extrabold text-muted">현재 전역 기본 요율</h3>
+          {rateLoading && <p className="text-sm text-muted">불러오는 중이에요...</p>}
+          {!rateLoading && rateLoadError && (
+            <p className="text-sm text-primary-strong">{rateLoadError}</p>
+          )}
+          {!rateLoading && !rateLoadError && globalRate && (
+            <div>
+              <p className="text-2xl font-extrabold text-ink">{formatRatePercent(globalRate.rate)}</p>
+              <p className="mt-1 text-sm text-muted">
+                {globalRate.updatedAt
+                  ? `${formatDateTime(globalRate.updatedAt)} · 관리자 #${globalRate.updatedByUserId} 설정`
+                  : "아직 설정된 적 없어서 기본값이 적용되고 있어요."}
+              </p>
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="mb-4 text-sm font-extrabold text-muted">새 요율 설정</h3>
+          <form onSubmit={handleRateSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="w-full sm:w-40">
+              <label htmlFor="rate-scope" className="mb-1.5 block text-sm font-bold text-ink">적용 범위</label>
+              <Select id="rate-scope" value={rateScope} onChange={(event) => setRateScope(event.target.value as CommissionRateScope)}>
+                <option value="GLOBAL">전역 기본값</option>
+                <option value="FAIR">특정 행사</option>
+              </Select>
+            </div>
+            {rateScope === "FAIR" && (
+              <div className="w-full sm:w-40">
+                <label htmlFor="rate-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
+                <Input id="rate-fair-id" type="number" min={1} value={rateFairIdInput} onChange={(event) => setRateFairIdInput(event.target.value)} placeholder="예: 1" />
+              </div>
+            )}
+            <div className="w-full sm:w-32">
+              <label htmlFor="rate-percent" className="mb-1.5 block text-sm font-bold text-ink">요율(%)</label>
+              <Input id="rate-percent" type="number" min={0} max={100} step={0.01} value={ratePercentInput} onChange={(event) => setRatePercentInput(event.target.value)} placeholder="예: 5" />
+            </div>
+            <Button type="submit" disabled={rateSubmitting}>{rateSubmitting ? "저장 중..." : "저장"}</Button>
+          </form>
+
+          {rateFormError && (
+            <p className="mt-3 flex items-start gap-2 text-sm text-primary-strong">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              {rateFormError}
+            </p>
+          )}
+          {rateFormSuccess && <p className="mt-3 text-sm text-leaf">{rateFormSuccess}</p>}
+        </Card>
+      </section>
+
+      <section>
+        <SectionHeader title="정산 조회·계산" description="행사 ID로 정산 목록을 조회하고, 업체별 정산을 계산·확정해요." />
+
+        <form onSubmit={handleLoadSubmit} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label htmlFor="fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
+            <Input id="fair-id" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
+          </div>
+          <Button type="submit" variant="outline" disabled={listLoading}>
+            <Search size={16} />
+            조회
+          </Button>
+        </form>
+
+        {listError && (
+          <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p>{listError}</p>
+          </div>
+        )}
+
+        {!loadedFairId && !listLoading && (
+          <EmptyState title="행사 ID를 먼저 조회해 주세요" description="정산을 확인·계산할 행사 ID를 입력하고 조회하면 목록이 표시돼요." />
+        )}
+
+        {listLoading && <div className="surface grid min-h-32 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
+
+        {loadedFairId !== null && !listLoading && settlements && (
+          <div className="space-y-4">
+            <Card className="p-5">
+              <h3 className="mb-3 text-sm font-extrabold text-muted">행사 #{loadedFairId} 새 정산 계산</h3>
+              <form onSubmit={handleCalcSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <label htmlFor="calc-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
+                  <Input id="calc-business-id" type="number" min={1} value={calcBusinessIdInput} onChange={(event) => setCalcBusinessIdInput(event.target.value)} placeholder="예: 20" />
+                </div>
+                <Button type="submit" variant="outline" disabled={calcSubmitting}>
+                  <Calculator size={16} />
+                  {calcSubmitting ? "계산 중..." : "정산 계산"}
+                </Button>
+              </form>
+              {calcError && <p className="mt-3 text-sm text-primary-strong">{calcError}</p>}
+            </Card>
+
+            {actionError && (
+              <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+                <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                <p>{actionError}</p>
+              </div>
+            )}
+
+            {settlements.length === 0 ? (
+              <EmptyState title="계산된 정산이 없어요" description="위 폼에서 업체 ID를 입력해 정산을 계산해 보세요." />
+            ) : (
+              <Table>
+                <thead>
+                  <tr className="border-b border-line bg-page text-xs font-bold text-muted">
+                    <th className="px-4 py-3">업체</th>
+                    <th className="px-4 py-3">총 참가비</th>
+                    <th className="px-4 py-3">환불액</th>
+                    <th className="px-4 py-3">수수료</th>
+                    <th className="px-4 py-3">지급액</th>
+                    <th className="px-4 py-3">상태</th>
+                    <th className="px-4 py-3">동작</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settlements.map((row) => {
+                    const isActioning = actioningSettlementId === row.settlementId;
+                    return (
+                      <tr key={row.settlementId} className="border-b border-line last:border-b-0">
+                        <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.businessId}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-ink">{formatWon(row.grossAmount)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-ink">{formatWon(row.refundAmount)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-ink">
+                          {formatWon(row.commissionAmount)} <span className="text-muted">({formatRatePercent(row.commissionRate)})</span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatWon(row.netAmount)}</td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <Badge tone={statusTones[row.status]}>{statusLabels[row.status]}</Badge>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {row.status === "PENDING" ? (
+                            <div className="flex gap-2">
+                              <Button variant="outline" onClick={() => handleRecalculate(row)} disabled={isActioning}>
+                                <RefreshCw size={14} />
+                                재계산
+                              </Button>
+                              <Button onClick={() => handleConfirm(row)} disabled={isActioning}>
+                                <Check size={14} />
+                                {isActioning ? "처리 중..." : "확정"}
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted">
+                              {row.confirmedAt ? `${formatDateTime(row.confirmedAt)} 확정` : "-"}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            )}
+          </div>
+        )}
+      </section>
+
+      {confirmDialog}
+    </div>
+  );
+}
