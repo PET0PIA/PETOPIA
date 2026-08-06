@@ -15,7 +15,14 @@ public enum UploadPolicy {
             "jpeg", "image/jpeg",
             "png", "image/png",
             "webp", "image/webp"
-    ), 10L * 1024 * 1024);
+    ), 10L * 1024 * 1024),
+
+    DOCUMENT("document", Map.of(
+            "pdf", "application/pdf",
+            "docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    ), 50L * 1024 * 1024);
 
     private final String directory;
     private final Map<String, String> contentTypesByExtension;
