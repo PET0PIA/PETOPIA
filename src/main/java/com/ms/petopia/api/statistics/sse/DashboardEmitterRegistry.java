@@ -30,9 +30,9 @@ public class DashboardEmitterRegistry {
     }
 
     private void remove(Long fairId, SseEmitter emitter){
-        List<SseEmitter> list = emitters.get(fairId);
-        if(list != null){
+        emitters.computeIfPresent(fairId, (id, list) -> {
             list.remove(emitter);
-        };
+            return list.isEmpty() ? null : list;
+        });
     }
 }

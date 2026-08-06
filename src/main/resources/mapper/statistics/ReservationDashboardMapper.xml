@@ -7,7 +7,6 @@
         <result column="operation_date" property="operationDate"/>
         <result column="capacity" property="capacity"/>
         <result column="entry_start_time" property="entryStartTime"/>
-        <result column="entry_end_time" property="entryStartTime"/>
         <result column="entry_end_time" property="entryEndTime"/>
         <result column="total_count" property="totalCount"/>
         <result column="confirmed_count" property="confirmedCount"/>
@@ -29,7 +28,7 @@
             SUM(CASE WHEN r.status = 'PENDING_PAYMENT' THEN 1 ELSE 0 END) AS pending_count,
             SUM(CASE WHEN r.status = 'CANCELED' THEN 1 ELSE 0 END) AS canceled_count,
             SUM(CASE WHEN r.status = 'EXPIRED' THEN 1 ELSE 0 END) AS expired_count,
-            fd.capacity - SUM(CASE WHEN r.status IN('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN') THEN 1 ELSE 0 END) AS remaining_capacity
+            fd.capacity - SUM(CASE WHEN r.status IN('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN') AND r.reservation_type != 'ONSITE_DIRECT' THEN 1 ELSE 0 END) AS remaining_capacity
         FROM fair_dates fd
             LEFT JOIN reservations r
             ON r.fair_id = fd.fair_id
