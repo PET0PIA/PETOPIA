@@ -35,17 +35,19 @@ import java.util.List;
  * "TODO 결제 도메인의 환불 가능 여부 확인 및 환불 성공 통지 후 CANCELED로 전환" 상태),
  * 지금은 REFUND 테이블을 source of truth로 남기고 다른 도메인이 조회해서 확인하는 걸 전제로 한다.
  *
- * <p><b>알려진 한계</b>: 정산(Settlement) 계산 이후 환불이 들어오면 이미 만들어진 정산 금액을
- * 재계산하는 기능이 없다(CodeRabbit 리뷰 지적, PR #47). 완전한 재계산/정정 정산 절차는 무겁고
- * 이번 스코프 밖이라, 대신 "이미 정산에 포함된 결제는 환불 자체를 거부"하는 최소 방어만 둔다 —
- * 정산 금액이 조용히 틀려지는 것(데이터 부정합)만 막고, 정말 그 결제를 환불해야 하는 예외 상황은
- * 정산 담당자가 수동으로 처리하는 걸 전제로 한다.
+ * <p><b>정산과의 관계</b>: 결제가 이미 CONFIRMED 정산에 포함돼 있으면 환불을 거부한다(확정 이후
+ * 금액은 불변이라는 규칙, PR #47 CodeRabbit 리뷰 지적). PENDING 정산에 포함된 결제는 환불을
+ * 허용하는 대신 그 정산에 "재계산 필요"(needs_recalculation) 표시를 원자적으로 남긴다 —
+ * {@code SettlementService.confirm}은 이 표시가 있으면 확정을 거부하고, 정산 담당자가
+ * {@code recalculate}를 호출해서 최신 완료/환불 상태를 반영한 금액으로 다시 계산한 뒤에야
+ * 확정할 수 있다(PR #54 CodeRabbit 리뷰 지적 — 표시 없이 상태만 읽던 예전 방식은 환불과
+ * confirm이 동시에 일어나면 옛날 금액이 그대로 확정돼버리는 경쟁 조건이 있었다).
  *
- * <p><b>동시성</b>: {@link #refund}와 {@code SettlementService.calculate}가 동시에 같은
- * 결제를 건드리면(정산 계산이 이 결제를 포함시키는 도중 환불이 끼어드는 경우) 정산 금액이
- * 환불 반영 전 값으로 굳을 수 있었다(CodeRabbit 리뷰 지적, PR #47). 그래서 둘 다 같은
+ * <p><b>동시성</b>: {@link #refund}와 {@code SettlementService.calculate}/{@code recalculate}가
+ * 동시에 같은 결제를 건드리면(정산 집계가 이 결제를 포함시키는 도중 환불이 끼어드는 경우) 정산
+ * 금액이 환불 반영 전 값으로 굳을 수 있었다(CodeRabbit 리뷰 지적, PR #47). 그래서 셋 다 같은
  * {@code PAYMENT} 행을 {@code FOR UPDATE}로 잠그고 트랜잭션 안에서 처리하도록 맞춰서,
- * 어느 쪽이 먼저 시작하든 나머지 하나가 끝날 때까지 기다렸다가 최신 상태를 보고 진행한다.
+ * 어느 쪽이 먼저 시작하든 나머지가 끝날 때까지 기다렸다가 최신 상태를 보고 진행한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -81,11 +83,17 @@ public class RefundService {
         if (!COMPLETED.equals(payment.getStatus())) {
             throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE);
         }
-        // 이미 정산(SETTLEMENT_ITEM)에 포함된 결제면 환불을 막는다 — 재계산 기능이 없어서
-        // 지금 환불을 허용하면 이미 계산·확정된 정산 금액이 조용히 옛날 값으로 남는다(알려진 한계).
-        if (settlementMapper.selectItemByPaymentId(paymentId) != null) {
+        // 이 결제가 정산에 포함돼 있으면(PENDING일 때만) "재계산 필요" 표시를 원자적으로 남기고
+        // 환불을 허용한다 — 정산 담당자가 SettlementService.recalculate로 나중에 금액을 바로잡는
+        // 걸 전제로 한다. markNeedsRecalculation의 WHERE status='PENDING' 조건이
+        // SettlementService.confirm()의 원자적 확정 UPDATE와 같은 SETTLEMENT 행을 두고 경쟁하므로,
+        // 둘 중 먼저 커밋한 쪽이 이긴다(CodeRabbit 리뷰 지적, PR #54 — 예전엔 상태만 읽고 끝나서
+        // "PENDING 확인 직후 confirm이 먼저 끝나버리는" 경쟁을 못 막았다). 이미 CONFIRMED로
+        // 넘어간 정산이면 이 UPDATE가 0행이라 환불을 거부한다.
+        Long settlementId = settlementMapper.selectSettlementIdByPaymentId(paymentId);
+        if (settlementId != null && settlementMapper.markNeedsRecalculation(settlementId) == 0) {
             throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE,
-                    "이미 정산에 포함된 결제는 환불할 수 없습니다. 정산 담당자에게 문의해 주세요.");
+                    "이미 확정된 정산에 포함된 결제는 환불할 수 없습니다. 정산 담당자에게 문의해 주세요.");
         }
 
         LocalDateTime now = LocalDateTime.now();

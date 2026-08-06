@@ -37,6 +37,14 @@ public class SettlementController {
         return settlementService.confirm(settlementId, userId);
     }
 
+    // 정산 재계산(관리자). PENDING 상태에서만 가능 — 계산 이후 새로 완료된 결제나
+    // (PENDING 정산에 포함된 채로 허용된) 환불을 최신 상태로 다시 반영한다. role 검증은
+    // confirm과 마찬가지로 인증 도메인 완성 후 추가 예정(TODO).
+    @PutMapping("/settlements/{settlementId}/recalculate")
+    public SettlementResponse recalculate(@PathVariable Long settlementId) {
+        return settlementService.recalculate(settlementId);
+    }
+
     // 참가업체 본인의 정산 단건 조회.
     @GetMapping("/fairs/{fairId}/vendors/{businessId}/settlement")
     public SettlementResponse getSettlement(
