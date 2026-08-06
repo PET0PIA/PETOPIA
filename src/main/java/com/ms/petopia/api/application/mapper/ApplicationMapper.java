@@ -8,6 +8,7 @@ import com.ms.petopia.api.application.dto.response.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -81,5 +82,8 @@ public interface ApplicationMapper {
 
     // 취소 요청 저장 (status는 DB DEFAULT 'REQUESTED' 활용)
     void insertApplicationCancelRequest(ApplicationCancelRequest cancelRequest);
+
+    // 행사 운영 시작일 조회 (취소 요청 마감 기한 판정용)
+    LocalDate selectOperationStartDateByFairId(@Param("fairId") Long fairId);
 
 }

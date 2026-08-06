@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
@@ -272,7 +273,35 @@ public class ApplicationService {
         // 선택 슬롯 목록 채우기
         detail.setSlots(applicationMapper.selectApplicationSlotDetails(applicationId));
 
+        // 취소 요청 가능 여부 계산 (프론트 버튼 활성화 판단용)
+        detail.setCancelable(isCancelable(detail));
+
         return detail;
+
+    }
+
+    // 취소 요청 가능 여부 계산 (프론트 버튼 활성화 판단용)
+    private boolean isCancelable(ApplicationDetailResponse detail) {
+
+        // 승인/확정된 신청서만 취소 대상 (심사 대기·반려·이미 취소된 건 취소할 게 없음)
+        if (!Application.Status.PAYMENT_PENDING.name().equals(detail.getStatus())
+                && !Application.Status.CONFIRMED.name().equals(detail.getStatus())) {
+            return false;
+        }
+
+        // 이미 처리 대기 중인 취소 요청이 있으면 중복 요청 방지 위해 버튼 비활성화
+        if (ApplicationCancelRequest.Status.REQUESTED.name().equals(detail.getCancelRequestStatus())) {
+            return false;
+        }
+
+        // 행사 시작 7일 전 마감 기한 확인
+        LocalDate operationStartDate = applicationMapper.selectOperationStartDateByFairId(detail.getFairId());
+
+        /*
+         * operationStartDate가 null(운영 시작일 미정)이면 제한할 근거가 없으므로 통과,
+         * 아니면 "오늘이 (행사 시작일 - 7일)보다 이후"가 아닐 때만 취소 가능
+         */
+        return operationStartDate == null || !LocalDate.now().isAfter(operationStartDate.minusDays(7));
 
     }
 
@@ -425,6 +454,13 @@ public class ApplicationService {
         if(application.getStatus() != Application.Status.PAYMENT_PENDING
                 && application.getStatus() != Application.Status.CONFIRMED) {
             throw new CommonException(ErrorCode.APPLICATION_NOT_CANCELABLE);
+        }
+
+        // 취소 요청 마감 기한 확인 (행사 시작 7일 전까지만 가능, 재요청도 동일 적용)
+        LocalDate operationStartDate = applicationMapper.selectOperationStartDateByFairId(application.getFairId());
+
+        if (operationStartDate != null && LocalDate.now().isAfter(operationStartDate.minusDays(7))) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_DEADLINE_EXCEEDED);
         }
 
         // 이미 처리 대기 중인 취소 요청이 있는지 사전 확인

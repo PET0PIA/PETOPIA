@@ -260,4 +260,9 @@
         VALUES (#{applicationId}, #{reason})
     </insert>
 
+    <!-- 행사 운영 시작일 조회 (취소 요청 마감 기한 판정용) -->
+    <select id="selectOperationStartDateByFairId" resultType="java.time.LocalDate">
+        SELECT operation_start_date FROM fairs WHERE fair_id = #{fairId}
+    </select>
+
 </mapper>

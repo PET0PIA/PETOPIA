@@ -66,6 +66,7 @@ public enum ErrorCode {
     APPLICATION_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V016", "반려 시 반려 사유를 입력해야 합니다."),
     APPLICATION_NOT_CANCELABLE(HttpStatus.CONFLICT, "V017", "취소 요청은 결제 대기 또는 확정된 신청서만 가능합니다."),
     APPLICATION_CANCEL_REQUEST_DUPLICATE(HttpStatus.CONFLICT, "V018", "이미 처리 대기 중인 취소 요청이 있습니다."),
+    APPLICATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "V019", "취소 요청은 행사 시작 7일 전까지만 가능합니다."),
 
 
     // ===== Payment =====
