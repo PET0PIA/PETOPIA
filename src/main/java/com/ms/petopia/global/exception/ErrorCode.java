@@ -127,6 +127,9 @@ public enum ErrorCode {
     SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
     SETTLEMENT_NOT_RECALCULABLE(HttpStatus.CONFLICT, "ST004", "재계산할 수 없는 정산 상태입니다."),
     SETTLEMENT_RECALCULATION_REQUIRED(HttpStatus.CONFLICT, "ST005", "재계산이 필요한 정산은 확정할 수 없습니다. 먼저 재계산해 주세요."),
+
+    // ===== Commission Rate (수수료율) =====
+    COMMISSION_RATE_INVALID_SCOPE(HttpStatus.BAD_REQUEST, "CR001", "scope와 fairId 조합이 올바르지 않습니다(GLOBAL은 fairId 없이, FAIR는 fairId와 함께)."),
     ;
 
     private final HttpStatus httpStatus;
