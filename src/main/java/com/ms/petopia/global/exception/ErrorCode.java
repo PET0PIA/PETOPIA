@@ -93,6 +93,11 @@ public enum ErrorCode {
     FAIR_DATE_OUT_OF_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F015", "운영 날짜가 행사 운영 기간을 벗어났습니다."),
     FAIR_DATE_INVALID_ENTRY_TIME(HttpStatus.BAD_REQUEST, "F016", "입장 종료 시간이 입장 시작 시간보다 빠릅니다."),
     FAIR_NOT_PUBLISHABLE(HttpStatus.CONFLICT, "F017", "공개할 수 없는 상태의 행사입니다."),
+    FAIR_CANCEL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "F018", "존재하지 않는 취소 신청이거나 해당 행사의 취소 신청이 아닙니다."),
+    FAIR_CANCEL_NOT_REQUESTABLE(HttpStatus.CONFLICT, "F019", "취소를 신청할 수 없는 행사입니다."),
+    FAIR_CANCEL_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F020", "취소 신청 사유를 입력해야 합니다."),
+    FAIR_CANCEL_REQUEST_NOT_PENDING(HttpStatus.CONFLICT, "F021", "검토 대기 중인 취소 신청만 검토할 수 있습니다."),
+    FAIR_CANCEL_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F022", "취소 신청 반려 시 반려 사유를 입력해야 합니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
