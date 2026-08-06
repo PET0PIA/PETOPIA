@@ -246,4 +246,18 @@
         ORDER BY acr.requested_at DESC
     </select>
 
+    <!-- 이 신청서에 처리 대기 중(REQUESTED)인 취소 요청이 있는지 확인 -->
+    <select id="existsPendingCancelRequest" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM application_cancel_request
+            WHERE application_id = #{applicationId} AND status = 'REQUESTED'
+        )
+    </select>
+
+    <!-- 취소 요청 저장 (status는 DB DEFAULT 'REQUESTED' 활용) -->
+    <insert id="insertApplicationCancelRequest" useGeneratedKeys="true" keyProperty="cancelRequestId">
+        INSERT INTO application_cancel_request (application_id, reason)
+        VALUES (#{applicationId}, #{reason})
+    </insert>
+
 </mapper>

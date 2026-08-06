@@ -1,6 +1,7 @@
 package com.ms.petopia.api.application.controller;
 
 import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
@@ -122,6 +123,21 @@ public class ApplicationController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(applicationService.getCancelRequestsForFair(adminUserId, fairId, status)));
+
+    }
+
+    // 참가 취소 요청 제출
+    @PostMapping("/applications/{applicationId}/cancel-requests")
+    public ResponseEntity<ApiResponse<Void>> submitCancelRequest(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @PathVariable Long applicationId,
+            @Valid @RequestBody ApplicationCancelRequestSubmitRequest request
+    ) {
+
+        applicationService.submitCancelRequest(ownerId, applicationId, request);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED, null));
 
     }
 

@@ -64,6 +64,8 @@ public enum ErrorCode {
     APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V014", "본인이 담당하는 행사가 아닙니다."),
     APPLICATION_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "V015", "심사 대기 중인 신청서만 검토할 수 있습니다."),
     APPLICATION_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V016", "반려 시 반려 사유를 입력해야 합니다."),
+    APPLICATION_NOT_CANCELABLE(HttpStatus.CONFLICT, "V017", "취소 요청은 결제 대기 또는 확정된 신청서만 가능합니다."),
+    APPLICATION_CANCEL_REQUEST_DUPLICATE(HttpStatus.CONFLICT, "V018", "이미 처리 대기 중인 취소 요청이 있습니다."),
 
 
     // ===== Payment =====

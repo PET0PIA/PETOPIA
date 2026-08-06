@@ -1,9 +1,11 @@
 package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.domain.Application;
+import com.ms.petopia.api.application.domain.ApplicationCancelRequest;
 import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.ApplicationSlot;
 import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
@@ -16,6 +18,7 @@ import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -396,6 +399,53 @@ public class ApplicationService {
         // 담당자는 있지만 요청자 본인이 아닌 경우
         if(!fairAdminUserId.equals(adminUserId)) {
             throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "본인이 담당하는 행사가 아닙니다.");
+        }
+
+    }
+
+    // 참가 취소 요청 제출 (사업자용)
+    @Transactional
+    public void submitCancelRequest(Long ownerId, Long applicationId, ApplicationCancelRequestSubmitRequest request) {
+
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 본인 소유 사업자의 신청인지 확인
+        Business business = businessMapper.selectById(application.getBusinessId());
+
+        if(business == null || !business.getOwnerId().equals(ownerId)) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 신청만 취소 요청할 수 있습니다.");
+        }
+
+        // 취소 가능한 상태인지 확인 (승인 대기/반려/이미 취소된 신청서는 취소 요청 불가)
+        if(application.getStatus() != Application.Status.PAYMENT_PENDING
+                && application.getStatus() != Application.Status.CONFIRMED) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_CANCELABLE);
+        }
+
+        // 이미 처리 대기 중인 취소 요청이 있는지 사전 확인
+        if(applicationMapper.existsPendingCancelRequest(applicationId)) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_DUPLICATE);
+        }
+
+        ApplicationCancelRequest cancelRequest = ApplicationCancelRequest.builder()
+                .applicationId(applicationId)
+                .reason(request.getReason())
+                .build();
+
+        /*
+         * 취소 요청 저장 — 실제 중복 방지 방어선은 DB 유니크 제약(UK_APPLICATION_CANCEL_ACTIVE).
+         * 사전 체크와 이 insert 사이에 동시 요청이 끼어들어도, DB가 물리적으로 막아주고
+         * 여기서 DuplicateKeyException으로 잡아서 같은 에러코드로 응답한다.
+         */
+        try {
+            applicationMapper.insertApplicationCancelRequest(cancelRequest);
+        } catch(DuplicateKeyException e) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_DUPLICATE, e);
         }
 
     }
