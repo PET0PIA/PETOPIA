@@ -1,5 +1,8 @@
 package com.ms.petopia.api.statistics.service;
 
+import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
+import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
+import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
 import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
 import com.ms.petopia.api.statistics.mapper.ReservationDashboardMapper;
@@ -25,8 +28,23 @@ public class ReservationDashboardService {
     private final DashboardEmitterRegistry emitterRegistry;
 
     @Transactional(readOnly = true)
-    public List<ReservationDateSummaryDto> getDateSummary(Long fairId, LocalDate date){
+    public List<ReservationDateSummaryDto> getDateSummary(Long fairId, LocalDate date) {
         return dashboardMapper.selectDateSummaryList(fairId, date);
+    }
+
+    @Transactional(readOnly = true)
+    public List<QrIssuanceSummaryDto> getQrIssuanceSummary(Long fairId) {
+        return dashboardMapper.selectQrIssuanceSummary(fairId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<HourlyEntryTrendDto> getHourlyEntryTrend(Long fairId, LocalDate date) {
+        return dashboardMapper.selectHourlyEntryTrend(fairId, date);
+    }
+
+    @Transactional(readOnly = true)
+    public List<BoothVisitStatDto> getBoothVisitStats(Long fairId) {
+        return dashboardMapper.selectBoothVisitStats(fairId);
     }
 
     @Async // 별도 스레드에서 실행. 예약처리 흐름을 블로킹X

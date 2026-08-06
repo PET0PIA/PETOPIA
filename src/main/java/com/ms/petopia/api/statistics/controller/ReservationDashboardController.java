@@ -1,5 +1,8 @@
 package com.ms.petopia.api.statistics.controller;
 
+import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
+import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
+import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
 import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
@@ -30,6 +33,28 @@ public class ReservationDashboardController {
     ){
         List<ReservationDateSummaryDto> result = dashboardService.getDateSummary(fairId, date);
         return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @GetMapping("/{fairId}/qr-issuance-summary")
+    public ResponseEntity<ApiResponse<List<QrIssuanceSummaryDto>>> getQrIssuanceSummary(
+            @PathVariable Long fairId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getQrIssuanceSummary(fairId)));
+    }
+
+    @GetMapping("/{fairId}/hourly-entry-trend")
+    public ResponseEntity<ApiResponse<List<HourlyEntryTrendDto>>> getHourlyEntryTrend(
+            @PathVariable Long fairId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getHourlyEntryTrend(fairId, date)));
+    }
+
+    @GetMapping("/{fairId}/booth-visit-stats")
+    public ResponseEntity<ApiResponse<List<BoothVisitStatDto>>> getBoothVisitStats(
+            @PathVariable Long fairId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getBoothVisitStats(fairId)));
     }
 
     // SSE 연결
