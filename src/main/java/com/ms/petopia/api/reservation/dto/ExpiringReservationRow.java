@@ -7,4 +7,5 @@ import lombok.Setter;
 @Setter
 public class ExpiringReservationRow {
     private Long reservationId;
+    private Long fairId; // 실시간 통계 확인용
 }

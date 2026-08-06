@@ -5,9 +5,11 @@ import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletedCommand;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletionResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentReceiptRow;
 import com.ms.petopia.api.reservation.mapper.ReservationPaymentConfirmationMapper;
+import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실시간 통계 확인용
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher; // 실시간 통계 확인용
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,7 @@ public class ReservationPaymentCompletionService {
     private final ReservationPaymentConfirmationMapper confirmationMapper;
     private final EntryQrService entryQrService;
     private final ReservationTimeProvider timeProvider;
+    private final ApplicationEventPublisher eventPublisher; // 실시간 통계 확인용
 
     /**
      * 결제 도메인이 검증한 성공 통지를 예약 상태에 반영한다.
@@ -94,6 +97,8 @@ public class ReservationPaymentCompletionService {
                 command.paidAmount(),
                 receivedAt
         );
+
+        eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
 
         return new ReservationPaymentCompletionResponse(
                 command.reservationId(),

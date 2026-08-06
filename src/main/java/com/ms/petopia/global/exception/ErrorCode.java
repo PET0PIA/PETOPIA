@@ -61,6 +61,10 @@ public enum ErrorCode {
     RECRUIT_CLOSED(HttpStatus.CONFLICT, "V011", "모집이 마감되어 신청할 수 없습니다."),
     APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "V012", "신청을 찾을 수 없습니다."),
     BUSINESS_REGISTER_LOCK_TIMEOUT(HttpStatus.CONFLICT, "V013", "사업자 등록 처리 중입니다. 잠시 후 다시 시도해주세요."),
+    APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V014", "본인이 담당하는 행사가 아닙니다."),
+    APPLICATION_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "V015", "심사 대기 중인 신청서만 검토할 수 있습니다."),
+    APPLICATION_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V016", "반려 시 반려 사유를 입력해야 합니다."),
+
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
@@ -85,6 +89,7 @@ public enum ErrorCode {
     FAIR_DATE_DUPLICATE(HttpStatus.CONFLICT, "F014", "이미 등록된 운영 날짜입니다."),
     FAIR_DATE_OUT_OF_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F015", "운영 날짜가 행사 운영 기간을 벗어났습니다."),
     FAIR_DATE_INVALID_ENTRY_TIME(HttpStatus.BAD_REQUEST, "F016", "입장 종료 시간이 입장 시작 시간보다 빠릅니다."),
+    FAIR_NOT_PUBLISHABLE(HttpStatus.CONFLICT, "F017", "공개할 수 없는 상태의 행사입니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),

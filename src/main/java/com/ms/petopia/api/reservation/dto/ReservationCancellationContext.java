@@ -10,6 +10,7 @@ import java.time.LocalTime;
 @Setter
 public class ReservationCancellationContext {
     private Long reservationId;
+    private Long fairId; // 실시간 통계 확인용
     private Long userId;
     private LocalDate visitDate;
     private String reservationType;
