@@ -9,9 +9,11 @@ import com.ms.petopia.api.reservation.mapper.OnsiteReservationMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.api.reservation.model.OnsiteSalesStatus;
 import com.ms.petopia.api.reservation.model.ReservationType;
+import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,9 @@ public class OnsiteReservationService {
     private final ReservationNumberGenerator reservationNumberGenerator;
     private final ReservationTimeProvider timeProvider;
     private final EntryQrService entryQrService;
+
+    // 실시간 예약 현황용 이벤트 발행
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 로그인 회원 본인의 당일 현장 직접예매를 만든다.
@@ -107,6 +112,9 @@ public class OnsiteReservationService {
 
         reservationMapper.insertCreatedHistory(row.getReservationId(), userId, status);
         String entryQrToken = paymentRequired ? null : entryQrService.issueForReservation(row.getReservationId());
+
+        // 실시간 예약현황 확인용
+        eventPublisher.publishEvent(new ReservationStatusChangedEvent(fairId));
 
         return new CreateOnsiteReservationResponse(
                 row.getReservationId(),
