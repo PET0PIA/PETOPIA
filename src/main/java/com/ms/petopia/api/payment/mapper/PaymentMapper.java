@@ -39,6 +39,13 @@ public interface PaymentMapper {
     PaymentRow selectByReservationId(@Param("reservationId") Long reservationId);
 
     /**
+     * idempotencyKey로 결제를 조회한다. 결제 생성(pay*) 메서드가 insert 전에 "이 원업무에
+     * 대한 이전 시도가 있는지, 있다면 FAILED라서 재시도 가능한지" 판단하는 용도로 쓴다.
+     * 없으면 null(첫 시도).
+     */
+    PaymentRow selectByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
+
+    /**
      * 결제 한 건을 생성한다. row.idempotencyKey가 이미 존재하면(동일 대상 중복결제)
      * DB의 UK_PAYMENT_IDEMPOTENCY_KEY 위반으로 DuplicateKeyException이 던져진다 —
      * 서비스 계층에서 잡아서 비즈니스 예외로 변환한다.
@@ -63,6 +70,19 @@ public interface PaymentMapper {
      * markProcessing으로 선점에 성공한 요청만 호출하므로, 정상 흐름에서는 항상 1을 반환한다.
      */
     int markFailed(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * 이전 시도가 FAILED로 끝난 결제 행을 PENDING으로 되돌려 재사용한다(결제 3종 공통 —
+     * 실패한 원업무가 idempotencyKey UNIQUE 제약에 막혀 영영 재결제 불가능해지는 문제 해결,
+     * 2026-08-06 CodeRabbit 지적). markProcessing과 동일하게 {@code WHERE status = 'FAILED'}
+     * 가드가 원자적이라, 동시에 두 재시도 요청이 들어와도 하나만 1을 받는다 — 0을 받은 쪽은
+     * 이미 다른 요청이 선점했다는 뜻이므로 충돌로 처리해야 한다.
+     * 재시도 시점에 금액이 달라질 수 있어(참가비 등 클라이언트가 다시 보내는 값) amount도 같이 갱신한다.
+     */
+    int resetFailedToPending(
+            @Param("paymentId") Long paymentId,
+            @Param("amount") Long amount,
+            @Param("updatedAt") LocalDateTime updatedAt);
 
     /**
      * 정산 집계용 — 특정 행사·업체의 완료된 참가비(VENDOR_FEE) 결제 전체를 조회한다.
