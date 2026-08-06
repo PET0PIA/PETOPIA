@@ -36,4 +36,48 @@ public class MailService {
             """.formatted(verificationCode));
         javaMailSender.send(simpleMailMessage);
     }
+
+    //관리자 계정 발급 메일
+    public void sendAdminAccountIssueEmail(String to, String tempPassword){
+        SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
+        simpleMailMessage.setFrom(fromEmail);
+        simpleMailMessage.setTo(to);
+        simpleMailMessage.setSubject("[PETOPIA] 행사 관리자 계정이 발급되었습니다");
+        simpleMailMessage.setText("""
+            안녕하세요. PETOPIA 입니다.
+
+            행사 승인이 완료되어 행사 관리자 계정이 발급되었습니다.
+
+            [아이디] %s
+            [임시 비밀번호] %s
+
+            로그인 후 반드시 비밀번호를 변경해 주세요.
+
+            감사합니다.
+            PETOPIA 드림.
+            """.formatted(to, tempPassword));
+        javaMailSender.send(simpleMailMessage);
+    }
+
+    //비밀번호 재설정 메일
+    public void sendPasswordResetEmail(String to, String resetLink){
+        SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
+        simpleMailMessage.setFrom(fromEmail);
+        simpleMailMessage.setTo(to);
+        simpleMailMessage.setSubject("[PETOPIA] 비밀번호 재설정");
+        simpleMailMessage.setText("""
+            안녕하세요. PETOPIA 입니다.
+
+            비밀번호 재발급 링크를 전해드립니다.
+            링크를 클릭해 비밀번호를 변경해주세요.
+
+            [비밀번호 재발급 링크] %s
+
+            해당 링크는 발급 후 10분 동안만 유효합니다.
+
+            감사합니다.
+            PETOPIA 드림.
+            """.formatted(resetLink));
+        javaMailSender.send(simpleMailMessage);
+    }
 }

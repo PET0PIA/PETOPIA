@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fair.mapper.FairDateMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="fairDateId" keyColumn="fair_date_id">
+        INSERT INTO fair_dates
+            (fair_id, operation_date, capacity, entry_start_time, entry_end_time, created_at, updated_at)
+        VALUES
+            (#{fairId}, #{operationDate}, #{capacity}, #{entryStartTime}, #{entryEndTime}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <select id="selectById" resultType="FairDate">
+        SELECT fair_date_id, fair_id, operation_date, capacity, entry_start_time, entry_end_time, created_at, updated_at
+          FROM fair_dates
+         WHERE fair_date_id = #{fairDateId}
+    </select>
+
+    <select id="selectByFairIdAndDate" resultType="FairDate">
+        SELECT fair_date_id, fair_id, operation_date, capacity, entry_start_time, entry_end_time, created_at, updated_at
+          FROM fair_dates
+         WHERE fair_id = #{fairId}
+           AND operation_date = #{operationDate}
+    </select>
+
+    <!--
+        reservedCount: 이 운영일의 유효 상태(사전예약, ADVANCE) 건수. ReservationMapper의
+        selectAvailabilityDates와 같은 기준(reservation_type='ADVANCE', status IN (...))으로
+        맞춰서 예약 도메인이 "정원 소진"으로 보는 건수와 동일하게 계산한다.
+        onsiteSalesConfigured: 이 운영일에 현장예매 정책이 이미 설정돼 있는지.
+        둘 다 관리자 화면이 정원 축소·삭제 전 경고를 보여주는 용도일 뿐, 여기서 직접 막지 않는다.
+    -->
+    <sql id="statsColumns">
+        SELECT fd.fair_date_id
+             , fd.fair_id
+             , fd.operation_date
+             , fd.capacity
+             , fd.entry_start_time
+             , fd.entry_end_time
+             , fd.created_at
+             , fd.updated_at
+             , (SELECT COUNT(*)
+                  FROM reservations r
+                 WHERE r.fair_id = fd.fair_id
+                   AND r.visit_date = fd.operation_date
+                   AND r.reservation_type = 'ADVANCE'
+                   AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')) AS reserved_count
+             , EXISTS (SELECT 1
+                         FROM onsite_sales_policies osp
+                        WHERE osp.fair_date_id = fd.fair_date_id) AS onsite_sales_configured
+          FROM fair_dates fd
+    </sql>
+
+    <select id="selectByIdWithStats" resultType="FairDateWithStats">
+        <include refid="statsColumns" />
+        WHERE fd.fair_date_id = #{fairDateId}
+    </select>
+
+    <select id="selectByFairIdWithStats" resultType="FairDateWithStats">
+        <include refid="statsColumns" />
+        WHERE fd.fair_id = #{fairId}
+        ORDER BY fd.operation_date ASC
+    </select>
+
+    <update id="update">
+        UPDATE fair_dates
+           SET capacity = #{capacity},
+               entry_start_time = #{entryStartTime},
+               entry_end_time = #{entryEndTime},
+               updated_at = #{updatedAt}
+         WHERE fair_date_id = #{fairDateId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM fair_dates WHERE fair_date_id = #{fairDateId}
+    </delete>
+
+</mapper>

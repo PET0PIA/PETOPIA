@@ -74,22 +74,23 @@ export function AuditLogPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  async function load(query: AuditLogQuery, pageArg: number) {
+  useEffect(() => {
+    if (!appliedQuery) return;
+    let ignore = false;
+
     setLoading(true);
     setLoadError(null);
-    try {
-      const data = await getAuditLogs({ ...query, page: pageArg, size: 20 });
-      setResponse(data);
-    } catch (error) {
-      setResponse(null);
-      setLoadError(error instanceof ApiError ? error.message : "감사 로그를 불러오지 못했어요.");
-    } finally {
-      setLoading(false);
-    }
-  }
+    getAuditLogs({ ...appliedQuery, page, size: 20 })
+      .then((data) => { if (!ignore) setResponse(data); })
+      .catch((error) => {
+        if (!ignore) {
+          setResponse(null);
+          setLoadError(error instanceof ApiError ? error.message : "감사 로그를 불러오지 못했어요.");
+        }
+      })
+      .finally(() => { if (!ignore) setLoading(false); });
 
-  useEffect(() => {
-    if (appliedQuery) load(appliedQuery, page);
+    return () => { ignore = true; };
   }, [appliedQuery, page]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -125,8 +126,8 @@ export function AuditLogPage() {
 
       <form onSubmit={handleSubmit} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="w-full sm:w-44">
-          <span className="mb-1.5 block text-sm font-bold text-ink">조회 조건</span>
-          <Select value={filterKind} onChange={(event) => setFilterKind(event.target.value as FilterKind)}>
+          <label htmlFor="filter-kind" className="mb-1.5 block text-sm font-bold text-ink">조회 조건</label>
+          <Select id="filter-kind" value={filterKind} onChange={(event) => setFilterKind(event.target.value as FilterKind)}>
             {Object.entries(filterKindLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -138,8 +139,8 @@ export function AuditLogPage() {
         {filterKind === "target" && (
           <>
             <div className="w-full sm:w-40">
-              <span className="mb-1.5 block text-sm font-bold text-ink">대상 종류</span>
-              <Select value={targetTypeInput} onChange={(event) => setTargetTypeInput(event.target.value as TargetType)}>
+              <label htmlFor="target-type" className="mb-1.5 block text-sm font-bold text-ink">대상 종류</label>
+              <Select id="target-type" value={targetTypeInput} onChange={(event) => setTargetTypeInput(event.target.value as TargetType)}>
                 <option value="">선택</option>
                 {Object.entries(targetTypeLabels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -149,23 +150,23 @@ export function AuditLogPage() {
               </Select>
             </div>
             <div className="flex-1">
-              <span className="mb-1.5 block text-sm font-bold text-ink">대상 ID</span>
-              <Input type="number" min={1} value={targetIdInput} onChange={(event) => setTargetIdInput(event.target.value)} placeholder="예: 1" />
+              <label htmlFor="target-id" className="mb-1.5 block text-sm font-bold text-ink">대상 ID</label>
+              <Input id="target-id" type="number" min={1} value={targetIdInput} onChange={(event) => setTargetIdInput(event.target.value)} placeholder="예: 1" />
             </div>
           </>
         )}
 
         {filterKind === "actor" && (
           <div className="flex-1">
-            <span className="mb-1.5 block text-sm font-bold text-ink">행위자 사용자 ID</span>
-            <Input type="number" min={1} value={actorIdInput} onChange={(event) => setActorIdInput(event.target.value)} placeholder="예: 1" />
+            <label htmlFor="actor-id" className="mb-1.5 block text-sm font-bold text-ink">행위자 사용자 ID</label>
+            <Input id="actor-id" type="number" min={1} value={actorIdInput} onChange={(event) => setActorIdInput(event.target.value)} placeholder="예: 1" />
           </div>
         )}
 
         {filterKind === "action" && (
           <div className="flex-1">
-            <span className="mb-1.5 block text-sm font-bold text-ink">액션 타입</span>
-            <Select value={actionTypeInput} onChange={(event) => setActionTypeInput(event.target.value as ActionType)}>
+            <label htmlFor="action-type" className="mb-1.5 block text-sm font-bold text-ink">액션 타입</label>
+            <Select id="action-type" value={actionTypeInput} onChange={(event) => setActionTypeInput(event.target.value as ActionType)}>
               <option value="">선택</option>
               {Object.entries(actionTypeLabels).map(([value, label]) => (
                 <option key={value} value={value}>

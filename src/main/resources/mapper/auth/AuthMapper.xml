@@ -171,6 +171,7 @@
          LIMIT 1
     </select>
 
+
     <!-- 사용/폐기 여부와 상관없이 가장 최근 발급된 토큰 1건. 재발급 쿨다운 판단용 -->
     <select id="selectLatestToken" resultType="UserToken">
         SELECT token_id
@@ -206,12 +207,12 @@
            AND used_at IS NULL
     </update>
 
-    <!-- AND used_at IS NULL 가드로 동시 요청 중 한쪽만 실제로 갱신됨 -->
     <update id="markUserTokenUsed">
         UPDATE user_tokens
            SET used_at = CURRENT_TIMESTAMP
          WHERE token_id = #{tokenId}
            AND used_at IS NULL
+           AND expires_at > CURRENT_TIMESTAMP
     </update>
 
     <!-- 인증 완료 기록. users.email_verified + status 둘 다 여기서 같이 전환 -->
@@ -231,5 +232,31 @@
              , updated_at = CURRENT_TIMESTAMP
          WHERE user_id = #{userId}
     </update>
+
+    <!-- ===== 비밀번호 변경 ===== -->
+
+    <!-- 로그인 상태에서 비밀번호 변경 -->
+    <update id="updateUserPassword">
+        UPDATE users
+           SET password_hash = #{passwordHash}
+             , updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+    </update>
+
+    <!-- 비밀번호 분실 시 비밀번호 재설정 -->
+    <select id="selectUserTokenByHash" resultType="UserToken">
+        SELECT token_id
+        , user_id
+        , token_hash
+        , purpose
+        , used_at
+        , attempt_count
+        , created_at
+        , expires_at
+        FROM user_tokens
+        WHERE token_hash = #{tokenHash}
+        AND purpose = #{purpose}
+        AND used_at IS NULL
+    </select>
 
 </mapper>

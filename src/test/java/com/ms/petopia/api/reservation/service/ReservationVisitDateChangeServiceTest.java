@@ -90,6 +90,22 @@ class ReservationVisitDateChangeServiceTest {
     }
 
     @Test
+    void rejectsVisitDateChangeRequestFromAnotherUser() {
+        ReservationChangeReservationRow reservation = reservation("CONFIRMED");
+        reservation.setUserId(99L);
+        given(changeMapper.selectReservationForUpdate(RESERVATION_ID)).willReturn(reservation);
+
+        assertThatThrownBy(() -> service.changeVisitDate(
+                RESERVATION_ID, USER_ID, new UpdateReservationVisitDateRequest(TARGET_DATE)
+        ))
+                .isInstanceOf(CommonException.class)
+                .extracting(exception -> ((CommonException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(changeMapper, never()).selectFairDatesForUpdate(any(), any());
+    }
+
+    @Test
     void rejectsOnsiteReservation() {
         ReservationChangeReservationRow onsiteReservation = reservation("CONFIRMED");
         onsiteReservation.setReservationType("ONSITE_DIRECT");

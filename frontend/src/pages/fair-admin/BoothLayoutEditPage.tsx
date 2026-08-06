@@ -8,6 +8,7 @@ import { BoothCanvas, MIN_SLOT_SIZE, clamp, type DraftSlot } from "../../compone
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Textarea";
+import { useConfirm } from "../../components/ui/useConfirm";
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2;
@@ -79,6 +80,8 @@ function validateDrafts(drafts: DraftSlot[]): string | null {
 }
 
 export function BoothLayoutEditPage() {
+  const { confirm, confirmDialog } = useConfirm();
+
   const params = useParams<{ fairId: string; hallId: string }>();
   const fairId = Number(params.fairId);
   const hallId = Number(params.hallId);
@@ -208,13 +211,13 @@ export function BoothLayoutEditPage() {
     setDirty(true);
   }
 
-  function handleDeleteSelected() {
+  async function handleDeleteSelected() {
     if (!selected) return;
     if (selected.lockedAt) {
       setFormError("이미 참가 신청이 걸린 슬롯은 삭제할 수 없어요.");
       return;
     }
-    if (!window.confirm(`'${selected.slotNumber || "번호 없음"}' 슬롯을 삭제할까요?`)) return;
+    if (!(await confirm({ description: `'${selected.slotNumber || "번호 없음"}' 슬롯을 삭제할까요?`, confirmLabel: "삭제" }))) return;
     setDrafts((previous) => previous.filter((draft) => draft.key !== selected.key));
     setSelectedKey(null);
     setDirty(true);
@@ -232,8 +235,8 @@ export function BoothLayoutEditPage() {
     setZoom(1);
   }
 
-  function handleReset() {
-    if (dirty && !window.confirm("저장하지 않은 변경사항을 모두 되돌릴까요?")) return;
+  async function handleReset() {
+    if (dirty && !(await confirm({ description: "저장하지 않은 변경사항을 모두 되돌릴까요?", confirmLabel: "되돌리기" }))) return;
     setFormError(null);
     setReloadTick((tick) => tick + 1);
   }
@@ -534,6 +537,7 @@ export function BoothLayoutEditPage() {
           </aside>
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

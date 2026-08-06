@@ -80,6 +80,33 @@ class PaymentControllerTest {
     }
 
     @Test
+    void getsPaymentByReservationId() throws Exception {
+        given(paymentService.getByReservationId(500L)).willReturn(
+                new PaymentResponse(
+                        2L, "PAYMENT_2", "RESERVATION_DEPOSIT", 30000L, "COMPLETED", "TOSS",
+                        LocalDateTime.of(2026, 8, 5, 10, 0),
+                        LocalDateTime.of(2026, 8, 5, 10, 0),
+                        10L, null, 90L, 500L, null
+                )
+        );
+
+        mockMvc.perform(get("/api/reservations/500/payment"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paymentId").value(2))
+                .andExpect(jsonPath("$.reservationId").value(500));
+    }
+
+    @Test
+    void returns404WhenNoPaymentForReservation() throws Exception {
+        willThrow(new CommonException(ErrorCode.PAYMENT_NOT_FOUND))
+                .given(paymentService).getByReservationId(999L);
+
+        mockMvc.perform(get("/api/reservations/999/payment"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("P001"));
+    }
+
+    @Test
     void returns404WhenPaymentNotFound() throws Exception {
         // Arrange: 서비스가 예외를 던지는 상황을 흉내냄
         // (PaymentServiceTest에서 이미 검증한 "존재하지 않으면 예외" 로직을,
@@ -178,6 +205,54 @@ class PaymentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"paymentKey\":\"\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createsReservationDepositPayment() throws Exception {
+        // Arrange: 예약금 결제는 요청 바디가 없음(금액을 클라이언트가 안 보냄 —
+        // 서비스가 예약 도메인 컨텍스트로 진짜 금액을 받아온다는 걸 컨트롤러 테스트에서는
+        // 그냥 신뢰하고, 여기선 "path variable/header가 잘 넘어가서 201로 응답하는지"만 본다).
+        given(paymentService.payReservationDeposit(eq(500L), eq(99L))).willReturn(
+                new PaymentResponse(
+                        2L, "PAYMENT_2", "RESERVATION_DEPOSIT", 30000L, "PENDING", "TOSS",
+                        null,
+                        LocalDateTime.of(2026, 8, 5, 10, 0),
+                        10L, null, 99L, 500L, null
+                )
+        );
+
+        mockMvc.perform(post("/api/reservations/500/payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+                .andExpect(status().isCreated()) // 컨트롤러가 201로 응답하는지
+                .andExpect(jsonPath("$.paymentType").value("RESERVATION_DEPOSIT"))
+                .andExpect(jsonPath("$.amount").value(30000))
+                .andExpect(jsonPath("$.reservationId").value(500));
+
+        verify(paymentService).payReservationDeposit(500L, 99L);
+    }
+
+    @Test
+    void returns403WhenPayingSomeoneElsesReservationDeposit() throws Exception {
+        // 다른 사람 소유의 예약에 예약금 결제를 시도하는 상황(IDOR 방지 확인)
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(paymentService).payReservationDeposit(eq(500L), eq(99L));
+
+        mockMvc.perform(post("/api/reservations/500/payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("A002"));
+    }
+
+    @Test
+    void returns409WhenReservationDepositAlreadyPaid() throws Exception {
+        // 이미 결제된 예약에 다시 예약금 결제를 시도하는 상황(idempotencyKey 중복)
+        willThrow(new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE))
+                .given(paymentService).payReservationDeposit(eq(500L), eq(99L));
+
+        mockMvc.perform(post("/api/reservations/500/payment")
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("P002"));
     }
 
 }

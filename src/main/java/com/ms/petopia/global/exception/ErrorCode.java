@@ -35,6 +35,8 @@ public enum ErrorCode {
     RESEND_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "A009", "인증 코드 재전송은 잠시 후 다시 시도해주세요."),
     EMAIL_NOT_VERIFIED(HttpStatus.UNAUTHORIZED, "A010", "이메일 인증이 완료되지 않은 이메일입니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "A011", "유효하지 않거나 만료된 토큰입니다. 다시 로그인해주세요."),
+    INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "A012", "현재 비밀번호가 일치하지 않습니다."),
+    FAIR_ADMIN_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "A013", "이미 관리자 계정이 배정된 행사입니다."),
 
     // ===== Storage =====
     STORAGE_UNSUPPORTED_EXTENSION(HttpStatus.BAD_REQUEST, "S001", "허용하지 않는 파일 확장자입니다."),
@@ -53,6 +55,12 @@ public enum ErrorCode {
     NTS_API_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "V005", "사업자 진위확인 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요."),
     BUSINESS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "V006", "사업자 정보를 확인할 수 없습니다. 입력하신 정보를 다시 확인해주세요."),
     BUSINESS_DUPLICATE(HttpStatus.CONFLICT, "V007", "이미 등록된 사업자등록번호입니다."),
+    APPLICATION_DUPLICATE_ACTIVE(HttpStatus.CONFLICT, "V008", "이미 진행 중인 신청이 존재합니다."),
+    BOOTH_SLOT_ALREADY_LOCKED(HttpStatus.CONFLICT, "V009", "이미 다른 신청에서 선택된 부스 슬롯이 포함되어 있습니다."),
+    TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "V010", "이용약관에 동의해야 신청서를 제출할 수 있습니다."),
+    RECRUIT_CLOSED(HttpStatus.CONFLICT, "V011", "모집이 마감되어 신청할 수 없습니다."),
+    APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "V012", "신청을 찾을 수 없습니다."),
+    BUSINESS_REGISTER_LOCK_TIMEOUT(HttpStatus.CONFLICT, "V013", "사업자 등록 처리 중입니다. 잠시 후 다시 시도해주세요."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
@@ -73,6 +81,10 @@ public enum ErrorCode {
     BOOTH_SLOT_DUPLICATE_NUMBER(HttpStatus.BAD_REQUEST, "F010", "같은 홀 안에 중복된 부스 번호가 있습니다."),
     BOOTH_LAYOUT_VERSION_CONFLICT(HttpStatus.CONFLICT, "F011", "다른 곳에서 이미 이 홀의 배치를 저장했습니다. 최신 상태를 다시 불러와 주세요."),
     BOOTH_SLOT_DUPLICATE_REFERENCE(HttpStatus.BAD_REQUEST, "F012", "같은 부스 슬롯을 요청 안에서 두 번 이상 참조했습니다."),
+    FAIR_DATE_NOT_FOUND(HttpStatus.NOT_FOUND, "F013", "존재하지 않는 운영일이거나 해당 행사의 운영일이 아닙니다."),
+    FAIR_DATE_DUPLICATE(HttpStatus.CONFLICT, "F014", "이미 등록된 운영 날짜입니다."),
+    FAIR_DATE_OUT_OF_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F015", "운영 날짜가 행사 운영 기간을 벗어났습니다."),
+    FAIR_DATE_INVALID_ENTRY_TIME(HttpStatus.BAD_REQUEST, "F016", "입장 종료 시간이 입장 시작 시간보다 빠릅니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -98,6 +110,16 @@ public enum ErrorCode {
     // ===== Notification =====
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),
     NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "N002", "해당 알림에 접근 권한이 없습니다."),
+
+    // ===== Refund =====
+    REFUND_NOT_FOUND(HttpStatus.NOT_FOUND, "RF001", "존재하지 않는 환불입니다."),
+    REFUND_TARGET_NOT_REFUNDABLE(HttpStatus.CONFLICT, "RF002", "환불할 수 없는 결제 상태입니다."),
+    REFUND_ALREADY_PROCESSED(HttpStatus.CONFLICT, "RF003", "이미 환불이 접수된 결제입니다."),
+
+    // ===== Settlement =====
+    SETTLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "ST001", "존재하지 않는 정산입니다."),
+    SETTLEMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ST002", "이미 계산된 정산이 있습니다."),
+    SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
     ;
 
     private final HttpStatus httpStatus;
