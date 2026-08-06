@@ -37,6 +37,10 @@ public enum ErrorCode {
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "A011", "유효하지 않거나 만료된 토큰입니다. 다시 로그인해주세요."),
     INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "A012", "현재 비밀번호가 일치하지 않습니다."),
     FAIR_ADMIN_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "A013", "이미 관리자 계정이 배정된 행사입니다."),
+    OAUTH_UNSUPPORTED_PROVIDER(HttpStatus.BAD_REQUEST, "A014", "지원하지 않는 소셜 로그인 제공자입니다."),
+    OAUTH_INVALID_STATE(HttpStatus.BAD_REQUEST, "A015", "잘못되었거나 만료된 요청입니다. 다시 시도해주세요."),
+    OAUTH_PENDING_NOT_FOUND(HttpStatus.BAD_REQUEST, "A016", "만료되었거나 잘못된 요청입니다. 처음부터 다시 시도해주세요."),
+    OAUTH_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY, "A017", "소셜 로그인 제공자와 통신 중 오류가 발생했습니다."),
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
