@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fair.mapper.FairTransitionMapper">
+
+    <select id="selectPaymentExpiringForUpdate" resultType="FairTransitionRow">
+        SELECT fair_id
+          FROM fairs
+         WHERE status = 'PAYMENT_PENDING'
+           AND payment_due_at IS NOT NULL
+           AND payment_due_at &lt;= #{now}
+         ORDER BY payment_due_at, fair_id
+         LIMIT #{limit}
+         FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="expireFair">
+        UPDATE fairs
+           SET status = 'EXPIRED'
+             , updated_at = #{now}
+         WHERE fair_id = #{fairId}
+           AND status = 'PAYMENT_PENDING'
+           AND payment_due_at IS NOT NULL
+           AND payment_due_at &lt;= #{now}
+    </update>
+
+    <select id="selectPreparingToStartForUpdate" resultType="FairTransitionRow">
+        SELECT fair_id
+          FROM fairs
+         WHERE status = 'PREPARING'
+           AND operation_start_date IS NOT NULL
+           AND operation_start_date &lt;= #{today}
+         ORDER BY operation_start_date, fair_id
+         LIMIT #{limit}
+         FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="startFair">
+        UPDATE fairs
+           SET status = 'IN_PROGRESS'
+             , updated_at = #{now}
+         WHERE fair_id = #{fairId}
+           AND status = 'PREPARING'
+    </update>
+
+    <select id="selectInProgressToEndForUpdate" resultType="FairTransitionRow">
+        SELECT fair_id
+          FROM fairs
+         WHERE status = 'IN_PROGRESS'
+           AND operation_end_date IS NOT NULL
+           AND operation_end_date &lt; #{today}
+         ORDER BY operation_end_date, fair_id
+         LIMIT #{limit}
+         FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="endFair">
+        UPDATE fairs
+           SET status = 'ENDED'
+             , updated_at = #{now}
+         WHERE fair_id = #{fairId}
+           AND status = 'IN_PROGRESS'
+    </update>
+
+</mapper>
