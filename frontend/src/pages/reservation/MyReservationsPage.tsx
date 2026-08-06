@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Badge } from "../../components/ui/Badge";
@@ -29,8 +29,6 @@ function formatTime(time: string) {
 }
 
 export function MyReservationsPage() {
-  const navigate = useNavigate();
-
   // 백엔드 연동 전이라 mock 데이터를 그대로 그린다.
   const reservations = mockReservations;
 
@@ -62,12 +60,15 @@ export function MyReservationsPage() {
           </thead>
           <tbody>
             {reservations.map((item) => (
-              <tr
-                key={item.reservationId}
-                onClick={() => navigate(`/reservations/me/${item.reservationId}`)}
-                className="cursor-pointer border-b border-line last:border-0 hover:bg-page"
-              >
-                <td className="px-4 py-3 font-bold">{item.fairName}</td>
+              <tr key={item.reservationId} className="border-b border-line last:border-0 hover:bg-page">
+                <td className="px-4 py-3">
+                  <Link
+                    to={`/reservations/me/${item.reservationId}`}
+                    className="font-bold text-ink hover:underline"
+                  >
+                    {item.fairName}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 text-muted">{item.visitDate}</td>
                 <td className="px-4 py-3 text-muted">
                   {formatTime(item.entryStartTime)} ~ {formatTime(item.entryEndTime)}
@@ -77,8 +78,14 @@ export function MyReservationsPage() {
                     {statusLabels[item.reservationStatus]}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-right text-muted">
-                  <ChevronRight size={16} className="inline" aria-hidden="true" />
+                <td className="px-4 py-3 text-right">
+                  <Link
+                    to={`/reservations/me/${item.reservationId}`}
+                    aria-label={`${item.fairName} 예약 상세 보기`}
+                    className="inline-flex items-center justify-center rounded-button p-1 text-muted hover:text-ink"
+                  >
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </Link>
                 </td>
               </tr>
             ))}

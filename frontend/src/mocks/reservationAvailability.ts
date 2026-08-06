@@ -54,7 +54,7 @@ const fairs: Record<string, FairReservationInfo> = {
       { fairDateId: 12, visitDate: "2026-09-19", entryStartTime: "10:00:00", entryEndTime: "18:00:00", remainingCapacity: 48, available: true },
       { fairDateId: 13, visitDate: "2026-09-20", entryStartTime: "10:00:00", entryEndTime: "17:00:00", remainingCapacity: 0, available: false },
     ],
-    onsite: { available: true, visitDate: "2026-08-06", entryStartTime: "10:00:00", entryEndTime: "18:00:00", price: 20000 },
+    onsite: { available: true, visitDate: "2026-09-18", entryStartTime: "10:00:00", entryEndTime: "18:00:00", price: 20000 },
   },
   // 유료 사전예약 + 현장예매 미접수
   "2": {
@@ -80,7 +80,7 @@ const fairs: Record<string, FairReservationInfo> = {
       { fairDateId: 31, visitDate: "2026-11-07", entryStartTime: "10:00:00", entryEndTime: "18:00:00", remainingCapacity: 300, available: true },
       { fairDateId: 32, visitDate: "2026-11-08", entryStartTime: "10:00:00", entryEndTime: "18:00:00", remainingCapacity: 150, available: true },
     ],
-    onsite: { available: true, visitDate: "2026-08-06", entryStartTime: "11:00:00", entryEndTime: "17:00:00", price: 10000 },
+    onsite: { available: true, visitDate: "2026-11-07", entryStartTime: "10:00:00", entryEndTime: "18:00:00", price: 10000 },
   },
 };
 
