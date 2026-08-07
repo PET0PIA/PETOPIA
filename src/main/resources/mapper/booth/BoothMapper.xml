@@ -19,4 +19,17 @@
         ORDER BY booth_item_id
     </select>
 
+    <!-- 신청 ID로 부스 조회 (1:1) -->
+    <select id="selectByApplicationId" resultType="com.ms.petopia.api.booth.domain.Booth">
+        SELECT booth_id, application_id, business_id, name, image_url, intro, category, target_animal, confirmed_at
+        FROM booth
+        WHERE application_id = #{applicationId}
+    </select>
+
+    <!-- 부스 생성 (신청 확정 시 자동 생성) -->
+    <insert id="insertBooth" useGeneratedKeys="true" keyProperty="boothId">
+        INSERT INTO booth (application_id, business_id, confirmed_at)
+        VALUES (#{applicationId}, #{businessId}, #{confirmedAt})
+    </insert>
+
 </mapper>

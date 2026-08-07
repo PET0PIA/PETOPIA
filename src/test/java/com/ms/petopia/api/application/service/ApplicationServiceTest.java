@@ -8,6 +8,7 @@ import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
+import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.api.notification.dto.NotificationType;
@@ -76,6 +77,9 @@ class ApplicationServiceTest {
 
     @Mock
     private NotificationService notificationService;
+
+    @Mock
+    private BoothMapper boothMapper;
 
     @InjectMocks
     private ApplicationService applicationService;
@@ -2097,6 +2101,7 @@ class ApplicationServiceTest {
 
             // then
             verify(applicationMapper).updateApplicationConfirmed(applicationId);
+            verify(boothMapper).insertBooth(any()); // 결제완료 시 부스도 같이 생성되는지 확인
 
         }
 

@@ -10,6 +10,8 @@ import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
+import com.ms.petopia.api.booth.domain.Booth;
+import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
@@ -54,6 +56,7 @@ public class ApplicationService {
     private final StorageService storageService;
     private final RefundService refundService;
     private final NotificationService notificationService;
+    private final BoothMapper boothMapper;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -731,6 +734,15 @@ public class ApplicationService {
         if (updated == 0) {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
         }
+
+        // 결제 완료로 확정됐으니 부스 프로필을 자동 생성한다.
+        Booth booth = Booth.builder()
+                .applicationId(applicationId)
+                .businessId(application.getBusinessId())
+                .confirmedAt(LocalDateTime.now())
+                .build();
+
+        boothMapper.insertBooth(booth);
 
     }
 
