@@ -207,6 +207,31 @@
         ORDER BY count DESC
     </select>
 
+    <!-- 방문자 1명이 평균 몇 개 부스를 방문했는지 -->
+    <select id="selectAvgBoothsPerVisitor" resultType="java.lang.Double">
+        SELECT ROUND(AVG(booth_count), 1)
+          FROM (
+               SELECT user_id, COUNT(DISTINCT booth_id) AS booth_count
+                 FROM booth_visits
+                WHERE fair_id = #{fairId}
+                GROUP BY user_id
+               ) sub
+    </select>
+
+    <!-- 부스 방문 패턴 분포: 유저별 방문 부스 수 히스토그램 -->
+    <select id="selectBoothVisitPatternDistribution" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT CONCAT(visit_depth, '개 부스') AS label,
+               COUNT(*) AS count
+          FROM (
+               SELECT user_id, COUNT(DISTINCT booth_id) AS visit_depth
+                 FROM booth_visits
+                WHERE fair_id = #{fairId}
+                GROUP BY user_id
+               ) sub
+         GROUP BY visit_depth
+         ORDER BY visit_depth ASC
+    </select>
+
     <!-- 반려동물 품종 분포 -->
     <select id="selectPetBreedBreakdown" resultType="com.ms.petopia.api.statistics.dto.PetBreedStatDto">
         SELECT COALESCE(rp.pet_species_snapshot, '미등록') AS species,
