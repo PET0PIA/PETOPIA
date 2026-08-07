@@ -44,6 +44,11 @@ public class ReservationDashboardService {
         return dashboardMapper.selectBoothVisitStats(fairId);
     }
 
+    @Transactional(readOnly = true)
+    public List<LabelCountDto> getBoothVisitPatternDistribution(Long fairId) {
+        return dashboardMapper.selectBoothVisitPatternDistribution(fairId);
+    }
+
     @Async // 별도 스레드에서 실행. 예약처리 흐름을 블로킹X
     @TransactionalEventListener
     public void onReservationStatusChanged(ReservationStatusChangedEvent event){
@@ -83,6 +88,7 @@ public class ReservationDashboardService {
         dto.setPetSpeciesBreakdown(dashboardMapper.selectPetSpeciesBreakdown(fairId));
         dto.setPetBreedBreakdown(dashboardMapper.selectPetBreedBreakdown(fairId));
         dto.setAvgPetAge(dashboardMapper.selectAvgPetAge(fairId));
+        dto.setAvgBoothsPerVisitor(dashboardMapper.selectAvgBoothsPerVisitor(fairId));
         return dto;
     }
 

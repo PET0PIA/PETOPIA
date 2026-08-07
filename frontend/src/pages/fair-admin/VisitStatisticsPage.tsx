@@ -1,9 +1,9 @@
-import { AlertCircle, Search } from "lucide-react";
+import { AlertCircle, Download, Search } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getFairDates, type FairDate } from "../../api/fair";
-import { getBoothVisitStats, getHourlyEntryTrend, getVisitStats, type BoothVisitStat, type HourlyEntryTrend, type VisitStats } from "../../api/statistics";
+import { downloadVisitStatsExcel, getBoothVisitStats, getHourlyEntryTrend, getVisitStats, type BoothVisitStat, type HourlyEntryTrend, type VisitStats } from "../../api/statistics";
 import { BoothVisitRanking } from "../../components/fair-admin/BoothVisitRanking";
 import { DonutChart } from "../../components/fair-admin/DonutChart";
 import { HourlyEntryTrendChart } from "../../components/fair-admin/HourlyEntryTrendChart";
@@ -34,6 +34,9 @@ export function VisitStatisticsPage() {
   const [hourlyTrend, setHourlyTrend] = useState<HourlyEntryTrend[]>([]);
   const [trendLoading, setTrendLoading] = useState(false);
   const [trendError, setTrendError] = useState<string | null>(null);
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // 운영일 목록(날짜 선택용)과 부스 방문 통계(운영일과 무관, 행사 전체 집계)는 fairId만 있으면 조회 가능하다.
   useEffect(() => {
@@ -83,6 +86,19 @@ export function VisitStatisticsPage() {
     return () => { ignore = true; };
   }, [fairId, selectedDate]);
 
+  async function handleExport() {
+    if (fairId === null) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadVisitStatsExcel(fairId);
+    } catch (error) {
+      setExportError(error instanceof ApiError ? error.message : "엑셀 파일을 내려받지 못했어요.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function handleLoadFair(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsed = Number(fairIdInput);
@@ -90,6 +106,7 @@ export function VisitStatisticsPage() {
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
+    setExportError(null);
     if (parsed === fairId) {
       setReloadTick((tick) => tick + 1);
     } else {
@@ -103,7 +120,22 @@ export function VisitStatisticsPage() {
         eyebrow="박람회 관리자"
         title="방문 통계"
         description="운영일별 시간대 입장 추이와 부스별 고유 방문객 수를 확인해요."
+        action={
+          fairId !== null && (
+            <Button type="button" variant="outline" onClick={handleExport} disabled={exporting}>
+              <Download size={16} />
+              {exporting ? "내보내는 중..." : "엑셀로 내보내기"}
+            </Button>
+          )
+        }
       />
+
+      {exportError && (
+        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <p>{exportError}</p>
+        </div>
+      )}
 
       <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
@@ -180,7 +212,7 @@ export function VisitStatisticsPage() {
                 <h2 className="text-lg font-extrabold text-ink">부스별 방문 통계</h2>
                 <p className="mt-1 text-sm text-muted">부스 QR을 스캔한 고유 방문객 수 기준으로, 행사 전 기간을 합산한 상위 {BOOTH_RANKING_PREVIEW_COUNT}개예요.</p>
               </div>
-              {boothStats.length > BOOTH_RANKING_PREVIEW_COUNT && (
+              {boothStats.length > 0 && (
                 <Link to={`/fair-admin/statistics/booths/${fairId}`} className="shrink-0 text-sm font-bold text-primary-strong hover:underline">
                   전체 {boothStats.length}개 상세보기
                 </Link>

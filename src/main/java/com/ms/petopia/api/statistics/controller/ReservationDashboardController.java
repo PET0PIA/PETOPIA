@@ -2,10 +2,12 @@ package com.ms.petopia.api.statistics.controller;
 
 import com.ms.petopia.api.statistics.dto.*;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
+import com.ms.petopia.api.statistics.service.VisitStatsExportService;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
 import com.ms.petopia.global.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +23,7 @@ import java.util.List;
 public class ReservationDashboardController {
     private final ReservationDashboardService dashboardService;
     private final DashboardEmitterRegistry emitterRegistry;
+    private final VisitStatsExportService exportService;
 
     @GetMapping("/{fairId}/reservation-dashboard")
     public ResponseEntity<ApiResponse<List<ReservationDateSummaryDto>>> getDashboard(
@@ -54,6 +57,13 @@ public class ReservationDashboardController {
         return ResponseEntity.ok(ApiResponse.success(dashboardService.getBoothVisitStats(fairId)));
     }
 
+    @GetMapping("/{fairId}/booth-visit-pattern")
+    public ResponseEntity<ApiResponse<List<LabelCountDto>>> getBoothVisitPattern(
+            @PathVariable Long fairId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getBoothVisitPatternDistribution(fairId)));
+    }
+
     // SSE 연결
     @GetMapping(value = "/{fairId}/reservation-dashboard/stream",
                 produces = MediaType.TEXT_EVENT_STREAM_VALUE) // 브라우저가 EventSource로 인식하는 MIME타입
@@ -78,6 +88,17 @@ public class ReservationDashboardController {
             @PathVariable Long fairId
     ) {
         return ResponseEntity.ok(ApiResponse.success(dashboardService.getVisitStats(fairId)));
+    }
+
+    @GetMapping("/{fairId}/visit-stats/export")
+    public ResponseEntity<byte[]> exportVisitStats(@PathVariable Long fairId) throws IOException {
+        byte[] body = exportService.exportAsExcel(fairId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"visit-stats-" + fairId + ".xlsx\"")
+                .header(HttpHeaders.CONTENT_TYPE,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                .body(body);
     }
 
 }
