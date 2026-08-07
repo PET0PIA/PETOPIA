@@ -567,6 +567,143 @@ class PaymentServiceTest {
         verify(tossPaymentClient, never()).confirmPayment(any(), any(), any());
     }
 
+    // ── 결제 취소·만료 (WBS 1.7) — 다른 도메인의 만료/취소 배치가 호출하는 상태전이 ──
+    // pendingRow()는 VENDOR_FEE라 캐스터는 "VENDOR_APPLICATION",
+    // pendingReservationDepositRow()는 RESERVATION_DEPOSIT이라 캐스터는 "RESERVATION".
+
+    @Test
+    @DisplayName("PENDING 결제를 취소하면 CANCELED로 바뀐다")
+    void cancelPayment_PENDING상태면_CANCELED로바뀐다() {
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markCanceled(eq(1L), any(LocalDateTime.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.cancelPayment(1L, "VENDOR_APPLICATION");
+
+        assertThat(result.status()).isEqualTo("CANCELED");
+        verify(paymentMapper).markCanceled(eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 결제를 취소하려 하면 예외를 던진다")
+    void cancelPayment_결제없음_예외를던진다() {
+        given(paymentMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(999L, "VENDOR_APPLICATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("PENDING이 아닌 결제를 취소하려 하면 예외를 던지고 마킹을 시도조차 안 한다")
+    void cancelPayment_PENDING아니면_예외를던진다() {
+        // COMPLETED된 결제를 뒤늦게 취소하려는 상황(원 업무 배치가 타이밍을 놓친 경우 등)
+        PaymentRow row = pendingRow();
+        row.setStatus("COMPLETED");
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(1L, "VENDOR_APPLICATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+
+        // PROCESSING 중인 결제를 배치가 잘못 건드리면 안 되므로, 애초에 마킹 호출 자체가 없어야 함
+        verify(paymentMapper, never()).markCanceled(any(), any());
+    }
+
+    @Test
+    @DisplayName("취소 요청이 동시에 들어와 선점에 실패하면(이미 confirm이 앞서 나감) 예외를 던진다")
+    void cancelPayment_선점실패시_예외를던진다() {
+        // markCanceled의 WHERE status='PENDING' 가드에서 밀린 상황 —
+        // 예: 배치가 조회한 직후 사용자가 먼저 confirm(PENDING->PROCESSING)해버린 경쟁
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markCanceled(eq(1L), any(LocalDateTime.class))).willReturn(0);
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(1L, "VENDOR_APPLICATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+    }
+
+    @Test
+    @DisplayName("호출 도메인이 그 결제의 소유 도메인이 아니면 취소를 거부한다")
+    void cancelPayment_캐스터불일치_예외를던진다() {
+        // VENDOR_FEE 결제인데 RESERVATION 도메인이 취소하려는 상황(CodeRabbit 리뷰 지적, PR #71 —
+        // 캐스터 값 자체는 허용목록에 있어도 그 결제의 소유 도메인인지는 확인 안 하던 문제)
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(1L, "RESERVATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).markCanceled(any(), any());
+    }
+
+    @Test
+    @DisplayName("PENDING 결제를 만료 처리하면 EXPIRED로 바뀐다")
+    void expirePayment_PENDING상태면_EXPIRED로바뀐다() {
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+        given(paymentMapper.markExpired(eq(2L), any(LocalDateTime.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.expirePayment(2L, "RESERVATION");
+
+        assertThat(result.status()).isEqualTo("EXPIRED");
+        verify(paymentMapper).markExpired(eq(2L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 결제를 만료 처리하려 하면 예외를 던진다")
+    void expirePayment_결제없음_예외를던진다() {
+        given(paymentMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> paymentService.expirePayment(999L, "RESERVATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("PENDING이 아닌 결제를 만료 처리하려 하면 예외를 던지고 마킹을 시도조차 안 한다")
+    void expirePayment_PENDING아니면_예외를던진다() {
+        PaymentRow row = pendingReservationDepositRow();
+        row.setStatus("COMPLETED");
+        given(paymentMapper.selectById(2L)).willReturn(row);
+
+        assertThatThrownBy(() -> paymentService.expirePayment(2L, "RESERVATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+
+        verify(paymentMapper, never()).markExpired(any(), any());
+    }
+
+    @Test
+    @DisplayName("만료 요청이 동시에 들어와 선점에 실패하면 예외를 던진다")
+    void expirePayment_선점실패시_예외를던진다() {
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+        given(paymentMapper.markExpired(eq(2L), any(LocalDateTime.class))).willReturn(0);
+
+        assertThatThrownBy(() -> paymentService.expirePayment(2L, "RESERVATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+    }
+
+    @Test
+    @DisplayName("호출 도메인이 그 결제의 소유 도메인이 아니면 만료 처리를 거부한다")
+    void expirePayment_캐스터불일치_예외를던진다() {
+        // RESERVATION_DEPOSIT 결제인데 FAIR 도메인이 만료 처리하려는 상황
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+
+        assertThatThrownBy(() -> paymentService.expirePayment(2L, "FAIR"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).markExpired(any(), any());
+    }
+
     @Test
     @DisplayName("토스가 승인을 확정적으로 거부하면(4xx) 결제를 FAILED로 남긴다")
     void confirmPayment_토스승인거부_FAILED로전이한다() {

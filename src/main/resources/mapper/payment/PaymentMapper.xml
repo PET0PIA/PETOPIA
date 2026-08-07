@@ -100,6 +100,24 @@
         AND status = 'PROCESSING'
     </update>
 
+    <!-- WBS 1.7 — 다른 도메인의 취소/만료 배치가 호출하는 상태전이. PENDING에서만 허용해서
+         confirm()이 이미 PROCESSING으로 선점한 결제는 건드리지 않는다. -->
+    <update id="markCanceled">
+        UPDATE payment
+        SET status = 'CANCELED',
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'PENDING'
+    </update>
+
+    <update id="markExpired">
+        UPDATE payment
+        SET status = 'EXPIRED',
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'PENDING'
+    </update>
+
     <!-- FAILED 행을 PENDING으로 되돌려 재사용한다(재결제 허용). markProcessing과 같은 이유로
          WHERE status = 'FAILED' 가드를 원자적 선점 조건으로 쓴다. -->
     <update id="resetFailedToPending">
