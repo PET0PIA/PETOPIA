@@ -72,6 +72,19 @@ public interface PaymentMapper {
     int markFailed(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
 
     /**
+     * PENDING -> CANCELED로 원자적으로 전이한다(다른 도메인의 취소 처리가 호출, WBS 1.7).
+     * markProcessing과 동일하게 {@code WHERE status='PENDING'} 가드라서, 이미 PROCESSING/
+     * COMPLETED로 넘어간 결제는 0을 반환한다 — 그 사이 confirm이 먼저 나간 경쟁 상황을 이렇게 막는다.
+     */
+    int markCanceled(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * PENDING -> EXPIRED로 원자적으로 전이한다(다른 도메인의 자체 만료 배치가 호출, WBS 1.7).
+     * 가드 방식은 markCanceled와 동일.
+     */
+    int markExpired(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
      * 이전 시도가 FAILED로 끝난 결제 행을 PENDING으로 되돌려 재사용한다(결제 3종 공통 —
      * 실패한 원업무가 idempotencyKey UNIQUE 제약에 막혀 영영 재결제 불가능해지는 문제 해결,
      * 2026-08-06 CodeRabbit 지적). markProcessing과 동일하게 {@code WHERE status = 'FAILED'}

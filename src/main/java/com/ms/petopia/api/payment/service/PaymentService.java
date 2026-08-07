@@ -14,6 +14,7 @@ import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
@@ -320,6 +321,51 @@ public class PaymentService {
             notifyReservationDomain(row);
         }
 
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 다른 도메인이 자기 업무(예약/신청/행사)를 취소 처리하면서, 그에 딸린 PENDING 결제를
+     * 함께 취소시키는 용도(WBS 1.7). PROCESSING(토스 승인 진행중)인 결제는 건드리면 안 되므로
+     * PENDING에서만 허용한다 — CANCELED/EXPIRED는 영구 종료 상태라 재결제는 새 결제 생성으로
+     * 처리한다(FAILED처럼 재사용하지 않음).
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 존재하지 않는 결제 ID일 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} PENDING이 아니거나,
+     *         조회 이후 다른 요청(confirm 등)이 먼저 상태를 바꿔버렸을 때
+     */
+    public PaymentResponse cancelPayment(Long paymentId) {
+        return changeToTerminalStatus(paymentId, "CANCELED", paymentMapper::markCanceled);
+    }
+
+    /**
+     * 다른 도메인의 자체 만료 배치(결제기한 초과)가 호출해서 PENDING 결제를 만료 처리하는
+     * 용도(WBS 1.7). 취소와 상태 가드·트레이드오프는 동일 — {@link #cancelPayment} 참고.
+     */
+    public PaymentResponse expirePayment(Long paymentId) {
+        return changeToTerminalStatus(paymentId, "EXPIRED", paymentMapper::markExpired);
+    }
+
+    private PaymentResponse changeToTerminalStatus(
+            Long paymentId, String targetStatus, BiFunction<Long, LocalDateTime, Integer> marker
+    ) {
+        PaymentRow row = paymentMapper.selectById(paymentId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!"PENDING".equals(row.getStatus())) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        int updated = marker.apply(paymentId, now);
+        if (updated == 0) {
+            // 조회 이후 confirm 등 다른 요청이 먼저 상태를 바꿔버린 경쟁 상황 — 충돌로 처리.
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        row.setStatus(targetStatus);
+        row.setUpdatedAt(now);
         return PaymentResponse.from(row);
     }
 
