@@ -12,6 +12,11 @@ import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
@@ -24,6 +29,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ApplicationService {
@@ -46,6 +53,7 @@ public class ApplicationService {
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final StorageService storageService;
     private final RefundService refundService;
+    private final NotificationService notificationService;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -397,6 +405,15 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
         }
 
+        // 알림
+        Business business = businessMapper.selectById(application.getBusinessId());
+
+        if(business != null) {
+            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_APPROVED,
+                    "참가 신청이 승인되었습니다",
+                    "참가비 " + finalPrice + "원을 " + paymentDueAt.toLocalDate() + "까지 결제해주세요.");
+        }
+
         return ApplicationReviewResultResponse.builder()
                 .applicationId(applicationId)
                 .status(Application.Status.PAYMENT_PENDING.name())
@@ -441,6 +458,15 @@ public class ApplicationService {
 
         if(updatedRows == 0) {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
+        }
+
+        // 알림
+        Business business = businessMapper.selectById(application.getBusinessId());
+
+        if(business != null) {
+            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_REJECTED,
+                    "참가 신청이 반려되었습니다",
+                    "반려 사유: " + request.getRejectReason());
         }
 
         return ApplicationReviewResultResponse.builder()
@@ -568,6 +594,15 @@ public class ApplicationService {
                     new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.VENDOR));
         }
 
+        // 알림
+        Business business = businessMapper.selectById(application.getBusinessId());
+
+        if(business != null) {
+            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
+                    "참가 취소 요청이 승인되었습니다",
+                    "신청이 취소 처리되었습니다.");
+        }
+
         return ApplicationCancelRequestResultResponse.builder()
                 .cancelRequestId(cancelRequest.getCancelRequestId())
                 .applicationId(applicationId)
@@ -576,6 +611,33 @@ public class ApplicationService {
                 .decidedAt(decidedAt)
                 .build();
         
+    }
+
+    /*
+     * 취소된 행사(fairs.canceled_at IS NOT NULL)에 속한 신청서 하나를 자동 취소 처리한다.
+     * 환불은 여기서 호출하지 않는다 - fair 도메인의 FairCancelRefundJob이 취소된 행사의
+     * COMPLETED 결제(VENDOR_FEE 포함)를 스스로 찾아 이미 환불 처리한다. 여기서
+     * 또 refundService.refund()를 부르면 같은 결제를 두 도메인이 동시에 처리하려는
+     * 꼴이라(RefundService의 UK_REFUND_PAYMENT 유니크 제약이 막아주긴 하지만) 책임이
+     * 겹친다 - application.status 전환만 담당한다.
+     */
+    @Transactional
+    public boolean cancelApplicationForCanceledFair(Long applicationId) {
+
+        // 락 순서를 approveCancelRequest와 통일(취소요청 행 먼저)해서 교착상태 방지
+        applicationMapper.lockPendingCancelRequestIfExists(applicationId);
+
+        int updated = applicationMapper.updateApplicationCanceled(applicationId);
+
+        if(updated == 0) {
+            return false; // 0이면 이미 다른 경로로 처리됨(동시성) - 배치 카운트에서 제외
+        }
+
+        // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
+        applicationMapper.closeRequestedCancelRequestByApplicationId(applicationId, LocalDateTime.now());
+
+        return true;
+
     }
 
     // 참가 취소 요청 반려 (행사 담당자용) — application.status는 그대로 유지
@@ -606,6 +668,15 @@ public class ApplicationService {
 
         if(updated == 0) {
             throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        // 알림
+        Business business = businessMapper.selectById(application.getBusinessId());
+
+        if(business != null) {
+            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_REJECTED,
+                    "참가 취소 요청이 반려되었습니다",
+                    "취소 요청이 반려되었습니다.");
         }
 
         return ApplicationCancelRequestResultResponse.builder()
@@ -661,6 +732,37 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
         }
 
+    }
+
+    /*
+     * 참가 신청 관련 상태 변경을 사업자에게 알림으로 남긴다. 알림 저장이 실패해도
+     * 본 로직(승인/반려/취소 처리)은 이미 끝난 뒤이므로 예외를 던져 되돌리지 않는다
+     * (RefundService.notifyRefundCompleted와 동일한 이유).
+     */
+    private void notifyApplicationEvent(Long recipientUserId, NotificationType type, String title, String body) {
+        try {
+            notificationService.save(new SaveNotificationDto.Request(
+                    recipientUserId,
+                    RecipientType.VENDOR,
+                    type,
+                    title,
+                    body,
+                    null,
+                    List.of(DeliveryChannel.IN_APP),
+                    null
+            ));
+        } catch (Exception e) {
+            log.error("참가 신청 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
+        }
+    }
+
+    private void notifyApplicationEventAfterCommit(Long recipientUserId, NotificationType type, String title, String body) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notifyApplicationEvent(recipientUserId, type, title, body);
+            }
+        });
     }
 
 }

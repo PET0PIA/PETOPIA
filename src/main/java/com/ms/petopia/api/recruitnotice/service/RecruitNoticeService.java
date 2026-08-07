@@ -9,6 +9,8 @@ import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeUpsertResponse
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +22,7 @@ import java.util.List;
 public class RecruitNoticeService {
 
     private final RecruitNoticeMapper recruitNoticeMapper;
+    private final StorageService storageService;
 
     // 모집 공고 작성/수정
     public RecruitNoticeUpsertResponse upsertNotice(Long fairId, Long writerId, RecruitNoticeRequest request) {
@@ -49,7 +52,7 @@ public class RecruitNoticeService {
                 .writerId(writerId)
                 .title(request.getTitle())
                 .content(request.getContent())
-                .imageUrl(request.getImageUrl())
+                .imageUrl(resolveImageUrl(request.getImageObjectKey()))
                 .recruitDeadline(request.getRecruitDeadline())
                 .build();
 
@@ -101,6 +104,18 @@ public class RecruitNoticeService {
 
         return deadlinePassed || fairCanceled || fairEnded;
 
+    }
+
+    /*
+     * presigned 업로드로 받은 임시 객체 키를 확정(tmp -> uploads)하고 공개 URL로 바꾼다.
+     * 키가 없으면(이미지를 첨부하지 않았으면) null을 그대로 반환한다.
+     */
+    private String resolveImageUrl(String temporaryObjectKey) {
+        if (temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
+            return null;
+        }
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
+        return storageService.toPublicUrl(confirmedKey);
     }
 
 }

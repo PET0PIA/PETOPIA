@@ -106,4 +106,15 @@ public interface ApplicationMapper {
     // 참가비 결제 완료 통지 반영 (반환: 영향받은 행 수, 동시 처리 방지)
     int updateApplicationConfirmed(@Param("applicationId") Long applicationId);
 
+    // 자동 취소 처리 시, 이 신청서에 처리 대기 중(REQUESTED)인 취소 요청이 있으면 함께 종료 처리 (없으면 0행 반영, 정상 상황 — 멱등)
+    int closeRequestedCancelRequestByApplicationId(@Param("applicationId") Long applicationId,
+                                                   @Param("decidedAt") LocalDateTime decidedAt);
+
+    /*
+     * 자동 취소 처리 전, 딸린 REQUESTED 취소 요청이 있으면 미리 잠가둔다.
+     * approveCancelRequest(취소요청 행 -> 신청 행 순서로 잠금)와 잠금 순서를 통일해서
+     * 두 경로가 동시에 같은 신청서를 처리할 때 교착상태가 나지 않게 하는 용도.
+     */
+    void lockPendingCancelRequestIfExists(@Param("applicationId") Long applicationId);
+
 }
