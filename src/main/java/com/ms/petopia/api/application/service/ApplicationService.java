@@ -409,7 +409,7 @@ public class ApplicationService {
         Business business = businessMapper.selectById(application.getBusinessId());
 
         if(business != null) {
-            notifyApplicationEvent(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_APPROVED,
+            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_APPROVED,
                     "참가 신청이 승인되었습니다",
                     "참가비 " + finalPrice + "원을 " + paymentDueAt.toLocalDate() + "까지 결제해주세요.");
         }
@@ -464,7 +464,7 @@ public class ApplicationService {
         Business business = businessMapper.selectById(application.getBusinessId());
 
         if(business != null) {
-            notifyApplicationEvent(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_REJECTED,
+            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_REJECTED,
                     "참가 신청이 반려되었습니다",
                     "반려 사유: " + request.getRejectReason());
         }
@@ -598,7 +598,7 @@ public class ApplicationService {
         Business business = businessMapper.selectById(application.getBusinessId());
 
         if(business != null) {
-            notifyApplicationEvent(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
+            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
                     "참가 취소 요청이 승인되었습니다",
                     "신청이 취소 처리되었습니다.");
         }
@@ -626,8 +626,14 @@ public class ApplicationService {
 
         int updated = applicationMapper.updateApplicationCanceled(applicationId);
 
-        // 0이면 이미 다른 경로로 처리됨(동시성) - 배치 카운트에서 제외
-        return updated == 1;
+        if(updated == 0) {
+            return false; // 0이면 이미 다른 경로로 처리됨(동시성) - 배치 카운트에서 제외
+        }
+
+        // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
+        applicationMapper.closeRequestedCancelRequestByApplicationId(applicationId, LocalDateTime.now());
+
+        return true;
 
     }
 
@@ -665,7 +671,7 @@ public class ApplicationService {
         Business business = businessMapper.selectById(application.getBusinessId());
 
         if(business != null) {
-            notifyApplicationEvent(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_REJECTED,
+            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_REJECTED,
                     "참가 취소 요청이 반려되었습니다",
                     "취소 요청이 반려되었습니다.");
         }
@@ -745,6 +751,15 @@ public class ApplicationService {
         } catch (Exception e) {
             log.error("참가 신청 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
         }
+    }
+
+    private void notifyApplicationEventAfterCommit(Long recipientUserId, NotificationType type, String title, String body) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notifyApplicationEvent(recipientUserId, type, title, body);
+            }
+        });
     }
 
 }

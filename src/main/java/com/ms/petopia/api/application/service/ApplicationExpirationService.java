@@ -1,6 +1,7 @@
 package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.mapper.ApplicationExpirationMapper;
+import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +14,7 @@ import java.util.List;
 public class ApplicationExpirationService {
 
     private final ApplicationExpirationMapper applicationExpirationMapper;
+    private final ApplicationMapper applicationMapper;
 
     /*
      * 결제 기한이 지난 PAYMENT_PENDING 신청서를 찾아 CANCELED로 자동 전환한다.
@@ -40,7 +42,11 @@ public class ApplicationExpirationService {
             int updated = applicationExpirationMapper.expirePaymentPendingApplication(applicationId, now);
 
             if(updated == 1) {
+
                 expired++;
+                // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
+                applicationMapper.closeRequestedCancelRequestByApplicationId(applicationId, now);
+
             }
 
         }

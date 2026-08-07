@@ -1,6 +1,7 @@
 package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.mapper.ApplicationExpirationMapper;
+import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,9 @@ class ApplicationExpirationServiceTest {
     @Mock
     private ApplicationExpirationMapper applicationExpirationMapper;
 
+    @Mock
+    private ApplicationMapper applicationMapper;
+
     @InjectMocks
     private ApplicationExpirationService applicationExpirationService;
 
@@ -51,6 +55,24 @@ class ApplicationExpirationServiceTest {
 
         // then: 2건 다 취소 처리된 걸로 카운트돼야 함
         assertThat(expired).isEqualTo(2);
+
+    }
+
+    @Test
+    @DisplayName("자동 취소된 신청서에 딸린 REQUESTED 취소 요청도 함께 종료 처리한다")
+    void closesDanglingCancelRequestWhenExpired() {
+
+        // given: 결제기한 지나 자동취소 대상인 신청서에, 처리 대기 중인 취소 요청이 딸려있는 상황
+        given(applicationExpirationMapper.selectDueApplicationsForUpdate(any(LocalDateTime.class), eq(200)))
+                .willReturn(List.of(1L));
+        given(applicationExpirationMapper.expirePaymentPendingApplication(eq(1L), any(LocalDateTime.class)))
+                .willReturn(1);
+
+        // when
+        applicationExpirationService.expireDueApplications(200);
+
+        // then: 딸린 취소 요청도 같이 종료 처리 시도했는지 확인
+        verify(applicationMapper).closeRequestedCancelRequestByApplicationId(eq(1L), any(LocalDateTime.class));
 
     }
 

@@ -96,6 +96,12 @@ class ApplicationServiceTest {
                 .forEach(sync -> sync.afterCompletion(status));
     }
 
+    // afterCommit()만 오버라이드한 콜백(알림 발송용)을 실제 커밋된 것처럼 수동 실행
+    private void simulateTransactionCommit() {
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+    }
+
     // 테스트용 신청 요청 DTO. boothSlotIds만 테스트마다 다르게 주고 나머지는 고정값 사용
     private ApplicationSubmitRequest createRequest(List<Long> boothSlotIds) {
 
@@ -960,6 +966,7 @@ class ApplicationServiceTest {
 
             // when
             applicationService.approveApplication(adminUserId, applicationId, null);
+            simulateTransactionCommit();
 
             // then: 사업자 소유주(ownerId)에게 VENDOR_APPLICATION_APPROVED 알림이 저장됐는지 확인
             verify(notificationService).save(argThat(req ->
@@ -989,6 +996,7 @@ class ApplicationServiceTest {
             // when
             ApplicationReviewResultResponse result =
                     applicationService.approveApplication(adminUserId, applicationId, null);
+            simulateTransactionCommit();
 
             // then: 예외가 삼켜지고 승인 결과는 정상 반환돼야 함
             assertThat(result.getStatus()).isEqualTo("PAYMENT_PENDING");
@@ -1187,6 +1195,7 @@ class ApplicationServiceTest {
 
             // when
             applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("부적합"));
+            simulateTransactionCommit();
 
             // then
             verify(notificationService).save(argThat(req ->
@@ -1678,6 +1687,7 @@ class ApplicationServiceTest {
 
             // when
             applicationService.approveCancelRequest(adminUserId, applicationId);
+            simulateTransactionCommit();
 
             // then
             verify(notificationService).save(argThat(req ->
@@ -1925,6 +1935,7 @@ class ApplicationServiceTest {
 
             // when
             applicationService.rejectCancelRequest(adminUserId, applicationId);
+            simulateTransactionCommit();
 
             // then
             verify(notificationService).save(argThat(req ->
@@ -2222,6 +2233,23 @@ class ApplicationServiceTest {
 
             // then
             assertThat(result).isTrue();
+
+        }
+
+        @Test
+        @DisplayName("딸린 REQUESTED 취소 요청도 함께 종료 처리한다")
+        void closesDanglingCancelRequestWhenCanceled() {
+
+            // given
+            Long applicationId = 1L;
+
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+
+            // when
+            applicationService.cancelApplicationForCanceledFair(applicationId);
+
+            // then
+            verify(applicationMapper).closeRequestedCancelRequestByApplicationId(eq(applicationId), any(LocalDateTime.class));
 
         }
 
