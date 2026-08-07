@@ -1,5 +1,5 @@
 import { AlertCircle, Calculator, Check, RefreshCw, Search } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   calculateSettlement,
@@ -70,10 +70,16 @@ export function SettlementPage() {
   const [rateFormError, setRateFormError] = useState<string | null>(null);
   const [rateFormSuccess, setRateFormSuccess] = useState<string | null>(null);
 
+  // 최초 조회(GET)가 끝나기 전에 저장(PUT)이 먼저 성공할 수 있어서, 조회가 나중에 도착한
+  // 응답으로 방금 저장한 값을 덮어쓰지 않도록 버전을 추적한다. 저장이 성공하면 버전을 올려서
+  // 그 전에 시작된 조회 응답은 무시되게 한다.
+  const globalRateVersionRef = useRef(0);
+
   useEffect(() => {
+    const version = globalRateVersionRef.current;
     let ignore = false;
     getCommissionRate()
-      .then((data) => { if (!ignore) setGlobalRate(data); })
+      .then((data) => { if (!ignore && globalRateVersionRef.current === version) setGlobalRate(data); })
       .catch((error) => { if (!ignore) setRateLoadError(errorMessage(error, "수수료율을 불러오지 못했어요.")); })
       .finally(() => { if (!ignore) setRateLoading(false); });
     return () => { ignore = true; };
@@ -116,6 +122,7 @@ export function SettlementPage() {
           : `행사 #${result.fairId} 전용 수수료율이 ${formatRatePercent(result.rate)}로 설정됐어요.`,
       );
       if (submittedScope === "GLOBAL") {
+        globalRateVersionRef.current += 1; // 아직 안 끝난 초기 조회 응답을 무효화한다.
         setGlobalRate(result);
       }
       setRatePercentInput("");
@@ -151,20 +158,28 @@ export function SettlementPage() {
     });
   }
 
+  // 목록 조회·정산 계산이 서로 다른 행사 컨텍스트에서 겹쳐 실행될 수 있어서(예: A 조회 중
+  // B로 전환), 먼저 시작했지만 나중에 끝난 요청이 지금 보고 있는 행사 목록에 잘못
+  // 반영되지 않도록 버전을 추적한다.
+  const fairContextVersionRef = useRef(0);
+
   async function loadSettlements(fairId: number) {
+    const version = ++fairContextVersionRef.current;
     setListLoading(true);
     setListError(null);
     setActionError(null);
     setCalcError(null);
     try {
       const data = await getSettlementsByFair(fairId);
+      if (fairContextVersionRef.current !== version) return;
       setSettlements(data);
       setLoadedFairId(fairId);
     } catch (error) {
+      if (fairContextVersionRef.current !== version) return;
       setSettlements(null);
       setListError(errorMessage(error, "정산 목록을 불러오지 못했어요."));
     } finally {
-      setListLoading(false);
+      if (fairContextVersionRef.current === version) setListLoading(false);
     }
   }
 
@@ -188,16 +203,19 @@ export function SettlementPage() {
       return;
     }
 
+    const version = fairContextVersionRef.current;
     setCalcSubmitting(true);
     setCalcError(null);
     try {
       const created = await calculateSettlement(loadedFairId, parsed);
+      if (fairContextVersionRef.current !== version) return;
       setSettlements((current) => (current ? [...current, created] : [created]));
       setCalcBusinessIdInput("");
     } catch (error) {
+      if (fairContextVersionRef.current !== version) return;
       setCalcError(errorMessage(error, "정산 계산에 실패했어요."));
     } finally {
-      setCalcSubmitting(false);
+      if (fairContextVersionRef.current === version) setCalcSubmitting(false);
     }
   }
 
