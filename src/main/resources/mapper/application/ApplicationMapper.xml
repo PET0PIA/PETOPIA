@@ -265,4 +265,54 @@
         SELECT operation_start_date FROM fairs WHERE fair_id = #{fairId}
     </select>
 
+    <!-- 이 신청서의 현재 처리 대기 중인(REQUESTED) 취소 요청 조회 -->
+    <select id="selectPendingCancelRequest" resultType="com.ms.petopia.api.application.domain.ApplicationCancelRequest">
+        SELECT cancel_request_id AS cancelRequestId, application_id AS applicationId,
+            reason, status, requested_at AS requestedAt, decided_at AS decidedAt
+        FROM application_cancel_request
+        WHERE application_id = #{applicationId} AND status = 'REQUESTED'
+    </select>
+
+    <!-- 취소 요청 승인 처리: REQUESTED일 때만 전환 (동시 처리 방지) -->
+    <update id="updateCancelRequestApproved">
+        UPDATE application_cancel_request
+        SET status = 'APPROVED', decided_at = #{decidedAt}
+        WHERE cancel_request_id = #{cancelRequestId} AND status = 'REQUESTED'
+    </update>
+
+    <!-- 취소 요청 승인에 따른 신청 상태 전환: PAYMENT_PENDING/CONFIRMED일 때만 CANCELED로 (동시 처리 방지) -->
+    <update id="updateApplicationCanceled">
+        UPDATE application
+        SET status = 'CANCELED'
+        WHERE application_id = #{applicationId}
+        AND status IN ('PAYMENT_PENDING', 'CONFIRMED')
+    </update>
+
+    <!-- 취소 요청 반려 처리: REQUESTED일 때만 전환 (동시 처리 방지) -->
+    <update id="updateCancelRequestRejected">
+        UPDATE application_cancel_request
+        SET status = 'REJECTED', decided_at = #{decidedAt}
+        WHERE cancel_request_id = #{cancelRequestId} AND status = 'REQUESTED'
+    </update>
+
+    <!--
+        payment 테이블을 직접 조회하는 단순 읽기 전용 쿼리.
+        VENDOR_FEE 전용 계약이라 payment_type도 같이 건다.
+        status는 일부러 안 거름 — 환불 가능 여부 판단은 RefundService.refund()가 자체적으로 함.
+    -->
+    <select id="selectPaymentIdByApplicationId" resultType="long">
+        SELECT payment_id
+        FROM payment
+        WHERE application_id = #{applicationId}
+        AND payment_type = 'VENDOR_FEE'
+    </select>
+
+    <!-- 참가비 결제 완료 시, 신청서 상태 confirmed로 변경 -->
+    <update id="updateApplicationConfirmed">
+        UPDATE application
+        SET status = 'CONFIRMED'
+        WHERE application_id = #{applicationId}
+        AND status = 'PAYMENT_PENDING'
+    </update>
+
 </mapper>

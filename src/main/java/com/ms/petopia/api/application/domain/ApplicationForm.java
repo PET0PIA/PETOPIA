@@ -17,6 +17,6 @@ public class ApplicationForm {
     private String managerPhone; // 신청 담당자 연락처
     private String managerEmail; // 신청 담당자 이메일
     private Boolean agreedTerms; // 이용약관 동의 여부, 제출 시 true 필수
-    private String attachmentUrl; // 제출서류 zip URL, 선택 입력
+    private String attachmentUrl; // 사업자등록증·인증서 등 제출서류를 PDF 하나로 합쳐서 업로드, 선택 입력
 
 }

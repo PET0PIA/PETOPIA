@@ -15,8 +15,14 @@ import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
+import com.ms.petopia.api.refund.dto.RefundReason;
+import com.ms.petopia.api.refund.dto.RefundRequest;
+import com.ms.petopia.api.refund.dto.RequestedByDomain;
+import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -38,6 +44,8 @@ public class ApplicationService {
     private final ApplicationMapper applicationMapper;
     private final BusinessMapper businessMapper;
     private final RecruitNoticeMapper recruitNoticeMapper;
+    private final StorageService storageService;
+    private final RefundService refundService;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -220,7 +228,7 @@ public class ApplicationService {
                 .managerPhone(request.getManagerPhone())
                 .managerEmail(request.getManagerEmail())
                 .agreedTerms(request.getAgreedTerms())
-                .attachmentUrl(request.getAttachmentUrl())
+                .attachmentUrl(resolveAttachmentUrl(request.getAttachmentObjectKey()))
                 .build();
 
         applicationMapper.insertApplicationForm(form);
@@ -247,6 +255,22 @@ public class ApplicationService {
 
     }
 
+    /*
+     * presigned 업로드로 받은 임시 객체 키를 확정(tmp → uploads)하고 공개 URL로 바꾼다.
+     * 키가 없으면(첨부파일을 안 넣었으면) null을 그대로 반환한다.
+     */
+    private String resolveAttachmentUrl(String temporaryObjectKey) {
+
+        if (temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
+            return null;
+        }
+
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.DOCUMENT);
+
+        return storageService.toPublicUrl(confirmedKey);
+
+    }
+
     // 내 신청 현황 목록 조회 (businessId는 선택적 필터)
     public List<ApplicationSummaryResponse> getMyApplications(Long ownerId, Long businessId) {
 
@@ -254,8 +278,8 @@ public class ApplicationService {
 
     }
 
-    // 신청 상세 조회
-    public ApplicationDetailResponse getApplicationDetail(Long ownerId, Long applicationId) {
+    // 신청 상세 조회 (사업자 본인 또는 담당 행사 관리자 조회 가능)
+    public ApplicationDetailResponse getApplicationDetail(Long userId, Long applicationId) {
 
         ApplicationDetailResponse detail = applicationMapper.selectApplicationDetail(applicationId);
 
@@ -265,16 +289,29 @@ public class ApplicationService {
 
         // 본인 소유 사업자의 신청인지 확인
         Business business = businessMapper.selectById(detail.getBusinessId());
+        boolean isOwner = business != null && business.getOwnerId().equals(userId);
 
-        if(business == null || !business.getOwnerId().equals(ownerId)) {
-            throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 신청만 조회할 수 있습니다.");
+        // 본인 소유가 아니면, 이 신청이 속한 행사의 담당자인지 확인
+        boolean isFairAdmin = false;
+
+        if(!isOwner) {
+
+            Long fairAdminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(detail.getFairId());
+            isFairAdmin = fairAdminUserId != null && fairAdminUserId.equals(userId);
+
+        }
+
+        if(!isOwner && !isFairAdmin) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 신청이거나 담당 행사여야 조회할 수 있습니다.");
         }
 
         // 선택 슬롯 목록 채우기
         detail.setSlots(applicationMapper.selectApplicationSlotDetails(applicationId));
 
-        // 취소 요청 가능 여부 계산 (프론트 버튼 활성화 판단용)
-        detail.setCancelable(isCancelable(detail));
+        // 취소 요청 가능 여부는 사업자 본인 관점에서만 의미 있음 (담당자는 취소 요청 주체가 아님)
+        if(isOwner) {
+            detail.setCancelable(isCancelable(detail));
+        }
 
         return detail;
 
@@ -482,6 +519,146 @@ public class ApplicationService {
             applicationMapper.insertApplicationCancelRequest(cancelRequest);
         } catch(DuplicateKeyException e) {
             throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_DUPLICATE, e);
+        }
+
+    }
+
+    // 참가 취소 요청 승인 (행사 담당자용) — application.status도 CANCELED로 함께 전환
+    @Transactional
+    public ApplicationCancelRequestResultResponse approveCancelRequest(Long adminUserId, Long applicationId) {
+        
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, application.getFairId());
+
+        // 처리 대기 중인 취소 요청 존재 확인
+        ApplicationCancelRequest cancelRequest = applicationMapper.selectPendingCancelRequest(applicationId);
+
+        if(cancelRequest == null) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        LocalDateTime decidedAt = LocalDateTime.now();
+
+        // 취소 요청 승인 처리 (동시 처리 방지)
+        int cancelRequestUpdated = applicationMapper.updateCancelRequestApproved(cancelRequest.getCancelRequestId(), decidedAt);
+
+        if(cancelRequestUpdated == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        // 신청 상태를 CANCELED로 전환 (동시 처리 방지)
+        int applicationUpdated = applicationMapper.updateApplicationCanceled(applicationId);
+
+        if(applicationUpdated == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_CANCELABLE);
+        }
+
+        // 결제가 있었다면(CONFIRMED 상태였던 경우) 환불 처리. PAYMENT_PENDING 상태에서 취소된 경우 결제가 없어 null.
+        Long paymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
+
+        if(paymentId != null) {
+            refundService.refund(paymentId, adminUserId,
+                    new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.VENDOR));
+        }
+
+        return ApplicationCancelRequestResultResponse.builder()
+                .cancelRequestId(cancelRequest.getCancelRequestId())
+                .applicationId(applicationId)
+                .status(ApplicationCancelRequest.Status.APPROVED.name())
+                .applicationStatus(Application.Status.CANCELED.name())
+                .decidedAt(decidedAt)
+                .build();
+        
+    }
+
+    // 참가 취소 요청 반려 (행사 담당자용) — application.status는 그대로 유지
+    @Transactional
+    public ApplicationCancelRequestResultResponse rejectCancelRequest(Long adminUserId, Long applicationId) {
+
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
+        verifyFairAdmin(adminUserId, application.getFairId());
+
+        // 처리 대기 중인 취소 요청 존재 확인
+        ApplicationCancelRequest cancelRequest = applicationMapper.selectPendingCancelRequest(applicationId);
+
+        if(cancelRequest == null) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        LocalDateTime decidedAt = LocalDateTime.now();
+
+        // 취소 요청 반려 처리 (동시 처리 방지)
+        int updated = applicationMapper.updateCancelRequestRejected(cancelRequest.getCancelRequestId(), decidedAt);
+
+        if(updated == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_NOT_FOUND);
+        }
+
+        return ApplicationCancelRequestResultResponse.builder()
+                .cancelRequestId(cancelRequest.getCancelRequestId())
+                .applicationId(applicationId)
+                .status(ApplicationCancelRequest.Status.REJECTED.name())
+                .applicationStatus(application.getStatus().name())
+                .decidedAt(decidedAt)
+                .build();
+
+    }
+
+    /*
+     * 결제 도메인이 참가비(VENDOR_FEE) 결제 완료를 통지하면 신청 상태를 CONFIRMED로 전환한다.
+     * 결제 도메인이 PaymentService.confirmPayment()에서 직접 이 메서드를 호출한다.
+     */
+    @Transactional
+    public void confirmVendorPayment(Long applicationId, Long paymentId, Long paidAmount) {
+
+        if (applicationId == null || paymentId == null || paidAmount == null) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        Application application = applicationMapper.selectById(applicationId);
+
+        if (application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이미 CONFIRMED면 재시도로 온 중복 통지일 가능성 — 같은 결제가 이미 반영된 거라면
+        // 재처리하지 않고 조용히 성공 처리한다(멱등). 다른 결제라면 이상 상황이라 막는다.
+        if (application.getStatus() == Application.Status.CONFIRMED) {
+            Long existingPaymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
+            if (paymentId.equals(existingPaymentId)) {
+                return;
+            }
+            throw new CommonException(ErrorCode.APPLICATION_PAYMENT_EVENT_CONFLICT);
+        }
+
+        if (application.getStatus() != Application.Status.PAYMENT_PENDING) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
+        }
+
+        // 승인 시 확정된 finalPrice와 실제 결제 금액이 다르면 통지 위변조/오류로 보고 막는다.
+        if (!paidAmount.equals(application.getFinalPrice())) {
+            throw new CommonException(ErrorCode.APPLICATION_PAYMENT_AMOUNT_MISMATCH);
+        }
+
+        // 조건부 UPDATE로 동시 처리 방지 (WHERE status='PAYMENT_PENDING' 가드)
+        int updated = applicationMapper.updateApplicationConfirmed(applicationId);
+
+        if (updated == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
         }
 
     }
