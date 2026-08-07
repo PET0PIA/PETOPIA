@@ -139,6 +139,41 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("참가신청ID로 조회하면 그 신청의 참가비 결제 상세를 반환한다")
+    void findByApplicationId_존재하는결제_결제상세를반환한다() {
+        // Arrange: 채린님(참가업체) 도메인이 취소승인 처리 중 환불 대상을 찾는 흐름을 흉내냄
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(5L);
+        row.setPaymentType("VENDOR_FEE");
+        row.setAmount(70000L);
+        row.setStatus("COMPLETED");
+        row.setFairId(10L);
+        row.setBusinessId(20L);
+        row.setApplicationId(40L);
+        given(paymentMapper.selectByApplicationId(40L)).willReturn(row);
+
+        // Act
+        PaymentResponse result = paymentService.findByApplicationId(40L);
+
+        // Assert
+        assertThat(result.paymentId()).isEqualTo(5L);
+        assertThat(result.applicationId()).isEqualTo(40L);
+        assertThat(result.status()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    @DisplayName("결제가 아직 없는 참가신청을 조회하면 예외 대신 null을 반환한다")
+    void findByApplicationId_결제없음_null을반환한다() {
+        // Arrange: 취소승인이 결제 전(신청만 하고 아직 결제 시작 안 한 상태)에도 가능한 케이스 —
+        // getByReservationId와 달리 여기선 "결제 없음"이 정상 상황이라 예외를 던지면 안 된다.
+        given(paymentMapper.selectByApplicationId(999L)).willReturn(null);
+
+        PaymentResponse result = paymentService.findByApplicationId(999L);
+
+        assertThat(result).isNull();
+    }
+
+    @Test
     @DisplayName("존재하지 않는 결제ID를 조회하면 예외를 던진다")
     void getPayment_존재하지않는결제_예외를던진다() {
         //Arrange: 999L로 조회하면 매퍼가 null을 리턴하는 상황(=DB에 없는 상황)을 흉내냄.

@@ -61,6 +61,17 @@ public class PaymentService {
     }
 
     /**
+     * 참가신청 ID로 그 신청의 참가비 결제를 조회한다. 채린님(참가업체) 도메인이 참가 취소승인
+     * 처리 중 환불 대상 paymentId를 찾는 용도. 취소승인은 결제 전(신청만 하고 아직 결제를
+     * 시작 안 한 상태)에도 가능하다고 확인됐으므로, {@link #getByReservationId}와 달리
+     * 예외 대신 null을 반환한다 — 호출부가 null이면 환불 호출 자체를 건너뛰어야 한다.
+     */
+    public PaymentResponse findByApplicationId(Long applicationId) {
+        PaymentRow row = paymentMapper.selectByApplicationId(applicationId);
+        return row == null ? null : PaymentResponse.from(row);
+    }
+
+    /**
      * 참가비 결제를 생성한다. application 테이블은 조회하지 않으므로(애그리거트 간
      * ID 참조 원칙 유지) 금액·소속 정보는 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
      *
