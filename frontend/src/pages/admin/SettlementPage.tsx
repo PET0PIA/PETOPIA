@@ -5,6 +5,7 @@ import {
   calculateSettlement,
   confirmSettlement,
   getSettlementsByFair,
+  getVendorSettlement,
   recalculateSettlement,
   type SettlementResponse,
   type SettlementStatus,
@@ -271,6 +272,35 @@ export function SettlementPage() {
     }
   }
 
+  // ── 업체별 정산 상세 단건 조회 ──
+  const [vendorFairIdInput, setVendorFairIdInput] = useState("");
+  const [vendorBusinessIdInput, setVendorBusinessIdInput] = useState("");
+  const [vendorSettlement, setVendorSettlement] = useState<SettlementResponse | null>(null);
+  const [vendorLookupLoading, setVendorLookupLoading] = useState(false);
+  const [vendorLookupError, setVendorLookupError] = useState<string | null>(null);
+
+  async function handleVendorLookupSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fairId = Number(vendorFairIdInput);
+    const businessId = Number(vendorBusinessIdInput);
+    if (!Number.isInteger(fairId) || fairId <= 0 || !Number.isInteger(businessId) || businessId <= 0) {
+      setVendorLookupError("행사 ID와 업체 ID 모두 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+
+    setVendorLookupLoading(true);
+    setVendorLookupError(null);
+    try {
+      const data = await getVendorSettlement(fairId, businessId);
+      setVendorSettlement(data);
+    } catch (error) {
+      setVendorSettlement(null);
+      setVendorLookupError(errorMessage(error, "정산 상세를 불러오지 못했어요."));
+    } finally {
+      setVendorLookupLoading(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader eyebrow="전체 운영" title="정산·수수료율" description="참가업체 정산을 계산·확정하고 플랫폼 수수료율을 관리해요." />
@@ -435,6 +465,69 @@ export function SettlementPage() {
               </Table>
             )}
           </div>
+        )}
+      </section>
+
+      <section className="mt-10">
+        <SectionHeader title="업체별 정산 상세 조회" description="행사 ID·업체 ID 조합으로 그 업체의 정산 단건을 바로 조회해요(참가업체 본인 조회용 API)." />
+
+        <form onSubmit={handleVendorLookupSubmit} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label htmlFor="vendor-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
+            <Input id="vendor-fair-id" className="input-no-spinner" type="number" min={1} value={vendorFairIdInput} onChange={(event) => setVendorFairIdInput(event.target.value)} placeholder="예: test1" />
+          </div>
+          <div className="flex-1">
+            <label htmlFor="vendor-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
+            <Input id="vendor-business-id" className="input-no-spinner" type="number" min={1} value={vendorBusinessIdInput} onChange={(event) => setVendorBusinessIdInput(event.target.value)} placeholder="예: test1" />
+          </div>
+          <Button type="submit" variant="outline" disabled={vendorLookupLoading}>
+            <Search size={16} />
+            조회
+          </Button>
+        </form>
+
+        {vendorLookupError && (
+          <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p>{vendorLookupError}</p>
+          </div>
+        )}
+
+        {vendorLookupLoading && <div className="surface grid min-h-32 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
+
+        {vendorSettlement && !vendorLookupLoading && (
+          <Card className="space-y-4 p-6">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-lg font-extrabold text-ink">정산 #{vendorSettlement.settlementId} · 업체 #{vendorSettlement.businessId}</h3>
+              <Badge tone={statusTones[vendorSettlement.status]}>{statusLabels[vendorSettlement.status]}</Badge>
+            </div>
+            <dl className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <dt className="text-xs font-bold text-muted">총 참가비</dt>
+                <dd className="mt-1 text-sm text-ink">{formatWon(vendorSettlement.grossAmount)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold text-muted">환불액</dt>
+                <dd className="mt-1 text-sm text-ink">{formatWon(vendorSettlement.refundAmount)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold text-muted">수수료</dt>
+                <dd className="mt-1 text-sm text-ink">{formatWon(vendorSettlement.commissionAmount)} ({formatRatePercent(vendorSettlement.commissionRate)})</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold text-muted">지급액</dt>
+                <dd className="mt-1 text-sm font-bold text-ink">{formatWon(vendorSettlement.netAmount)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold text-muted">확정 시각</dt>
+                <dd className="mt-1 text-sm text-ink">{vendorSettlement.confirmedAt ? formatDateTime(vendorSettlement.confirmedAt) : "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-bold text-muted">확정한 관리자</dt>
+                <dd className="mt-1 text-sm text-ink">{vendorSettlement.confirmedByUserId !== null ? `#${vendorSettlement.confirmedByUserId}` : "-"}</dd>
+              </div>
+            </dl>
+          </Card>
         )}
       </section>
 
