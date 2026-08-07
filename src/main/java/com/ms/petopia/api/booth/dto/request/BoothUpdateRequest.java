@@ -11,7 +11,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
-public class BoothUpsertRequest {
+public class BoothUpdateRequest {
 
     @Size(max = 100, message = "부스명은 100자 이하여야 합니다.")
     private String name;

@@ -19,13 +19,6 @@
         ORDER BY booth_item_id
     </select>
 
-    <!-- 신청 ID로 부스 조회 (1:1) -->
-    <select id="selectByApplicationId" resultType="com.ms.petopia.api.booth.domain.Booth">
-        SELECT booth_id, application_id, business_id, name, image_url, intro, category, target_animal, confirmed_at
-        FROM booth
-        WHERE application_id = #{applicationId}
-    </select>
-
     <!-- 부스 생성 (신청 확정 시 자동 생성) -->
     <insert id="insertBooth" useGeneratedKeys="true" keyProperty="boothId">
         INSERT INTO booth (application_id, business_id, confirmed_at)
@@ -36,5 +29,18 @@
     <delete id="deleteBoothByApplicationId">
         DELETE FROM booth WHERE application_id = #{applicationId}
     </delete>
+
+    <!-- 부스 프로필 부분 수정. null이 아닌 필드만 SET 절에 포함(보낸 필드만 갱신) -->
+    <update id="updateBooth">
+        UPDATE booth
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="imageUrl != null">image_url = #{imageUrl},</if>
+            <if test="intro != null">intro = #{intro},</if>
+            <if test="category != null">category = #{category},</if>
+            <if test="targetAnimal != null">target_animal = #{targetAnimal},</if>
+        </set>
+        WHERE booth_id = #{boothId}
+    </update>
 
 </mapper>
