@@ -14,6 +14,13 @@ public final class FairTemporaryAuthHeaders {
 
     public static final String USER_ID = "X-User-Id";
 
+    /**
+     * 내부(도메인 간) API 호출자 식별용. reservation 도메인의 {@code TemporaryAuthHeaders}와
+     * 이름/값이 같지만, 이 클래스 상단 주석과 같은 이유로 도메인마다 독립적으로 둔다.
+     */
+    public static final String INTERNAL_CALLER = "X-Internal-Caller";
+    public static final String PAYMENT_CALLER = "PAYMENT";
+
     private FairTemporaryAuthHeaders() {
     }
 }
