@@ -33,7 +33,7 @@ public class PaymentContractController {
             @RequestHeader(PaymentInternalAuthHeaders.INTERNAL_CALLER) String caller
     ) {
         assertKnownCaller(caller);
-        return paymentService.cancelPayment(paymentId);
+        return paymentService.cancelPayment(paymentId, caller);
     }
 
     @PutMapping("/payments/{paymentId}/expire")
@@ -42,7 +42,7 @@ public class PaymentContractController {
             @RequestHeader(PaymentInternalAuthHeaders.INTERNAL_CALLER) String caller
     ) {
         assertKnownCaller(caller);
-        return paymentService.expirePayment(paymentId);
+        return paymentService.expirePayment(paymentId, caller);
     }
 
     private void assertKnownCaller(String caller) {
