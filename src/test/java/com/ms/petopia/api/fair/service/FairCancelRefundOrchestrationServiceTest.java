@@ -58,7 +58,7 @@ class FairCancelRefundOrchestrationServiceTest {
     // ===== enumerateTargets =====
 
     @Test
-    @DisplayName("아직 안 훑은 취소 행사의 COMPLETED 예약금·참가비 결제를 작업행으로 등록한다")
+    @DisplayName("아직 안 훑은 취소 행사의 COMPLETED 예약금·참가비 결제를 작업행으로 등록하고 완료 기록을 남긴다")
     void enumerateTargets_새결제를_작업행으로_등록한다() {
         given(timeProvider.now()).willReturn(NOW);
         given(targetMapper.selectUnenumeratedCanceledFairIds(50)).willReturn(List.of(FAIR_ID));
@@ -75,10 +75,11 @@ class FairCancelRefundOrchestrationServiceTest {
         assertThat(captor.getAllValues())
                 .extracting(FairCancelRefundTarget::getPaymentId)
                 .containsExactlyInAnyOrder(1L, 2L);
+        verify(targetMapper).markEnumerationCompleted(FAIR_ID, NOW);
     }
 
     @Test
-    @DisplayName("이미 등록된 결제는 유니크 제약 위반을 무시하고 건너뛴다")
+    @DisplayName("이미 등록된 결제는 유니크 제약 위반을 무시하고 건너뛰지만 완료 기록은 남긴다")
     void enumerateTargets_이미등록된결제는_건너뛴다() {
         given(timeProvider.now()).willReturn(NOW);
         given(targetMapper.selectUnenumeratedCanceledFairIds(50)).willReturn(List.of(FAIR_ID));
@@ -92,6 +93,7 @@ class FairCancelRefundOrchestrationServiceTest {
         int enumerated = orchestrationService.enumerateTargets(50);
 
         assertThat(enumerated).isZero();
+        verify(targetMapper).markEnumerationCompleted(FAIR_ID, NOW);
     }
 
     @Test
@@ -118,6 +120,38 @@ class FairCancelRefundOrchestrationServiceTest {
 
         assertThat(orchestrationService.enumerateTargets(50)).isZero();
         verify(paymentService, never()).getPayments(any(), any(), any(), any(), anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("결제유형 하나라도 조회 중 예외가 나면 그 행사는 완료 기록을 남기지 않고 다음 행사로 넘어간다")
+    void enumerateTargets_행사하나실패해도_나머지행사는_계속처리한다() {
+        Long otherFairId = 20L;
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectUnenumeratedCanceledFairIds(50)).willReturn(List.of(FAIR_ID, otherFairId));
+        given(paymentService.getPayments(eq(FAIR_ID), any(), any(), any(), anyInt(), anyInt()))
+                .willThrow(new IllegalStateException("결제 도메인 일시 장애"));
+        given(paymentService.getPayments(eq(otherFairId), any(), any(), any(), anyInt(), anyInt()))
+                .willReturn(emptyPage());
+
+        int enumerated = orchestrationService.enumerateTargets(50);
+
+        assertThat(enumerated).isZero();
+        verify(targetMapper, never()).markEnumerationCompleted(eq(FAIR_ID), any());
+        verify(targetMapper).markEnumerationCompleted(otherFairId, NOW);
+    }
+
+    @Test
+    @DisplayName("결제가 0건인 행사도 완료 기록을 남긴다")
+    void enumerateTargets_결제가0건이어도_완료기록을남긴다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectUnenumeratedCanceledFairIds(50)).willReturn(List.of(FAIR_ID));
+        given(paymentService.getPayments(eq(FAIR_ID), any(), any(), any(), anyInt(), anyInt()))
+                .willReturn(emptyPage());
+
+        int enumerated = orchestrationService.enumerateTargets(50);
+
+        assertThat(enumerated).isZero();
+        verify(targetMapper).markEnumerationCompleted(FAIR_ID, NOW);
     }
 
     // ===== processPendingTargets =====

@@ -9,16 +9,18 @@ import java.util.List;
 
 /**
  * fair_cancel_refund_targets 전용 쿼리({@code FairCancelRefundJob} 참고). 두 단계로 나뉜다:
- * (1) 취소된 행사 중 아직 한 번도 환불 대상을 훑지 않은 행사를 찾아 작업행을 채워 넣는
+ * (1) 취소된 행사 중 아직 발견 단계를 끝까지 완료하지 않은 행사를 찾아 작업행을 채워 넣는
  * "발견(enumerate)" 단계, (2) PENDING 작업행을 처리하는 "실행" 단계.
  */
 @Mapper
 public interface FairCancelRefundTargetMapper {
 
     /**
-     * 취소됐지만({@code canceled_at IS NOT NULL}) 이 테이블에 작업행이 하나도 없는 행사
-     * ID를 조회한다. 결제가 하나도 없는(무료) 행사는 발견 단계에서 작업행이 안 생기므로
-     * 이 조회에 계속 다시 걸린다 - 비용은 낮지만 알려진 한계로 남겨둔다.
+     * 취소됐지만({@code canceled_at IS NOT NULL}) {@code fair_cancel_refund_enumerations}에
+     * 완료 기록이 없는 행사 ID를 조회한다. 작업행({@code fair_cancel_refund_targets}) 존재
+     * 여부로 판단하지 않는다 - 참가비 결제가 0건인 행사는 애초에 작업행이 안 생기고,
+     * 결제유형 중 하나만 처리하다 실패해도 이미 등록된 행이 있으면 다시 훑을 대상에서
+     * 영구히 빠져버리기 때문이다.
      */
     List<Long> selectUnenumeratedCanceledFairIds(@Param("limit") int limit);
 
@@ -28,6 +30,13 @@ public interface FairCancelRefundTargetMapper {
      * 호출부가 잡아서 무시한다(발견 단계가 여러 번 돌아도 안전하게 하기 위함).
      */
     void insert(FairCancelRefundTarget target);
+
+    /**
+     * 행사 하나의 발견 단계가 끝까지(모든 결제유형·모든 페이지) 예외 없이 완료됐음을
+     * 기록한다. 이미 기록돼 있으면(동시 실행 등) DuplicateKeyException이 던져진다 -
+     * 호출부가 잡아서 무시한다.
+     */
+    void markEnumerationCompleted(@Param("fairId") Long fairId, @Param("now") LocalDateTime now);
 
     /**
      * 재시도 대상(PENDING) 작업을 잠가서 조회한다. reservation 도메인의

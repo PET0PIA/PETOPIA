@@ -10,8 +10,8 @@
          WHERE f.canceled_at IS NOT NULL
            AND NOT EXISTS (
                SELECT 1
-                 FROM fair_cancel_refund_targets t
-                WHERE t.fair_id = f.fair_id
+                 FROM fair_cancel_refund_enumerations e
+                WHERE e.fair_id = f.fair_id
            )
          ORDER BY f.canceled_at
          LIMIT #{limit}
@@ -22,6 +22,11 @@
             (fair_id, payment_id, payment_type, status, attempt_count, created_at, updated_at)
         VALUES
             (#{fairId}, #{paymentId}, #{paymentType}, 'PENDING', 0, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <insert id="markEnumerationCompleted">
+        INSERT INTO fair_cancel_refund_enumerations (fair_id, enumerated_at)
+        VALUES (#{fairId}, #{now})
     </insert>
 
     <select id="selectPendingForUpdate" resultType="FairCancelRefundTarget">

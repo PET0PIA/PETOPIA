@@ -73,8 +73,14 @@ public class FairCancelRefundOrchestrationService {
     private final FairTimeProvider timeProvider;
 
     /**
-     * 취소됐지만 아직 환불 대상을 훑지 않은 행사를 찾아, COMPLETED 예약금·참가비 결제를
-     * 전부 작업행으로 등록한다. 이미 등록된 결제는 유니크 제약으로 조용히 건너뛴다.
+     * 취소됐지만 아직 발견 단계를 끝까지 완료하지 않은 행사를 찾아, COMPLETED 예약금·참가비
+     * 결제를 전부 작업행으로 등록한다. 이미 등록된 결제는 유니크 제약으로 조용히 건너뛴다.
+     *
+     * <p>행사 하나는 모든 결제유형·모든 페이지를 예외 없이 다 훑었을 때만 완료로 기록한다
+     * (참가비 결제가 0건이어도 완료로 기록됨 - "확인해서 0건"과 "아직 확인 안 함"을
+     * 구분해야 하기 때문). 한 행사 처리 중 예외가 나도 그 행사만 미완료로 남기고 다음
+     * 행사로 넘어간다 - 한 행사의 실패가 배치 전체나 뒤이은 {@link #processPendingTargets}
+     * 호출을 막지 않게 하기 위함.
      *
      * @return 새로 등록한 작업행 수
      */
@@ -82,9 +88,24 @@ public class FairCancelRefundOrchestrationService {
         List<Long> fairIds = targetMapper.selectUnenumeratedCanceledFairIds(fairBatchSize);
         int enumerated = 0;
         for (Long fairId : fairIds) {
+            enumerated += enumerateFair(fairId);
+        }
+        return enumerated;
+    }
+
+    private int enumerateFair(Long fairId) {
+        int enumerated = 0;
+        try {
             for (String paymentType : REFUNDABLE_TYPES.keySet()) {
                 enumerated += enumerateType(fairId, paymentType);
             }
+            targetMapper.markEnumerationCompleted(fairId, timeProvider.now());
+        } catch (DuplicateKeyException e) {
+            // 동시 실행 등으로 이미 완료 기록이 있는 경우 - 무시한다.
+        } catch (RuntimeException e) {
+            // 결제 도메인 조회 실패 등 - 이 행사만 미완료로 남기고(다음 스케줄에서 처음부터
+            // 재시도됨) 나머지 행사 발견과 processPendingTargets 호출은 계속 진행한다.
+            log.warn("행사 취소 환불 대상 발견 실패. fairId={}", fairId, e);
         }
         return enumerated;
     }
