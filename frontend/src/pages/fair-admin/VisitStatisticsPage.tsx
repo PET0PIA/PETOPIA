@@ -106,6 +106,7 @@ export function VisitStatisticsPage() {
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
+    setExportError(null);
     if (parsed === fairId) {
       setReloadTick((tick) => tick + 1);
     } else {

@@ -24,19 +24,16 @@ export function BoothVisitStatsPage() {
 
     setLoading(true);
     setLoadError(null);
-    Promise.all([getBoothVisitStats(fairId), getBoothVisitPattern(fairId)])
-      .then(([stats, pattern]) => {
-        if (!ignore) {
-          setBoothStats(stats);
-          setVisitPattern(pattern);
-        }
-      })
-      .catch((error) => {
-        if (!ignore) {
+    Promise.allSettled([getBoothVisitStats(fairId), getBoothVisitPattern(fairId)])
+      .then(([statsResult, patternResult]) => {
+        if (ignore) return;
+        if (statsResult.status === "fulfilled") {
+          setBoothStats(statsResult.value);
+        } else {
           setBoothStats([]);
-          setVisitPattern([]);
-          setLoadError(error instanceof ApiError ? error.message : "부스별 방문 통계를 불러오지 못했어요.");
+          setLoadError(statsResult.reason instanceof ApiError ? statsResult.reason.message : "부스별 방문 통계를 불러오지 못했어요.");
         }
+        setVisitPattern(patternResult.status === "fulfilled" ? patternResult.value : []);
       })
       .finally(() => { if (!ignore) setLoading(false); });
 
