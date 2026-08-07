@@ -8,6 +8,8 @@ import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeResponse;
 import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeUpsertResponse;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,9 @@ class RecruitNoticeServiceTest {
     @Mock
     private RecruitNoticeMapper recruitNoticeMapper;
 
+    @Mock
+    private StorageService storageService;
+
     @InjectMocks
     private RecruitNoticeService recruitNoticeService;
 
@@ -47,7 +52,7 @@ class RecruitNoticeServiceTest {
 
         request.setTitle(title);
         request.setContent("반려동물 관련 사업자를 모집합니다.");
-        request.setImageUrl("https://cdn.petopia.kr/notice/1.jpg");
+        request.setImageObjectKey("tmp/image/notice-1.jpg");
         request.setRecruitDeadline(LocalDateTime.now().plusDays(1));
 
         return request;
@@ -249,6 +254,39 @@ class RecruitNoticeServiceTest {
             assertThat(passed.getWriterId()).isEqualTo(writerId);
             // 그 안의 값들이 request 내용이랑 정확히 일치하는지 확인
             assertThat(passed.getTitle()).isEqualTo("검증용 제목");
+        }
+
+        @Test
+        @DisplayName("imageObjectKey를 objectKey 확정 후 공개 URL로 변환해서 저장한다")
+        void resolvesImageUrlFromObjectKey() {
+
+            // given: presigned-upload로 받은 임시 objectKey를 포함한 요청
+            Long fairId = 1L;
+            Long writerId = 1L;
+
+            RecruitNoticeRequest request = createRequest("이미지 변환 검증용 제목");
+            RecruitNotice savedNotice = createNotice(1L, fairId, writerId,
+                    "이미지 변환 검증용 제목", null);
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null, savedNotice);
+
+            // 스토리지 확정 흐름 스텁
+            given(storageService.confirm("tmp/image/notice-1.jpg", UploadPolicy.IMAGE))
+                    .willReturn("uploads/image/2026/08/07/notice-1.jpg");
+            given(storageService.toPublicUrl("uploads/image/2026/08/07/notice-1.jpg"))
+                    .willReturn("https://d2jl6zs612zyt4.cloudfront.net/uploads/image/2026/08/07/notice-1.jpg");
+
+            ArgumentCaptor<RecruitNotice> captor = ArgumentCaptor.forClass(RecruitNotice.class);
+
+            // when
+            recruitNoticeService.upsertNotice(fairId, writerId, request);
+
+            // then: Mapper에 넘어간 imageUrl이 confirm/toPublicUrl을 거친 최종 공개 URL인지 확인
+            verify(recruitNoticeMapper).upsertNotice(captor.capture());
+            assertThat(captor.getValue().getImageUrl())
+                    .isEqualTo("https://d2jl6zs612zyt4.cloudfront.net/uploads/image/2026/08/07/notice-1.jpg");
+
         }
 
     }
