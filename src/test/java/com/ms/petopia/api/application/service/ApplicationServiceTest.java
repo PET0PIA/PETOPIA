@@ -2051,4 +2051,44 @@ class ApplicationServiceTest {
 
     }
 
+    @Nested
+    @DisplayName("취소된 행사에 속한 신청 자동 취소")
+    class CancelApplicationForCanceledFair {
+
+        @Test
+        @DisplayName("정상적으로 취소 처리한다")
+        void cancelsSuccessfully() {
+
+            // given
+            Long applicationId = 1L;
+
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+
+            // when
+            boolean result = applicationService.cancelApplicationForCanceledFair(applicationId);
+
+            // then
+            assertThat(result).isTrue();
+
+        }
+
+        @Test
+        @DisplayName("이미 다른 경로로 처리돼(동시성) UPDATE가 0행 반영되면 false를 반환한다")
+        void returnsFalseWhenAlreadyProcessed() {
+
+            // given: 조회 시점 이후 이미 다른 경로(예: 사업자 자진 취소)로 처리돼버린 상황
+            Long applicationId = 1L;
+
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(0);
+
+            // when
+            boolean result = applicationService.cancelApplicationForCanceledFair(applicationId);
+
+            // then
+            assertThat(result).isFalse();
+
+        }
+
+    }
+
 }

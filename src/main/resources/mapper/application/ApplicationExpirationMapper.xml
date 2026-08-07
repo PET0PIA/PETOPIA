@@ -36,4 +36,15 @@
         AND payment_due_at &lt;= #{now}
     </update>
 
+    <!-- 별도 FOR UPDATE 불필요 - 실제 동시성 방어는 updateApplicationCanceled의 조건부
+         UPDATE가 담당(그 UPDATE 자체가 행 잠금 + WHERE 가드 역할을 함) -->
+    <select id="selectApplicationsForCanceledFairs" resultType="long">
+        SELECT a.application_id
+        FROM application a
+        WHERE a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+        AND a.fair_id IN (SELECT fair_id FROM fairs WHERE canceled_at IS NOT NULL)
+        ORDER BY a.application_id
+        LIMIT #{limit}
+    </select>
+
 </mapper>

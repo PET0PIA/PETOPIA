@@ -578,6 +578,24 @@ public class ApplicationService {
         
     }
 
+    /*
+     * 취소된 행사(fairs.canceled_at IS NOT NULL)에 속한 신청서 하나를 자동 취소 처리한다.
+     * 환불은 여기서 호출하지 않는다 - fair 도메인의 FairCancelRefundJob이 취소된 행사의
+     * COMPLETED 결제(VENDOR_FEE 포함)를 스스로 찾아 이미 환불 처리한다. 여기서
+     * 또 refundService.refund()를 부르면 같은 결제를 두 도메인이 동시에 처리하려는
+     * 꼴이라(RefundService의 UK_REFUND_PAYMENT 유니크 제약이 막아주긴 하지만) 책임이
+     * 겹친다 - application.status 전환만 담당한다.
+     */
+    @Transactional
+    public boolean cancelApplicationForCanceledFair(Long applicationId) {
+
+        int updated = applicationMapper.updateApplicationCanceled(applicationId);
+
+        // 0이면 이미 다른 경로로 처리됨(동시성) - 배치 카운트에서 제외
+        return updated == 1;
+
+    }
+
     // 참가 취소 요청 반려 (행사 담당자용) — application.status는 그대로 유지
     @Transactional
     public ApplicationCancelRequestResultResponse rejectCancelRequest(Long adminUserId, Long applicationId) {

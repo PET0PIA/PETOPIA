@@ -17,4 +17,7 @@ public interface ApplicationExpirationMapper {
     int expirePaymentPendingApplication(@Param("applicationId") Long applicationId,
                                         @Param("now") LocalDateTime now);
 
+    // 취소된 행사에 속한, 아직 활성 상태(PAYMENT_PENDING/CONFIRMED)인 신청서 ID 목록 조회
+    List<Long> selectApplicationsForCanceledFairs(@Param("limit") int limit);
+
 }

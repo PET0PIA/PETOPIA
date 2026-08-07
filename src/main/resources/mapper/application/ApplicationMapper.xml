@@ -285,7 +285,7 @@
         UPDATE application
         SET status = 'CANCELED'
         WHERE application_id = #{applicationId}
-        AND status IN ('PAYMENT_PENDING', 'CONFIRMED')
+        AND status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
     </update>
 
     <!-- 취소 요청 반려 처리: REQUESTED일 때만 전환 (동시 처리 방지) -->
