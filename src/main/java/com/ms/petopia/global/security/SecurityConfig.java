@@ -48,6 +48,9 @@ public class SecurityConfig {
                         ).authenticated()
                         .requestMatchers("/api/v1/admin/fairs/**")
                         .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // 통계화면 관리자 허용
+                        .requestMatchers("/api/admin/**")
+                        .hasRole("SUPER_ADMIN")
                         //참가업체 부스 운영 API(부스 방문 스캔 등). 부스 소유 검증은 서비스 계층에서 한 번 더 한다.
                         .requestMatchers("/api/v1/vendor/**")
                         .hasRole("VENDOR")
