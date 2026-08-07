@@ -10,6 +10,8 @@ import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
@@ -41,6 +43,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.argThat;
 
 /*
  * ApplicationService 단위 테스트.
@@ -70,6 +73,9 @@ class ApplicationServiceTest {
 
     @Mock
     private RefundService refundService;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private ApplicationService applicationService;
@@ -935,6 +941,61 @@ class ApplicationServiceTest {
         }
 
         @Test
+        @DisplayName("승인 성공 시 사업자에게 알림을 보낸다")
+        void notifiesOwnerWhenApproved() {
+
+            // given
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+            Long ownerId = 5L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
+            given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(900000L), any(), any()))
+                    .willReturn(1);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+
+            // when
+            applicationService.approveApplication(adminUserId, applicationId, null);
+
+            // then: 사업자 소유주(ownerId)에게 VENDOR_APPLICATION_APPROVED 알림이 저장됐는지 확인
+            verify(notificationService).save(argThat(req ->
+                    req.userId().equals(ownerId) && req.type() == NotificationType.VENDOR_APPLICATION_APPROVED));
+
+        }
+
+        @Test
+        @DisplayName("알림 저장이 실패해도 승인 처리 자체는 정상적으로 끝난다")
+        void approvalSucceedsEvenWhenNotificationFails() {
+
+            // given: 알림 저장 중 예상 못한 예외가 나는 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
+            given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(900000L), any(), any()))
+                    .willReturn(1);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, 5L));
+            doThrow(new RuntimeException("알림 서버 장애"))
+                    .when(notificationService).save(any());
+
+            // when
+            ApplicationReviewResultResponse result =
+                    applicationService.approveApplication(adminUserId, applicationId, null);
+
+            // then: 예외가 삼켜지고 승인 결과는 정상 반환돼야 함
+            assertThat(result.getStatus()).isEqualTo("PAYMENT_PENDING");
+
+        }
+
+        @Test
         @DisplayName("finalPrice를 안 주면 슬롯 가격 합계로 자동 계산해서 승인한다")
         void approvesWithAutoCalculatedFinalPrice() {
 
@@ -1104,6 +1165,32 @@ class ApplicationServiceTest {
             request.setRejectReason(rejectReason);
 
             return request;
+
+        }
+
+        @Test
+        @DisplayName("반려 성공 시 사업자에게 알림을 보낸다")
+        void notifiesOwnerWhenRejected() {
+
+            // given
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+            Long ownerId = 5L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.updateApplicationRejected(eq(applicationId), eq("부적합"), any()))
+                    .willReturn(1);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+
+            // when
+            applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("부적합"));
+
+            // then
+            verify(notificationService).save(argThat(req ->
+                    req.userId().equals(ownerId) && req.type() == NotificationType.VENDOR_APPLICATION_REJECTED));
 
         }
 
@@ -1565,6 +1652,40 @@ class ApplicationServiceTest {
         }
 
         @Test
+        @DisplayName("취소 승인 성공 시 사업자에게 알림을 보낸다")
+        void notifiesOwnerWhenCancelApproved() {
+
+            // given
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+            Long businessId = 1L;
+            Long ownerId = 5L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).businessId(businessId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+            given(applicationMapper.selectPaymentIdByApplicationId(applicationId)).willReturn(null);
+            given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, ownerId));
+
+            // when
+            applicationService.approveCancelRequest(adminUserId, applicationId);
+
+            // then
+            verify(notificationService).save(argThat(req ->
+                    req.userId().equals(ownerId) && req.type() == NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED));
+
+        }
+
+        @Test
         @DisplayName("정상적으로 승인 처리하고 신청을 CANCELED로 전환한다 (결제 전 상태)")
         void approvesSuccessfully() {
 
@@ -1776,6 +1897,38 @@ class ApplicationServiceTest {
                     .status(ApplicationCancelRequest.Status.REQUESTED)
                     .requestedAt(LocalDateTime.now())
                     .build();
+
+        }
+
+        @Test
+        @DisplayName("취소 반려 성공 시 사업자에게 알림을 보낸다")
+        void notifiesOwnerWhenCancelRejected() {
+
+            // given
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+            Long businessId = 1L;
+            Long ownerId = 5L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).businessId(businessId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestRejected(eq(10L), any())).willReturn(1);
+            given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, ownerId));
+
+            // when
+            applicationService.rejectCancelRequest(adminUserId, applicationId);
+
+            // then
+            verify(notificationService).save(argThat(req ->
+                    req.userId().equals(ownerId) && req.type() == NotificationType.VENDOR_APPLICATION_CANCEL_REJECTED));
 
         }
 
