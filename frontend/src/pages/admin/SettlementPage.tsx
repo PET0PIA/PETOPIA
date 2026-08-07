@@ -278,6 +278,9 @@ export function SettlementPage() {
   const [vendorSettlement, setVendorSettlement] = useState<SettlementResponse | null>(null);
   const [vendorLookupLoading, setVendorLookupLoading] = useState(false);
   const [vendorLookupError, setVendorLookupError] = useState<string | null>(null);
+  // 조회를 연달아 여러 번 보낼 수 있어서, 먼저 시작했지만 나중에 끝나는 요청이 최신 결과를
+  // 덮어쓰지 않도록 요청 순번을 추적한다.
+  const vendorLookupRequestIdRef = useRef(0);
 
   async function handleVendorLookupSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -288,16 +291,19 @@ export function SettlementPage() {
       return;
     }
 
+    const requestId = ++vendorLookupRequestIdRef.current;
     setVendorLookupLoading(true);
     setVendorLookupError(null);
     try {
       const data = await getVendorSettlement(fairId, businessId);
+      if (vendorLookupRequestIdRef.current !== requestId) return;
       setVendorSettlement(data);
     } catch (error) {
+      if (vendorLookupRequestIdRef.current !== requestId) return;
       setVendorSettlement(null);
       setVendorLookupError(errorMessage(error, "정산 상세를 불러오지 못했어요."));
     } finally {
-      setVendorLookupLoading(false);
+      if (vendorLookupRequestIdRef.current === requestId) setVendorLookupLoading(false);
     }
   }
 
