@@ -76,7 +76,7 @@ public class OAuthService {
 
         // 신규 유저
         String tempKey = TokenHashUtil.generateRawToken();
-        oauthPendingStore.saveSignup(tempKey, userInfo.email(), userInfo.provider(), userInfo.oauthId(), SIGNUP_PENDING_TTL);
+        oauthPendingStore.saveSignup(tempKey, userInfo.email(), userInfo.provider(), userInfo.oauthId(), userInfo.emailVerified(), SIGNUP_PENDING_TTL);
         return frontendUrl + "/oauth/callback?type=signup&code=" + tempKey;
 
     }
@@ -120,7 +120,10 @@ public class OAuthService {
                 .agreedPrivacy(request.getAgreedPrivacy())
                 .role("USER")
                 .status("ACTIVE")
-                .emailVerified(true)
+                //provider가 실제로 검증해준 값을 그대로 씀
+                //네이버처럼 검증 클레임이 없는 provider로 가입한 유저를 "이메일 검증 완료"로 기록하면
+                //그 이메일의 진짜 주인이 나중에 일반 가입을 시도할 때 existsVerifiedByEmail이 true를 반환해 자기 이메일인데도 막혀버림
+                .emailVerified(pending.emailVerified())
                 .createdAt(LocalDateTime.now())
                 .build();
 

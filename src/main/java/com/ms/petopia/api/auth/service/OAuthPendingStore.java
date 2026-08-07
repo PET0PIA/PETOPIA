@@ -42,13 +42,14 @@ public class OAuthPendingStore {
 
     //신규 유저 가입 시 redis 저장.
     //콜론으로 이어붙인 문자열 대신 JSON으로 직렬화함
-    public void saveSignup(String tempKey, String email, String provider, String oauthId, Duration ttl) {
+    //emailVerified도 같이 보존해야 함 - completeSignup이 이 값을 그대로 users.email_verified에 저장하기 때문에
+    public void saveSignup(String tempKey, String email, String provider, String oauthId, boolean emailVerified, Duration ttl) {
         if (email == null || email.isBlank() || oauthId == null || oauthId.isBlank()) {
             throw new CommonException(ErrorCode.OAUTH_PROVIDER_ERROR);
         }
 
         String key = "oauth_pending:" + tempKey;
-        String value = writeJson(new OAuthPendingSignup(provider, oauthId, email));
+        String value = writeJson(new OAuthPendingSignup(provider, oauthId, email, emailVerified));
         stringRedisTemplate.opsForValue().set(key, value, ttl);
     }
 
@@ -83,7 +84,7 @@ public class OAuthPendingStore {
         }
     }
 
-    public record OAuthPendingSignup(String provider, String oauthId, String email) {
+    public record OAuthPendingSignup(String provider, String oauthId, String email, boolean emailVerified) {
 
     }
 

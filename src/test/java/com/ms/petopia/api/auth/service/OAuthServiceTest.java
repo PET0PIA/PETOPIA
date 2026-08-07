@@ -158,7 +158,8 @@ class OAuthServiceTest {
         //이메일 검증이 안 됐으니 selectUserByEmail 자체를 호출하면 안 됨 - 자동연결 판단을 아예 안 함
         verify(authMapper, never()).selectUserByEmail(any());
         verify(userSocialAccountMapper, never()).insertSocialAccount(any());
-        verify(oauthPendingStore).saveSignup(anyString(), eq(EMAIL), eq(PROVIDER), eq(OAUTH_ID), eq(Duration.ofMinutes(15)));
+        //emailVerified=false도 pending에 그대로 보존돼야 함 - completeSignup이 이 값을 users.email_verified에 씀
+        verify(oauthPendingStore).saveSignup(anyString(), eq(EMAIL), eq(PROVIDER), eq(OAUTH_ID), eq(false), eq(Duration.ofMinutes(15)));
     }
 
     @Test
@@ -171,7 +172,7 @@ class OAuthServiceTest {
         String redirect = oAuthService.handleCallback("google", "code", "state");
 
         assertThat(redirect).startsWith(FRONTEND_URL + "/oauth/callback?type=signup&code=");
-        verify(oauthPendingStore).saveSignup(anyString(), eq(EMAIL), eq(PROVIDER), eq(OAUTH_ID), eq(Duration.ofMinutes(15)));
+        verify(oauthPendingStore).saveSignup(anyString(), eq(EMAIL), eq(PROVIDER), eq(OAUTH_ID), eq(true), eq(Duration.ofMinutes(15)));
         verify(oauthPendingStore, never()).saveLogin(any(), any(), any());
         verify(userSocialAccountMapper, never()).insertSocialAccount(any());
     }
@@ -222,7 +223,7 @@ class OAuthServiceTest {
     @Test
     void completeSignup_유효한tempKey면_유저와소셜계정을생성하고토큰쌍을반환한다() {
         OAuthPendingStore.OAuthPendingSignup pending =
-                new OAuthPendingStore.OAuthPendingSignup(PROVIDER, OAUTH_ID, EMAIL);
+                new OAuthPendingStore.OAuthPendingSignup(PROVIDER, OAUTH_ID, EMAIL, true);
         given(oauthPendingStore.peekSignup("temp-key")).willReturn(pending);
         //insertUser는 실제 DB에서는 useGeneratedKeys로 PK를 채워주는데, 목에서는 그 동작을 흉내내야 함
         willAnswer(invocation -> {
@@ -273,7 +274,7 @@ class OAuthServiceTest {
     @Test
     void completeSignup_이미가입된이메일이면_DUPLICATED_EMAIL을던지고_pending데이터를지우지않는다() {
         OAuthPendingStore.OAuthPendingSignup pending =
-                new OAuthPendingStore.OAuthPendingSignup(PROVIDER, OAUTH_ID, EMAIL);
+                new OAuthPendingStore.OAuthPendingSignup(PROVIDER, OAUTH_ID, EMAIL, true);
         given(oauthPendingStore.peekSignup("temp-key")).willReturn(pending);
         given(authMapper.insertUser(any(User.class))).willThrow(new DuplicateKeyException("email UNIQUE 위반"));
 
@@ -285,6 +286,28 @@ class OAuthServiceTest {
         verify(userSocialAccountMapper, never()).insertSocialAccount(any());
         //DB insert가 실패했으니 pending은 그대로 남아있어야 함 - 재시도 가능하게
         verify(oauthPendingStore, never()).deleteSignup(any());
+    }
+
+    //네이버처럼 emailVerified=false로 저장된 pending이면, completeSignup도 그 값을 그대로 유지해야 함
+    //(무조건 true로 확정하면 이메일의 진짜 주인이 나중에 일반가입을 못 하게 막히는 문제로 이어짐 - 코드래빗 리뷰 반영)
+    @Test
+    void completeSignup_pending의emailVerified가false면_유저도emailVerified가false로저장된다() {
+        OAuthPendingStore.OAuthPendingSignup pending =
+                new OAuthPendingStore.OAuthPendingSignup("NAVER", OAUTH_ID, EMAIL, false);
+        given(oauthPendingStore.peekSignup("temp-key")).willReturn(pending);
+        willAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setUserId(USER_ID);
+            return 1;
+        }).given(authMapper).insertUser(any(User.class));
+        given(jwtTokenProvider.generateAccessToken(USER_ID, "USER")).willReturn("access-token");
+        given(jwtTokenProvider.generateRefreshToken(USER_ID)).willReturn("refresh-token");
+
+        oAuthService.completeSignup(signupRequest("temp-key"));
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(authMapper).insertUser(userCaptor.capture());
+        assertThat(userCaptor.getValue().isEmailVerified()).isFalse();
     }
 
     private OAuthSignupRequest signupRequest(String tempKey) {
