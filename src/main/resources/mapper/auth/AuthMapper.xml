@@ -51,6 +51,15 @@
         )
     </insert>
 
+    <!--
+      email_verified = FALSE 만으로는 "이메일 인증 도중 이탈한 미완성 가입 row"를 구분 못 한다.
+      OAuth로 만든 유저(비밀번호 없음)도 이제 emailVerified가 provider 값을 그대로 따라가서
+      false일 수 있기 때문 - 네이버로 가입한 진짜 유저 row가 이 WHERE 조건에 걸려서,
+      같은 이메일로 일반 가입을 시도하는 다른 사람의 값으로 통째로 덮어써질 수 있다(계정 탈취/데이터 손상).
+      password_hash IS NOT NULL을 추가로 요구해서, "이 row가 애초에 이메일/비밀번호 가입으로
+      만들어졌는가"까지 같이 확인한다 - OAuth 유저는 passwordHash가 항상 null이라
+      이 조건에서 자동으로 제외된다.
+    -->
     <update id="updateUnverifiedUser" parameterType="User">
         UPDATE users
            SET password_hash   = #{passwordHash}
@@ -65,6 +74,7 @@
              , updated_at      = CURRENT_TIMESTAMP
          WHERE user_id = #{userId}
            AND email_verified = FALSE
+           AND password_hash IS NOT NULL
     </update>
 
     <select id="selectUserByEmail" resultType="User">

@@ -60,7 +60,11 @@ public class OAuthPendingStore {
         if (value == null) {
             return null;
         }
-        return readJson(value);
+        OAuthPendingSignup pending = readJson(value);
+        if (pending.emailVerified() == null) {
+            throw new CommonException(ErrorCode.OAUTH_PENDING_NOT_FOUND);
+        }
+        return pending;
     }
 
     //DB 커밋이 성공적으로 끝난 뒤에만 호출해서 실제로 지움 (OAuthService에서 트랜잭션 커밋 이후로 미뤄서 호출)
@@ -84,7 +88,7 @@ public class OAuthPendingStore {
         }
     }
 
-    public record OAuthPendingSignup(String provider, String oauthId, String email, boolean emailVerified) {
+    public record OAuthPendingSignup(String provider, String oauthId, String email, Boolean emailVerified) {
 
     }
 
