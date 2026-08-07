@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,15 +59,16 @@ class FairTransitionServiceTest {
         verify(transitionMapper).completeFairPayment(4L, NOW);
         verify(transitionMapper).completeFairPayment(5L, NOW);
 
+        Map<String, Object> expectedPayload = Map.of("status", "PREPARING", "completedAt", NOW);
         verify(auditLogService).record(
                 isNull(), eq(ActorType.SYSTEM), eq("SYSTEM"),
                 eq(ActionType.PAYMENT_COMPLETION_RECEIVED), eq(TargetType.FAIR), eq(4L),
-                isNull(), any()
+                isNull(), eq(expectedPayload)
         );
         verify(auditLogService).record(
                 isNull(), eq(ActorType.SYSTEM), eq("SYSTEM"),
                 eq(ActionType.PAYMENT_COMPLETION_RECEIVED), eq(TargetType.FAIR), eq(5L),
-                isNull(), any()
+                isNull(), eq(expectedPayload)
         );
     }
 

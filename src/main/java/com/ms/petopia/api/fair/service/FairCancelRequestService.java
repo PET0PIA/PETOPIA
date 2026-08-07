@@ -158,7 +158,12 @@ public class FairCancelRequestService {
             Fair fairUpdate = new Fair();
             fairUpdate.setFairId(fairId);
             fairUpdate.setCanceledAt(now);
-            fairMapper.update(fairUpdate);
+            // fair_cancel_requests는 이미 APPROVED로 갱신된 뒤라, 여기서 실패하면(정상 흐름에선
+            // 거의 일어나지 않지만 - fairs는 하드삭제하지 않음) 신청 상태와 fairs.canceled_at이
+            // 어긋난 채로 감사 로그만 "성공"으로 남을 수 있다. 결과를 확인해 즉시 롤백한다.
+            if (fairMapper.update(fairUpdate) != 1) {
+                throw new CommonException(ErrorCode.INTERNAL_SERVER_ERROR);
+            }
 
             // TODO 인증 도메인 완성 전까지 reviewerId가 실제 SUPER_ADMIN인지는 검증하지 않는다
             // (review() 상단 TODO와 동일한 한계). actorRole은 그 전제하에 고정값으로 남긴다.
