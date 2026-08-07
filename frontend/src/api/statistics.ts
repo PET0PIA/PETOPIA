@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, ApiError } from "./client";
 
 /**
  * ReservationDashboardController는 NotificationController와 마찬가지로 응답을
@@ -78,6 +78,8 @@ export interface VisitStats {
   petBreedBreakdown: PetBreedStat[];
   /** 데이터 없으면 null */
   avgPetAge: number | null;
+  /** 방문자 1명당 평균 방문 부스 수, 데이터 없으면 null */
+  avgBoothsPerVisitor: number | null;
 }
 
 /** date를 생략하면 해당 행사의 전체 운영일을 반환한다. */
@@ -98,8 +100,50 @@ export function getBoothVisitStats(fairId: number) {
   return unwrap(apiClient.get<ApiEnvelope<BoothVisitStat[]>>(`/api/fairs/${fairId}/booth-visit-stats`));
 }
 
+export function getBoothVisitPattern(fairId: number) {
+  return unwrap(apiClient.get<ApiEnvelope<LabelCount[]>>(`/api/fairs/${fairId}/booth-visit-pattern`));
+}
+
 export function getVisitStats(fairId: number) {
   return unwrap(apiClient.get<ApiEnvelope<VisitStats>>(`/api/fairs/${fairId}/visit-stats`));
+}
+
+/** Content-Disposition 헤더의 filename="..."을 뽑아낸다. 없으면 null. */
+function parseFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+  const match = /filename="?([^";]+)"?/.exec(contentDisposition);
+  return match ? match[1] : null;
+}
+
+/**
+ * 방문 통계를 엑셀(.xlsx)로 내려받는다. apiClient는 JSON 응답만 다루므로
+ * 바이너리 응답을 직접 fetch해 Blob으로 받고 브라우저 다운로드를 트리거한다.
+ */
+export async function downloadVisitStatsExcel(fairId: number): Promise<void> {
+  const response = await fetch(`/api/fairs/${fairId}/visit-stats/export`);
+
+  if (!response.ok) {
+    let message = "엑셀 파일을 내려받지 못했어요.";
+    try {
+      const body = await response.json();
+      message = body?.message ?? message;
+    } catch {
+      // 에러 응답이 JSON이 아니면 기본 메시지를 사용한다.
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const blob = await response.blob();
+  const filename = parseFilename(response.headers.get("Content-Disposition")) ?? `visit-stats-${fairId}.xlsx`;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 /**

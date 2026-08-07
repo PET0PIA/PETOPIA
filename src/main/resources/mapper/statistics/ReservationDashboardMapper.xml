@@ -207,6 +207,37 @@
         ORDER BY count DESC
     </select>
 
+    <!-- 방문자 1명이 평균 몇 개 부스를 방문했는지 -->
+    <!-- 부스를 하나도 방문하지 않은 입장자도 분모에 포함하기 위해 entry_records를 기준으로 LEFT JOIN -->
+    <select id="selectAvgBoothsPerVisitor" resultType="java.lang.Double">
+        SELECT ROUND(AVG(booth_count), 1)
+          FROM (
+               SELECT enr.user_id, COUNT(DISTINCT bv.booth_id) AS booth_count
+                 FROM entry_records enr
+                 LEFT JOIN booth_visits bv
+                        ON bv.fair_id = enr.fair_id AND bv.user_id = enr.user_id
+                WHERE enr.fair_id = #{fairId}
+                GROUP BY enr.user_id
+               ) sub
+    </select>
+
+    <!-- 부스 방문 패턴 분포: 유저별 방문 부스 수 히스토그램 -->
+    <!-- 부스를 하나도 방문하지 않은 입장자도 "0개 부스" 버킷에 포함하기 위해 entry_records 기준 LEFT JOIN -->
+    <select id="selectBoothVisitPatternDistribution" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT CONCAT(visit_depth, '개 부스') AS label,
+               COUNT(*) AS count
+          FROM (
+               SELECT enr.user_id, COUNT(DISTINCT bv.booth_id) AS visit_depth
+                 FROM entry_records enr
+                 LEFT JOIN booth_visits bv
+                        ON bv.fair_id = enr.fair_id AND bv.user_id = enr.user_id
+                WHERE enr.fair_id = #{fairId}
+                GROUP BY enr.user_id
+               ) sub
+         GROUP BY visit_depth
+         ORDER BY visit_depth ASC
+    </select>
+
     <!-- 반려동물 품종 분포 -->
     <select id="selectPetBreedBreakdown" resultType="com.ms.petopia.api.statistics.dto.PetBreedStatDto">
         SELECT COALESCE(rp.pet_species_snapshot, '미등록') AS species,

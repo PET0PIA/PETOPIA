@@ -2,8 +2,9 @@ import { AlertCircle, ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
-import { getBoothVisitStats, type BoothVisitStat } from "../../api/statistics";
+import { getBoothVisitStats, getBoothVisitPattern, type BoothVisitStat, type LabelCount } from "../../api/statistics";
 import { BoothVisitRanking } from "../../components/fair-admin/BoothVisitRanking";
+import { DonutChart } from "../../components/fair-admin/DonutChart";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Card } from "../../components/ui/Card";
@@ -13,6 +14,7 @@ export function BoothVisitStatsPage() {
   const fairId = Number(params.fairId);
 
   const [boothStats, setBoothStats] = useState<BoothVisitStat[]>([]);
+  const [visitPattern, setVisitPattern] = useState<LabelCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -22,13 +24,16 @@ export function BoothVisitStatsPage() {
 
     setLoading(true);
     setLoadError(null);
-    getBoothVisitStats(fairId)
-      .then((data) => { if (!ignore) setBoothStats(data); })
-      .catch((error) => {
-        if (!ignore) {
+    Promise.allSettled([getBoothVisitStats(fairId), getBoothVisitPattern(fairId)])
+      .then(([statsResult, patternResult]) => {
+        if (ignore) return;
+        if (statsResult.status === "fulfilled") {
+          setBoothStats(statsResult.value);
+        } else {
           setBoothStats([]);
-          setLoadError(error instanceof ApiError ? error.message : "부스별 방문 통계를 불러오지 못했어요.");
+          setLoadError(statsResult.reason instanceof ApiError ? statsResult.reason.message : "부스별 방문 통계를 불러오지 못했어요.");
         }
+        setVisitPattern(patternResult.status === "fulfilled" ? patternResult.value : []);
       })
       .finally(() => { if (!ignore) setLoading(false); });
 
@@ -59,9 +64,19 @@ export function BoothVisitStatsPage() {
       ) : boothStats.length === 0 ? (
         <EmptyState title="아직 부스 방문 기록이 없어요." description="부스 QR 스캔 기록이 쌓이면 이곳에서 순위를 확인할 수 있어요." />
       ) : (
-        <Card className="p-6">
-          <BoothVisitRanking data={boothStats} />
-        </Card>
+        <div className="flex flex-col gap-6">
+          <Card className="p-6">
+            <BoothVisitRanking data={boothStats} />
+          </Card>
+
+          <Card className="p-6">
+            <div className="mb-5">
+              <h2 className="text-lg font-extrabold text-ink">방문객 부스 방문 패턴</h2>
+              <p className="mt-1 text-sm text-muted">방문객이 이번 행사에서 몇 개의 부스를 방문했는지 분포예요.</p>
+            </div>
+            <DonutChart data={visitPattern} unit="명" />
+          </Card>
+        </div>
       )}
     </div>
   );
