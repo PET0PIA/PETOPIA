@@ -1,9 +1,6 @@
 package com.ms.petopia.api.statistics.service;
 
-import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
-import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
-import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
-import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
+import com.ms.petopia.api.statistics.dto.*;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
 import com.ms.petopia.api.statistics.mapper.ReservationDashboardMapper;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
@@ -67,6 +64,26 @@ public class ReservationDashboardService {
                 log.debug("SSE push 실패 - fairId={}", fairId);
             }
         }
+    }
+
+    @Transactional(readOnly = true)
+    public VisitStatsDto getVisitStats(Long fairId){
+        int totalVisitors = dashboardMapper.selectTotalVisitors(fairId);
+        int totalConfirmed = dashboardMapper.selectTotalConfirmedReservations(fairId);
+
+        // 확정 예약이 하나도 없으면 0.0, 있으면 소수점 1자리 반올림
+        double visitRate = totalConfirmed > 0 ? Math.round((double) totalVisitors / totalConfirmed * 1000.0) / 10.0 : 0.0;
+        VisitStatsDto dto = new VisitStatsDto();
+        dto.setTotalVisitors(totalVisitors);
+        dto.setTotalConfirmedReservations(totalConfirmed);
+        dto.setVisitRate(visitRate);
+        dto.setChannelBreakdown(dashboardMapper.selectChannelBreakdown(fairId));
+        dto.setGenderBreakdown(dashboardMapper.selectGenderBreakdown(fairId));
+        dto.setAgeGroupBreakdown(dashboardMapper.selectAgeGroupBreakdown(fairId));
+        dto.setPetSpeciesBreakdown(dashboardMapper.selectPetSpeciesBreakdown(fairId));
+        dto.setPetBreedBreakdown(dashboardMapper.selectPetBreedBreakdown(fairId));
+        dto.setAvgPetAge(dashboardMapper.selectAvgPetAge(fairId));
+        return dto;
     }
 
 }

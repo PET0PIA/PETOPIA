@@ -1,9 +1,6 @@
 package com.ms.petopia.api.statistics.controller;
 
-import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
-import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
-import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
-import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
+import com.ms.petopia.api.statistics.dto.*;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
 import com.ms.petopia.global.response.ApiResponse;
@@ -75,4 +72,12 @@ public class ReservationDashboardController {
         }
         return emitter;
     }
+
+    @GetMapping("/{fairId}/visit-stats")
+    public ResponseEntity<ApiResponse<VisitStatsDto>> getVisitStats(
+            @PathVariable Long fairId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getVisitStats(fairId)));
+    }
+
 }

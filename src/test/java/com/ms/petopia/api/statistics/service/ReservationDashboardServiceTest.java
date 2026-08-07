@@ -2,8 +2,11 @@ package com.ms.petopia.api.statistics.service;
 
 import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
 import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
+import com.ms.petopia.api.statistics.dto.LabelCountDto;
+import com.ms.petopia.api.statistics.dto.PetBreedStatDto;
 import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
 import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
+import com.ms.petopia.api.statistics.dto.VisitStatsDto;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
 import com.ms.petopia.api.statistics.mapper.ReservationDashboardMapper;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
@@ -277,6 +280,92 @@ class ReservationDashboardServiceTest {
         assertThat(result.get(2).getUniqueVisitorCount()).isEqualTo(50);
     }
 
+    // ── getVisitStats ─────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("방문자 있고 예약도 있을 때 visitRate를 소수점 1자리로 계산")
+    void getVisitStats_withVisitors_calculatesVisitRateCorrectly() {
+        stubAllMapperMethods(80, 100);
+
+        VisitStatsDto result = dashboardService.getVisitStats(FAIR_ID);
+
+        assertThat(result.getTotalVisitors()).isEqualTo(80);
+        assertThat(result.getTotalConfirmedReservations()).isEqualTo(100);
+        assertThat(result.getVisitRate()).isEqualTo(80.0);
+    }
+
+    @Test
+    @DisplayName("방문율 소수점 반올림 - 3/7 → 42.9%")
+    void getVisitStats_fractionalVisitRate_roundsToOneDecimal() {
+        stubAllMapperMethods(3, 7);
+
+        VisitStatsDto result = dashboardService.getVisitStats(FAIR_ID);
+
+        assertThat(result.getVisitRate()).isEqualTo(42.9);
+    }
+
+    @Test
+    @DisplayName("확정 예약이 0건이면 visitRate는 0.0 (ZeroDivisionError 방지)")
+    void getVisitStats_noConfirmedReservations_visitRateIsZero() {
+        stubAllMapperMethods(0, 0);
+
+        VisitStatsDto result = dashboardService.getVisitStats(FAIR_ID);
+
+        assertThat(result.getVisitRate()).isEqualTo(0.0);
+    }
+
+    @Test
+    @DisplayName("반려동물 나이 데이터 없으면 avgPetAge는 null")
+    void getVisitStats_noPetAgeData_avgPetAgeIsNull() {
+        stubAllMapperMethods(10, 10);
+        given(dashboardMapper.selectAvgPetAge(FAIR_ID)).willReturn(null);
+
+        VisitStatsDto result = dashboardService.getVisitStats(FAIR_ID);
+
+        assertThat(result.getAvgPetAge()).isNull();
+    }
+
+    @Test
+    @DisplayName("방문자 특징 데이터가 있으면 각 breakdown에 올바르게 담김")
+    void getVisitStats_withBreakdownData_returnsAllBreakdowns() {
+        stubAllMapperMethods(100, 100);
+        given(dashboardMapper.selectGenderBreakdown(FAIR_ID))
+                .willReturn(List.of(makeLabelCount("MALE", 60), makeLabelCount("FEMALE", 40)));
+        given(dashboardMapper.selectPetSpeciesBreakdown(FAIR_ID))
+                .willReturn(List.of(makeLabelCount("DOG", 70), makeLabelCount("CAT", 30)));
+        given(dashboardMapper.selectPetBreedBreakdown(FAIR_ID))
+                .willReturn(List.of(makePetBreed("DOG", "골든 리트리버", 25)));
+        given(dashboardMapper.selectAvgPetAge(FAIR_ID)).willReturn(3.5);
+
+        VisitStatsDto result = dashboardService.getVisitStats(FAIR_ID);
+
+        assertThat(result.getGenderBreakdown()).hasSize(2);
+        assertThat(result.getGenderBreakdown().get(0).getLabel()).isEqualTo("MALE");
+        assertThat(result.getGenderBreakdown().get(0).getCount()).isEqualTo(60);
+        assertThat(result.getPetSpeciesBreakdown()).hasSize(2);
+        assertThat(result.getPetBreedBreakdown()).hasSize(1);
+        assertThat(result.getPetBreedBreakdown().get(0).getSpecies()).isEqualTo("DOG");
+        assertThat(result.getPetBreedBreakdown().get(0).getBreed()).isEqualTo("골든 리트리버");
+        assertThat(result.getAvgPetAge()).isEqualTo(3.5);
+    }
+
+    @Test
+    @DisplayName("Mapper 8개 메서드 모두 각 1회씩 호출")
+    void getVisitStats_callsAllMapperMethodsOnce() {
+        stubAllMapperMethods(0, 0);
+
+        dashboardService.getVisitStats(FAIR_ID);
+
+        then(dashboardMapper).should(times(1)).selectTotalVisitors(FAIR_ID);
+        then(dashboardMapper).should(times(1)).selectTotalConfirmedReservations(FAIR_ID);
+        then(dashboardMapper).should(times(1)).selectChannelBreakdown(FAIR_ID);
+        then(dashboardMapper).should(times(1)).selectGenderBreakdown(FAIR_ID);
+        then(dashboardMapper).should(times(1)).selectAgeGroupBreakdown(FAIR_ID);
+        then(dashboardMapper).should(times(1)).selectPetSpeciesBreakdown(FAIR_ID);
+        then(dashboardMapper).should(times(1)).selectPetBreedBreakdown(FAIR_ID);
+        then(dashboardMapper).should(times(1)).selectAvgPetAge(FAIR_ID);
+    }
+
     // ── 헬퍼 메서드 ──────────────────────────────────────────────────
 
     private HourlyEntryTrendDto makeHourlyDto(int hour, int count) {
@@ -291,6 +380,32 @@ class ReservationDashboardServiceTest {
         dto.setBoothId(boothId);
         dto.setBoothNumber(number);
         dto.setUniqueVisitorCount(visitorCount);
+        return dto;
+    }
+
+    private void stubAllMapperMethods(int visitors, int confirmed) {
+        given(dashboardMapper.selectTotalVisitors(FAIR_ID)).willReturn(visitors);
+        given(dashboardMapper.selectTotalConfirmedReservations(FAIR_ID)).willReturn(confirmed);
+        given(dashboardMapper.selectChannelBreakdown(FAIR_ID)).willReturn(List.of());
+        given(dashboardMapper.selectGenderBreakdown(FAIR_ID)).willReturn(List.of());
+        given(dashboardMapper.selectAgeGroupBreakdown(FAIR_ID)).willReturn(List.of());
+        given(dashboardMapper.selectPetSpeciesBreakdown(FAIR_ID)).willReturn(List.of());
+        given(dashboardMapper.selectPetBreedBreakdown(FAIR_ID)).willReturn(List.of());
+        given(dashboardMapper.selectAvgPetAge(FAIR_ID)).willReturn(null);
+    }
+
+    private LabelCountDto makeLabelCount(String label, int count) {
+        LabelCountDto dto = new LabelCountDto();
+        dto.setLabel(label);
+        dto.setCount(count);
+        return dto;
+    }
+
+    private PetBreedStatDto makePetBreed(String species, String breed, int count) {
+        PetBreedStatDto dto = new PetBreedStatDto();
+        dto.setSpecies(species);
+        dto.setBreed(breed);
+        dto.setCount(count);
         return dto;
     }
 }

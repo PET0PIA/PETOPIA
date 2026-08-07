@@ -1,9 +1,6 @@
 package com.ms.petopia.api.statistics.mapper;
 
-import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
-import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
-import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
-import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
+import com.ms.petopia.api.statistics.dto.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -32,4 +29,14 @@ public interface ReservationDashboardMapper {
     List<BoothVisitStatDto> selectBoothVisitStats(
             @Param("fairId") Long fairId
     );
+
+    // visit-stats
+    int selectTotalVisitors(@Param("fairId") Long fairId);
+    int selectTotalConfirmedReservations(@Param("fairId") Long fairId);
+    List<LabelCountDto> selectChannelBreakdown(@Param("fairId") Long fairId);
+    List<LabelCountDto> selectGenderBreakdown(@Param("fairId") Long fairId);
+    List<LabelCountDto> selectAgeGroupBreakdown(@Param("fairId") Long fairId);
+    List<LabelCountDto> selectPetSpeciesBreakdown(@Param("fairId") Long fairId);
+    List<PetBreedStatDto> selectPetBreedBreakdown(@Param("fairId") Long fairId);
+    Double selectAvgPetAge(@Param("fairId") Long fairId);
 }

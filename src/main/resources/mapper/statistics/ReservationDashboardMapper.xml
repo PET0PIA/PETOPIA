@@ -138,4 +138,95 @@
          ORDER BY unique_visitor_count DESC
     </select>
 
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- visit-stats                                         -->
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- 실제 입장한 총 방문자 수 (중복 제거) -->
+    <select id="selectTotalVisitors" resultType="int">
+        SELECT COUNT(DISTINCT user_id)
+        FROM entry_records
+        WHERE fair_id = #{fairId}
+    </select>
+
+    <!--확정된 예약 수 (방문율 분모)-->
+    <select id="selectTotalConfirmedReservations" resultType="int">
+        SELECT COUNT(*)
+        FROM reservations
+        WHERE fair_id = #{fairId}
+            AND status IN ('CONFIRMED', 'CHECKED_IN')
+    </select>
+
+    <!--채널별(ONLINE/ONSITE_DIRECT)-->
+    <select id="selectChannelBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT COALESCE(r.channel, '미등록') AS label,
+            COUNT(*) AS count
+        FROM entry_records enr
+            JOIN reservations r ON r.reservation_id = enr.reservation_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY r.channel
+        ORDER BY count DESC
+    </select>
+
+    <!--성별 분포-->
+    <select id="selectGenderBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT COALESCE(u.gender, '미등록') AS label,
+            COUNT(*) AS count
+        FROM entry_records enr
+            JOIN users u ON u.user_id = enr.user_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY u.gender
+        ORDER BY count DESC
+    </select>
+
+    <!--연령대 분포-->
+    <select id="selectAgeGroupBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT CASE
+                WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 20 THEN '10대 이하'
+                WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 30 THEN '20대'
+                WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 40 THEN '30대'
+                WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 50 THEN '40대'
+                ELSE '50대 이상'
+            END AS label,
+            COUNT(*) AS count
+        FROM entry_records enr
+            JOIN users u ON u.user_id = enr.user_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY label
+        ORDER BY MIN(TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE())) ASC
+    </select>
+
+    <!-- 반려동물 종 분포 -->
+    <select id="selectPetSpeciesBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT COALESCE(rp.pet_species_snapshot, '미등록') AS label,
+            COUNT(*) AS count
+        FROM entry_records enr
+            JOIN reservations r ON r.reservation_id = enr.reservation_id
+            LEFT JOIN reservation_pets rp ON rp.reservation_id = r.reservation_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY rp.pet_species_snapshot, rp.pet_breed_snapshot
+        ORDER BY count DESC
+    </select>
+
+    <!-- 반려동물 품종 분포 -->
+    <select id="selectPetBreedBreakdown" resultType="com.ms.petopia.api.statistics.dto.PetBreedStatDto">
+        SELECT COALESCE(rp.pet_species_snapshot, '미등록') AS species,
+        COALESCE(rp.pet_breed_snapshot,  '미등록') AS breed,
+        COUNT(*) AS count
+        FROM entry_records enr
+        JOIN reservations r   ON r.reservation_id  = enr.reservation_id
+        LEFT JOIN reservation_pets rp ON rp.reservation_id = r.reservation_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY rp.pet_species_snapshot, rp.pet_breed_snapshot
+        ORDER BY count DESC
+    </select>
+
+    <!-- 평균 반려동물 나이. 데이터 없으면 NULL 반환 -->
+    <select id="selectAvgPetAge" resultType="java.lang.Double">
+        SELECT AVG(rp.pet_age_snapshot)
+        FROM entry_records enr
+            JOIN reservations r ON r.reservation_id = enr.reservation_id
+            LEFT JOIN reservation_pets rp ON rp.reservation_id = r.reservation_id
+        WHERE enr.fair_id = #{fairId}
+            AND rp.pet_age_snapshot IS NOT NULL
+    </select>
 </mapper>

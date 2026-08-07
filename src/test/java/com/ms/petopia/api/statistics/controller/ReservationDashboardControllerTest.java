@@ -2,8 +2,11 @@ package com.ms.petopia.api.statistics.controller;
 
 import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
 import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
+import com.ms.petopia.api.statistics.dto.LabelCountDto;
+import com.ms.petopia.api.statistics.dto.PetBreedStatDto;
 import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
 import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
+import com.ms.petopia.api.statistics.dto.VisitStatsDto;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
@@ -174,6 +177,43 @@ class ReservationDashboardControllerTest {
                 .andExpect(jsonPath("$.data", hasSize(0)));
     }
 
+    // ── visit-stats ───────────────────────────────────────────────────
+
+    @Test
+    void getVisitStats_returnsFullStats() throws Exception {
+        VisitStatsDto dto = makeVisitStats(80, 100, 80.0);
+        given(dashboardService.getVisitStats(1L)).willReturn(dto);
+
+        mockMvc.perform(get("/api/fairs/1/visit-stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.totalVisitors").value(80))
+                .andExpect(jsonPath("$.data.totalConfirmedReservations").value(100))
+                .andExpect(jsonPath("$.data.visitRate").value(80.0));
+    }
+
+    @Test
+    void getVisitStats_noVisitors_returnsZeroRate() throws Exception {
+        VisitStatsDto dto = makeVisitStats(0, 0, 0.0);
+        given(dashboardService.getVisitStats(1L)).willReturn(dto);
+
+        mockMvc.perform(get("/api/fairs/1/visit-stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalVisitors").value(0))
+                .andExpect(jsonPath("$.data.visitRate").value(0.0));
+    }
+
+    @Test
+    void getVisitStats_avgPetAgeIsNull_returnsNullInResponse() throws Exception {
+        VisitStatsDto dto = makeVisitStats(10, 10, 100.0);
+        dto.setAvgPetAge(null);
+        given(dashboardService.getVisitStats(1L)).willReturn(dto);
+
+        mockMvc.perform(get("/api/fairs/1/visit-stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.avgPetAge").value(org.hamcrest.Matchers.nullValue()));
+    }
+
     // ── 헬퍼 메서드 ──────────────────────────────────────────────────
 
     private ReservationDateSummaryDto makeSummary(LocalDate date, int capacity, int confirmed) {
@@ -209,6 +249,20 @@ class ReservationDashboardControllerTest {
         dto.setBoothName(name);
         dto.setUniqueVisitorCount(uniqueCount);
         dto.setTotalScanCount(totalCount);
+        return dto;
+    }
+
+    private VisitStatsDto makeVisitStats(int visitors, int confirmed, double rate) {
+        VisitStatsDto dto = new VisitStatsDto();
+        dto.setTotalVisitors(visitors);
+        dto.setTotalConfirmedReservations(confirmed);
+        dto.setVisitRate(rate);
+        dto.setChannelBreakdown(List.of());
+        dto.setGenderBreakdown(List.of());
+        dto.setAgeGroupBreakdown(List.of());
+        dto.setPetSpeciesBreakdown(List.of());
+        dto.setPetBreedBreakdown(List.of());
+        dto.setAvgPetAge(null);
         return dto;
     }
 }
