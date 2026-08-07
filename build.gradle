@@ -34,7 +34,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     // Flyway 10부터 DB별 지원도 모듈로 분리됐다. 이 모듈이 없으면 MySQL을 인식하지 못한다.
     implementation 'org.flywaydb:flyway-mysql'
-    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'com.mysql:mysql-connector-j:8.4.0'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
