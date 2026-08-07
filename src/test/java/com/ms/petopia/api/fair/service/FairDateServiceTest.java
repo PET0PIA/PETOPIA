@@ -5,11 +5,13 @@ import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairDate;
 import com.ms.petopia.api.fair.dto.FairDateResponse;
 import com.ms.petopia.api.fair.dto.FairDateWithStats;
+import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.UpdateFairDateRequest;
 import com.ms.petopia.api.fair.mapper.FairDateMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +42,7 @@ class FairDateServiceTest {
     private static final LocalDate OPERATION_DATE = LocalDate.of(2026, 9, 5);
     private static final LocalTime ENTRY_START = LocalTime.of(10, 0);
     private static final LocalTime ENTRY_END = LocalTime.of(18, 0);
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 7, 10, 0);
 
     @Mock
     private FairDateMapper fairDateMapper;
@@ -47,8 +50,16 @@ class FairDateServiceTest {
     @Mock
     private FairMapper fairMapper;
 
+    @Mock
+    private FairTimeProvider timeProvider;
+
     @InjectMocks
     private FairDateService fairDateService;
+
+    @BeforeEach
+    void setUpTime() {
+        org.mockito.Mockito.lenient().when(timeProvider.now()).thenReturn(NOW);
+    }
 
     // ===== create =====
 
@@ -161,6 +172,34 @@ class FairDateServiceTest {
         assertThat(response.onsiteSalesConfigured()).isFalse();
     }
 
+    @Test
+    @DisplayName("취소된 행사에 운영일을 등록하려 하면 FAIR_DATE_FAIR_NOT_EDITABLE을 던진다")
+    void create_취소된행사면_예외를_던진다() {
+        Fair canceledFair = fairWithPeriod(null, null);
+        canceledFair.setCanceledAt(LocalDateTime.of(2026, 8, 1, 0, 0));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair);
+
+        assertErrorCode(
+                () -> fairDateService.create(FAIR_ID, createRequest()),
+                ErrorCode.FAIR_DATE_FAIR_NOT_EDITABLE
+        );
+        verify(fairDateMapper, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("종료된 행사에 운영일을 등록하려 하면 FAIR_DATE_FAIR_NOT_EDITABLE을 던진다")
+    void create_종료된행사면_예외를_던진다() {
+        Fair endedFair = fairWithPeriod(null, null);
+        endedFair.setStatus(FairStatus.ENDED);
+        given(fairMapper.selectById(FAIR_ID)).willReturn(endedFair);
+
+        assertErrorCode(
+                () -> fairDateService.create(FAIR_ID, createRequest()),
+                ErrorCode.FAIR_DATE_FAIR_NOT_EDITABLE
+        );
+        verify(fairDateMapper, never()).insert(any());
+    }
+
     // ===== getFairDates =====
 
     @Test
@@ -202,6 +241,7 @@ class FairDateServiceTest {
     @DisplayName("정원이 0 이하이면 INVALID_INPUT_VALUE를 던지고 갱신하지 않는다")
     void update_정원이0이하면_예외를_던진다() {
         given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithPeriod(null, null));
 
         assertErrorCode(
                 () -> fairDateService.update(FAIR_ID, FAIR_DATE_ID, new UpdateFairDateRequest(0, ENTRY_START, ENTRY_END)),
@@ -214,6 +254,7 @@ class FairDateServiceTest {
     @DisplayName("입장 종료 시간이 시작 시간보다 빠르거나 같으면 FAIR_DATE_INVALID_ENTRY_TIME을 던진다")
     void update_입장시간이거꾸로면_예외를_던진다() {
         given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithPeriod(null, null));
 
         assertErrorCode(
                 () -> fairDateService.update(FAIR_ID, FAIR_DATE_ID, new UpdateFairDateRequest(100, ENTRY_END, ENTRY_START)),
@@ -226,6 +267,7 @@ class FairDateServiceTest {
     @DisplayName("같은 행사 소속 운영일을 수정하면 정원·입장시간을 갱신하고 예약 집계와 함께 다시 조회해 반환한다")
     void update_정상수정이면_갱신후_다시조회한다() {
         given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithPeriod(null, null));
         given(fairDateMapper.selectByIdWithStats(FAIR_DATE_ID)).willReturn(statsRow(5, true));
 
         FairDateResponse response = fairDateService.update(FAIR_ID, FAIR_DATE_ID, updateRequest());
@@ -238,6 +280,36 @@ class FairDateServiceTest {
         assertThat(response.capacity()).isEqualTo(100);
         assertThat(response.reservedCount()).isEqualTo(5);
         assertThat(response.onsiteSalesConfigured()).isTrue();
+    }
+
+    @Test
+    @DisplayName("취소된 행사의 운영일을 수정하려 하면 FAIR_DATE_FAIR_NOT_EDITABLE을 던지고 갱신하지 않는다")
+    void update_취소된행사면_예외를_던진다() {
+        given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        Fair canceledFair = fairWithPeriod(null, null);
+        canceledFair.setCanceledAt(NOW.minusDays(1));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair);
+
+        assertErrorCode(
+                () -> fairDateService.update(FAIR_ID, FAIR_DATE_ID, updateRequest()),
+                ErrorCode.FAIR_DATE_FAIR_NOT_EDITABLE
+        );
+        verify(fairDateMapper, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("종료된 행사의 운영일을 수정하려 하면 FAIR_DATE_FAIR_NOT_EDITABLE을 던지고 갱신하지 않는다")
+    void update_종료된행사면_예외를_던진다() {
+        given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        Fair endedFair = fairWithPeriod(null, null);
+        endedFair.setStatus(FairStatus.ENDED);
+        given(fairMapper.selectById(FAIR_ID)).willReturn(endedFair);
+
+        assertErrorCode(
+                () -> fairDateService.update(FAIR_ID, FAIR_DATE_ID, updateRequest()),
+                ErrorCode.FAIR_DATE_FAIR_NOT_EDITABLE
+        );
+        verify(fairDateMapper, never()).update(any());
     }
 
     // ===== delete =====
@@ -255,10 +327,23 @@ class FairDateServiceTest {
     @DisplayName("같은 행사 소속 운영일을 삭제하면 예약·현장예매 정책 여부와 무관하게 deleteById를 호출한다")
     void delete_정상삭제() {
         given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithPeriod(null, null));
 
         fairDateService.delete(FAIR_ID, FAIR_DATE_ID);
 
         verify(fairDateMapper).deleteById(FAIR_DATE_ID);
+    }
+
+    @Test
+    @DisplayName("취소된 행사의 운영일을 삭제하려 하면 FAIR_DATE_FAIR_NOT_EDITABLE을 던지고 삭제하지 않는다")
+    void delete_취소된행사면_예외를_던진다() {
+        given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        Fair canceledFair = fairWithPeriod(null, null);
+        canceledFair.setCanceledAt(NOW.minusDays(1));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair);
+
+        assertErrorCode(() -> fairDateService.delete(FAIR_ID, FAIR_DATE_ID), ErrorCode.FAIR_DATE_FAIR_NOT_EDITABLE);
+        verify(fairDateMapper, never()).deleteById(any());
     }
 
     // ===== fixtures =====

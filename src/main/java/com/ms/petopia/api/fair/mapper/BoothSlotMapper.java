@@ -26,6 +26,12 @@ public interface BoothSlotMapper {
     List<BoothSlot> selectByHallId(@Param("hallId") Long hallId);
 
     /**
+     * 홀 삭제 전 부스 슬롯이 하나라도 남아있는지 확인하는 용도. booth_slots.hall_id에는
+     * FK 제약이 없어서(DDL 주석 참고) 이 체크 없이 홀을 지우면 슬롯이 고아 행으로 남는다.
+     */
+    boolean existsByHallId(@Param("hallId") Long hallId);
+
+    /**
      * null이 아닌 필드만 갱신한다. hall_id는 갱신 대상이 아니다(슬롯이 다른 홀로 옮겨가지 않음).
      */
     int update(BoothSlot boothSlot);

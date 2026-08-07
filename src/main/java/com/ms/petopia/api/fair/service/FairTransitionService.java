@@ -1,5 +1,9 @@
 package com.ms.petopia.api.fair.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.fair.dto.FairTransitionRow;
 import com.ms.petopia.api.fair.mapper.FairTransitionMapper;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * fairs.status 자동전이 4종을 처리한다. reservation 도메인의
@@ -24,8 +29,10 @@ import java.util.List;
  * 도메인)이 아직 없어도 이 도메인 혼자 만들 수 있다는 실용적 이유로 폴링을 선택했다 -
  * 나중에 결제 도메인이 콜백을 만들면 그쪽으로 옮기고 이 폴링은 안전망으로만 남겨도 된다.
  *
- * <p>변경 이력(감사 로그)은 이번 범위에 포함하지 않았다. audit 도메인의 {@code ActionType}에
- * 자동전이용 값을 추가해야 하는데, 이 enum은 다른 도메인 소유라 별도 확인 후 진행한다.
+ * <p>개설비 결제 완료 전이({@code completeDuePayments})만 감사 로그를 남긴다 - audit 도메인의
+ * {@code ActionType}에 {@code PAYMENT_COMPLETION_RECEIVED}가 이미 있어 그대로 쓴다. 나머지
+ * 세 전이(만료/시작/종료)는 대응하는 {@code ActionType} 값이 없어 이번 범위에서 제외했다 -
+ * 필요해지면 audit 도메인과 새 값 추가를 먼저 확인해야 한다.
  *
  * <p>네 조회 쿼리 모두 {@code canceled_at IS NOT NULL}인 행사는 제외한다 - 취소된 행사를
  * 계속 자동전이시켜 봐야 의미가 없고, status만 계속 바뀌면 관리자 화면에서 취소된 행사가
@@ -38,6 +45,7 @@ public class FairTransitionService {
 
     private final FairTransitionMapper transitionMapper;
     private final FairTimeProvider timeProvider;
+    private final AuditLogService auditLogService;
 
     /**
      * 개설비 결제 기한이 지난 PAYMENT_PENDING 행사를 EXPIRED로 바꾼다.
@@ -108,6 +116,18 @@ public class FairTransitionService {
         for (FairTransitionRow row : rows) {
             if (transitionMapper.completeFairPayment(row.getFairId(), now) == 1) {
                 completed++;
+                // userId는 null(사람 행위자가 없는 배치 - audit_log.user_id는 시스템 처리 시
+                // NULL을 허용한다). actor_role은 DDL상 NOT NULL이라 "SYSTEM"으로 고정한다.
+                auditLogService.record(
+                        null,
+                        ActorType.SYSTEM,
+                        "SYSTEM",
+                        ActionType.PAYMENT_COMPLETION_RECEIVED,
+                        TargetType.FAIR,
+                        row.getFairId(),
+                        null,
+                        Map.of("status", "PREPARING", "completedAt", now)
+                );
             }
         }
         return completed;

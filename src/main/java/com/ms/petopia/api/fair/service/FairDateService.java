@@ -5,6 +5,7 @@ import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairDate;
 import com.ms.petopia.api.fair.dto.FairDateResponse;
 import com.ms.petopia.api.fair.dto.FairDateWithStats;
+import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.UpdateFairDateRequest;
 import com.ms.petopia.api.fair.mapper.FairDateMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
@@ -24,6 +25,10 @@ import java.util.List;
  * <p>정원 축소·삭제가 기존 예약·현장예매 정책과 충돌할 수 있어도 여기서 막지 않는다 -
  * {@link FairDateResponse}의 reservedCount/onsiteSalesConfigured로 관리자 화면이 경고만
  * 보여주고, 계속 진행할지는 관리자 판단에 맡긴다.
+ *
+ * <p>취소됐거나(canceled_at) 종료된(ENDED) 행사는 운영일 자체를 더 관리할 이유가 없어
+ * create/update/delete 모두에서 막는다. RECEIVED/PAYMENT_PENDING/PREPARING/IN_PROGRESS는
+ * 계속 편집 가능한 "진행 중" 상태로 본다.
  */
 @Service
 @RequiredArgsConstructor
@@ -31,17 +36,19 @@ public class FairDateService {
 
     private final FairDateMapper fairDateMapper;
     private final FairMapper fairMapper;
+    private final FairTimeProvider timeProvider;
 
     @Transactional
     public FairDateResponse create(Long fairId, CreateFairDateRequest request) {
         Fair fair = findFairOrThrow(fairId);
+        validateFairEditable(fair);
         validateCreateRequest(fair, request);
 
         if (fairDateMapper.selectByFairIdAndDate(fairId, request.operationDate()) != null) {
             throw new CommonException(ErrorCode.FAIR_DATE_DUPLICATE);
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = timeProvider.now();
         FairDate fairDate = new FairDate();
         fairDate.setFairId(fairId);
         fairDate.setOperationDate(request.operationDate());
@@ -66,6 +73,7 @@ public class FairDateService {
     @Transactional
     public FairDateResponse update(Long fairId, Long fairDateId, UpdateFairDateRequest request) {
         findFairDateInFair(fairId, fairDateId);
+        validateFairEditable(findFairOrThrow(fairId));
         validateUpdateRequest(request);
 
         FairDate update = new FairDate();
@@ -73,7 +81,7 @@ public class FairDateService {
         update.setCapacity(request.capacity());
         update.setEntryStartTime(request.entryStartTime());
         update.setEntryEndTime(request.entryEndTime());
-        update.setUpdatedAt(LocalDateTime.now());
+        update.setUpdatedAt(timeProvider.now());
         fairDateMapper.update(update);
 
         return toResponse(fairDateMapper.selectByIdWithStats(fairDateId));
@@ -82,7 +90,17 @@ public class FairDateService {
     @Transactional
     public void delete(Long fairId, Long fairDateId) {
         findFairDateInFair(fairId, fairDateId);
+        validateFairEditable(findFairOrThrow(fairId));
         fairDateMapper.deleteById(fairDateId);
+    }
+
+    /**
+     * 취소됐거나(canceled_at) 종료된(ENDED) 행사는 운영일을 더 관리할 수 없게 막는다.
+     */
+    private void validateFairEditable(Fair fair) {
+        if (fair.getCanceledAt() != null || fair.getStatus() == FairStatus.ENDED) {
+            throw new CommonException(ErrorCode.FAIR_DATE_FAIR_NOT_EDITABLE);
+        }
     }
 
     /**

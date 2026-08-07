@@ -11,6 +11,10 @@ import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestResponse;
 import com.ms.petopia.api.fair.mapper.FairCancelRequestMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +33,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
@@ -52,6 +57,9 @@ class FairCancelRequestServiceTest {
 
     @Mock
     private FairTimeProvider timeProvider;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     @InjectMocks
     private FairCancelRequestService cancelRequestService;
@@ -209,6 +217,12 @@ class FairCancelRequestServiceTest {
         verify(fairMapper).update(fairCaptor.capture());
         assertThat(fairCaptor.getValue().getFairId()).isEqualTo(FAIR_ID);
         assertThat(fairCaptor.getValue().getCanceledAt()).isEqualTo(NOW);
+
+        verify(auditLogService).record(
+                eq(REVIEWER_ID), eq(ActorType.ADMIN), eq("SUPER_ADMIN"),
+                eq(ActionType.FAIR_CANCEL_APPROVE), eq(TargetType.FAIR), eq(FAIR_ID),
+                any(), any()
+        );
     }
 
     @Test
@@ -226,6 +240,7 @@ class FairCancelRequestServiceTest {
         assertThat(response.rejectReason()).isEqualTo("서류 미비");
         assertThat(response.canceledAt()).isNull();
         verify(fairMapper, never()).update(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

@@ -11,6 +11,10 @@ import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestResponse;
 import com.ms.petopia.api.fair.mapper.FairCancelRequestMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,6 +54,7 @@ public class FairCancelRequestService {
     private final FairCancelRequestMapper cancelRequestMapper;
     private final FairMapper fairMapper;
     private final FairTimeProvider timeProvider;
+    private final AuditLogService auditLogService;
 
     /**
      * 취소를 신청한다. PENDING 상태로 등록되고, SUPER_ADMIN의 검토를 기다린다.
@@ -153,6 +159,19 @@ public class FairCancelRequestService {
             fairUpdate.setFairId(fairId);
             fairUpdate.setCanceledAt(now);
             fairMapper.update(fairUpdate);
+
+            // TODO 인증 도메인 완성 전까지 reviewerId가 실제 SUPER_ADMIN인지는 검증하지 않는다
+            // (review() 상단 TODO와 동일한 한계). actorRole은 그 전제하에 고정값으로 남긴다.
+            auditLogService.record(
+                    reviewerId,
+                    ActorType.ADMIN,
+                    "SUPER_ADMIN",
+                    ActionType.FAIR_CANCEL_APPROVE,
+                    TargetType.FAIR,
+                    fairId,
+                    null,
+                    Map.of("fairCancelRequestId", cancelRequestId, "canceledAt", canceledAt)
+            );
         }
 
         return new ReviewFairCancelRequestResponse(
