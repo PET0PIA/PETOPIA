@@ -1,16 +1,22 @@
 import { AlertCircle, Search } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getFairDates, type FairDate } from "../../api/fair";
-import { getBoothVisitStats, getHourlyEntryTrend, type BoothVisitStat, type HourlyEntryTrend } from "../../api/statistics";
+import { getBoothVisitStats, getHourlyEntryTrend, getVisitStats, type BoothVisitStat, type HourlyEntryTrend, type VisitStats } from "../../api/statistics";
 import { BoothVisitRanking } from "../../components/fair-admin/BoothVisitRanking";
+import { DonutChart } from "../../components/fair-admin/DonutChart";
 import { HourlyEntryTrendChart } from "../../components/fair-admin/HourlyEntryTrendChart";
+import { PetBreedBreakdown } from "../../components/fair-admin/PetBreedBreakdown";
+import { VisitStatsOverview } from "../../components/fair-admin/VisitStatsOverview";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
+
+const BOOTH_RANKING_PREVIEW_COUNT = 3;
 
 export function VisitStatisticsPage() {
   // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
@@ -19,6 +25,7 @@ export function VisitStatisticsPage() {
 
   const [fairDates, setFairDates] = useState<FairDate[]>([]);
   const [boothStats, setBoothStats] = useState<BoothVisitStat[]>([]);
+  const [visitStats, setVisitStats] = useState<VisitStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -35,17 +42,19 @@ export function VisitStatisticsPage() {
 
     setLoading(true);
     setLoadError(null);
-    Promise.all([getFairDates(fairId), getBoothVisitStats(fairId)])
-      .then(([dates, booth]) => {
+    Promise.all([getFairDates(fairId), getBoothVisitStats(fairId), getVisitStats(fairId)])
+      .then(([dates, booth, visit]) => {
         if (ignore) return;
         setFairDates(dates);
         setBoothStats(booth);
+        setVisitStats(visit);
         setSelectedDate((current) => (current && dates.some((d) => d.operationDate === current) ? current : (dates[0]?.operationDate ?? "")));
       })
       .catch((error) => {
         if (!ignore) {
           setFairDates([]);
           setBoothStats([]);
+          setVisitStats(null);
           setLoadError(error instanceof ApiError ? error.message : "방문 통계를 불러오지 못했어요.");
         }
       })
@@ -121,6 +130,16 @@ export function VisitStatisticsPage() {
 
       {fairId !== null && !loading && !loadError && (
         <div className="flex flex-col gap-6">
+          {visitStats && (
+            <Card className="p-6">
+              <div className="mb-5">
+                <h2 className="text-lg font-extrabold text-ink">방문 요약</h2>
+                <p className="mt-1 text-sm text-muted">행사 전 기간을 합산한 실입장 방문객 지표예요.</p>
+              </div>
+              <VisitStatsOverview stats={visitStats} />
+            </Card>
+          )}
+
           <Card className="p-6">
             <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
               <div>
@@ -156,17 +175,62 @@ export function VisitStatisticsPage() {
           </Card>
 
           <Card className="p-6">
-            <div className="mb-5">
-              <h2 className="text-lg font-extrabold text-ink">부스별 방문 통계</h2>
-              <p className="mt-1 text-sm text-muted">부스 QR을 스캔한 고유 방문객 수 기준으로, 행사 전 기간을 합산한 순위예요.</p>
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-extrabold text-ink">부스별 방문 통계</h2>
+                <p className="mt-1 text-sm text-muted">부스 QR을 스캔한 고유 방문객 수 기준으로, 행사 전 기간을 합산한 상위 {BOOTH_RANKING_PREVIEW_COUNT}개예요.</p>
+              </div>
+              {boothStats.length > BOOTH_RANKING_PREVIEW_COUNT && (
+                <Link to={`/fair-admin/statistics/booths/${fairId}`} className="shrink-0 text-sm font-bold text-primary-strong hover:underline">
+                  전체 {boothStats.length}개 상세보기
+                </Link>
+              )}
             </div>
 
             {boothStats.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted">아직 부스 방문 기록이 없어요.</p>
             ) : (
-              <BoothVisitRanking data={boothStats} />
+              <BoothVisitRanking data={boothStats.slice(0, BOOTH_RANKING_PREVIEW_COUNT)} />
             )}
           </Card>
+
+          {visitStats && (
+            <Card className="p-6">
+              <div className="mb-5">
+                <h2 className="text-lg font-extrabold text-ink">방문객 분포</h2>
+                <p className="mt-1 text-sm text-muted">실입장 방문객 기준 채널·성별·연령대·반려동물 종 분포예요.</p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
+                <div>
+                  <h3 className="mb-3 text-sm font-bold text-ink">채널</h3>
+                  <DonutChart data={visitStats.channelBreakdown} />
+                </div>
+                <div>
+                  <h3 className="mb-3 text-sm font-bold text-ink">성별</h3>
+                  <DonutChart data={visitStats.genderBreakdown} />
+                </div>
+                <div>
+                  <h3 className="mb-3 text-sm font-bold text-ink">연령대</h3>
+                  <DonutChart data={visitStats.ageGroupBreakdown} />
+                </div>
+                <div>
+                  <h3 className="mb-3 text-sm font-bold text-ink">반려동물 종</h3>
+                  <DonutChart data={visitStats.petSpeciesBreakdown} />
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {visitStats && (
+            <Card className="p-6">
+              <div className="mb-5">
+                <h2 className="text-lg font-extrabold text-ink">반려동물 품종 분포</h2>
+                <p className="mt-1 text-sm text-muted">방문 건수가 많은 순으로 정렬돼요.</p>
+              </div>
+              <PetBreedBreakdown data={visitStats.petBreedBreakdown} />
+            </Card>
+          )}
         </div>
       )}
     </div>

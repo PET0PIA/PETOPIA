@@ -52,6 +52,34 @@ export interface BoothVisitStat {
   totalScanCount: number;
 }
 
+export interface LabelCount {
+  label: string;
+  count: number;
+}
+
+export interface PetBreedStat {
+  species: string;
+  /** 미등록이면 "미등록" 문자열로 내려온다. */
+  breed: string;
+  count: number;
+}
+
+export interface VisitStats {
+  /** 실제 입장한 총 방문자 수(중복 제거) */
+  totalVisitors: number;
+  /** 확정된 예약 수(방문율 분모) */
+  totalConfirmedReservations: number;
+  /** 방문율 %, 소수점 1자리 */
+  visitRate: number;
+  channelBreakdown: LabelCount[];
+  genderBreakdown: LabelCount[];
+  ageGroupBreakdown: LabelCount[];
+  petSpeciesBreakdown: LabelCount[];
+  petBreedBreakdown: PetBreedStat[];
+  /** 데이터 없으면 null */
+  avgPetAge: number | null;
+}
+
 /** date를 생략하면 해당 행사의 전체 운영일을 반환한다. */
 export function getReservationDashboard(fairId: number, date?: string) {
   const query = date ? `?date=${date}` : "";
@@ -68,6 +96,10 @@ export function getHourlyEntryTrend(fairId: number, date: string) {
 
 export function getBoothVisitStats(fairId: number) {
   return unwrap(apiClient.get<ApiEnvelope<BoothVisitStat[]>>(`/api/fairs/${fairId}/booth-visit-stats`));
+}
+
+export function getVisitStats(fairId: number) {
+  return unwrap(apiClient.get<ApiEnvelope<VisitStats>>(`/api/fairs/${fairId}/visit-stats`));
 }
 
 /**
