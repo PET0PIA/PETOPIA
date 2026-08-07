@@ -236,6 +236,10 @@ jobs:
             -e TOSS_SECRET_KEY \
             -e TOSS_CLIENT_KEY='' -e TOSS_SECURITY_KEY='' \
             -e NTS_SERVICE_KEY \
+            -e GOOGLE_CLIENT_ID='ci-smoke-test-google-client-id' \
+            -e GOOGLE_CLIENT_SECRET='ci-smoke-test-google-client-secret' \
+            -e NAVER_CLIENT_ID='ci-smoke-test-naver-client-id' \
+            -e NAVER_CLIENT_SECRET='ci-smoke-test-naver-client-secret' \
             petopia:ci-${{ github.sha }}
 
           deadline=$(( SECONDS + 120 ))

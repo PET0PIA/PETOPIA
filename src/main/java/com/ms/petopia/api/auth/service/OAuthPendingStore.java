@@ -1,8 +1,12 @@
 package com.ms.petopia.api.auth.service;
 
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 
@@ -19,6 +23,7 @@ import java.time.Duration;
 public class OAuthPendingStore {
 
     private final StringRedisTemplate stringRedisTemplate;
+    private final ObjectMapper objectMapper;
 
     public void saveLogin(String code, Long userId, Duration ttl) {
         //Redis는 나눠져 있지 않고 전체가 하나의 Map 이기 때문에 key 앞에 문자열을 붙여줘야 key가 겹치지 않을 수 있다.
@@ -35,22 +40,47 @@ public class OAuthPendingStore {
     }
 
 
-    //신규 유저 가입 시 redis 저장
+    //신규 유저 가입 시 redis 저장.
+    //콜론으로 이어붙인 문자열 대신 JSON으로 직렬화함
     public void saveSignup(String tempKey, String email, String provider, String oauthId, Duration ttl) {
+        if (email == null || email.isBlank() || oauthId == null || oauthId.isBlank()) {
+            throw new CommonException(ErrorCode.OAUTH_PROVIDER_ERROR);
+        }
+
         String key = "oauth_pending:" + tempKey;
-        String value = provider + ":" + oauthId + ":" + email;   //redis는 key:value(값 하나)만 되기 때문에 문자열로 나열함
+        String value = writeJson(new OAuthPendingSignup(provider, oauthId, email));
         stringRedisTemplate.opsForValue().set(key, value, ttl);
     }
 
-    //값 다시 쪼개 리턴
-    public OAuthPendingSignup consumeSignup(String tempKey) {
+    //비파괴적 조회
+    public OAuthPendingSignup peekSignup(String tempKey) {
         String key = "oauth_pending:" + tempKey;
-        String value = stringRedisTemplate.opsForValue().getAndDelete(key);
+        String value = stringRedisTemplate.opsForValue().get(key);
         if (value == null) {
             return null;
         }
-        String[] parts = value.split(":", 3);
-        return new OAuthPendingSignup(parts[0], parts[1], parts[2]);
+        return readJson(value);
+    }
+
+    //DB 커밋이 성공적으로 끝난 뒤에만 호출해서 실제로 지움 (OAuthService에서 트랜잭션 커밋 이후로 미뤄서 호출)
+    public void deleteSignup(String tempKey) {
+        stringRedisTemplate.delete("oauth_pending:" + tempKey);
+    }
+
+    private String writeJson(OAuthPendingSignup pending) {
+        try {
+            return objectMapper.writeValueAsString(pending);
+        } catch (JacksonException e) {
+            throw new CommonException(ErrorCode.OAUTH_PROVIDER_ERROR, e);
+        }
+    }
+
+    private OAuthPendingSignup readJson(String value) {
+        try {
+            return objectMapper.readValue(value, OAuthPendingSignup.class);
+        } catch (JacksonException e) {
+            throw new CommonException(ErrorCode.OAUTH_PROVIDER_ERROR, e);
+        }
     }
 
     public record OAuthPendingSignup(String provider, String oauthId, String email) {

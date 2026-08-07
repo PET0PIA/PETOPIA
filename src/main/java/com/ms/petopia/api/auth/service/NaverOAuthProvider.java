@@ -21,7 +21,8 @@ public class NaverOAuthProvider implements OAuthProvider {
     private static final String TOKEN_URI = "https://nid.naver.com/oauth2.0/token";
     private static final String USERINFO_URI = "https://openapi.naver.com/v1/nid/me";
 
-    private final RestClient restClient = RestClient.create();
+    //OAuthRestClientConfig가 타임아웃까지 설정해서 만들어준 공용 빈을 주입받음
+    private final RestClient restClient;
 
     @Value("${oauth.naver.client-id}")
     private String clientId;
@@ -31,6 +32,10 @@ public class NaverOAuthProvider implements OAuthProvider {
 
     @Value("${oauth.naver.redirect-uri}")
     private String redirectUri;
+
+    public NaverOAuthProvider(RestClient oauthRestClient) {
+        this.restClient = oauthRestClient;
+    }
 
     //유저를 네이버 로그인/동의 화면으로 보낼 URL 조립.
     //구글과 달리 scope 파라미터가 없음 - 네이버는 권한 범위를 네이버 개발자 콘솔에서 앱 등록 시 미리 설정해두는 방식이라
@@ -52,10 +57,27 @@ public class NaverOAuthProvider implements OAuthProvider {
         try {
             NaverTokenResponse tokenResponse = exchangeCodeForToken(code, state);
             NaverUserInfoResponse userInfoResponse = fetchUserInfo(tokenResponse.accessToken());
+            validate(userInfoResponse);
 
-            return new OAuthUserInfo(PROVIDER, userInfoResponse.response().id(), userInfoResponse.response().email());
+            //네이버는 구글의 email_verified 같은 검증 클레임이 없음 - 항상 false로 고정해서
+            //OAuthService가 이 이메일로 자동 연결(다른 사람 계정에 잘못 연결)을 시도하지 않게 함
+            return new OAuthUserInfo(PROVIDER, userInfoResponse.response().id(), userInfoResponse.response().email(), false);
         } catch (RestClientException e) {
             throw new CommonException(ErrorCode.OAUTH_PROVIDER_ERROR, e);
+        }
+    }
+
+    //네이버는 인증/파라미터 오류도 HTTP 200 + resultcode(예: "024","025")로 내려주는 경우가 있어서
+    //RestClient의 4xx/5xx 예외 처리만으론 못 걸러냄 - 응답 내용 자체를 직접 검증해야 함
+    private void validate(NaverUserInfoResponse response) {
+        boolean valid = response != null
+                && "00".equals(response.resultcode())
+                && response.response() != null
+                && response.response().id() != null && !response.response().id().isBlank()
+                && response.response().email() != null && !response.response().email().isBlank();
+
+        if (!valid) {
+            throw new CommonException(ErrorCode.OAUTH_PROVIDER_ERROR);
         }
     }
 
@@ -92,9 +114,10 @@ public class NaverOAuthProvider implements OAuthProvider {
             @JsonProperty("access_token") String accessToken
     ) {}
 
-    //네이버 유저정보 엔드포인트 응답 - 구글과 달리 실제 데이터가 response 객체 안에 한 번 더 감싸져 있음
+    //네이버 유저정보 엔드포인트 응답 - 구글과 달리 실제 데이터가 response 객체 안에 한 번 더 감싸져 있고,
+    //성공/실패 여부가 HTTP 상태코드가 아니라 resultcode 필드로 옴("00"이 성공)
     //{"resultcode":"00","message":"success","response":{"id":"...","email":"..."}}
-    private record NaverUserInfoResponse(NaverProfile response) {}
+    private record NaverUserInfoResponse(String resultcode, String message, NaverProfile response) {}
 
     //id가 네이버가 부여한 유저 고유 ID(=oauthId)
     private record NaverProfile(String id, String email) {}

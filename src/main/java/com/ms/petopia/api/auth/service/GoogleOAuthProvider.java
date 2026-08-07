@@ -24,8 +24,8 @@ public class GoogleOAuthProvider implements OAuthProvider {
     private static final String TOKEN_URI = "https://oauth2.googleapis.com/token";
     private static final String USERINFO_URI = "https://www.googleapis.com/oauth2/v3/userinfo";
 
-    //RestClient.Builder 빈을 주입받는 대신 직접 생성 - Spring 자동 설정 여부와 상관없이 항상 동작함
-    private final RestClient restClient = RestClient.create();
+    //OAuthRestClientConfig가 타임아웃까지 설정해서 만들어준 공용 빈을 주입받음
+    private final RestClient restClient;
 
     @Value("${oauth.google.client-id}")
     private String clientId;
@@ -35,6 +35,10 @@ public class GoogleOAuthProvider implements OAuthProvider {
 
     @Value("${oauth.google.redirect-uri}")
     private String redirectUri;
+
+    public GoogleOAuthProvider(RestClient oauthRestClient) {
+        this.restClient = oauthRestClient;
+    }
 
     //유저를 구글 로그인/동의 화면으로 보낼 URL 조립.
     //client_id/redirect_uri/response_type/scope는 구글 문서대로 적음.
@@ -63,7 +67,7 @@ public class GoogleOAuthProvider implements OAuthProvider {
             GoogleTokenResponse tokenResponse = exchangeCodeForToken(code); //code -> access_token
             GoogleUserInfoResponse userInfoResponse = fetchUserInfo(tokenResponse.accessToken());   //acess_token -> email/sub
 
-            return new OAuthUserInfo(PROVIDER, userInfoResponse.sub(), userInfoResponse.email());   //변환
+            return new OAuthUserInfo(PROVIDER, userInfoResponse.sub(), userInfoResponse.email(), userInfoResponse.emailVerified());   //변환
         } catch (RestClientException e) {
             //code가 만료/재사용됐거나 구글 쪽 장애 등 서버 문제는 502로 구분
             throw new CommonException(ErrorCode.OAUTH_PROVIDER_ERROR, e);
@@ -104,9 +108,11 @@ public class GoogleOAuthProvider implements OAuthProvider {
             @JsonProperty("access_token") String accessToken
     ) {}
 
-    //구글 유저정보 엔드포인트 응답 형태 - sub가 구글이 부여한 유저 고유 ID(=oauthId)
+    //구글 유저정보 엔드포인트 응답 형태 - sub가 구글이 부여한 유저 고유 ID(=oauthId).
+    //email_verified는 OIDC 표준 클레임 - 이 이메일을 이 사람이 실제로 소유한다고 구글이 검증했다는 뜻
     private record GoogleUserInfoResponse(
             String sub,
-            String email
+            String email,
+            @JsonProperty("email_verified") boolean emailVerified
     ) {}
 }

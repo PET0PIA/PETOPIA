@@ -2,6 +2,7 @@ package com.ms.petopia.api.auth.service;
 
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.domain.UserSocialAccount;
+import com.ms.petopia.api.auth.dto.OAuthAuthorizationStart;
 import com.ms.petopia.api.auth.dto.OAuthSignupRequest;
 import com.ms.petopia.api.auth.dto.OAuthUserInfo;
 import com.ms.petopia.api.auth.dto.TokenPair;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
@@ -74,14 +76,15 @@ class OAuthServiceTest {
     // ===== getAuthorizationUrl =====
 
     @Test
-    void getAuthorizationUrl_state를생성해저장하고_provider가만든URL을반환한다() {
+    void getAuthorizationUrl_state를생성해저장하고_provider가만든URL과state를함께반환한다() {
         given(googleProvider.getAuthorizationUrl(anyString())).willReturn("https://accounts.google.com/o/oauth2/v2/auth?...");
 
-        String result = oAuthService.getAuthorizationUrl("google");
+        OAuthAuthorizationStart result = oAuthService.getAuthorizationUrl("google");
 
-        assertThat(result).isEqualTo("https://accounts.google.com/o/oauth2/v2/auth?...");
-        verify(oauthStateStore).save(anyString(), eq(Duration.ofMinutes(5)));
-        verify(googleProvider).getAuthorizationUrl(anyString());
+        assertThat(result.url()).isEqualTo("https://accounts.google.com/o/oauth2/v2/auth?...");
+        assertThat(result.state()).isNotBlank();
+        verify(oauthStateStore).save(eq("google"), eq(result.state()), eq(Duration.ofMinutes(5)));
+        verify(googleProvider).getAuthorizationUrl(result.state());
     }
 
     @Test
@@ -91,14 +94,14 @@ class OAuthServiceTest {
                 .extracting(ex -> ((CommonException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.OAUTH_UNSUPPORTED_PROVIDER);
 
-        verify(oauthStateStore, never()).save(any(), any());
+        verify(oauthStateStore, never()).save(any(), any(), any());
     }
 
     // ===== handleCallback =====
 
     @Test
     void handleCallback_state가유효하지않으면_OAUTH_INVALID_STATE를던지고_구글에는묻지않는다() {
-        given(oauthStateStore.validate("bad-state")).willReturn(false);
+        given(oauthStateStore.validate("google", "bad-state")).willReturn(false);
 
         assertThatThrownBy(() -> oAuthService.handleCallback("google", "code", "bad-state"))
                 .isInstanceOf(CommonException.class)
@@ -110,8 +113,8 @@ class OAuthServiceTest {
 
     @Test
     void handleCallback_이미연결된소셜계정이있으면_로그인핸드오프를저장하고login리다이렉트를반환한다() {
-        given(oauthStateStore.validate("state")).willReturn(true);
-        given(googleProvider.getUserInfo("code", "state")).willReturn(new OAuthUserInfo(PROVIDER, OAUTH_ID, EMAIL));
+        given(oauthStateStore.validate("google", "state")).willReturn(true);
+        given(googleProvider.getUserInfo("code", "state")).willReturn(new OAuthUserInfo(PROVIDER, OAUTH_ID, EMAIL, true));
         given(userSocialAccountMapper.selectByProviderAndOauthId(PROVIDER, OAUTH_ID))
                 .willReturn(UserSocialAccount.builder().userId(USER_ID).build());
 
@@ -124,9 +127,9 @@ class OAuthServiceTest {
     }
 
     @Test
-    void handleCallback_소셜연결은없지만이메일로가입된유저가있으면_자동연결하고login리다이렉트를반환한다() {
-        given(oauthStateStore.validate("state")).willReturn(true);
-        given(googleProvider.getUserInfo("code", "state")).willReturn(new OAuthUserInfo(PROVIDER, OAUTH_ID, EMAIL));
+    void handleCallback_소셜연결은없지만이메일검증된provider고이메일로가입된유저가있으면_자동연결하고login리다이렉트를반환한다() {
+        given(oauthStateStore.validate("google", "state")).willReturn(true);
+        given(googleProvider.getUserInfo("code", "state")).willReturn(new OAuthUserInfo(PROVIDER, OAUTH_ID, EMAIL, true));
         given(userSocialAccountMapper.selectByProviderAndOauthId(PROVIDER, OAUTH_ID)).willReturn(null);
         given(authMapper.selectUserByEmail(EMAIL)).willReturn(User.builder().userId(USER_ID).email(EMAIL).build());
 
@@ -141,10 +144,27 @@ class OAuthServiceTest {
         verify(oauthPendingStore).saveLogin(anyString(), eq(USER_ID), eq(Duration.ofMinutes(2)));
     }
 
+    //네이버처럼 이메일 검증 클레임이 없는 provider는, 이메일이 같아도 자동연결하면 안 됨(코드래빗 리뷰 반영) -
+    //남의 이메일을 자기 것처럼 적어낸 사람이 그 이메일의 진짜 주인 계정에 로그인돼버릴 수 있음
+    @Test
+    void handleCallback_이메일이일치해도emailVerified가false면_자동연결하지않고완전신규로처리한다() {
+        given(oauthStateStore.validate("google", "state")).willReturn(true);
+        given(googleProvider.getUserInfo("code", "state")).willReturn(new OAuthUserInfo(PROVIDER, OAUTH_ID, EMAIL, false));
+        given(userSocialAccountMapper.selectByProviderAndOauthId(PROVIDER, OAUTH_ID)).willReturn(null);
+
+        String redirect = oAuthService.handleCallback("google", "code", "state");
+
+        assertThat(redirect).startsWith(FRONTEND_URL + "/oauth/callback?type=signup&code=");
+        //이메일 검증이 안 됐으니 selectUserByEmail 자체를 호출하면 안 됨 - 자동연결 판단을 아예 안 함
+        verify(authMapper, never()).selectUserByEmail(any());
+        verify(userSocialAccountMapper, never()).insertSocialAccount(any());
+        verify(oauthPendingStore).saveSignup(anyString(), eq(EMAIL), eq(PROVIDER), eq(OAUTH_ID), eq(Duration.ofMinutes(15)));
+    }
+
     @Test
     void handleCallback_완전신규유저면_가입핸드오프를저장하고signup리다이렉트를반환한다() {
-        given(oauthStateStore.validate("state")).willReturn(true);
-        given(googleProvider.getUserInfo("code", "state")).willReturn(new OAuthUserInfo(PROVIDER, OAUTH_ID, EMAIL));
+        given(oauthStateStore.validate("google", "state")).willReturn(true);
+        given(googleProvider.getUserInfo("code", "state")).willReturn(new OAuthUserInfo(PROVIDER, OAUTH_ID, EMAIL, true));
         given(userSocialAccountMapper.selectByProviderAndOauthId(PROVIDER, OAUTH_ID)).willReturn(null);
         given(authMapper.selectUserByEmail(EMAIL)).willReturn(null);
 
@@ -203,7 +223,7 @@ class OAuthServiceTest {
     void completeSignup_유효한tempKey면_유저와소셜계정을생성하고토큰쌍을반환한다() {
         OAuthPendingStore.OAuthPendingSignup pending =
                 new OAuthPendingStore.OAuthPendingSignup(PROVIDER, OAUTH_ID, EMAIL);
-        given(oauthPendingStore.consumeSignup("temp-key")).willReturn(pending);
+        given(oauthPendingStore.peekSignup("temp-key")).willReturn(pending);
         //insertUser는 실제 DB에서는 useGeneratedKeys로 PK를 채워주는데, 목에서는 그 동작을 흉내내야 함
         willAnswer(invocation -> {
             User user = invocation.getArgument(0);
@@ -231,11 +251,13 @@ class OAuthServiceTest {
         assertThat(socialCaptor.getValue().getUserId()).isEqualTo(USER_ID);
         assertThat(socialCaptor.getValue().getProvider()).isEqualTo(PROVIDER);
         assertThat(socialCaptor.getValue().getOauthId()).isEqualTo(OAUTH_ID);
+        //성공했으니 pending 데이터를 지움 (단위테스트엔 실제 트랜잭션이 없어서 즉시 실행되는 경로를 탐)
+        verify(oauthPendingStore).deleteSignup("temp-key");
     }
 
     @Test
     void completeSignup_tempKey가없으면_OAUTH_PENDING_NOT_FOUND를던지고_아무것도저장하지않는다() {
-        given(oauthPendingStore.consumeSignup("bad-key")).willReturn(null);
+        given(oauthPendingStore.peekSignup("bad-key")).willReturn(null);
 
         assertThatThrownBy(() -> oAuthService.completeSignup(signupRequest("bad-key")))
                 .isInstanceOf(CommonException.class)
@@ -244,6 +266,25 @@ class OAuthServiceTest {
 
         verify(authMapper, never()).insertUser(any());
         verify(userSocialAccountMapper, never()).insertSocialAccount(any());
+    }
+
+    //emailVerified=false인 provider(네이버 등)는 자동연결을 안 하다 보니, 이미 그 이메일로 가입된
+    //유저가 있어도 여기까지 흘러들어올 수 있음 - UNIQUE 제약 위반을 500이 아니라 409로 응답해야 함
+    @Test
+    void completeSignup_이미가입된이메일이면_DUPLICATED_EMAIL을던지고_pending데이터를지우지않는다() {
+        OAuthPendingStore.OAuthPendingSignup pending =
+                new OAuthPendingStore.OAuthPendingSignup(PROVIDER, OAUTH_ID, EMAIL);
+        given(oauthPendingStore.peekSignup("temp-key")).willReturn(pending);
+        given(authMapper.insertUser(any(User.class))).willThrow(new DuplicateKeyException("email UNIQUE 위반"));
+
+        assertThatThrownBy(() -> oAuthService.completeSignup(signupRequest("temp-key")))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.DUPLICATED_EMAIL);
+
+        verify(userSocialAccountMapper, never()).insertSocialAccount(any());
+        //DB insert가 실패했으니 pending은 그대로 남아있어야 함 - 재시도 가능하게
+        verify(oauthPendingStore, never()).deleteSignup(any());
     }
 
     private OAuthSignupRequest signupRequest(String tempKey) {
