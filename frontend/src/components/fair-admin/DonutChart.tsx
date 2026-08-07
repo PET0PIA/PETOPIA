@@ -14,9 +14,9 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const GAP_PX = 3;
 const MAX_SLICES = 6;
 
-// 카테고리 정체성용 6색. 브랜드 코럴(primary)을 1번 슬롯으로 두고, 인접 쌍이 색맹 시뮬레이션에서도
+// 카테고리 정체성용 6색(파스텔톤). 브랜드 코럴(primary) 계열을 1번 슬롯으로 두고, 인접 쌍이 색맹 시뮬레이션에서도
 // 구분되도록 고정 순서로 배치했다(scripts/validate_palette.js로 검증). 슬롯 순서를 바꾸면 안 된다.
-const SLICE_COLORS = ["#FF6B6B", "#3D7DD1", "#3F9D6B", "#C98500", "#8A6FD1", "#E8829E"];
+const SLICE_COLORS = ["#F28B82", "#6B9EE8", "#5FB57E", "#D9A441", "#9575D9", "#EB84A8"];
 // "기타"로 접힌 항목은 정체성 색이 아니라 중립색으로 표시한다.
 const OTHER_COLOR = "#918B83";
 

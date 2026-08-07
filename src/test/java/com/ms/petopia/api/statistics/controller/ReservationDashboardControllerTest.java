@@ -8,6 +8,7 @@ import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
 import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
 import com.ms.petopia.api.statistics.dto.VisitStatsDto;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
+import com.ms.petopia.api.statistics.service.VisitStatsExportService;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,9 @@ class ReservationDashboardControllerTest {
 
     @MockitoBean
     private ReservationDashboardService dashboardService;
+
+    @MockitoBean
+    private VisitStatsExportService exportService;
 
     @MockitoBean
     private DashboardEmitterRegistry emitterRegistry;

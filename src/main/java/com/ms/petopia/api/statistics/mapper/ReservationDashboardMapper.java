@@ -30,6 +30,12 @@ public interface ReservationDashboardMapper {
             @Param("fairId") Long fairId
     );
 
+    List<LabelCountDto> selectBoothVisitPatternDistribution(
+            @Param("fairId") Long fairId
+    );
+
+    Double selectAvgBoothsPerVisitor(@Param("fairId") Long fairId);
+
     // visit-stats
     int selectTotalVisitors(@Param("fairId") Long fairId);
     int selectTotalConfirmedReservations(@Param("fairId") Long fairId);
