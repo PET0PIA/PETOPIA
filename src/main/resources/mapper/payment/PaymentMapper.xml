@@ -51,6 +51,15 @@
          WHERE idempotency_key = #{idempotencyKey}
     </select>
 
+    <!-- VENDOR_FEE 전용 계약이라 payment_type도 같이 건다 — application_id만으로 걸면
+         이론상 다른 결제유형 행과 헷갈릴 수 있다(selectByReservationId와 동일한 이유). -->
+    <select id="selectByApplicationId" resultType="PaymentRow">
+        SELECT <include refid="paymentColumns"/>
+          FROM payment
+         WHERE application_id = #{applicationId}
+           AND payment_type = 'VENDOR_FEE'
+    </select>
+
     <insert id="insert" parameterType="PaymentRow"
             useGeneratedKeys="true" keyProperty="paymentId">
         INSERT INTO payment (
@@ -89,6 +98,24 @@
         updated_at = #{updatedAt}
         WHERE payment_id = #{paymentId}
         AND status = 'PROCESSING'
+    </update>
+
+    <!-- WBS 1.7 — 다른 도메인의 취소/만료 배치가 호출하는 상태전이. PENDING에서만 허용해서
+         confirm()이 이미 PROCESSING으로 선점한 결제는 건드리지 않는다. -->
+    <update id="markCanceled">
+        UPDATE payment
+        SET status = 'CANCELED',
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'PENDING'
+    </update>
+
+    <update id="markExpired">
+        UPDATE payment
+        SET status = 'EXPIRED',
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'PENDING'
     </update>
 
     <!-- FAILED 행을 PENDING으로 되돌려 재사용한다(재결제 허용). markProcessing과 같은 이유로

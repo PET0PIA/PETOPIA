@@ -7,7 +7,7 @@ package com.ms.petopia.api.fair.dto;
  * RECEIVED -> REJECTED       (심사 반려, FairService.review)
  * RECEIVED -> PAYMENT_PENDING (심사 승인, FairService.review)
  * PAYMENT_PENDING -> EXPIRED  (개설비 결제 기한 초과, FairTransitionService.expireDuePayments)
- * PAYMENT_PENDING -> PREPARING (개설비 결제 완료 - 결제 연동에서 처리, 아직 미구현)
+ * PAYMENT_PENDING -> PREPARING (개설비 결제 완료, FairTransitionService.completeDuePayments)
  * PREPARING -> IN_PROGRESS    (운영 시작일 도래, FairTransitionService.startDueFairs)
  * IN_PROGRESS -> ENDED        (운영 종료일 경과, FairTransitionService.endDueFairs)
  * </pre>
