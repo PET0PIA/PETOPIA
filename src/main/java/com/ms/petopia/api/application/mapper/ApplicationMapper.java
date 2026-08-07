@@ -100,4 +100,10 @@ public interface ApplicationMapper {
     int updateCancelRequestRejected(@Param("cancelRequestId") Long cancelRequestId,
                                     @Param("decidedAt") LocalDateTime decidedAt);
 
+    // 참가신청 PK로 그 신청의 참가비 결제 ID 조회 (VENDOR_FEE 전용, 취소 승인 시 환불 필요 여부 판단용, 결제 없으면 null)
+    Long selectPaymentIdByApplicationId(@Param("applicationId") Long applicationId);
+
+    // 참가비 결제 완료 통지 반영 (반환: 영향받은 행 수, 동시 처리 방지)
+    int updateApplicationConfirmed(@Param("applicationId") Long applicationId);
+
 }

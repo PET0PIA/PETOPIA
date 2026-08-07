@@ -15,6 +15,10 @@ import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
+import com.ms.petopia.api.refund.dto.RefundReason;
+import com.ms.petopia.api.refund.dto.RefundRequest;
+import com.ms.petopia.api.refund.dto.RequestedByDomain;
+import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
@@ -41,6 +45,7 @@ public class ApplicationService {
     private final BusinessMapper businessMapper;
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final StorageService storageService;
+    private final RefundService refundService;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -555,6 +560,14 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_CANCELABLE);
         }
 
+        // 결제가 있었다면(CONFIRMED 상태였던 경우) 환불 처리. PAYMENT_PENDING 상태에서 취소된 경우 결제가 없어 null.
+        Long paymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
+
+        if(paymentId != null) {
+            refundService.refund(paymentId, adminUserId,
+                    new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.VENDOR));
+        }
+
         return ApplicationCancelRequestResultResponse.builder()
                 .cancelRequestId(cancelRequest.getCancelRequestId())
                 .applicationId(applicationId)
@@ -602,6 +615,47 @@ public class ApplicationService {
                 .applicationStatus(application.getStatus().name())
                 .decidedAt(decidedAt)
                 .build();
+
+    }
+
+    /*
+     * 결제 도메인이 참가비(VENDOR_FEE) 결제 완료를 통지하면 신청 상태를 CONFIRMED로 전환한다.
+     * 결제 도메인이 PaymentService.confirmPayment()에서 직접 이 메서드를 호출한다.
+     */
+    @Transactional
+    public void confirmVendorPayment(Long applicationId, Long paymentId, Long paidAmount, LocalDateTime paidAt) {
+
+        Application application = applicationMapper.selectById(applicationId);
+
+        if (application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 이미 CONFIRMED면 재시도로 온 중복 통지일 가능성 — 같은 결제가 이미 반영된 거라면
+        // 재처리하지 않고 조용히 성공 처리한다(멱등). 다른 결제라면 이상 상황이라 막는다.
+        if (application.getStatus() == Application.Status.CONFIRMED) {
+            Long existingPaymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
+            if (paymentId.equals(existingPaymentId)) {
+                return;
+            }
+            throw new CommonException(ErrorCode.APPLICATION_PAYMENT_EVENT_CONFLICT);
+        }
+
+        if (application.getStatus() != Application.Status.PAYMENT_PENDING) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
+        }
+
+        // 승인 시 확정된 finalPrice와 실제 결제 금액이 다르면 통지 위변조/오류로 보고 막는다.
+        if (!paidAmount.equals(application.getFinalPrice())) {
+            throw new CommonException(ErrorCode.APPLICATION_PAYMENT_AMOUNT_MISMATCH);
+        }
+
+        // 조건부 UPDATE로 동시 처리 방지 (WHERE status='PAYMENT_PENDING' 가드)
+        int updated = applicationMapper.updateApplicationConfirmed(applicationId);
+
+        if (updated == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
+        }
 
     }
 

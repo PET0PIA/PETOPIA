@@ -68,6 +68,9 @@ public enum ErrorCode {
     APPLICATION_CANCEL_REQUEST_DUPLICATE(HttpStatus.CONFLICT, "V018", "이미 처리 대기 중인 취소 요청이 있습니다."),
     APPLICATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "V019", "취소 요청은 행사 시작 7일 전까지만 가능합니다."),
     APPLICATION_CANCEL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "V020", "처리 대기 중인 취소 요청을 찾을 수 없습니다."),
+    APPLICATION_PAYMENT_EVENT_CONFLICT(HttpStatus.CONFLICT, "V021", "이미 다른 결제로 완료 처리된 신청서입니다."),
+    APPLICATION_NOT_PAYMENT_PENDING(HttpStatus.CONFLICT, "V022", "결제 대기 중인 신청서만 결제 완료 처리할 수 있습니다."),
+    APPLICATION_PAYMENT_AMOUNT_MISMATCH(HttpStatus.CONFLICT, "V023", "통지된 결제 금액이 승인 시 확정된 금액과 일치하지 않습니다."),
 
 
     // ===== Payment =====

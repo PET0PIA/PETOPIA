@@ -295,4 +295,24 @@
         WHERE cancel_request_id = #{cancelRequestId} AND status = 'REQUESTED'
     </update>
 
+    <!--
+        payment 테이블을 직접 조회하는 단순 읽기 전용 쿼리.
+        VENDOR_FEE 전용 계약이라 payment_type도 같이 건다.
+        status는 일부러 안 거름 — 환불 가능 여부 판단은 RefundService.refund()가 자체적으로 함.
+    -->
+    <select id="selectPaymentIdByApplicationId" resultType="long">
+        SELECT payment_id
+        FROM payment
+        WHERE application_id = #{applicationId}
+        AND payment_type = 'VENDOR_FEE'
+    </select>
+
+    <!-- 참가비 결제 완료 시, 신청서 상태 confirmed로 변경 -->
+    <update id="updateApplicationConfirmed">
+        UPDATE application
+        SET status = 'CONFIRMED'
+        WHERE application_id = #{applicationId}
+        AND status = 'PAYMENT_PENDING'
+    </update>
+
 </mapper>

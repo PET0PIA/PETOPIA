@@ -13,6 +13,10 @@ import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
+import com.ms.petopia.api.refund.dto.RefundReason;
+import com.ms.petopia.api.refund.dto.RefundRequest;
+import com.ms.petopia.api.refund.dto.RequestedByDomain;
+import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.storage.StorageService;
 import org.junit.jupiter.api.*;
@@ -63,6 +67,9 @@ class ApplicationServiceTest {
 
     @Mock
     private StorageService storageService;
+
+    @Mock
+    private RefundService refundService;
 
     @InjectMocks
     private ApplicationService applicationService;
@@ -1558,7 +1565,7 @@ class ApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("정상적으로 승인 처리하고 신청을 CANCELED로 전환한다")
+        @DisplayName("정상적으로 승인 처리하고 신청을 CANCELED로 전환한다 (결제 전 상태)")
         void approvesSuccessfully() {
 
             // given: 처리 대기 중인 취소 요청이 있고, 담당자 본인이 승인하는 상황
@@ -1577,6 +1584,7 @@ class ApplicationServiceTest {
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
             given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+            given(applicationMapper.selectPaymentIdByApplicationId(applicationId)).willReturn(null);
 
             // when
             ApplicationCancelRequestResultResponse result =
@@ -1585,6 +1593,42 @@ class ApplicationServiceTest {
             // then: 취소 요청은 APPROVED로, 신청은 CANCELED로 같이 전환됐는지 확인
             assertThat(result.getStatus()).isEqualTo("APPROVED");
             assertThat(result.getApplicationStatus()).isEqualTo("CANCELED");
+
+            // 결제 전(PAYMENT_PENDING) 상태였으니 환불은 시도되지 않아야 함
+            verify(refundService, never()).refund(any(), any(), any());
+
+        }
+
+        @Test
+        @DisplayName("결제 완료 상태였다면 승인과 함께 환불도 트리거한다")
+        void approvesSuccessfullyAndTriggersRefundWhenPaid() {
+
+            // given: CONFIRMED(결제 완료) 상태의 신청서 + 그 신청서의 참가비 결제(paymentId=100L)가 존재하는 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+            Long paymentId = 100L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.CONFIRMED)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+            given(applicationMapper.selectPaymentIdByApplicationId(applicationId)).willReturn(paymentId);
+
+            // when
+            applicationService.approveCancelRequest(adminUserId, applicationId);
+
+            // then: 조회된 paymentId로, VENDOR_CANCEL/VENDOR 사유의 환불이 정확히 한 번 호출됐는지 확인
+            verify(refundService).refund(
+                    eq(paymentId), eq(adminUserId),
+                    eq(new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.VENDOR)));
 
         }
 
