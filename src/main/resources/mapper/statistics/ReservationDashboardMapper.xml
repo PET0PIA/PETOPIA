@@ -150,7 +150,7 @@
 
     <!--확정된 예약 수 (방문율 분모)-->
     <select id="selectTotalConfirmedReservations" resultType="int">
-        SELECT COUNT(*)
+        SELECT COUNT(DISTINCT user_id)
         FROM reservations
         WHERE fair_id = #{fairId}
             AND status IN ('CONFIRMED', 'CHECKED_IN')
@@ -170,7 +170,7 @@
     <!--성별 분포-->
     <select id="selectGenderBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
         SELECT COALESCE(u.gender, '미등록') AS label,
-            COUNT(*) AS count
+            COUNT(DISTINCT enr.user_id) AS count
         FROM entry_records enr
             JOIN users u ON u.user_id = enr.user_id
         WHERE enr.fair_id = #{fairId}
@@ -187,7 +187,7 @@
                 WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 50 THEN '40대'
                 ELSE '50대 이상'
             END AS label,
-            COUNT(*) AS count
+            COUNT(DISTINCT enr.user_id) AS count
         FROM entry_records enr
             JOIN users u ON u.user_id = enr.user_id
         WHERE enr.fair_id = #{fairId}
@@ -203,7 +203,7 @@
             JOIN reservations r ON r.reservation_id = enr.reservation_id
             LEFT JOIN reservation_pets rp ON rp.reservation_id = r.reservation_id
         WHERE enr.fair_id = #{fairId}
-        GROUP BY rp.pet_species_snapshot, rp.pet_breed_snapshot
+        GROUP BY rp.pet_species_snapshot
         ORDER BY count DESC
     </select>
 

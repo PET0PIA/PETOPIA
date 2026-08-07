@@ -68,6 +68,7 @@ export function ReservationStatusPage() {
     const unsubscribe = subscribeReservationDashboard(fairId, (data) => {
       setLiveConnected(true);
       setSummary(data);
+      getQrIssuanceSummary(fairId).then(setQrSummary).catch(() => {});
     });
     return () => {
       unsubscribe();
@@ -99,8 +100,8 @@ export function ReservationStatusPage() {
 
       <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</span>
-          <Input type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
+          <label htmlFor="reservation-fair-id" className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</label>
+          <Input id="reservation-fair-id" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
         </div>
         <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
         {fairId !== null && (
