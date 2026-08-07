@@ -1906,4 +1906,149 @@ class ApplicationServiceTest {
 
     }
 
+    @Nested
+    @DisplayName("참가비 결제 완료 반영")
+    class ConfirmVendorPayment {
+
+        @Test
+        @DisplayName("결제 대기 상태에서 금액이 일치하면 CONFIRMED로 전환한다")
+        void confirmsSuccessfully() {
+
+            // given: PAYMENT_PENDING 상태고, 통지된 금액이 승인 시 확정된 finalPrice와 일치하는 상황
+            Long applicationId = 1L;
+            Long paymentId = 100L;
+            Long finalPrice = 50000L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .finalPrice(finalPrice)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(applicationMapper.updateApplicationConfirmed(applicationId)).willReturn(1);
+
+            // when
+            applicationService.confirmVendorPayment(applicationId, paymentId, finalPrice);
+
+            // then
+            verify(applicationMapper).updateApplicationConfirmed(applicationId);
+
+        }
+
+        @Test
+        @DisplayName("이미 CONFIRMED이고 같은 paymentId면 예외 없이 그대로 반환한다 (멱등)")
+        void idempotentWhenAlreadyConfirmedWithSamePayment() {
+
+            // given: 재시도로 같은 통지가 다시 도착한 상황 — 이미 이 결제로 CONFIRMED된 상태
+            Long applicationId = 1L;
+            Long paymentId = 100L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.CONFIRMED)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(applicationMapper.selectPaymentIdByApplicationId(applicationId)).willReturn(paymentId);
+
+            // when
+            applicationService.confirmVendorPayment(applicationId, paymentId, 50000L);
+
+            // then: 이미 반영된 상태이니 재처리(UPDATE) 시도하면 안 됨
+            verify(applicationMapper, never()).updateApplicationConfirmed(any());
+
+        }
+
+        @Test
+        @DisplayName("이미 CONFIRMED인데 다른 paymentId로 통지가 오면 예외를 던진다")
+        void throwsWhenAlreadyConfirmedWithDifferentPayment() {
+
+            // given: 이미 다른 결제(999L)로 CONFIRMED됐는데, 엉뚱한 결제(100L)가 완료 통지를 보낸 이상 상황
+            Long applicationId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.CONFIRMED)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(applicationMapper.selectPaymentIdByApplicationId(applicationId)).willReturn(999L);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.confirmVendorPayment(applicationId, 100L, 50000L))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("이미 다른 결제로 완료 처리된 신청서입니다");
+
+        }
+
+        @Test
+        @DisplayName("PAYMENT_PENDING 상태가 아니면 예외를 던진다")
+        void throwsWhenNotPaymentPending() {
+
+            // given: 아직 심사 대기 중인 신청서에 결제 완료 통지가 온 상황
+            Long applicationId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.PENDING_REVIEW)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.confirmVendorPayment(applicationId, 100L, 50000L))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("결제 대기 중인 신청서만");
+
+        }
+
+        @Test
+        @DisplayName("통지된 금액이 finalPrice와 다르면 예외를 던진다")
+        void throwsWhenAmountMismatch() {
+
+            // given: 승인 시 확정된 금액(50000원)과 실제 통지된 결제 금액(40000원)이 다른 상황
+            Long applicationId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .finalPrice(50000L)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.confirmVendorPayment(applicationId, 100L, 40000L))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("통지된 결제 금액이 승인 시 확정된 금액과 일치하지 않습니다");
+
+        }
+
+        @Test
+        @DisplayName("동시 처리로 UPDATE가 0행 반영되면 예외를 던진다")
+        void throwsWhenConcurrentUpdateFails() {
+
+            // given: 검증까진 통과했지만, UPDATE 시점엔 이미 다른 통지가 먼저 처리해버린 상황
+            Long applicationId = 1L;
+            Long finalPrice = 50000L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .finalPrice(finalPrice)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(applicationMapper.updateApplicationConfirmed(applicationId)).willReturn(0);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.confirmVendorPayment(applicationId, 100L, finalPrice))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("결제 대기 중인 신청서만");
+
+        }
+
+    }
+
 }

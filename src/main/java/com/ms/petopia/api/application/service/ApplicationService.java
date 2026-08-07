@@ -623,7 +623,11 @@ public class ApplicationService {
      * 결제 도메인이 PaymentService.confirmPayment()에서 직접 이 메서드를 호출한다.
      */
     @Transactional
-    public void confirmVendorPayment(Long applicationId, Long paymentId, Long paidAmount, LocalDateTime paidAt) {
+    public void confirmVendorPayment(Long applicationId, Long paymentId, Long paidAmount) {
+
+        if (applicationId == null || paymentId == null || paidAmount == null) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
 
         Application application = applicationMapper.selectById(applicationId);
 
