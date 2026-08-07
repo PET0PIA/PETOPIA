@@ -94,8 +94,11 @@ export function SettlementPage() {
       return;
     }
 
+    // 저장 요청이 응답을 기다리는 동안 사용자가 rateScope를 바꿀 수 있어서, 제출 시점 값을
+    // 로컬 변수로 캡처해두고 응답 처리에는 이 값만 쓴다(await 뒤에 상태를 다시 읽지 않는다).
+    const submittedScope = rateScope;
     let fairId: number | undefined;
-    if (rateScope === "FAIR") {
+    if (submittedScope === "FAIR") {
       const parsed = Number(rateFairIdInput);
       if (!Number.isInteger(parsed) || parsed <= 0) {
         setRateFormError("행사별 수수료율은 행사 ID를 1 이상의 숫자로 입력해 주세요.");
@@ -106,13 +109,13 @@ export function SettlementPage() {
 
     setRateSubmitting(true);
     try {
-      const result = await setCommissionRate({ scope: rateScope, fairId, rate: percent / 100 });
+      const result = await setCommissionRate({ scope: submittedScope, fairId, rate: percent / 100 });
       setRateFormSuccess(
-        rateScope === "GLOBAL"
+        submittedScope === "GLOBAL"
           ? `전역 기본 수수료율이 ${formatRatePercent(result.rate)}로 설정됐어요.`
           : `행사 #${result.fairId} 전용 수수료율이 ${formatRatePercent(result.rate)}로 설정됐어요.`,
       );
-      if (rateScope === "GLOBAL") {
+      if (submittedScope === "GLOBAL") {
         setGlobalRate(result);
       }
       setRatePercentInput("");
@@ -136,12 +139,23 @@ export function SettlementPage() {
   const [calcError, setCalcError] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
-  const [actioningSettlementId, setActioningSettlementId] = useState<number | null>(null);
+  // 행마다 독립적으로 처리 중인지 추적한다(값 하나만 저장하면 동시에 다른 행을 처리할 때
+  // 서로 상태를 덮어써서 버튼이 실제 완료 전에 풀리거나 중복 요청이 나갈 수 있다).
+  const [actioningSettlementIds, setActioningSettlementIds] = useState<Set<number>>(new Set());
+
+  function markActioning(settlementId: number, actioning: boolean) {
+    setActioningSettlementIds((current) => {
+      const next = new Set(current);
+      if (actioning) next.add(settlementId); else next.delete(settlementId);
+      return next;
+    });
+  }
 
   async function loadSettlements(fairId: number) {
     setListLoading(true);
     setListError(null);
     setActionError(null);
+    setCalcError(null);
     try {
       const data = await getSettlementsByFair(fairId);
       setSettlements(data);
@@ -202,7 +216,7 @@ export function SettlementPage() {
     if (!ok) return;
 
     setActionError(null);
-    setActioningSettlementId(settlement.settlementId);
+    markActioning(settlement.settlementId, true);
     try {
       const result = await confirmSettlement(settlement.settlementId);
       updateSettlementInList(result);
@@ -213,20 +227,20 @@ export function SettlementPage() {
         setActionError(errorMessage(error, "정산 확정에 실패했어요."));
       }
     } finally {
-      setActioningSettlementId(null);
+      markActioning(settlement.settlementId, false);
     }
   }
 
   async function handleRecalculate(settlement: SettlementResponse) {
     setActionError(null);
-    setActioningSettlementId(settlement.settlementId);
+    markActioning(settlement.settlementId, true);
     try {
       const result = await recalculateSettlement(settlement.settlementId);
       updateSettlementInList(result);
     } catch (error) {
       setActionError(errorMessage(error, "정산 재계산에 실패했어요."));
     } finally {
-      setActioningSettlementId(null);
+      markActioning(settlement.settlementId, false);
     }
   }
 
@@ -247,7 +261,7 @@ export function SettlementPage() {
             <div>
               <p className="text-2xl font-extrabold text-ink">{formatRatePercent(globalRate.rate)}</p>
               <p className="mt-1 text-sm text-muted">
-                {globalRate.updatedAt
+                {globalRate.updatedAt && globalRate.updatedByUserId !== null
                   ? `${formatDateTime(globalRate.updatedAt)} · 관리자 #${globalRate.updatedByUserId} 설정`
                   : "아직 설정된 적 없어서 기본값이 적용되고 있어요."}
               </p>
@@ -260,7 +274,7 @@ export function SettlementPage() {
           <form onSubmit={handleRateSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="w-full sm:w-40">
               <label htmlFor="rate-scope" className="mb-1.5 block text-sm font-bold text-ink">적용 범위</label>
-              <Select id="rate-scope" value={rateScope} onChange={(event) => setRateScope(event.target.value as CommissionRateScope)}>
+              <Select id="rate-scope" value={rateScope} disabled={rateSubmitting} onChange={(event) => setRateScope(event.target.value as CommissionRateScope)}>
                 <option value="GLOBAL">기본 수수료율</option>
                 <option value="FAIR">특정 행사</option>
               </Select>
@@ -268,12 +282,12 @@ export function SettlementPage() {
             {rateScope === "FAIR" && (
               <div className="w-full sm:w-40">
                 <label htmlFor="rate-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-                <Input id="rate-fair-id" className="input-no-spinner" type="number" min={1} value={rateFairIdInput} onChange={(event) => setRateFairIdInput(event.target.value)} placeholder="예: test1" />
+                <Input id="rate-fair-id" className="input-no-spinner" type="number" min={1} value={rateFairIdInput} disabled={rateSubmitting} onChange={(event) => setRateFairIdInput(event.target.value)} placeholder="예: test1" />
               </div>
             )}
             <div className="w-full sm:w-32">
               <label htmlFor="rate-percent" className="mb-1.5 block text-sm font-bold text-ink">수수료율(%)</label>
-              <Input id="rate-percent" type="number" min={0} max={100} step={0.01} value={ratePercentInput} onChange={(event) => setRatePercentInput(event.target.value)} placeholder="예: 5" />
+              <Input id="rate-percent" type="number" min={0} max={100} step={0.01} value={ratePercentInput} disabled={rateSubmitting} onChange={(event) => setRatePercentInput(event.target.value)} placeholder="예: 5" />
             </div>
             <Button type="submit" disabled={rateSubmitting}>{rateSubmitting ? "저장 중..." : "저장"}</Button>
           </form>
@@ -356,7 +370,7 @@ export function SettlementPage() {
                 </thead>
                 <tbody>
                   {settlements.map((row) => {
-                    const isActioning = actioningSettlementId === row.settlementId;
+                    const isActioning = actioningSettlementIds.has(row.settlementId);
                     return (
                       <tr key={row.settlementId} className="border-b border-line last:border-b-0">
                         <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.businessId}</td>

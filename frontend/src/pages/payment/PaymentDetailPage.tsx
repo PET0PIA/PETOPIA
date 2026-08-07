@@ -1,5 +1,5 @@
 import { AlertCircle, Search } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getPayment, type PaymentDetail } from "../../api/payment";
@@ -27,20 +27,27 @@ export function PaymentDetailPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  async function loadPayment(paymentId: number) {
+  // 자동조회(쿼리파라미터)와 수동조회(폼 제출)가 동시에 실행될 수 있어서, 먼저 시작했지만
+  // 나중에 끝나는 요청이 최신 요청의 결과를 덮어쓰지 않도록 요청 순번을 추적한다.
+  const latestRequestIdRef = useRef(0);
+
+  const loadPayment = useCallback(async (paymentId: number) => {
+    const requestId = ++latestRequestIdRef.current;
     setPaymentIdInput(String(paymentId));
     setLoading(true);
     setLoadError(null);
     try {
       const data = await getPayment(paymentId);
+      if (latestRequestIdRef.current !== requestId) return;
       setDetail(data);
     } catch (error) {
+      if (latestRequestIdRef.current !== requestId) return;
       setDetail(null);
       setLoadError(error instanceof ApiError ? error.message : "결제 정보를 불러오지 못했어요.");
     } finally {
-      setLoading(false);
+      if (latestRequestIdRef.current === requestId) setLoading(false);
     }
-  }
+  }, []);
 
   // 목록 페이지의 "상세" 링크(?id=)로 들어왔을 때 자동으로 채워서 조회한다.
   // loadPayment의 setState 호출이 effect 본문에서 "동기적으로" 실행되는 것으로 잡히지 않도록
@@ -49,7 +56,7 @@ export function PaymentDetailPage() {
     const idParam = Number(searchParams.get("id"));
     if (!Number.isInteger(idParam) || idParam <= 0) return;
     queueMicrotask(() => loadPayment(idParam));
-  }, [searchParams]);
+  }, [loadPayment, searchParams]);
 
   function handleLoad(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
