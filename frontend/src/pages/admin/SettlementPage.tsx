@@ -80,7 +80,7 @@ export function SettlementPage() {
     let ignore = false;
     getCommissionRate()
       .then((data) => { if (!ignore && globalRateVersionRef.current === version) setGlobalRate(data); })
-      .catch((error) => { if (!ignore) setRateLoadError(errorMessage(error, "수수료율을 불러오지 못했어요.")); })
+      .catch((error) => { if (!ignore && globalRateVersionRef.current === version) setRateLoadError(errorMessage(error, "수수료율을 불러오지 못했어요.")); })
       .finally(() => { if (!ignore) setRateLoading(false); });
     return () => { ignore = true; };
   }, []);
@@ -124,6 +124,7 @@ export function SettlementPage() {
       if (submittedScope === "GLOBAL") {
         globalRateVersionRef.current += 1; // 아직 안 끝난 초기 조회 응답을 무효화한다.
         setGlobalRate(result);
+        setRateLoadError(null); // 이전 초기 조회 실패 메시지가 남아있었다면 같이 지운다.
       }
       setRatePercentInput("");
       setRateFairIdInput("");
@@ -226,19 +227,24 @@ export function SettlementPage() {
   }
 
   async function handleConfirm(settlement: SettlementResponse) {
+    // 확인 대화상자를 띄워둔 채로도 사용자가 다른 행사로 전환할 수 있어서, 대화상자 대기
+    // 전후와 API 응답 처리 전에 행사 컨텍스트가 그대로인지 확인한다.
+    const version = fairContextVersionRef.current;
     const ok = await confirm({
       title: "정산 확정",
       description: `업체 #${settlement.businessId} 정산(${formatWon(settlement.netAmount)})을 확정할까요?\n확정 이후에는 금액을 되돌릴 수 없어요.`,
       confirmLabel: "확정",
     });
-    if (!ok) return;
+    if (!ok || fairContextVersionRef.current !== version) return;
 
     setActionError(null);
     markActioning(settlement.settlementId, true);
     try {
       const result = await confirmSettlement(settlement.settlementId);
+      if (fairContextVersionRef.current !== version) return;
       updateSettlementInList(result);
     } catch (error) {
+      if (fairContextVersionRef.current !== version) return;
       if (error instanceof ApiError && error.code === "ST005") {
         setActionError(`정산 #${settlement.settlementId}: 계산 이후 환불이 반영되지 않았어요. 먼저 "재계산"을 눌러 주세요.`);
       } else {
@@ -250,12 +256,15 @@ export function SettlementPage() {
   }
 
   async function handleRecalculate(settlement: SettlementResponse) {
+    const version = fairContextVersionRef.current;
     setActionError(null);
     markActioning(settlement.settlementId, true);
     try {
       const result = await recalculateSettlement(settlement.settlementId);
+      if (fairContextVersionRef.current !== version) return;
       updateSettlementInList(result);
     } catch (error) {
+      if (fairContextVersionRef.current !== version) return;
       setActionError(errorMessage(error, "정산 재계산에 실패했어요."));
     } finally {
       markActioning(settlement.settlementId, false);
