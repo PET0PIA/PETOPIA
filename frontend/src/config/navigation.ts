@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { BarChart3, CalendarDays, ClipboardCheck, FileCheck2, LayoutDashboard, Map, QrCode, ReceiptText, ScrollText, Settings2, Store, Ticket, UsersRound } from "lucide-react";
+import { BarChart3, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, LayoutDashboard, ListOrdered, Map, PlusCircle, QrCode, ReceiptText, ScrollText, Settings2, Store, Ticket, UsersRound } from "lucide-react";
 import type { BusinessStatus } from "../types/domain";
 
 export interface NavigationItem {
@@ -28,6 +28,9 @@ export const fairAdminNavigation: NavigationItem[] = [
 export const superAdminNavigation: NavigationItem[] = [
   { label: "전체 운영 대시보드", path: "/admin", icon: LayoutDashboard },
   { label: "행사 등록 신청 검토", path: "/admin/fair-applications", icon: FileCheck2 },
+  { label: "결제 상세 조회", path: "/admin/payments", icon: CreditCard },
+  { label: "결제 생성·확정", path: "/admin/payments/create", icon: PlusCircle },
+  { label: "결제 목록", path: "/admin/payments/list", icon: ListOrdered },
   { label: "행사 취소 신청 처리", path: "/admin/cancellations", icon: CalendarDays },
   { label: "행사 안내 관리", path: "/admin/fairs", icon: Store },
   { label: "장소 관리", path: "/admin/venues", icon: Map },
