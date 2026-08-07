@@ -1,6 +1,6 @@
-import { AlertCircle, Download, Search } from "lucide-react";
+import { AlertCircle, ArrowLeft, Download, Search } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getFairDates, type FairDate } from "../../api/fair";
 import { downloadVisitStatsExcel, getBoothVisitStats, getHourlyEntryTrend, getVisitStats, type BoothVisitStat, type HourlyEntryTrend, type VisitStats } from "../../api/statistics";
@@ -18,10 +18,26 @@ import { Select } from "../../components/ui/Select";
 
 const BOOTH_RANKING_PREVIEW_COUNT = 3;
 
+/**
+ * 진입 경로에 따라 fairId를 두 가지 방식으로 받을 수 있다.
+ * - 박람회 관리자 화면(/fair-admin/statistics?fairId=123): 쿼리스트링
+ * - 전체 운영 대시보드에서 행사명을 눌러 들어온 경우(/admin/dashboard/fairs/123): 경로 파라미터
+ */
+function resolveInitialFairIdInput(pathParam: string | undefined, searchParams: URLSearchParams): string {
+  return pathParam ?? searchParams.get("fairId") ?? "";
+}
+function resolveInitialFairId(pathParam: string | undefined, searchParams: URLSearchParams): number | null {
+  const parsed = Number(pathParam ?? searchParams.get("fairId"));
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function VisitStatisticsPage() {
+  const { fairId: fairIdParam } = useParams<{ fairId: string }>();
+  const [searchParams] = useSearchParams();
+
   // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [fairId, setFairId] = useState<number | null>(null);
+  const [fairIdInput, setFairIdInput] = useState(() => resolveInitialFairIdInput(fairIdParam, searchParams));
+  const [fairId, setFairId] = useState<number | null>(() => resolveInitialFairId(fairIdParam, searchParams));
 
   const [fairDates, setFairDates] = useState<FairDate[]>([]);
   const [boothStats, setBoothStats] = useState<BoothVisitStat[]>([]);
@@ -114,10 +130,18 @@ export function VisitStatisticsPage() {
     }
   }
 
+  const fromAdminDashboard = fairIdParam !== undefined;
+
   return (
     <div className="mx-auto max-w-6xl py-2">
+      {fromAdminDashboard && (
+        <Link to="/admin" className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-primary-strong">
+          <ArrowLeft size={16} />
+          전체 운영 대시보드로
+        </Link>
+      )}
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow={fromAdminDashboard ? "전체 운영" : "박람회 관리자"}
         title="방문 통계"
         description="운영일별 시간대 입장 추이와 부스별 고유 방문객 수를 확인해요."
         action={
