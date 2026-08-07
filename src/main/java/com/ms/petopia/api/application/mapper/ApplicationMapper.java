@@ -110,4 +110,11 @@ public interface ApplicationMapper {
     int closeRequestedCancelRequestByApplicationId(@Param("applicationId") Long applicationId,
                                                    @Param("decidedAt") LocalDateTime decidedAt);
 
+    /*
+     * 자동 취소 처리 전, 딸린 REQUESTED 취소 요청이 있으면 미리 잠가둔다.
+     * approveCancelRequest(취소요청 행 -> 신청 행 순서로 잠금)와 잠금 순서를 통일해서
+     * 두 경로가 동시에 같은 신청서를 처리할 때 교착상태가 나지 않게 하는 용도.
+     */
+    void lockPendingCancelRequestIfExists(@Param("applicationId") Long applicationId);
+
 }

@@ -327,4 +327,11 @@
         AND status = 'REQUESTED'
     </update>
 
+    <!-- 신청 행을 UPDATE하기 전에, 취소요청 행 잠금 -->
+    <select id="lockPendingCancelRequestIfExists">
+        SELECT cancel_request_id FROM application_cancel_request
+        WHERE application_id = #{applicationId} AND status = 'REQUESTED'
+        FOR UPDATE
+    </select>
+
 </mapper>

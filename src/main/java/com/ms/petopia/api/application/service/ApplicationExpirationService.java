@@ -38,6 +38,9 @@ public class ApplicationExpirationService {
 
         for(Long applicationId : dueApplicationIds) {
 
+            // 락 순서를 approveCancelRequest와 통일(취소요청 행 먼저)해서 교착상태 방지
+            applicationMapper.lockPendingCancelRequestIfExists(applicationId);
+
             // 조건부 UPDATE라 그 사이 상태가 바뀌었으면(예: 결제 완료) 0행 반영되고 조용히 건너뜀
             int updated = applicationExpirationMapper.expirePaymentPendingApplication(applicationId, now);
 

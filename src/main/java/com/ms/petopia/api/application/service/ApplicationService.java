@@ -624,6 +624,9 @@ public class ApplicationService {
     @Transactional
     public boolean cancelApplicationForCanceledFair(Long applicationId) {
 
+        // 락 순서를 approveCancelRequest와 통일(취소요청 행 먼저)해서 교착상태 방지
+        applicationMapper.lockPendingCancelRequestIfExists(applicationId);
+
         int updated = applicationMapper.updateApplicationCanceled(applicationId);
 
         if(updated == 0) {
