@@ -37,8 +37,6 @@ public class FairService {
     /**
      * 공개(publish)를 허용하는 상태. 심사 승인 이후(PAYMENT_PENDING~IN_PROGRESS)에만 공개할 수 있고,
      * 심사 전(RECEIVED)이거나 더 이상 진행되지 않는 상태(REJECTED/EXPIRED/ENDED)는 제외한다.
-     * TODO PAYMENT_PENDING -> PREPARING 자동전이(개설비 결제 연동)가 구현되기 전까지는 실질적으로
-     *      PAYMENT_PENDING 상태에서만 호출된다. 스케줄러(상태 자동전이) 작업에서 재검토한다.
      */
     private static final Set<FairStatus> PUBLISHABLE_STATUSES =
             EnumSet.of(FairStatus.PAYMENT_PENDING, FairStatus.PREPARING, FairStatus.IN_PROGRESS);

@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * fairs.status 자동전이 3종(EXPIRED/IN_PROGRESS/ENDED)을 주기적으로 실행한다.
+ * fairs.status 자동전이 4종(PREPARING/EXPIRED/IN_PROGRESS/ENDED)을 주기적으로 실행한다.
  * reservation 도메인의 {@code ReservationExpirationJob}과 동일하게 단일 인스턴스 실행을
  * 전제로 한다(다중 인스턴스 배포 시 분산 락 필요 - 현재 스코프 밖).
  */
@@ -21,6 +21,11 @@ public class FairTransitionJob {
 
     @Scheduled(fixedDelayString = "${petopia.fair.transition-check-interval-ms:300000}")
     public void runTransitions() {
+        int completed = transitionService.completeDuePayments(BATCH_SIZE);
+        if (completed > 0) {
+            log.info("개설비 결제가 완료된 행사를 준비중으로 전환했습니다. count={}", completed);
+        }
+
         int expired = transitionService.expireDuePayments(BATCH_SIZE);
         if (expired > 0) {
             log.info("개설비 결제 기한이 지난 행사를 만료 처리했습니다. count={}", expired);
