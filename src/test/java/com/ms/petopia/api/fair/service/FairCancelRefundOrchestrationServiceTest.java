@@ -1,7 +1,7 @@
 package com.ms.petopia.api.fair.service;
 
-import com.ms.petopia.api.fair.dto.Fair;
-import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.fair.dto.FairCancelRefundTarget;
+import com.ms.petopia.api.fair.mapper.FairCancelRefundTargetMapper;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.service.PaymentService;
@@ -19,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,18 +31,17 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class FairCancelRefundOrchestrationServiceTest {
 
     private static final Long FAIR_ID = 10L;
-    private static final Long ACTOR_ID = 99L;
+    private static final Long TARGET_ID = 500L;
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 7, 10, 0);
 
     @Mock
-    private FairMapper fairMapper;
+    private FairCancelRefundTargetMapper targetMapper;
 
     @Mock
     private PaymentService paymentService;
@@ -49,144 +49,166 @@ class FairCancelRefundOrchestrationServiceTest {
     @Mock
     private RefundService refundService;
 
+    @Mock
+    private FairTimeProvider timeProvider;
+
     @InjectMocks
     private FairCancelRefundOrchestrationService orchestrationService;
 
+    // ===== enumerateTargets =====
+
     @Test
-    @DisplayName("취소된 행사의 예약금/참가비 결제를 각각 알맞은 사유로 환불하고 성공 건수를 반환한다")
-    void refundForCanceledFair_결제유형별로_알맞은사유로_환불한다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
+    @DisplayName("아직 안 훑은 취소 행사의 COMPLETED 예약금·참가비 결제를 작업행으로 등록한다")
+    void enumerateTargets_새결제를_작업행으로_등록한다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectUnenumeratedCanceledFairIds(50)).willReturn(List.of(FAIR_ID));
         given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 0, 100))
                 .willReturn(singlePage(payment(1L)));
         given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "COMPLETED", 0, 100))
                 .willReturn(singlePage(payment(2L)));
-        given(refundService.refund(any(), any(), any())).willReturn(null);
 
-        int refunded = orchestrationService.refundForCanceledFair(FAIR_ID, ACTOR_ID);
+        int enumerated = orchestrationService.enumerateTargets(50);
 
-        assertThat(refunded).isEqualTo(2);
-        ArgumentCaptor<RefundRequest> requestCaptor = ArgumentCaptor.forClass(RefundRequest.class);
-        verify(refundService).refund(eq(1L), eq(ACTOR_ID), requestCaptor.capture());
-        assertThat(requestCaptor.getValue().refundReason()).isEqualTo(RefundReason.FAIR_CANCEL_USER);
-        assertThat(requestCaptor.getValue().requestedByDomain()).isEqualTo(RequestedByDomain.FAIR);
-
-        verify(refundService).refund(eq(2L), eq(ACTOR_ID), requestCaptor.capture());
-        assertThat(requestCaptor.getValue().refundReason()).isEqualTo(RefundReason.FAIR_CANCEL_VENDOR);
+        assertThat(enumerated).isEqualTo(2);
+        ArgumentCaptor<FairCancelRefundTarget> captor = ArgumentCaptor.forClass(FairCancelRefundTarget.class);
+        verify(targetMapper, org.mockito.Mockito.times(2)).insert(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(FairCancelRefundTarget::getPaymentId)
+                .containsExactlyInAnyOrder(1L, 2L);
     }
 
-    /**
-     * getPayments가 페이지네이션돼 있어서, 결제 건수가 많은 행사는 1페이지만 보고 끝내면
-     * 일부가 빠진다 - totalPages까지 다 순회하는지 검증한다.
-     */
     @Test
-    @DisplayName("결제 목록이 여러 페이지면 끝까지 순회해서 전부 환불한다")
-    void refundForCanceledFair_여러페이지면_끝까지순회한다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
+    @DisplayName("이미 등록된 결제는 유니크 제약 위반을 무시하고 건너뛴다")
+    void enumerateTargets_이미등록된결제는_건너뛴다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectUnenumeratedCanceledFairIds(50)).willReturn(List.of(FAIR_ID));
+        given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 0, 100))
+                .willReturn(singlePage(payment(1L)));
+        given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "COMPLETED", 0, 100))
+                .willReturn(emptyPage());
+        willThrow(new DuplicateKeyException("UK_FAIR_CANCEL_REFUND_TARGETS_PAYMENT"))
+                .given(targetMapper).insert(any());
+
+        int enumerated = orchestrationService.enumerateTargets(50);
+
+        assertThat(enumerated).isZero();
+    }
+
+    @Test
+    @DisplayName("페이지가 여러 개면 끝까지 순회해서 전부 등록한다")
+    void enumerateTargets_여러페이지면_끝까지순회한다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectUnenumeratedCanceledFairIds(50)).willReturn(List.of(FAIR_ID));
         given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 0, 100))
                 .willReturn(new PaymentListResponse(List.of(payment(1L)), 0, 100, 2, 2));
         given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 1, 100))
                 .willReturn(new PaymentListResponse(List.of(payment(2L)), 1, 100, 2, 2));
         given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "COMPLETED", 0, 100))
                 .willReturn(emptyPage());
-        given(refundService.refund(any(), any(), any())).willReturn(null);
 
-        int refunded = orchestrationService.refundForCanceledFair(FAIR_ID, ACTOR_ID);
+        int enumerated = orchestrationService.enumerateTargets(50);
 
-        assertThat(refunded).isEqualTo(2);
-        verify(refundService).refund(eq(1L), any(), any());
-        verify(refundService).refund(eq(2L), any(), any());
-        verify(paymentService).getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 0, 100);
-        verify(paymentService).getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 1, 100);
+        assertThat(enumerated).isEqualTo(2);
     }
 
     @Test
-    @DisplayName("취소되지 않은 행사면 환불을 내보내지 않고 0을 반환한다")
-    void refundForCanceledFair_취소안됐으면_아무것도안한다() {
-        Fair fair = new Fair();
-        fair.setFairId(FAIR_ID);
-        fair.setCanceledAt(null);
-        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+    @DisplayName("아직 안 훑은 취소 행사가 없으면 0을 반환한다")
+    void enumerateTargets_대상없으면_0을반환한다() {
+        given(targetMapper.selectUnenumeratedCanceledFairIds(50)).willReturn(List.of());
 
-        int refunded = orchestrationService.refundForCanceledFair(FAIR_ID, ACTOR_ID);
-
-        assertThat(refunded).isZero();
+        assertThat(orchestrationService.enumerateTargets(50)).isZero();
         verify(paymentService, never()).getPayments(any(), any(), any(), any(), anyInt(), anyInt());
-        verify(refundService, never()).refund(any(), any(), any());
+    }
+
+    // ===== processPendingTargets =====
+
+    @Test
+    @DisplayName("환불에 성공하면 markCompleted를 호출하고 성공 건수를 반환한다")
+    void processPendingTargets_성공하면_완료처리한다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectPendingForUpdate(200))
+                .willReturn(List.of(target(TARGET_ID, "RESERVATION_DEPOSIT")));
+        given(refundService.refund(any(), any(), any())).willReturn((RefundResponse) null);
+        given(targetMapper.markCompleted(TARGET_ID, NOW)).willReturn(1);
+
+        int completed = orchestrationService.processPendingTargets(200);
+
+        assertThat(completed).isEqualTo(1);
+        ArgumentCaptor<RefundRequest> captor = ArgumentCaptor.forClass(RefundRequest.class);
+        verify(refundService).refund(eq(TARGET_ID), any(), captor.capture());
+        assertThat(captor.getValue().refundReason()).isEqualTo(RefundReason.FAIR_CANCEL_USER);
+        assertThat(captor.getValue().requestedByDomain()).isEqualTo(RequestedByDomain.FAIR);
+        verify(targetMapper).markCompleted(TARGET_ID, NOW);
     }
 
     @Test
-    @DisplayName("존재하지 않는 행사면 0을 반환한다")
-    void refundForCanceledFair_행사없으면_0을반환한다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(null);
-
-        int refunded = orchestrationService.refundForCanceledFair(FAIR_ID, ACTOR_ID);
-
-        assertThat(refunded).isZero();
-        verify(refundService, never()).refund(any(), any(), any());
-    }
-
-    @Test
-    @DisplayName("환불 대상이 없으면 0을 반환한다")
-    void refundForCanceledFair_환불대상없으면_0을반환한다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
-        given(paymentService.getPayments(eq(FAIR_ID), any(), any(), eq("COMPLETED"), eq(0), eq(100)))
-                .willReturn(emptyPage());
-
-        int refunded = orchestrationService.refundForCanceledFair(FAIR_ID, ACTOR_ID);
-
-        assertThat(refunded).isZero();
-        verify(refundService, never()).refund(any(), any(), any());
-    }
-
-    /**
-     * 한 건이 이미 환불됐거나(동시 처리) 정산 확정으로 거부돼도, 그 건만 건너뛰고
-     * 나머지 결제는 계속 환불 처리해야 한다(클래스 문서의 "독립 트랜잭션" 설계 참고).
-     */
-    @Test
-    @DisplayName("일부 결제의 환불이 실패해도 나머지는 계속 처리하고, 성공한 건수만 반환한다")
-    void refundForCanceledFair_일부실패해도_나머지는_계속처리한다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
-        given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 0, 100))
-                .willReturn(singlePage(payment(1L)));
-        given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "COMPLETED", 0, 100))
-                .willReturn(singlePage(payment(2L)));
+    @DisplayName("재시도해도 성공할 수 없는 실패(이미 환불됨)면 즉시 FAILED로 확정한다")
+    void processPendingTargets_영구실패면_바로실패처리한다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectPendingForUpdate(200))
+                .willReturn(List.of(target(TARGET_ID, "VENDOR_FEE")));
         willThrow(new CommonException(ErrorCode.REFUND_ALREADY_PROCESSED))
-                .given(refundService).refund(eq(1L), any(), any());
-        given(refundService.refund(eq(2L), any(), any())).willReturn((RefundResponse) null);
+                .given(refundService).refund(any(), any(), any());
 
-        int refunded = orchestrationService.refundForCanceledFair(FAIR_ID, ACTOR_ID);
+        int completed = orchestrationService.processPendingTargets(200);
 
-        assertThat(refunded).isEqualTo(1);
-        verify(refundService, times(2)).refund(any(), any(), any());
+        assertThat(completed).isZero();
+        verify(targetMapper).markFailed(eq(TARGET_ID), any(), eq(NOW));
+        verify(targetMapper, never()).markRetryOrGiveUp(any(), any(), anyInt(), any());
     }
 
-    /**
-     * CommonException이 아닌 예상 못한 RuntimeException(결제 도메인 쪽 데이터 접근 예외 등)
-     * 도 그 건만 건너뛰고 나머지 결제는 계속 처리해야 한다.
-     */
     @Test
-    @DisplayName("예상 못한 RuntimeException이 나도 나머지는 계속 처리하고, 성공한 건수만 반환한다")
-    void refundForCanceledFair_예상못한예외도_건너뛰고계속처리한다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
-        given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 0, 100))
-                .willReturn(singlePage(payment(1L)));
-        given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "COMPLETED", 0, 100))
-                .willReturn(singlePage(payment(2L)));
-        willThrow(new IllegalStateException("결제 도메인 데이터 접근 실패"))
-                .given(refundService).refund(eq(1L), any(), any());
-        given(refundService.refund(eq(2L), any(), any())).willReturn((RefundResponse) null);
+    @DisplayName("예상 못한 실패면 재시도 대상으로 남긴다")
+    void processPendingTargets_예상못한실패면_재시도대상으로남긴다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectPendingForUpdate(200))
+                .willReturn(List.of(target(TARGET_ID, "RESERVATION_DEPOSIT")));
+        willThrow(new IllegalStateException("일시적 오류")).given(refundService).refund(any(), any(), any());
 
-        int refunded = orchestrationService.refundForCanceledFair(FAIR_ID, ACTOR_ID);
+        int completed = orchestrationService.processPendingTargets(200);
 
-        assertThat(refunded).isEqualTo(1);
-        verify(refundService, times(2)).refund(any(), any(), any());
+        assertThat(completed).isZero();
+        verify(targetMapper).markRetryOrGiveUp(eq(TARGET_ID), any(), eq(5), eq(NOW));
+        verify(targetMapper, never()).markFailed(any(), any(), any());
     }
 
-    private Fair canceledFair() {
-        Fair fair = new Fair();
-        fair.setFairId(FAIR_ID);
-        fair.setCanceledAt(NOW);
-        return fair;
+    @Test
+    @DisplayName("일부 결제가 실패해도 나머지는 계속 처리하고 성공 건수만 반환한다")
+    void processPendingTargets_일부실패해도_나머지는_계속처리한다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(targetMapper.selectPendingForUpdate(200)).willReturn(List.of(
+                target(1L, "RESERVATION_DEPOSIT"),
+                target(2L, "VENDOR_FEE")
+        ));
+        willThrow(new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE))
+                .given(refundService).refund(eq(1L), any(), any());
+        given(refundService.refund(eq(2L), any(), any())).willReturn((RefundResponse) null);
+        given(targetMapper.markCompleted(2L, NOW)).willReturn(1);
+
+        int completed = orchestrationService.processPendingTargets(200);
+
+        assertThat(completed).isEqualTo(1);
+        verify(targetMapper).markFailed(eq(1L), any(), eq(NOW));
+        verify(targetMapper).markCompleted(2L, NOW);
+    }
+
+    @Test
+    @DisplayName("대상이 없으면 0을 반환한다")
+    void processPendingTargets_대상없으면_0을반환한다() {
+        given(targetMapper.selectPendingForUpdate(200)).willReturn(List.of());
+
+        assertThat(orchestrationService.processPendingTargets(200)).isZero();
+        verify(refundService, never()).refund(any(), any(), any());
+    }
+
+    private FairCancelRefundTarget target(Long targetId, String paymentType) {
+        FairCancelRefundTarget target = new FairCancelRefundTarget();
+        target.setFairCancelRefundTargetId(targetId);
+        target.setFairId(FAIR_ID);
+        target.setPaymentId(targetId);
+        target.setPaymentType(paymentType);
+        target.setStatus(FairCancelRefundTarget.STATUS_PENDING);
+        return target;
     }
 
     private PaymentResponse payment(Long paymentId) {

@@ -4,7 +4,6 @@ import com.ms.petopia.api.fair.dto.CreateFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.FairCancelRequestResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestResponse;
-import com.ms.petopia.api.fair.service.FairCancelRefundOrchestrationService;
 import com.ms.petopia.api.fair.service.FairCancelRequestService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,7 +25,6 @@ import java.util.List;
 public class FairCancelRequestController {
 
     private final FairCancelRequestService cancelRequestService;
-    private final FairCancelRefundOrchestrationService refundOrchestrationService;
 
     @PostMapping
     public ResponseEntity<FairCancelRequestResponse> createCancelRequest(
@@ -52,14 +50,9 @@ public class FairCancelRequestController {
             @RequestBody ReviewFairCancelRequestRequest request
     ) {
         // TODO 인증 도메인 완성 후 X-User-Id 대신 SUPER_ADMIN 인증 Principal에서 reviewerId를 가져온다.
-        ReviewFairCancelRequestResponse response =
-                cancelRequestService.review(fairId, cancelRequestId, reviewerId, request);
-        if (response.canceledAt() != null) {
-            // review()는 자체 트랜잭션이라 이 시점엔 이미 커밋돼 있다(프록시 메서드가 반환한 뒤라서).
-            // 취소 승인이 실제로 반영된 뒤에만 환불을 내보내려고 일부러 review()와 분리된
-            // 트랜잭션으로 호출한다(FairCancelRefundOrchestrationService 클래스 주석 참고).
-            refundOrchestrationService.refundForCanceledFair(fairId, reviewerId);
-        }
-        return response;
+        // 승인 시 환불은 여기서 직접 트리거하지 않는다 - FairCancelRefundJob이 canceled_at이
+        // 채워진 행사를 스스로 찾아 처리한다(FairCancelRefundOrchestrationService 클래스 주석
+        // 참고, 결제 도메인 호출 실패가 이 API 응답에 영향을 주지 않게 하려는 목적).
+        return cancelRequestService.review(fairId, cancelRequestId, reviewerId, request);
     }
 }

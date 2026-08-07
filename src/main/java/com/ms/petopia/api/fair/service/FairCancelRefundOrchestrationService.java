@@ -1,7 +1,7 @@
 package com.ms.petopia.api.fair.service;
 
-import com.ms.petopia.api.fair.dto.Fair;
-import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.fair.dto.FairCancelRefundTarget;
+import com.ms.petopia.api.fair.mapper.FairCancelRefundTargetMapper;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.service.PaymentService;
@@ -9,49 +9,57 @@ import com.ms.petopia.api.refund.dto.RefundReason;
 import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.service.RefundService;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * 행사 취소 승인 뒤 관람객 예약금·참가업체 참가비를 일괄 환불한다(개설비는 관리자 수동
- * 처리 대상이라 제외 - {@link RefundReason#OPENING_FEE_MANUAL} 참고).
+ * 행사 취소 승인 뒤 관람객 예약금·참가업체 참가비를 환불한다(개설비는 관리자 수동 처리
+ * 대상이라 제외 - {@link RefundReason#OPENING_FEE_MANUAL} 참고). {@link FairCancelRefundJob}이
+ * 주기적으로 호출하는 두 단계로 나뉜다.
  *
- * <p>환불 대상 조회는 결제 도메인 테이블을 직접 SQL로 읽지 않고, 결제 도메인이 이미 갖고
- * 있는 {@link PaymentService#getPayments}를 그대로 호출한다(결제 도메인 담당자 확인,
- * 2026-08-07) - 이 도메인이 payment 테이블 스키마에 직접 의존하지 않게 된다. 이 메서드가
- * 페이지네이션돼 있어서 끝까지 순회한다({@link #REFUND_PAGE_SIZE} 단위).
+ * <p><b>왜 승인 API 응답 안에서 동기로 처리하지 않는가</b>: 처음엔 취소 승인 직후 이 도메인이
+ * {@code PaymentService.getPayments()}로 대상을 조회하고 바로 {@code RefundService.refund()}를
+ * 부르는 방식이었다. 근데 취소 승인은 이미 커밋된 뒤라, 그 뒤 결제 도메인 호출이 실패하면
+ * (일시적 네트워크/DB 문제 등) 그 요청은 오류로 끝나고, {@code FairCancelRequestService.review()}는
+ * PENDING 신청만 검토할 수 있어서 같은 API로 환불을 다시 트리거할 방법이 없었다. 그래서
+ * "환불해야 할 결제"를 {@code fair_cancel_refund_targets}에 작업행으로 영속화하고, 스케줄러가
+ * 반복 처리(재시도)하는 방식으로 바꿨다 - 취소 승인 API 자체는 더 이상 결제 도메인 호출
+ * 성패에 영향받지 않는다.
  *
- * <p>결제가 아직 COMPLETED로 끝나지 않고 PENDING으로 남아있는 건은 이 메서드로 처리하지
- * 않는다 - 결제 도메인이 별도로 제공할 예정인 결제 취소/만료 API(cancelPayment, 2026-08-07
- * 기준 아직 코드에 없음)로 처리해야 한다는 걸 확인했다. 그 API가 나오기 전까지 PENDING
- * 결제는 이 오케스트레이션의 범위 밖이다(남은 작업으로 별도 추적).
- *
- * <p>일부러 {@code @Transactional}을 달지 않는다. {@link RefundService#refund}는 결제
- * 한 건마다 자기 트랜잭션(결제 행 잠금 + 정산 재계산 표시)을 갖는데, 이 클래스에
- * {@code @Transactional}을 달면 같은 트랜잭션에 합류(REQUIRED)해버려서 한 건이라도
- * 예외를 던지면 그 트랜잭션이 rollback-only로 표시되고, 이미 처리된 나머지 환불까지
- * 커밋 시점에 {@code UnexpectedRollbackException}으로 전부 날아간다. 결제 건마다
- * 독립된 트랜잭션으로 처리해서, 한두 건이 실패해도(이미 환불됨, 정산 확정으로 거부됨,
- * 그 외 예상 못한 예외 등) 그 건만 건너뛰고 나머지는 계속 진행되게 한다 - 행사 취소 승인
- * 자체는 이미 끝난 사실이라 환불 일부 실패가 그걸 되돌릴 이유는 아니다.
- *
- * <p>{@code FairCancelRequestController}가 {@code review()} 호출(자체 트랜잭션)이
- * 커밋된 뒤에 이 메서드를 부르는 것을 전제로 한다 - 취소 승인이 실제로 반영되기 전에
- * 환불부터 나가면 안 되기 때문이다.
- *
- * <p>지금은 HTTP 요청 안에서 동기로 전부 처리한다(MVP 모의 환불 범위, 배치/큐 인프라
- * 없음). 결제 건수가 많은 행사는 이 요청이 오래 걸릴 수 있다 - 나중에 비동기 처리가
- * 필요해지면 그때 배치 잡으로 옮기는 걸 고려한다.
+ * <p>발견(enumerate)과 처리(process) 모두 일부러 {@code @Transactional}을 달지 않는다.
+ * {@link RefundService#refund}는 결제 한 건마다 자기 트랜잭션을 갖는데, 여길
+ * {@code @Transactional}로 감싸면 같은 트랜잭션에 합류(REQUIRED)해버려서 한 건이라도
+ * 예외를 던지면 배치 전체가 rollback-only로 표시돼 이미 처리한 나머지까지
+ * {@code UnexpectedRollbackException}으로 날아간다. 결제/작업 건마다 독립된 트랜잭션(또는
+ * 단일 UPDATE)으로 처리해서 한 건의 실패가 나머지에 영향을 주지 않게 한다.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class FairCancelRefundOrchestrationService {
 
-    private static final int REFUND_PAGE_SIZE = 100;
+    private static final int PAYMENT_PAGE_SIZE = 100;
+
+    /** 예상 못한(잠재적으로 일시적인) 실패를 몇 번까지 재시도할지. 넘기면 FAILED로 포기한다. */
+    private static final int MAX_ATTEMPTS = 5;
+
+    /** 재시도해도 성공할 수 없는(즉시 FAILED로 확정할) 에러코드. */
+    private static final Set<ErrorCode> TERMINAL_ERROR_CODES =
+            EnumSet.of(ErrorCode.REFUND_ALREADY_PROCESSED, ErrorCode.REFUND_TARGET_NOT_REFUNDABLE);
+
+    /** 실제 처리자를 알 수 없는 배치 컨텍스트에서 쓰는 표시값 - RefundService는 이 값을
+     * 로그로만 남기고 저장하지 않는다(REFUND 테이블에 별도 컬럼 없음). */
+    private static final Long SYSTEM_ACTOR_USER_ID = 0L;
 
     /** 자동 환불 대상 결제유형 -> 환불 사유. 개설비는 의도적으로 포함하지 않는다. */
     private static final Map<String, RefundReason> REFUNDABLE_TYPES = Map.of(
@@ -59,62 +67,110 @@ public class FairCancelRefundOrchestrationService {
             "VENDOR_FEE", RefundReason.FAIR_CANCEL_VENDOR
     );
 
-    private final FairMapper fairMapper;
+    private final FairCancelRefundTargetMapper targetMapper;
     private final PaymentService paymentService;
     private final RefundService refundService;
+    private final FairTimeProvider timeProvider;
 
     /**
-     * 취소된 행사의 환불 대상 결제(COMPLETED 예약금·참가비)를 전부 환불 처리한다.
-     * 이미 환불된 건이나 그 외 예상 못한 이유로 {@link RefundService#refund}가 예외를
-     * 던지면 그 건만 건너뛴다.
+     * 취소됐지만 아직 환불 대상을 훑지 않은 행사를 찾아, COMPLETED 예약금·참가비 결제를
+     * 전부 작업행으로 등록한다. 이미 등록된 결제는 유니크 제약으로 조용히 건너뛴다.
      *
-     * @return 실제로 환불 처리된 건수
+     * @return 새로 등록한 작업행 수
      */
-    public int refundForCanceledFair(Long fairId, Long actorUserId) {
-        Fair fair = fairMapper.selectById(fairId);
-        if (fair == null || fair.getCanceledAt() == null) {
-            // 방어적 체크 - 호출부가 취소 승인 직후에만 부르는 걸 전제로 하지만, 실수로
-            // 취소되지 않은 행사에 대해 불려도 조용히 0건으로 끝내고 환불을 내보내지 않는다.
-            log.warn("취소되지 않은 행사에 환불 오케스트레이션이 호출됐습니다. fairId={}", fairId);
-            return 0;
+    public int enumerateTargets(int fairBatchSize) {
+        List<Long> fairIds = targetMapper.selectUnenumeratedCanceledFairIds(fairBatchSize);
+        int enumerated = 0;
+        for (Long fairId : fairIds) {
+            for (String paymentType : REFUNDABLE_TYPES.keySet()) {
+                enumerated += enumerateType(fairId, paymentType);
+            }
         }
-
-        int refunded = 0;
-        for (Map.Entry<String, RefundReason> entry : REFUNDABLE_TYPES.entrySet()) {
-            refunded += refundAllOfType(fairId, actorUserId, entry.getKey(), entry.getValue());
-        }
-        return refunded;
+        return enumerated;
     }
 
-    /**
-     * 결제유형 하나에 대해 COMPLETED 결제를 페이지 끝까지 순회하며 환불한다.
-     * {@code PaymentService.getPayments}가 페이지네이션돼 있어서 1페이지만 보고 끝내면
-     * 결제 건수 많은 행사에서 일부가 빠질 수 있다 - totalPages까지 다 돈다.
-     */
-    private int refundAllOfType(Long fairId, Long actorUserId, String paymentType, RefundReason reason) {
-        int refunded = 0;
+    private int enumerateType(Long fairId, String paymentType) {
+        int enumerated = 0;
         int page = 0;
         int totalPages = 1;
         while (page < totalPages) {
             PaymentListResponse response =
-                    paymentService.getPayments(fairId, null, paymentType, "COMPLETED", page, REFUND_PAGE_SIZE);
+                    paymentService.getPayments(fairId, null, paymentType, "COMPLETED", page, PAYMENT_PAGE_SIZE);
             totalPages = response.totalPages();
 
             for (PaymentResponse payment : response.content()) {
-                try {
-                    refundService.refund(payment.paymentId(), actorUserId,
-                            new RefundRequest(reason, RequestedByDomain.FAIR));
-                    refunded++;
-                } catch (RuntimeException e) {
-                    // 이미 환불됨(동시 처리)/정산 확정으로 환불 불가(CommonException) 뿐 아니라,
-                    // 결제 도메인 쪽 데이터 접근 예외 등 예상 못한 RuntimeException도 이 건만
-                    // 건너뛰고 나머지 결제는 계속 처리한다.
-                    log.warn("행사 취소 환불 처리 실패. fairId={}, paymentId={}, reason={}",
-                            fairId, payment.paymentId(), e.getMessage(), e);
+                if (registerTarget(fairId, payment.paymentId(), paymentType)) {
+                    enumerated++;
                 }
             }
             page++;
         }
-        return refunded;
+        return enumerated;
+    }
+
+    private boolean registerTarget(Long fairId, Long paymentId, String paymentType) {
+        LocalDateTime now = timeProvider.now();
+        FairCancelRefundTarget target = new FairCancelRefundTarget();
+        target.setFairId(fairId);
+        target.setPaymentId(paymentId);
+        target.setPaymentType(paymentType);
+        target.setCreatedAt(now);
+        target.setUpdatedAt(now);
+        try {
+            targetMapper.insert(target);
+            return true;
+        } catch (DuplicateKeyException e) {
+            // 이미 등록된 결제 - 발견 단계가 여러 번 돌아도 안전하게 무시한다.
+            return false;
+        }
+    }
+
+    /**
+     * PENDING 작업을 처리한다.
+     *
+     * @return 이번 호출에서 새로 성공 처리한 건수
+     */
+    public int processPendingTargets(int batchSize) {
+        List<FairCancelRefundTarget> targets = targetMapper.selectPendingForUpdate(batchSize);
+        int completed = 0;
+        for (FairCancelRefundTarget target : targets) {
+            if (process(target)) {
+                completed++;
+            }
+        }
+        return completed;
+    }
+
+    private boolean process(FairCancelRefundTarget target) {
+        RefundReason reason = REFUNDABLE_TYPES.get(target.getPaymentType());
+        LocalDateTime now = timeProvider.now();
+        Long targetId = target.getFairCancelRefundTargetId();
+
+        try {
+            refundService.refund(target.getPaymentId(), SYSTEM_ACTOR_USER_ID,
+                    new RefundRequest(reason, RequestedByDomain.FAIR));
+            return targetMapper.markCompleted(targetId, now) == 1;
+        } catch (CommonException e) {
+            if (TERMINAL_ERROR_CODES.contains(e.getErrorCode())) {
+                targetMapper.markFailed(targetId, truncate(e.getMessage()), now);
+            } else {
+                targetMapper.markRetryOrGiveUp(targetId, truncate(e.getMessage()), MAX_ATTEMPTS, now);
+            }
+            return false;
+        } catch (RuntimeException e) {
+            // 결제 도메인 쪽 데이터 접근 예외 등 예상 못한 실패 - 잠재적으로 일시적이라 재시도
+            // 대상으로 남긴다(시도 횟수가 MAX_ATTEMPTS에 도달하면 그때 FAILED로 포기한다).
+            log.warn("행사 취소 환불 처리 실패. targetId={}, fairId={}, paymentId={}",
+                    targetId, target.getFairId(), target.getPaymentId(), e);
+            targetMapper.markRetryOrGiveUp(targetId, truncate(e.getMessage()), MAX_ATTEMPTS, now);
+            return false;
+        }
+    }
+
+    private String truncate(String message) {
+        if (message == null) {
+            return null;
+        }
+        return message.length() > 500 ? message.substring(0, 500) : message;
     }
 }

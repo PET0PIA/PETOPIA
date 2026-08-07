@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fair.mapper.FairCancelRefundTargetMapper">
+
+    <select id="selectUnenumeratedCanceledFairIds" resultType="long">
+        SELECT f.fair_id
+          FROM fairs f
+         WHERE f.canceled_at IS NOT NULL
+           AND NOT EXISTS (
+               SELECT 1
+                 FROM fair_cancel_refund_targets t
+                WHERE t.fair_id = f.fair_id
+           )
+         ORDER BY f.canceled_at
+         LIMIT #{limit}
+    </select>
+
+    <insert id="insert" parameterType="FairCancelRefundTarget">
+        INSERT INTO fair_cancel_refund_targets
+            (fair_id, payment_id, payment_type, status, attempt_count, created_at, updated_at)
+        VALUES
+            (#{fairId}, #{paymentId}, #{paymentType}, 'PENDING', 0, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <select id="selectPendingForUpdate" resultType="FairCancelRefundTarget">
+        SELECT fair_cancel_refund_target_id, fair_id, payment_id, payment_type,
+               status, attempt_count, last_error, created_at, updated_at
+          FROM fair_cancel_refund_targets
+         WHERE status = 'PENDING'
+         ORDER BY fair_cancel_refund_target_id
+         LIMIT #{limit}
+         FOR UPDATE SKIP LOCKED
+    </select>
+
+    <update id="markCompleted">
+        UPDATE fair_cancel_refund_targets
+           SET status = 'COMPLETED'
+             , updated_at = #{now}
+         WHERE fair_cancel_refund_target_id = #{id}
+           AND status = 'PENDING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE fair_cancel_refund_targets
+           SET status = 'FAILED'
+             , last_error = #{error}
+             , updated_at = #{now}
+         WHERE fair_cancel_refund_target_id = #{id}
+           AND status = 'PENDING'
+    </update>
+
+    <update id="markRetryOrGiveUp">
+        UPDATE fair_cancel_refund_targets
+           SET attempt_count = attempt_count + 1
+             , last_error = #{error}
+             , status = CASE WHEN attempt_count + 1 >= #{maxAttempts} THEN 'FAILED' ELSE 'PENDING' END
+             , updated_at = #{now}
+         WHERE fair_cancel_refund_target_id = #{id}
+           AND status = 'PENDING'
+    </update>
+
+</mapper>
