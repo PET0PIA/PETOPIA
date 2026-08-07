@@ -24,6 +24,11 @@ export function getSettlementsByFair(fairId: number) {
   return apiClient.get<SettlementResponse[]>(`/api/fairs/${fairId}/settlements`);
 }
 
+/** 특정 행사·업체 조합의 정산 단건 상세 조회(참가업체 본인 조회용). */
+export function getVendorSettlement(fairId: number, businessId: number) {
+  return apiClient.get<SettlementResponse>(`/api/fairs/${fairId}/vendors/${businessId}/settlement`);
+}
+
 /**
  * 특정 행사·업체의 정산을 계산해서 PENDING으로 만든다. 같은 조합으로 이미 계산된 정산이
  * 있으면 409(SETTLEMENT_ALREADY_EXISTS)가 온다.
