@@ -46,6 +46,14 @@ public interface PaymentMapper {
     PaymentRow selectByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
 
     /**
+     * 참가신청 ID로 그 신청의 참가비 결제를 조회한다(VENDOR_FEE 전용). 채린님(참가업체) 도메인이
+     * 참가 취소승인 처리 중 환불 대상 paymentId를 찾는 용도. 취소승인은 결제 전(신청만 하고
+     * 아직 결제를 시작 안 한 상태)에도 가능하므로, 결제가 없으면 null을 그대로 반환한다
+     * (존재 유무 판단은 서비스 계층 책임).
+     */
+    PaymentRow selectByApplicationId(@Param("applicationId") Long applicationId);
+
+    /**
      * 결제 한 건을 생성한다. row.idempotencyKey가 이미 존재하면(동일 대상 중복결제)
      * DB의 UK_PAYMENT_IDEMPOTENCY_KEY 위반으로 DuplicateKeyException이 던져진다 —
      * 서비스 계층에서 잡아서 비즈니스 예외로 변환한다.
