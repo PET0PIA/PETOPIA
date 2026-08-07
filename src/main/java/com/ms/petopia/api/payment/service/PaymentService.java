@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * 결제 조회를 담당하는 서비스.
@@ -70,26 +72,23 @@ public class PaymentService {
 
     @Transactional
     public PaymentResponse payVendorFee(Long applicationId,Long userId, VendorFeePaymentRequest request) {
-        LocalDateTime now = LocalDateTime.now();
-
-        PaymentRow row = new PaymentRow();
-        row.setPaymentType("VENDOR_FEE");
-        row.setAmount(request.amount());
-        row.setStatus("PENDING");
-        row.setMethod("TOSS");
-        row.setIdempotencyKey("VENDOR_FEE_" + applicationId);
-        row.setCreatedAt(now);
-        row.setUpdatedAt(now);
-        row.setFairId(request.fairId());
-        row.setBusinessId(request.businessId());
-        row.setPayerUserId(userId);
-        row.setApplicationId(applicationId);
-
-        try {
-            paymentMapper.insert(row);
-        } catch (DuplicateKeyException e) {
-            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
-        }
+        String idempotencyKey = "VENDOR_FEE_" + applicationId;
+        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
+            LocalDateTime now = LocalDateTime.now();
+            PaymentRow newRow = new PaymentRow();
+            newRow.setPaymentType("VENDOR_FEE");
+            newRow.setAmount(request.amount());
+            newRow.setStatus("PENDING");
+            newRow.setMethod("TOSS");
+            newRow.setIdempotencyKey(idempotencyKey);
+            newRow.setCreatedAt(now);
+            newRow.setUpdatedAt(now);
+            newRow.setFairId(request.fairId());
+            newRow.setBusinessId(request.businessId());
+            newRow.setPayerUserId(userId);
+            newRow.setApplicationId(applicationId);
+            return newRow;
+        });
 
         return PaymentResponse.from(row);
     }
@@ -107,26 +106,161 @@ public class PaymentService {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        PaymentRow row = new PaymentRow();
-        row.setPaymentType("RESERVATION_DEPOSIT");
-        row.setAmount(context.amount());
-        row.setStatus("PENDING");
-        row.setMethod("TOSS");
-        row.setIdempotencyKey("RESERVATION_DEPOSIT_" + reservationId);
-        row.setCreatedAt(now);
-        row.setUpdatedAt(now);
-        row.setFairId(context.fairId());
-        row.setPayerUserId(userId);
-        row.setReservationId(reservationId);
+        String idempotencyKey = "RESERVATION_DEPOSIT_" + reservationId;
+        PaymentRow row = createOrRetryPayment(idempotencyKey, context.amount(), userId, () -> {
+            LocalDateTime now = LocalDateTime.now();
+            PaymentRow newRow = new PaymentRow();
+            newRow.setPaymentType("RESERVATION_DEPOSIT");
+            newRow.setAmount(context.amount());
+            newRow.setStatus("PENDING");
+            newRow.setMethod("TOSS");
+            newRow.setIdempotencyKey(idempotencyKey);
+            newRow.setCreatedAt(now);
+            newRow.setUpdatedAt(now);
+            newRow.setFairId(context.fairId());
+            newRow.setPayerUserId(userId);
+            newRow.setReservationId(reservationId);
+            return newRow;
+        });
 
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 행사개설비 결제를 생성한다. 참가비와 동일 구조로 fair 테이블은 조회하지 않으므로(애그리거트
+     * 간 ID 참조 원칙 유지) 금액은 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
+     * fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
+     *
+     * <p>결제 완료 후 행사 상태를 "준비중"으로 전이하는 건 이 메서드 책임이 아니다 — 행사 도메인이
+     * 결제 완료를 어떻게 감지할지(폴링/이벤트 발행) 아직 미정이라 API 명세서에 "미확정"으로
+     * 남아있다. 지금은 결제 자체만 처리하고 크로스도메인 통지는 하지 않는다(참가비와 동일).
+     *
+     * <p>동일 행사에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
+     * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사일 때
+     */
+    @Transactional
+    public PaymentResponse payFairOpeningFee(Long fairId, Long userId, OpeningFeePaymentRequest request) {
+        String idempotencyKey = "FAIR_OPENING_FEE_" + fairId;
+        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
+            LocalDateTime now = LocalDateTime.now();
+            PaymentRow newRow = new PaymentRow();
+            newRow.setPaymentType("FAIR_OPENING_FEE");
+            newRow.setAmount(request.amount());
+            newRow.setStatus("PENDING");
+            newRow.setMethod("TOSS");
+            newRow.setIdempotencyKey(idempotencyKey);
+            newRow.setCreatedAt(now);
+            newRow.setUpdatedAt(now);
+            newRow.setFairId(fairId);
+            newRow.setPayerUserId(userId);
+            return newRow;
+        });
+
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 결제 생성(pay*) 3종이 공유하는 공통 로직 — 결제 3종 공통 후속과제(2026-08-06 CodeRabbit
+     * 지적, 실패 결제 재시도 불가) 해결.
+     *
+     * <p>동일 idempotencyKey로 이전 시도가 있었는지 먼저 확인해서:
+     * <ul>
+     *   <li>없으면 새로 insert(기존과 동일, 동시 첫 시도 경쟁은 DuplicateKeyException으로 처리)</li>
+     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용)</li>
+     *   <li>FAILED로 남아있지만 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재시도 금지)</li>
+     *   <li>PENDING/PROCESSING/COMPLETED면 여전히 중복결제로 막음(기존 동작 유지)</li>
+     * </ul>
+     *
+     * @param idempotencyKey 원업무 식별자 기준 키(예: {@code "VENDOR_FEE_" + applicationId})
+     * @param amount 이번 시도의 결제 금액 — 재사용 시에도 이 값으로 갱신한다(재시도 시점에
+     *               금액이 달라질 수 있어서, 예: 참가비 재승인 등)
+     * @param userId 재시도를 요청한 사용자. 기존 FAILED 행의 payerUserId와 다르면 남의 결제를
+     *               멋대로 PENDING으로 되돌리는 셈이라 막는다(CodeRabbit 지적, PR #63).
+     * @param newRowSupplier 이전 시도가 아예 없을 때 삽입할 새 PaymentRow를 만드는 함수
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 기존 FAILED 결제의 결제자가 아닐 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제 진행/완료 중이거나,
+     *         다른 요청이 먼저 재시도를 선점했을 때
+     */
+    private PaymentRow createOrRetryPayment(
+            String idempotencyKey, Long amount, Long userId, Supplier<PaymentRow> newRowSupplier
+    ) {
+        PaymentRow existing = paymentMapper.selectByIdempotencyKey(idempotencyKey);
+        if (existing != null) {
+            if (!"FAILED".equals(existing.getStatus())) {
+                throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+            }
+            if (!userId.equals(existing.getPayerUserId())) {
+                throw new CommonException(ErrorCode.ACCESS_DENIED);
+            }
+
+            LocalDateTime now = LocalDateTime.now();
+            int reset = paymentMapper.resetFailedToPending(existing.getPaymentId(), amount, now);
+            if (reset == 0) {
+                // 우리가 조회한 뒤, 다른 요청이 먼저 재시도를 선점했거나 상태가 바뀐 경우 — 충돌로 처리.
+                throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+            }
+
+            existing.setStatus("PENDING");
+            existing.setAmount(amount);
+            existing.setUpdatedAt(now);
+            existing.setTossPaymentKey(null);
+            existing.setPaidAt(null);
+            return existing;
+        }
+
+        PaymentRow row = newRowSupplier.get();
         try {
             paymentMapper.insert(row);
         } catch (DuplicateKeyException e) {
+            // selectByIdempotencyKey로는 못 찾았는데 그 사이 다른 요청이 먼저 insert에 성공한
+            // 경우(첫 결제 동시요청 경쟁) — 기존과 동일하게 충돌 처리.
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
         }
+        return row;
+    }
 
-        return PaymentResponse.from(row);
+    /**
+     * 조건별 결제 목록 조회(관리자용). fairId·businessId·paymentType·status 전부 선택적이고
+     * 넘긴 값들은 AND로 조합된다.
+     *
+     * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} page·size가 범위를 벗어났을 때
+     */
+    public PaymentListResponse getPayments(
+            Long fairId, Long businessId, String paymentType, String status, int page, int size
+    ) {
+        validatePageAndSize(page, size);
+        long offset = (long) page * size;
+        List<PaymentRow> rows = paymentMapper.selectByFilter(fairId, businessId, paymentType, status, null, offset, size);
+        long total = paymentMapper.countByFilter(fairId, businessId, paymentType, status, null);
+        return PaymentListResponse.of(rows, page, size, total);
+    }
+
+    /**
+     * 로그인 사용자 본인의 결제 내역 조회(마이페이지). 다른 필터 없이 payerUserId만 건다.
+     *
+     * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} page·size가 범위를 벗어났을 때
+     */
+    public PaymentListResponse getMyPayments(Long userId, int page, int size) {
+        validatePageAndSize(page, size);
+        long offset = (long) page * size;
+        List<PaymentRow> rows = paymentMapper.selectByFilter(null, null, null, null, userId, offset, size);
+        long total = paymentMapper.countByFilter(null, null, null, null, userId);
+        return PaymentListResponse.of(rows, page, size, total);
+    }
+
+    /**
+     * 컨트롤러의 {@code @Min}/{@code @Max} 어노테이션은 여기서 검증을 대신하지 않는다 —
+     * 이 프로젝트가 쓰는 {@code standaloneSetup} 기반 컨트롤러 테스트에서 메서드 파라미터
+     * 검증이 실제로 안 걸리는 걸 확인해서(CodeRabbit 리뷰 지적, PR #62), 프레임워크 동작에
+     * 기대지 않고 서비스 계층에서 명시적으로 막는다. 특히 page < 0이면 SQL의
+     * {@code OFFSET}이 음수가 돼서 DB 에러로 이어질 수 있어 이 검증이 실질적으로도 중요하다.
+     */
+    private void validatePageAndSize(int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
     }
 
 
