@@ -1,5 +1,6 @@
 package com.ms.petopia.api.settlement.service;
 
+import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.refund.dto.RefundRow;
@@ -44,6 +45,9 @@ class SettlementServiceTest {
     @Mock
     private RefundMapper refundMapper;
 
+    @Mock
+    private CommissionRateService commissionRateService;
+
     @InjectMocks
     private SettlementService settlementService;
 
@@ -69,6 +73,7 @@ class SettlementServiceTest {
         ));
         given(refundMapper.selectByPaymentId(1L)).willReturn(null);
         given(refundMapper.selectByPaymentId(2L)).willReturn(null);
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.0500"));
 
         // Act
         SettlementResponse result = settlementService.calculate(10L, 20L);
@@ -99,6 +104,7 @@ class SettlementServiceTest {
         refund.setRefundAmount(100000L);
         given(refundMapper.selectByPaymentId(1L)).willReturn(refund);
         given(refundMapper.selectByPaymentId(2L)).willReturn(null);
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.0500"));
 
         // Act
         SettlementResponse result = settlementService.calculate(10L, 20L);
@@ -115,6 +121,7 @@ class SettlementServiceTest {
     void calculate_결제없음_0원정산() {
         given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(null);
         given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of());
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.0500"));
 
         SettlementResponse result = settlementService.calculate(10L, 20L);
 
@@ -141,6 +148,7 @@ class SettlementServiceTest {
     void calculate_동시계산_중복키_예외를던진다() {
         given(settlementMapper.selectByFairAndBusiness(10L, 20L)).willReturn(null);
         given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of());
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.0500"));
         willThrow(new DuplicateKeyException("settlement fair-business unique violation"))
                 .given(settlementMapper).insert(any(SettlementRow.class));
 
@@ -202,6 +210,23 @@ class SettlementServiceTest {
     }
 
     @Test
+    @DisplayName("재계산이 필요한 정산은 확정할 수 없다")
+    void confirm_재계산필요_예외를던진다() {
+        // Arrange: PENDING이긴 하지만 환불로 인해 needs_recalculation이 서 있는 상황
+        // (CodeRabbit 리뷰 지적, PR #54 — recalculate 없이 confirm하면 옛날 금액으로 굳어버림)
+        SettlementRow row = pendingSettlementRow();
+        row.setNeedsRecalculation(true);
+        given(settlementMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_RECALCULATION_REQUIRED);
+
+        verify(settlementMapper, never()).confirm(any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("동시에 두 번 확정 요청이 들어오면 나중 요청은 예외를 던진다")
     void confirm_동시확정_예외를던진다() {
         given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
@@ -212,6 +237,78 @@ class SettlementServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);
+    }
+
+    @Test
+    @DisplayName("PENDING 정산을 재계산하면 최신 결제·환불 상태로 금액이 갱신된다")
+    void recalculate_PENDING_성공() {
+        // Arrange: 계산 당시엔 없던 결제(3L)가 그 사이 새로 완료된 상황
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+        given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of(
+                vendorFeePayment(1L, 100000L),
+                vendorFeePayment(2L, 50000L),
+                vendorFeePayment(3L, 80000L)
+        ));
+        given(refundMapper.selectByPaymentId(1L)).willReturn(null);
+        given(refundMapper.selectByPaymentId(2L)).willReturn(null);
+        given(refundMapper.selectByPaymentId(3L)).willReturn(null);
+        given(settlementMapper.updateAggregates(
+                eq(1L), eq(230000L), eq(0L), eq(11500L), eq(218500L), any(LocalDateTime.class)))
+                .willReturn(1);
+
+        // Act
+        SettlementResponse result = settlementService.recalculate(1L);
+
+        // Assert: gross 230000, commission 230000*0.05=11500, net 218500
+        assertThat(result.grossAmount()).isEqualTo(230000L);
+        assertThat(result.commissionAmount()).isEqualTo(11500L);
+        assertThat(result.netAmount()).isEqualTo(218500L);
+
+        // 기존 감사근거는 지우고 최신 내역으로 다시 채운다
+        verify(settlementMapper).deleteItemsBySettlementId(1L);
+        verify(settlementMapper).insertItems(anyList());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 정산을 재계산하려 하면 예외를 던진다")
+    void recalculate_존재하지않음_예외를던진다() {
+        given(settlementMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> settlementService.recalculate(999L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("CONFIRMED 정산은 재계산할 수 없다 — 확정 이후 금액은 불변")
+    void recalculate_CONFIRMED_예외를던진다() {
+        SettlementRow row = pendingSettlementRow();
+        row.setStatus("CONFIRMED");
+        given(settlementMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> settlementService.recalculate(1L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_RECALCULABLE);
+
+        verify(settlementMapper, never()).deleteItemsBySettlementId(any());
+    }
+
+    @Test
+    @DisplayName("재계산 도중 동시에 확정되면 예외를 던진다")
+    void recalculate_동시확정_예외를던진다() {
+        // Arrange: selectById로 PENDING 확인한 직후, UPDATE 시점엔 이미 다른 요청이 확정해버린 경우
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+        given(paymentMapper.selectCompletedVendorFeePayments(10L, 20L)).willReturn(List.of());
+        given(settlementMapper.updateAggregates(
+                eq(1L), eq(0L), eq(0L), eq(0L), eq(0L), any(LocalDateTime.class)))
+                .willReturn(0);
+
+        assertThatThrownBy(() -> settlementService.recalculate(1L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_RECALCULABLE);
     }
 
     @Test

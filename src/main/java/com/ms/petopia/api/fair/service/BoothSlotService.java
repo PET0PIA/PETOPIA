@@ -133,8 +133,8 @@ public class BoothSlotService {
         updateCommand.setMemo(item.memo());
         // DB의 NOW() 대신 앱이 정한 시각을 명시적으로 실어 보낸다 - 그래야 이 저장이
         // 응답으로 돌려주는 updatedAt(now)과 실제 DB에 박히는 값이 항상 일치한다
-        // (코드래빗 리뷰 반영: 이전엔 SQL이 updated_at = NOW()를 써서 앱 서버와 DB 서버의
-        // 시계가 어긋나면 응답이 실제 저장값과 달라질 수 있었다).
+        // (이전엔 SQL이 updated_at = NOW()를 써서 앱 서버와 DB 서버의 시계가 어긋나면
+        // 응답이 실제 저장값과 달라질 수 있었다).
         updateCommand.setUpdatedAt(now);
         if (!locked) {
             updateCommand.setSlotNumber(item.slotNumber());
@@ -206,7 +206,7 @@ public class BoothSlotService {
         // 같은 boothSlotId를 두 번 이상 참조하면 뒤 항목이 앞 항목의 update를 덮어써 버려서
         // (existingById 맵은 갱신되지 않으니 둘 다 "원본 existing" 기준으로 처리됨) DB에는
         // 마지막 항목만 반영되는데 응답에는 두 항목이 다 담기는 불일치가 생긴다. 그래서
-        // slotNumber 중복과 같은 자리에서 미리 막는다(코드래빗 리뷰 반영).
+        // slotNumber 중복과 같은 자리에서 미리 막는다.
         Set<Long> referencedSlotIds = new HashSet<>();
         for (BoothSlotItem item : items) {
             validateItem(item);

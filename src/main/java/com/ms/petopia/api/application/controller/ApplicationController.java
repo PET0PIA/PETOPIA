@@ -1,10 +1,10 @@
 package com.ms.petopia.api.application.controller;
 
+import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
-import com.ms.petopia.api.application.dto.response.ApplicationDetailResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationResponse;
-import com.ms.petopia.api.application.dto.response.ApplicationSummaryResponse;
-import com.ms.petopia.api.application.dto.response.BoothSlotLockStatusResponse;
+import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -67,6 +67,77 @@ public class ApplicationController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(applicationService.getApplicationDetail(ownerId, applicationId)));
+
+    }
+
+    // 담당 행사의 신청 목록 조회 (행사 담당자용)
+    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
+    @GetMapping("/fairs/{fairId}/applications")
+    public ResponseEntity<ApiResponse<List<ApplicationReviewSummaryResponse>>> getApplicationsForFair(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long fairId,
+            @RequestParam(required = false) String status
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.getApplicationsForFair(adminUserId, fairId, status)));
+
+    }
+
+    // 참가 신청서 승인 (행사 담당자용)
+    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
+    @PutMapping("/applications/{applicationId}/approve")
+    public ResponseEntity<ApiResponse<ApplicationReviewResultResponse>> approveApplication(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long applicationId,
+            @Valid @RequestBody(required = false) ApplicationApproveRequest request
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.approveApplication(adminUserId, applicationId, request)));
+
+    }
+
+    // 참가 신청서 반려 (행사 담당자용)
+    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
+    @PutMapping("/applications/{applicationId}/reject")
+    public ResponseEntity<ApiResponse<ApplicationReviewResultResponse>> rejectApplication(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long applicationId,
+            @Valid @RequestBody ApplicationRejectRequest request
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.rejectApplication(adminUserId, applicationId, request)));
+
+    }
+
+    // 담당 행사의 취소 요청 목록 조회 (행사 담당자용)
+    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
+    @GetMapping("/fairs/{fairId}/cancel-requests")
+    public ResponseEntity<ApiResponse<List<ApplicationCancelRequestSummaryResponse>>> getCancelRequestsForFair(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long fairId,
+            @RequestParam(required = false) String status
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.getCancelRequestsForFair(adminUserId, fairId, status)));
+
+    }
+
+    // 참가 취소 요청 제출
+    @PostMapping("/applications/{applicationId}/cancel-requests")
+    public ResponseEntity<ApiResponse<Void>> submitCancelRequest(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @PathVariable Long applicationId,
+            @Valid @RequestBody ApplicationCancelRequestSubmitRequest request
+    ) {
+
+        applicationService.submitCancelRequest(ownerId, applicationId, request);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED, null));
 
     }
 

@@ -31,7 +31,7 @@ public class CorsConfig {
                 .toList();
         configuration.setAllowedOrigins(origins);
 
-        configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         //refresh token을 httpOnly 쿠키로 내려주므로 cross-origin 요청에도 쿠키가 실려야 한다.
         //true로 켜는 순간 allowedOrigins에 *는 쓸 수 없다.

@@ -11,7 +11,6 @@ import com.ms.petopia.api.refund.dto.RefundResponse;
 import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.mapper.RefundMapper;
-import com.ms.petopia.api.settlement.dto.SettlementItemRow;
 import com.ms.petopia.api.settlement.mapper.SettlementMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -76,6 +75,9 @@ class RefundServiceTest {
     void refund_성공() {
         // Arrange
         given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        // Mockito는 Long 같은 숫자 wrapper 리턴 타입을 스텁 안 하면 null이 아니라 0을 기본
+        // 반환하므로, "정산과 무관한 결제"를 표현하려면 null을 명시적으로 스텁해야 한다.
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
 
         // Act
         RefundResponse result = refundService.refund(1L, 99L, USER_CANCEL_REQUEST);
@@ -97,17 +99,14 @@ class RefundServiceTest {
     }
 
     @Test
-    @DisplayName("이미 정산에 포함된 결제는 환불할 수 없다")
-    void refund_이미정산됨_예외를던진다() {
-        // Arrange: 이 결제가 이미 어느 정산의 SETTLEMENT_ITEM으로 들어가 있는 상황
-        // (정산 계산 이후 환불을 허용하면 정산 금액이 옛날 값으로 굳어버리는 걸 방지하는 방어 로직)
+    @DisplayName("이미 CONFIRMED 정산에 포함된 결제는 환불할 수 없다")
+    void refund_확정정산에포함됨_예외를던진다() {
+        // Arrange: 이 결제가 이미 확정(CONFIRMED)된 정산에 들어가 있는 상황 — markNeedsRecalculation의
+        // WHERE status='PENDING' 조건에 안 걸려서 0행이 반환된다(확정 이후 금액은 불변이라는 규칙
+        // 때문에 재계산으로도 되돌릴 수 없어서 환불 자체를 막는다)
         given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
-        SettlementItemRow item = new SettlementItemRow();
-        item.setSettlementItemId(1L);
-        item.setSettlementId(5L);
-        item.setPaymentId(1L);
-        item.setAmountIncluded(50000L);
-        given(settlementMapper.selectItemByPaymentId(1L)).willReturn(item);
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(5L);
+        given(settlementMapper.markNeedsRecalculation(5L)).willReturn(0);
 
         assertThatThrownBy(() -> refundService.refund(1L, 99L, USER_CANCEL_REQUEST))
                 .isInstanceOf(CommonException.class)
@@ -119,10 +118,40 @@ class RefundServiceTest {
     }
 
     @Test
+    @DisplayName("PENDING 정산에 포함된 결제는 환불하면서 재계산 필요 표시를 남긴다")
+    void refund_대기중정산에포함됨_재계산필요표시하고환불허용() {
+        // Arrange: 정산이 아직 PENDING이면 환불과 같은 트랜잭션에서 needs_recalculation을 원자적으로
+        // 세워서(CodeRabbit 리뷰 지적, PR #54 — confirm과의 경쟁 방지), 담당자가 나중에 recalculate를
+        // 호출해서 금액을 바로잡기 전까지는 확정도 막히게 한다
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(5L);
+        given(settlementMapper.markNeedsRecalculation(5L)).willReturn(1);
+
+        RefundResponse result = refundService.refund(1L, 99L, USER_CANCEL_REQUEST);
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        verify(settlementMapper).markNeedsRecalculation(5L);
+    }
+
+    @Test
+    @DisplayName("정산에 포함된 적 없는 결제는 정산 관련 조회 없이 그냥 환불된다")
+    void refund_정산과무관한결제_그냥환불된다() {
+        // Arrange: selectSettlementIdByPaymentId가 null을 반환하는 상황(어떤 정산에도 없음)
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
+
+        RefundResponse result = refundService.refund(1L, 99L, USER_CANCEL_REQUEST);
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        verify(settlementMapper, never()).markNeedsRecalculation(any());
+    }
+
+    @Test
     @DisplayName("환불 완료 알림 저장이 실패해도 환불 응답 자체는 성공으로 반환한다")
     void refund_알림저장실패해도_환불응답은성공이다() {
         // Arrange: 환불 자체는 이미 성공했는데 알림함 저장만 터지는 상황(예: 알림 도메인 장애)
         given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
         willThrow(new RuntimeException("notification save failed"))
                 .given(notificationService).save(any(SaveNotificationDto.Request.class));
 
@@ -139,6 +168,7 @@ class RefundServiceTest {
         row.setPaymentType("RESERVATION_DEPOSIT");
         row.setReservationId(500L);
         given(paymentMapper.selectByIdForUpdate(1L)).willReturn(row);
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
 
         RefundResponse result = refundService.refund(1L, 99L, USER_CANCEL_REQUEST);
 
@@ -174,6 +204,7 @@ class RefundServiceTest {
     void refund_이미환불됨_예외를던진다() {
         // Arrange: 실제로는 DB의 UK_REFUND_PAYMENT 위반이 DuplicateKeyException으로 올라옴
         given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
         willThrow(new DuplicateKeyException("refund payment unique violation"))
                 .given(refundMapper).insert(any(RefundRow.class));
 

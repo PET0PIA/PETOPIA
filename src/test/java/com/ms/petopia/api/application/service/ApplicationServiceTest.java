@@ -1,6 +1,8 @@
 package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.domain.Application;
+import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
+import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.eq;
 
 /*
  * ApplicationService 단위 테스트.
@@ -757,6 +760,425 @@ class ApplicationServiceTest {
 
             // 소유 확인에서 막혔으니, 슬롯 조회는 실행되면 안 됨
             verify(applicationMapper, never()).selectApplicationSlotDetails(any());
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("담당 행사의 신청 목록 조회(행사 담당자용)")
+    class GetApplicationsForFair {
+
+        @Test
+        @DisplayName("담당자 본인이면 신청 목록을 반환한다")
+        void returnsApplicationsWhenAdminMatches() {
+
+            // given: 이 행사의 담당자가 요청자 본인인 상황
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+
+            List<ApplicationReviewSummaryResponse> applications = List.of(
+                    ApplicationReviewSummaryResponse.builder()
+                            .applicationId(1L).businessId(10L).businessName("멍냥용품")
+                            .status("PENDING_REVIEW").submittedAt(LocalDateTime.now())
+                            .finalPrice(null).rejectReason(null)
+                            .build()
+            );
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectApplicationsByFair(fairId, null)).willReturn(applications);
+
+            // when
+            List<ApplicationReviewSummaryResponse> result =
+                    applicationService.getApplicationsForFair(adminUserId, fairId, null);
+
+            // then
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getBusinessName()).isEqualTo("멍냥용품");
+
+        }
+
+        @Test
+        @DisplayName("status 필터를 넘기면 매퍼에 그대로 전달된다")
+        void passesStatusFilterToMapper() {
+
+            // given
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+            String status = "PENDING_REVIEW";
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectApplicationsByFair(fairId, status)).willReturn(List.of());
+
+            // when
+            applicationService.getApplicationsForFair(adminUserId, fairId, status);
+
+            // then
+            verify(applicationMapper).selectApplicationsByFair(fairId, status);
+
+        }
+
+        @Test
+        @DisplayName("담당자가 배정되지 않은 행사면 예외를 던진다")
+        void throwsWhenNoAdminAssigned() {
+
+            // given: fair_admin_assignments에 담당자 자체가 없는 상황
+            Long adminUserId = 1L;
+            Long fairId = 999L;
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.getApplicationsForFair(adminUserId, fairId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("담당자가 배정되지 않은 행사입니다");
+
+            // 담당자 확인에서 막혔으니, 목록 조회 쿼리는 실행되면 안 됨
+            verify(applicationMapper, never()).selectApplicationsByFair(any(), any());
+
+        }
+
+        @Test
+        @DisplayName("본인이 담당하는 행사가 아니면 예외를 던진다")
+        void throwsWhenNotAssignedAdmin() {
+
+            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            Long adminUserId = 1L;
+            Long fairId = 1L;
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.getApplicationsForFair(adminUserId, fairId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+
+            verify(applicationMapper, never()).selectApplicationsByFair(any(), any());
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("참가 신청서 승인")
+    class ApproveApplication {
+
+        // 테스트용 신청서. status만 바꿔가며 심사 대기/이미 처리됨 케이스 재현
+        private Application createApplication(Long applicationId, Long fairId, Application.Status status) {
+
+            return Application.builder()
+                    .applicationId(applicationId)
+                    .businessId(1L)
+                    .fairId(fairId)
+                    .status(status)
+                    .build();
+
+        }
+
+        @Test
+        @DisplayName("finalPrice를 안 주면 슬롯 가격 합계로 자동 계산해서 승인한다")
+        void approvesWithAutoCalculatedFinalPrice() {
+
+            // given: request=null(담당자가 finalPrice를 안 보낸 상황), 심사 대기 상태인 신청서
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            // 슬롯 가격 합계(실제 SUM 쿼리 결과라고 가정) - 이 매퍼 값 자체가 900000이라고 스텁
+            given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
+            given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(900000L), any(), any()))
+                    .willReturn(1);
+
+            // when
+            ApplicationReviewResultResponse result =
+                    applicationService.approveApplication(adminUserId, applicationId, null);
+
+            // then: 합계값이 그대로 finalPrice로 반영됐는지, 결제 마감일도 채워졌는지 확인
+            assertThat(result.getStatus()).isEqualTo("PAYMENT_PENDING");
+            assertThat(result.getFinalPrice()).isEqualTo(900000L);
+            assertThat(result.getPaymentDueAt()).isNotNull();
+
+        }
+
+        @Test
+        @DisplayName("담당자가 finalPrice를 직접 지정하면 그 값을 그대로 사용한다")
+        void approvesWithAdminSpecifiedFinalPrice() {
+
+            // given: 담당자가 화면에서 미리 본 합계 대신 다른 값(500000)을 직접 입력한 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+            ApplicationApproveRequest request = new ApplicationApproveRequest();
+            request.setFinalPrice(500000L);
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(500000L), any(), any()))
+                    .willReturn(1);
+
+            // when
+            ApplicationReviewResultResponse result =
+                    applicationService.approveApplication(adminUserId, applicationId, request);
+
+            // then: 담당자가 지정한 값이 그대로 쓰였는지 + 불필요한 합계 조회 쿼리는 안 불렸는지 확인
+            assertThat(result.getFinalPrice()).isEqualTo(500000L);
+            verify(applicationMapper, never()).sumSlotPricesByApplicationId(any());
+
+        }
+
+        @Test
+        @DisplayName("신청이 존재하지 않으면 예외를 던진다")
+        void throwsWhenApplicationNotFound() {
+
+            // given: 존재하지 않는 applicationId
+            Long adminUserId = 1L;
+            Long applicationId = 999L;
+
+            given(applicationMapper.selectById(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("신청을 찾을 수 없습니다");
+
+            // 신청 자체가 없으니, 담당자 확인 단계까지 가면 안 됨
+            verify(recruitNoticeMapper, never()).selectAdminUserIdByFairId(any());
+
+        }
+
+        @Test
+        @DisplayName("담당자가 아니면 예외를 던진다")
+        void throwsWhenNotAssignedAdmin() {
+
+            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+
+            // 담당자 확인에서 막혔으니, 실제 승인 처리는 실행되면 안 됨
+            verify(applicationMapper, never()).updateApplicationApproved(any(), any(), any(), any());
+
+        }
+
+        @Test
+        @DisplayName("이미 심사 처리된 신청이면 예외를 던진다")
+        void throwsWhenNotPendingReview() {
+
+            // given: 이미 반려된 신청서를 다시 승인하려는 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.REJECTED));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("심사 대기 중인 신청서만");
+
+            verify(applicationMapper, never()).updateApplicationApproved(any(), any(), any(), any());
+
+        }
+
+        @Test
+        @DisplayName("동시 처리로 UPDATE가 0행 반영되면 예외를 던진다")
+        void throwsWhenConcurrentApprovalWins() {
+
+            /*
+             * given: 조회 시점엔 PENDING_REVIEW였지만(선행 체크 통과),
+             * 실제 UPDATE 실행 시점엔 다른 요청이 먼저 처리해버려서 0행 반영된 상황(락 없이 UPDATE 조건으로 방어)
+             */
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
+            given(applicationMapper.updateApplicationApproved(any(), any(), any(), any())).willReturn(0);
+
+            // when & then: 선행 체크는 통과했지만, UPDATE의 영향받은 행이 0이라 동일한 예외로 최종 차단됨
+            assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("심사 대기 중인 신청서만");
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("참가 신청서 반려")
+    class RejectApplication {
+
+        // 테스트용 신청서. status만 바꿔가며 심사 대기/이미 처리됨 케이스 재현
+        private Application createApplication(Long applicationId, Long fairId, Application.Status status) {
+
+            return Application.builder()
+                    .applicationId(applicationId)
+                    .businessId(1L)
+                    .fairId(fairId)
+                    .status(status)
+                    .build();
+
+        }
+
+        // 테스트용 반려 요청 DTO
+        private ApplicationRejectRequest createRejectRequest(String rejectReason) {
+
+            ApplicationRejectRequest request = new ApplicationRejectRequest();
+            request.setRejectReason(rejectReason);
+
+            return request;
+
+        }
+
+        @Test
+        @DisplayName("정상적으로 반려 처리한다")
+        void rejectsSuccessfully() {
+
+            // given: 심사 대기 상태인 신청서 + 정상적인 반려 사유
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.updateApplicationRejected(eq(applicationId), eq("부적합"), any()))
+                    .willReturn(1);
+
+            // when
+            ApplicationReviewResultResponse result =
+                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("부적합"));
+
+            // then: 상태와 반려 사유가 응답에 정확히 담겼는지 확인
+            assertThat(result.getStatus()).isEqualTo("REJECTED");
+            assertThat(result.getRejectReason()).isEqualTo("부적합");
+
+        }
+
+        @Test
+        @DisplayName("신청이 존재하지 않으면 예외를 던진다")
+        void throwsWhenApplicationNotFound() {
+
+            // given: 존재하지 않는 applicationId
+            Long adminUserId = 1L;
+            Long applicationId = 999L;
+
+            given(applicationMapper.selectById(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("신청을 찾을 수 없습니다");
+
+        }
+
+        @Test
+        @DisplayName("담당자가 아니면 예외를 던진다")
+        void throwsWhenNotAssignedAdmin() {
+
+            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+
+            verify(applicationMapper, never()).updateApplicationRejected(any(), any(), any());
+
+        }
+
+        @Test
+        @DisplayName("이미 심사 처리된 신청이면 예외를 던진다")
+        void throwsWhenNotPendingReview() {
+
+            // given: 이미 승인(PAYMENT_PENDING)된 신청서를 다시 반려하려는 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PAYMENT_PENDING));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("심사 대기 중인 신청서만");
+
+            verify(applicationMapper, never()).updateApplicationRejected(any(), any(), any());
+
+        }
+
+        @Test
+        @DisplayName("반려 사유가 없으면 예외를 던진다")
+        void throwsWhenRejectReasonBlank() {
+
+            // given: rejectReason이 공백뿐인 요청 (컨트롤러 @NotBlank 대신 서비스에서 방어)
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("  ")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("반려 사유를 입력해야 합니다");
+
+            verify(applicationMapper, never()).updateApplicationRejected(any(), any(), any());
+
+        }
+
+        @Test
+        @DisplayName("동시 처리로 UPDATE가 0행 반영되면 예외를 던진다")
+        void throwsWhenConcurrentRejectionLoses() {
+
+            // given: 조회 시점엔 PENDING_REVIEW였지만, UPDATE 시점엔 다른 요청이 먼저 처리해버린 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.updateApplicationRejected(any(), any(), any())).willReturn(0);
+
+            // when & then
+            assertThatThrownBy(() ->
+                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("심사 대기 중인 신청서만");
 
         }
 
