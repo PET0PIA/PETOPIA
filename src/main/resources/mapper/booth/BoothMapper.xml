@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.booth.mapper.BoothMapper">
+
+    <!-- 부스 ID로 단건 조회 -->
+    <select id="selectById" resultType="com.ms.petopia.api.booth.domain.Booth">
+        SELECT booth_id, application_id, business_id, name, image_url, intro, category, target_animal, confirmed_at
+        FROM booth
+        WHERE booth_id = #{boothId}
+    </select>
+
+    <!-- 부스 상세 조회 시 같이 내려줄 판매상품·이벤트 목록 -->
+    <select id="selectItemsByBoothId" resultType="com.ms.petopia.api.booth.domain.BoothItem">
+        SELECT booth_item_id, booth_id, name, type, image_url, note
+        FROM booth_item
+        WHERE booth_id = #{boothId}
+        ORDER BY booth_item_id
+    </select>
+
+</mapper>
