@@ -14,6 +14,8 @@ import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 /**
@@ -58,6 +60,17 @@ public class PaymentService {
             throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
         }
         return PaymentResponse.from(row);
+    }
+
+    /**
+     * 참가신청 ID로 그 신청의 참가비 결제를 조회한다. 채린님(참가업체) 도메인이 참가 취소승인
+     * 처리 중 환불 대상 paymentId를 찾는 용도. 취소승인은 결제 전(신청만 하고 아직 결제를
+     * 시작 안 한 상태)에도 가능하다고 확인됐으므로, {@link #getByReservationId}와 달리
+     * 예외 대신 null을 반환한다 — 호출부가 null이면 환불 호출 자체를 건너뛰어야 한다.
+     */
+    public PaymentResponse findByApplicationId(Long applicationId) {
+        PaymentRow row = paymentMapper.selectByApplicationId(applicationId);
+        return row == null ? null : PaymentResponse.from(row);
     }
 
     /**
@@ -320,6 +333,72 @@ public class PaymentService {
             notifyReservationDomain(row);
         }
 
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 취소/만료 계약 API를 부를 수 있는 호출 도메인이 각각 어떤 결제유형을 다뤄야 하는지 매핑.
+     * {@code PaymentInternalAuthHeaders}의 캐스터 값과 1:1 대응 — 예약 도메인이 참가비 결제를,
+     * 참가업체 도메인이 예약금 결제를 잘못(또는 악의적으로) 건드리는 걸 막는다(CodeRabbit 리뷰
+     * 지적, PR #71 — 캐스터 검증만 있고 그 캐스터가 실제로 그 결제의 소유 도메인인지는 안 봤음).
+     * 인증 도메인 완성 전까지는 여전히 헤더값을 그대로 신뢰하는 한계는 남아있다(TODO).
+     */
+    private static final Map<String, String> CALLER_PAYMENT_TYPES = Map.of(
+            "RESERVATION", "RESERVATION_DEPOSIT",
+            "FAIR", "FAIR_OPENING_FEE",
+            "VENDOR_APPLICATION", "VENDOR_FEE"
+    );
+
+    /**
+     * 다른 도메인이 자기 업무(예약/신청/행사)를 취소 처리하면서, 그에 딸린 PENDING 결제를
+     * 함께 취소시키는 용도(WBS 1.7). PROCESSING(토스 승인 진행중)인 결제는 건드리면 안 되므로
+     * PENDING에서만 허용한다 — CANCELED/EXPIRED는 영구 종료 상태라 재결제는 새 결제 생성으로
+     * 처리한다(FAILED처럼 재사용하지 않음).
+     *
+     * @param callerDomain 호출 도메인(RESERVATION/FAIR/VENDOR_APPLICATION) — 그 결제의
+     *                     paymentType과 안 맞으면 남의 결제를 건드리는 셈이라 거부한다.
+     * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 존재하지 않는 결제 ID일 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 호출 도메인이 그 결제의 소유
+     *         도메인이 아닐 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} PENDING이 아니거나,
+     *         조회 이후 다른 요청(confirm 등)이 먼저 상태를 바꿔버렸을 때
+     */
+    public PaymentResponse cancelPayment(Long paymentId, String callerDomain) {
+        return changeToTerminalStatus(paymentId, callerDomain, "CANCELED", paymentMapper::markCanceled);
+    }
+
+    /**
+     * 다른 도메인의 자체 만료 배치(결제기한 초과)가 호출해서 PENDING 결제를 만료 처리하는
+     * 용도(WBS 1.7). 취소와 상태 가드·트레이드오프는 동일 — {@link #cancelPayment} 참고.
+     */
+    public PaymentResponse expirePayment(Long paymentId, String callerDomain) {
+        return changeToTerminalStatus(paymentId, callerDomain, "EXPIRED", paymentMapper::markExpired);
+    }
+
+    private PaymentResponse changeToTerminalStatus(
+            Long paymentId, String callerDomain, String targetStatus, BiFunction<Long, LocalDateTime, Integer> marker
+    ) {
+        PaymentRow row = paymentMapper.selectById(paymentId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        String expectedType = CALLER_PAYMENT_TYPES.get(callerDomain);
+        if (expectedType != null && !expectedType.equals(row.getPaymentType())) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+        if (!"PENDING".equals(row.getStatus())) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        int updated = marker.apply(paymentId, now);
+        if (updated == 0) {
+            // 조회 이후 confirm 등 다른 요청이 먼저 상태를 바꿔버린 경쟁 상황 — 충돌로 처리.
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        row.setStatus(targetStatus);
+        row.setUpdatedAt(now);
         return PaymentResponse.from(row);
     }
 

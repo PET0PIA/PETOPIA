@@ -57,4 +57,25 @@ public interface FairTransitionMapper {
      * IN_PROGRESS -> ENDED.
      */
     int endFair(@Param("fairId") Long fairId, @Param("now") LocalDateTime now);
+
+    /**
+     * 개설비(FAIR_OPENING_FEE) 결제가 COMPLETED로 끝난 PAYMENT_PENDING 행사를 조회한다.
+     * payment 테이블은 결제 도메인 소유라 EXISTS 서브쿼리로 읽기만 한다 - FOR UPDATE는
+     * fairs 쪽 행에만 걸린다(서브쿼리 대상인 payment 행은 잠그지 않는다).
+     *
+     * <p>결제 완료를 이 도메인이 어떻게 감지할지는 결제 도메인 API 명세(PaymentService.
+     * payFairOpeningFee 참고)에 "미확정"으로 남아있었는데, confirmPayment()가 예약금과
+     * 달리 개설비는 크로스도메인 콜백을 보내지 않는 걸 확인해서(코드 확인, 2026-08-07)
+     * 폴링으로 결정했다 - expireDuePayments/startDueFairs/endDueFairs와 같은 방식이고,
+     * 콜백 발행 쪽(결제 도메인)이 아직 없어도 이 도메인 혼자 만들 수 있다는 실용적 이유도 있다.
+     */
+    List<FairTransitionRow> selectPaymentCompletedForUpdate(@Param("limit") int limit);
+
+    /**
+     * PAYMENT_PENDING -> PREPARING(개설비 결제 완료). 조회(selectPaymentCompletedForUpdate)의
+     * COMPLETED 확인은 별도 쿼리라, 그 사이 개설비 결제가 수동 환불 등으로 상태가 바뀌면
+     * 낡은 판단으로 전이해버릴 수 있다 - 그래서 이 UPDATE도 같은 EXISTS 조건을 WHERE에 걸어
+     * 갱신 시점에 결제 완료 여부를 다시 확인한다(XML 참고).
+     */
+    int completeFairPayment(@Param("fairId") Long fairId, @Param("now") LocalDateTime now);
 }

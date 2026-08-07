@@ -85,6 +85,15 @@ jobs:
       # 호출하는 테스트는 없으므로 값 자체는 아무 문자열이나 된다.
       TOSS_SECRET_KEY: ci-only-toss-secret-key-not-for-production
       NTS_SERVICE_KEY: ci-only-nts-service-key-not-for-production
+      # oauth.google/naver 의 client-id/client-secret 도 JWT_SECRET과 같은 이유로
+      # 기본값이 없다 (application.yaml 참고). 실제 구글/네이버 API를 호출하는
+      # 테스트는 없으므로 값 자체는 아무 문자열이나 되고, job 레벨에 두는 이유도
+      # JWT_SECRET과 동일 - 테스트(러너의 JVM)와 스모크 테스트(컨테이너) 둘 다
+      # 같은 값을 여기 하나에서 가져다 쓴다.
+      GOOGLE_CLIENT_ID: ci-smoke-test-google-client-id
+      GOOGLE_CLIENT_SECRET: ci-smoke-test-google-client-secret
+      NAVER_CLIENT_ID: ci-smoke-test-naver-client-id
+      NAVER_CLIENT_SECRET: ci-smoke-test-naver-client-secret
 
     steps:
       - name: 체크아웃
@@ -236,6 +245,8 @@ jobs:
             -e TOSS_SECRET_KEY \
             -e TOSS_CLIENT_KEY='' -e TOSS_SECURITY_KEY='' \
             -e NTS_SERVICE_KEY \
+            -e GOOGLE_CLIENT_ID -e GOOGLE_CLIENT_SECRET \
+            -e NAVER_CLIENT_ID -e NAVER_CLIENT_SECRET \
             petopia:ci-${{ github.sha }}
 
           deadline=$(( SECONDS + 120 ))

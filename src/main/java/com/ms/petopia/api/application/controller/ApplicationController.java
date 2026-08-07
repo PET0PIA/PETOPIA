@@ -58,15 +58,15 @@ public class ApplicationController {
 
     }
 
-    // 신청 상세 조회
+    // 신청 상세 조회 (사업자 본인 또는 담당 행사 관리자 조회 가능)
     @GetMapping("/applications/{applicationId}")
     public ResponseEntity<ApiResponse<ApplicationDetailResponse>> getApplicationDetail(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long userId,
             @PathVariable Long applicationId
     ) {
 
         return ResponseEntity.ok(
-                ApiResponse.success(applicationService.getApplicationDetail(ownerId, applicationId)));
+                ApiResponse.success(applicationService.getApplicationDetail(userId, applicationId)));
 
     }
 
@@ -138,6 +138,31 @@ public class ApplicationController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(HttpStatus.CREATED, null));
+
+    }
+
+    // 참가 취소 요청 승인 (행사 담당자용)
+    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
+    @PutMapping("/applications/{applicationId}/cancel-requests/approve")
+    public ResponseEntity<ApiResponse<ApplicationCancelRequestResultResponse>> approveCancelRequest(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long applicationId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.approveCancelRequest(adminUserId, applicationId)));
+
+    }
+
+    // 참가 취소 요청 반려 (행사 담당자용)
+    @PutMapping("/applications/{applicationId}/cancel-requests/reject")
+    public ResponseEntity<ApiResponse<ApplicationCancelRequestResultResponse>> rejectCancelRequest(
+            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @PathVariable Long applicationId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.rejectCancelRequest(adminUserId, applicationId)));
 
     }
 

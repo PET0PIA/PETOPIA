@@ -46,6 +46,14 @@ public interface PaymentMapper {
     PaymentRow selectByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
 
     /**
+     * 참가신청 ID로 그 신청의 참가비 결제를 조회한다(VENDOR_FEE 전용). 채린님(참가업체) 도메인이
+     * 참가 취소승인 처리 중 환불 대상 paymentId를 찾는 용도. 취소승인은 결제 전(신청만 하고
+     * 아직 결제를 시작 안 한 상태)에도 가능하므로, 결제가 없으면 null을 그대로 반환한다
+     * (존재 유무 판단은 서비스 계층 책임).
+     */
+    PaymentRow selectByApplicationId(@Param("applicationId") Long applicationId);
+
+    /**
      * 결제 한 건을 생성한다. row.idempotencyKey가 이미 존재하면(동일 대상 중복결제)
      * DB의 UK_PAYMENT_IDEMPOTENCY_KEY 위반으로 DuplicateKeyException이 던져진다 —
      * 서비스 계층에서 잡아서 비즈니스 예외로 변환한다.
@@ -70,6 +78,19 @@ public interface PaymentMapper {
      * markProcessing으로 선점에 성공한 요청만 호출하므로, 정상 흐름에서는 항상 1을 반환한다.
      */
     int markFailed(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * PENDING -> CANCELED로 원자적으로 전이한다(다른 도메인의 취소 처리가 호출, WBS 1.7).
+     * markProcessing과 동일하게 {@code WHERE status='PENDING'} 가드라서, 이미 PROCESSING/
+     * COMPLETED로 넘어간 결제는 0을 반환한다 — 그 사이 confirm이 먼저 나간 경쟁 상황을 이렇게 막는다.
+     */
+    int markCanceled(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * PENDING -> EXPIRED로 원자적으로 전이한다(다른 도메인의 자체 만료 배치가 호출, WBS 1.7).
+     * 가드 방식은 markCanceled와 동일.
+     */
+    int markExpired(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
 
     /**
      * 이전 시도가 FAILED로 끝난 결제 행을 PENDING으로 되돌려 재사용한다(결제 3종 공통 —

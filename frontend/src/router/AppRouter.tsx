@@ -12,7 +12,12 @@ import { ReservationStatusPage } from "../pages/fair-admin/ReservationStatusPage
 import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
+import { PaymentDetailPage } from "../pages/payment/PaymentDetailPage";
+import { PaymentCreatePage } from "../pages/payment/PaymentCreatePage";
+import { PaymentListPage } from "../pages/payment/PaymentListPage";
+import { RefundPage } from "../pages/payment/RefundPage";
 import { AuditLogPage } from "../pages/admin/AuditLogPage";
+import { SettlementPage } from "../pages/admin/SettlementPage";
 import { NotificationsPage } from "../pages/notification/NotificationsPage";
 import { MyReservationsPage } from "../pages/reservation/MyReservationsPage";
 import { ReservationDetailPage } from "../pages/reservation/ReservationDetailPage";
@@ -39,8 +44,6 @@ const publicPages: Record<string, string> = {
   "/privacy": "개인정보 처리방침",
   "/contact": "문의",
 };
-
-// 홀 관리·운영일 관리·예약 현황·방문 통계는 실제 화면을 붙였으므로 fairAdminNavigation 자동 매핑 대상에서 제외한다.
 const fairAdminImplementedPaths = [
   "/fair-admin/booths",
   "/fair-admin/fair",
@@ -48,18 +51,23 @@ const fairAdminImplementedPaths = [
   "/fair-admin/statistics",
 ];
 const fairAdminFallbackNavigation = fairAdminNavigation.filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
-// 신청 검토도 실제 화면을 붙였으므로 superAdminNavigation 자동 매핑 대상에서 제외한다.
 const superAdminFallbackNavigation = superAdminNavigation.filter(
-  (item) => item.path !== "/admin" && item.path !== "/admin/fair-applications" && item.path !== "/admin/audit-logs"
+  (item) =>
+    item.path !== "/admin" &&
+    item.path !== "/admin/fair-applications" &&
+    item.path !== "/admin/audit-logs" &&
+    item.path !== "/admin/payments" &&
+    item.path !== "/admin/payments/create" &&
+    item.path !== "/admin/payments/list" &&
+    item.path !== "/admin/refunds" &&
+    item.path !== "/admin/settlements"
 );
-
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
   const nav = kind === "fair" ? fairAdminNavigation : superAdminNavigation;
   const title = nav.find((item) => item.path === location.pathname)?.label ?? "관리자 메뉴";
   return <PlaceholderPage title={title} admin />;
 }
-
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -76,7 +84,6 @@ export function AppRouter() {
           ))}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
-
         <Route path="fair-admin" element={<FairAdminLayout />}>
           <Route index element={<PlaceholderPage title="박람회 관리자" admin />} />
           <Route path="booths" element={<HallManagementPage />} />
@@ -91,11 +98,15 @@ export function AppRouter() {
           ))}
           <Route path="*" element={<AdminFallback kind="fair" />} />
         </Route>
-
         <Route path="admin" element={<SuperAdminLayout />}>
           <Route index element={<PlaceholderPage title="전체 운영 대시보드" admin />} />
           <Route path="fair-applications" element={<FairApplicationReviewPage />} />
           <Route path="audit-logs" element={<AuditLogPage />} />
+          <Route path="payments" element={<PaymentDetailPage />} />
+          <Route path="payments/create" element={<PaymentCreatePage />} />
+          <Route path="payments/list" element={<PaymentListPage />} />
+          <Route path="refunds" element={<RefundPage />} />
+          <Route path="settlements" element={<SettlementPage />} />
           {superAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
           ))}

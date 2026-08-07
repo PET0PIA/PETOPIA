@@ -50,6 +50,9 @@ public class FairCancelRequestController {
             @RequestBody ReviewFairCancelRequestRequest request
     ) {
         // TODO 인증 도메인 완성 후 X-User-Id 대신 SUPER_ADMIN 인증 Principal에서 reviewerId를 가져온다.
+        // 승인 시 환불은 여기서 직접 트리거하지 않는다 - FairCancelRefundJob이 canceled_at이
+        // 채워진 행사를 스스로 찾아 처리한다(FairCancelRefundOrchestrationService 클래스 주석
+        // 참고, 결제 도메인 호출 실패가 이 API 응답에 영향을 주지 않게 하려는 목적).
         return cancelRequestService.review(fairId, cancelRequestId, reviewerId, request);
     }
 }
