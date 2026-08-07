@@ -1,6 +1,6 @@
 package com.ms.petopia.api.statistics.controller;
 
-import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
+import com.ms.petopia.api.statistics.dto.*;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
 import com.ms.petopia.global.response.ApiResponse;
@@ -32,6 +32,28 @@ public class ReservationDashboardController {
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
+    @GetMapping("/{fairId}/qr-issuance-summary")
+    public ResponseEntity<ApiResponse<List<QrIssuanceSummaryDto>>> getQrIssuanceSummary(
+            @PathVariable Long fairId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getQrIssuanceSummary(fairId)));
+    }
+
+    @GetMapping("/{fairId}/hourly-entry-trend")
+    public ResponseEntity<ApiResponse<List<HourlyEntryTrendDto>>> getHourlyEntryTrend(
+            @PathVariable Long fairId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getHourlyEntryTrend(fairId, date)));
+    }
+
+    @GetMapping("/{fairId}/booth-visit-stats")
+    public ResponseEntity<ApiResponse<List<BoothVisitStatDto>>> getBoothVisitStats(
+            @PathVariable Long fairId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getBoothVisitStats(fairId)));
+    }
+
     // SSE 연결
     @GetMapping(value = "/{fairId}/reservation-dashboard/stream",
                 produces = MediaType.TEXT_EVENT_STREAM_VALUE) // 브라우저가 EventSource로 인식하는 MIME타입
@@ -50,4 +72,12 @@ public class ReservationDashboardController {
         }
         return emitter;
     }
+
+    @GetMapping("/{fairId}/visit-stats")
+    public ResponseEntity<ApiResponse<VisitStatsDto>> getVisitStats(
+            @PathVariable Long fairId
+    ) {
+        return ResponseEntity.ok(ApiResponse.success(dashboardService.getVisitStats(fairId)));
+    }
+
 }
