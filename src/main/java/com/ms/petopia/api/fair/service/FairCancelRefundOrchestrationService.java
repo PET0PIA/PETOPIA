@@ -8,7 +8,6 @@ import com.ms.petopia.api.refund.dto.RefundReason;
 import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.service.RefundService;
-import com.ms.petopia.global.exception.CommonException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -48,7 +47,8 @@ public class FairCancelRefundOrchestrationService {
     /**
      * 취소된 행사의 환불 대상 결제를 전부 환불 처리한다. 이미 환불된 건은 조회 자체에서
      * 빠지고({@code LEFT JOIN refund ... IS NULL}), 조회 이후 동시에 다른 경로로 이미
-     * 환불됐다면 {@link RefundService#refund}가 예외를 던지므로 그 건만 건너뛴다.
+     * 환불됐거나 그 외 예상 못한 이유로 {@link RefundService#refund}가 예외를 던지면
+     * 그 건만 건너뛴다.
      *
      * @return 실제로 환불 처리된 건수
      */
@@ -72,10 +72,13 @@ public class FairCancelRefundOrchestrationService {
                 refundService.refund(payment.getPaymentId(), actorUserId,
                         new RefundRequest(reason, RequestedByDomain.FAIR));
                 refunded++;
-            } catch (CommonException e) {
-                // 이미 환불됨(동시 처리)/정산 확정으로 환불 불가 등 - 이 건만 건너뛰고 계속한다.
+            } catch (RuntimeException e) {
+                // 이미 환불됨(동시 처리)/정산 확정으로 환불 불가(CommonException) 뿐 아니라, 결제
+                // 도메인 쪽 데이터 접근 예외 등 예상 못한 RuntimeException도 이 건만 건너뛰고
+                // 나머지 결제는 계속 처리한다 - CommonException만 잡으면 그 외 예외에서 반복문이
+                // 끊겨 이후 결제는 환불도 안 되고 호출부(컨트롤러)까지 오류로 끝나버린다.
                 log.warn("행사 취소 환불 처리 실패. fairId={}, paymentId={}, reason={}",
-                        fairId, payment.getPaymentId(), e.getMessage());
+                        fairId, payment.getPaymentId(), e.getMessage(), e);
             }
         }
         return refunded;

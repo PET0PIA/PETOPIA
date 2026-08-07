@@ -132,6 +132,30 @@ class FairCancelRefundOrchestrationServiceTest {
         verify(refundService, times(2)).refund(any(), any(), any());
     }
 
+    /**
+     * CommonException이 아닌 예상 못한 RuntimeException(결제 도메인 쪽 데이터 접근 예외 등)
+     * 도 그 건만 건너뛰고 나머지 결제는 계속 처리해야 한다 - CommonException만 잡으면
+     * 이런 예외에서 반복문이 끊겨 이후 결제는 환불도 안 되고 예외가 호출부(컨트롤러)까지
+     * 그대로 전파된다.
+     */
+    @Test
+    @DisplayName("예상 못한 RuntimeException이 나도 나머지는 계속 처리하고, 성공한 건수만 반환한다")
+    void refundForCanceledFair_예상못한예외도_건너뛰고계속처리한다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
+        given(cancelRefundMapper.selectRefundablePaymentsByFairId(FAIR_ID)).willReturn(List.of(
+                paymentRow(1L, "RESERVATION_DEPOSIT"),
+                paymentRow(2L, "VENDOR_FEE")
+        ));
+        willThrow(new IllegalStateException("결제 도메인 데이터 접근 실패"))
+                .given(refundService).refund(eq(1L), any(), any());
+        given(refundService.refund(eq(2L), any(), any())).willReturn((RefundResponse) null);
+
+        int refunded = orchestrationService.refundForCanceledFair(FAIR_ID, ACTOR_ID);
+
+        assertThat(refunded).isEqualTo(1);
+        verify(refundService, times(2)).refund(any(), any(), any());
+    }
+
     @Test
     @DisplayName("개설비(FAIR_OPENING_FEE) 등 대상 외 결제유형은 건너뛴다")
     void refundForCanceledFair_대상외유형은_건너뛴다() {

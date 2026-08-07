@@ -72,7 +72,10 @@ public interface FairTransitionMapper {
     List<FairTransitionRow> selectPaymentCompletedForUpdate(@Param("limit") int limit);
 
     /**
-     * PAYMENT_PENDING -> PREPARING(개설비 결제 완료).
+     * PAYMENT_PENDING -> PREPARING(개설비 결제 완료). 조회(selectPaymentCompletedForUpdate)의
+     * COMPLETED 확인은 별도 쿼리라, 그 사이 개설비 결제가 수동 환불 등으로 상태가 바뀌면
+     * 낡은 판단으로 전이해버릴 수 있다 - 그래서 이 UPDATE도 같은 EXISTS 조건을 WHERE에 걸어
+     * 갱신 시점에 결제 완료 여부를 다시 확인한다(XML 참고).
      */
     int completeFairPayment(@Param("fairId") Long fairId, @Param("now") LocalDateTime now);
 }

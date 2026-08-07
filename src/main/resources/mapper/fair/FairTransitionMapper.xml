@@ -86,13 +86,23 @@
          FOR UPDATE SKIP LOCKED
     </select>
 
+    <!-- 조회(selectPaymentCompletedForUpdate)의 COMPLETED 확인은 별도 쿼리라, 그 사이
+         개설비 결제가 수동 환불 등으로 상태가 바뀌면 낡은 판단으로 전이해버릴 수 있다.
+         조회와 같은 EXISTS 조건을 UPDATE에도 그대로 걸어서 갱신 시점에 다시 확인한다. -->
     <update id="completeFairPayment">
-        UPDATE fairs
+        UPDATE fairs f
            SET status = 'PREPARING'
              , updated_at = #{now}
-         WHERE fair_id = #{fairId}
-           AND status = 'PAYMENT_PENDING'
-           AND canceled_at IS NULL
+         WHERE f.fair_id = #{fairId}
+           AND f.status = 'PAYMENT_PENDING'
+           AND f.canceled_at IS NULL
+           AND EXISTS (
+               SELECT 1
+                 FROM payment p
+                WHERE p.fair_id = f.fair_id
+                  AND p.payment_type = 'FAIR_OPENING_FEE'
+                  AND p.status = 'COMPLETED'
+           )
     </update>
 
 </mapper>
