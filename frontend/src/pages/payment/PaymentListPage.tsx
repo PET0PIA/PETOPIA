@@ -110,11 +110,11 @@ function AdminListSection() {
       <form onSubmit={handleSubmit} className="surface mb-6 grid gap-3 p-5 sm:grid-cols-5 sm:items-end">
         <div>
           <label htmlFor="al-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-          <Input id="al-fair-id" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="전체" />
+          <Input id="al-fair-id" className="input-no-spinner" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="전체" />
         </div>
         <div>
           <label htmlFor="al-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
-          <Input id="al-business-id" type="number" min={1} value={businessIdInput} onChange={(event) => setBusinessIdInput(event.target.value)} placeholder="전체" />
+          <Input id="al-business-id" className="input-no-spinner" type="number" min={1} value={businessIdInput} onChange={(event) => setBusinessIdInput(event.target.value)} placeholder="전체" />
         </div>
         <div>
           <label htmlFor="al-type" className="mb-1.5 block text-sm font-bold text-ink">결제 유형</label>
@@ -202,7 +202,7 @@ function MyPaymentsSection() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label htmlFor="mp-user-id" className="mb-1.5 block text-sm font-bold text-ink">사용자 ID (임시 헤더 X-User-Id)</label>
-            <Input id="mp-user-id" type="number" min={1} value={userIdInput} onChange={(event) => setUserIdInput(event.target.value)} placeholder="예: 1" />
+            <Input id="mp-user-id" className="input-no-spinner" type="number" min={1} value={userIdInput} onChange={(event) => setUserIdInput(event.target.value)} placeholder="예: test1" />
           </div>
           <Button type="submit" variant="outline" disabled={loading}>
             <User size={16} />내 결제 조회

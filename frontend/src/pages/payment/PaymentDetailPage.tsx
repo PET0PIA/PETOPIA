@@ -1,5 +1,6 @@
 import { AlertCircle, Search } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getPayment, type PaymentDetail } from "../../api/payment";
 import { Badge } from "../../components/ui/Badge";
@@ -20,23 +21,18 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export function PaymentDetailPage() {
+  const [searchParams] = useSearchParams();
   const [paymentIdInput, setPaymentIdInput] = useState("");
   const [detail, setDetail] = useState<PaymentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  async function handleLoad(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(paymentIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("결제 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-
+  async function loadPayment(paymentId: number) {
+    setPaymentIdInput(String(paymentId));
     setLoading(true);
     setLoadError(null);
     try {
-      const data = await getPayment(parsed);
+      const data = await getPayment(paymentId);
       setDetail(data);
     } catch (error) {
       setDetail(null);
@@ -46,14 +42,33 @@ export function PaymentDetailPage() {
     }
   }
 
+  // 목록 페이지의 "상세" 링크(?id=)로 들어왔을 때 자동으로 채워서 조회한다.
+  // loadPayment의 setState 호출이 effect 본문에서 "동기적으로" 실행되는 것으로 잡히지 않도록
+  // 마이크로태스크로 한 틱 미룬다(react-hooks/set-state-in-effect).
+  useEffect(() => {
+    const idParam = Number(searchParams.get("id"));
+    if (!Number.isInteger(idParam) || idParam <= 0) return;
+    queueMicrotask(() => loadPayment(idParam));
+  }, [searchParams]);
+
+  function handleLoad(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Number(paymentIdInput);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setLoadError("결제 ID는 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+    loadPayment(parsed);
+  }
+
   return (
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader eyebrow="결제" title="결제 상세 조회" description="결제 ID로 결제 상세 내역을 확인해요." />
 
       <form onSubmit={handleLoad} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">조회할 결제 ID</span>
-          <Input type="number" min={1} value={paymentIdInput} onChange={(event) => setPaymentIdInput(event.target.value)} placeholder="예: 1" />
+          <label htmlFor="payment-id-input" className="mb-1.5 block text-sm font-bold text-ink">조회할 결제 ID</label>
+          <Input id="payment-id-input" className="input-no-spinner" type="number" min={1} value={paymentIdInput} onChange={(event) => setPaymentIdInput(event.target.value)} placeholder="예: test1" />
         </div>
         <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
       </form>

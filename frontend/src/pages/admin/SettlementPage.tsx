@@ -84,9 +84,13 @@ export function SettlementPage() {
     setRateFormError(null);
     setRateFormSuccess(null);
 
+    if (ratePercentInput.trim() === "") {
+      setRateFormError("수수료율은 0~100 사이의 숫자(%)로 입력해 주세요.");
+      return;
+    }
     const percent = Number(ratePercentInput);
     if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
-      setRateFormError("요율은 0~100 사이의 숫자(%)로 입력해 주세요.");
+      setRateFormError("수수료율은 0~100 사이의 숫자(%)로 입력해 주세요.");
       return;
     }
 
@@ -94,7 +98,7 @@ export function SettlementPage() {
     if (rateScope === "FAIR") {
       const parsed = Number(rateFairIdInput);
       if (!Number.isInteger(parsed) || parsed <= 0) {
-        setRateFormError("행사별 요율은 행사 ID를 1 이상의 숫자로 입력해 주세요.");
+        setRateFormError("행사별 수수료율은 행사 ID를 1 이상의 숫자로 입력해 주세요.");
         return;
       }
       fairId = parsed;
@@ -105,8 +109,8 @@ export function SettlementPage() {
       const result = await setCommissionRate({ scope: rateScope, fairId, rate: percent / 100 });
       setRateFormSuccess(
         rateScope === "GLOBAL"
-          ? `전역 기본 요율이 ${formatRatePercent(result.rate)}로 설정됐어요.`
-          : `행사 #${result.fairId} 전용 요율이 ${formatRatePercent(result.rate)}로 설정됐어요.`,
+          ? `전역 기본 수수료율이 ${formatRatePercent(result.rate)}로 설정됐어요.`
+          : `행사 #${result.fairId} 전용 수수료율이 ${formatRatePercent(result.rate)}로 설정됐어요.`,
       );
       if (rateScope === "GLOBAL") {
         setGlobalRate(result);
@@ -114,7 +118,7 @@ export function SettlementPage() {
       setRatePercentInput("");
       setRateFairIdInput("");
     } catch (error) {
-      setRateFormError(errorMessage(error, "요율 설정에 실패했어요."));
+      setRateFormError(errorMessage(error, "수수료율 설정에 실패했어요."));
     } finally {
       setRateSubmitting(false);
     }
@@ -231,10 +235,10 @@ export function SettlementPage() {
       <PageHeader eyebrow="전체 운영" title="정산·수수료율" description="참가업체 정산을 계산·확정하고 플랫폼 수수료율을 관리해요." />
 
       <section className="mb-10">
-        <SectionHeader title="수수료율 관리" description="전역 기본값과 행사별 override를 설정해요. 새로 설정한 값은 이후 계산되는 정산부터 적용돼요." />
+        <SectionHeader title="수수료율 관리" description="모든 행사에 공통으로 적용되는 기본 수수료율을 설정하거나, 특정 행사에만 다른 수수료율을 따로 지정할 수 있어요. 변경한 수수료율은 설정 이후에 새로 계산되는 정산부터 반영돼요." />
 
         <Card className="mb-4 p-6">
-          <h3 className="mb-2 text-sm font-extrabold text-muted">현재 전역 기본 요율</h3>
+          <h3 className="mb-2 text-sm font-extrabold text-muted">현재 전체 기본 수수료율</h3>
           {rateLoading && <p className="text-sm text-muted">불러오는 중이에요...</p>}
           {!rateLoading && rateLoadError && (
             <p className="text-sm text-primary-strong">{rateLoadError}</p>
@@ -252,23 +256,23 @@ export function SettlementPage() {
         </Card>
 
         <Card className="p-6">
-          <h3 className="mb-4 text-sm font-extrabold text-muted">새 요율 설정</h3>
+          <h3 className="mb-4 text-sm font-extrabold text-muted">새 수수료율 설정</h3>
           <form onSubmit={handleRateSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="w-full sm:w-40">
               <label htmlFor="rate-scope" className="mb-1.5 block text-sm font-bold text-ink">적용 범위</label>
               <Select id="rate-scope" value={rateScope} onChange={(event) => setRateScope(event.target.value as CommissionRateScope)}>
-                <option value="GLOBAL">전역 기본값</option>
+                <option value="GLOBAL">기본 수수료율</option>
                 <option value="FAIR">특정 행사</option>
               </Select>
             </div>
             {rateScope === "FAIR" && (
               <div className="w-full sm:w-40">
                 <label htmlFor="rate-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-                <Input id="rate-fair-id" type="number" min={1} value={rateFairIdInput} onChange={(event) => setRateFairIdInput(event.target.value)} placeholder="예: 1" />
+                <Input id="rate-fair-id" className="input-no-spinner" type="number" min={1} value={rateFairIdInput} onChange={(event) => setRateFairIdInput(event.target.value)} placeholder="예: test1" />
               </div>
             )}
             <div className="w-full sm:w-32">
-              <label htmlFor="rate-percent" className="mb-1.5 block text-sm font-bold text-ink">요율(%)</label>
+              <label htmlFor="rate-percent" className="mb-1.5 block text-sm font-bold text-ink">수수료율(%)</label>
               <Input id="rate-percent" type="number" min={0} max={100} step={0.01} value={ratePercentInput} onChange={(event) => setRatePercentInput(event.target.value)} placeholder="예: 5" />
             </div>
             <Button type="submit" disabled={rateSubmitting}>{rateSubmitting ? "저장 중..." : "저장"}</Button>
@@ -290,7 +294,7 @@ export function SettlementPage() {
         <form onSubmit={handleLoadSubmit} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label htmlFor="fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-            <Input id="fair-id" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
+            <Input id="fair-id" className="input-no-spinner" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: test1" />
           </div>
           <Button type="submit" variant="outline" disabled={listLoading}>
             <Search size={16} />
@@ -318,7 +322,7 @@ export function SettlementPage() {
               <form onSubmit={handleCalcSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex-1">
                   <label htmlFor="calc-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
-                  <Input id="calc-business-id" type="number" min={1} value={calcBusinessIdInput} onChange={(event) => setCalcBusinessIdInput(event.target.value)} placeholder="예: 20" />
+                  <Input id="calc-business-id" className="input-no-spinner" type="number" min={1} value={calcBusinessIdInput} onChange={(event) => setCalcBusinessIdInput(event.target.value)} placeholder="예: 20" />
                 </div>
                 <Button type="submit" variant="outline" disabled={calcSubmitting}>
                   <Calculator size={16} />
