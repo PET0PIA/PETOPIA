@@ -22,4 +22,7 @@ public interface BoothMapper {
     // 부스 생성 (신청 확정 시 자동 생성)
     void insertBooth(Booth booth);
 
+    // 신청 ID 기준으로 부스 삭제 (취소 승인 시, 이전 상태가 CONFIRMED였을 때)
+    int deleteBoothByApplicationId(@Param("applicationId") Long applicationId);
+
 }

@@ -32,4 +32,9 @@
         VALUES (#{applicationId}, #{businessId}, #{confirmedAt})
     </insert>
 
+    <!-- 신청 ID 기준으로 부스 삭제 (취소 승인 시) -->
+    <delete id="deleteBoothByApplicationId">
+        DELETE FROM booth WHERE application_id = #{applicationId}
+    </delete>
+
 </mapper>

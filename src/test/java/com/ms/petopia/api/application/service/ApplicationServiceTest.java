@@ -1768,6 +1768,70 @@ class ApplicationServiceTest {
         }
 
         @Test
+        @DisplayName("이전 상태가 CONFIRMED였다면 승인과 함께 부스도 삭제하고 boothDeleted=true를 반환한다")
+        void deletesBoothWhenApprovingConfirmedApplication() {
+
+            // given: CONFIRMED(결제 완료) 상태의 신청서 - 부스가 존재하는 상황
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.CONFIRMED)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+            given(applicationMapper.selectPaymentIdByApplicationId(applicationId)).willReturn(null);
+
+            // when
+            ApplicationCancelRequestResultResponse result =
+                    applicationService.approveCancelRequest(adminUserId, applicationId);
+
+            // then
+            assertThat(result.getBoothDeleted()).isTrue();
+            verify(boothMapper).deleteBoothByApplicationId(applicationId);
+
+        }
+
+        @Test
+        @DisplayName("이전 상태가 PAYMENT_PENDING이었다면 부스 삭제를 시도하지 않고 boothDeleted=false를 반환한다")
+        void doesNotDeleteBoothWhenApprovingPaymentPendingApplication() {
+
+            // given: 결제 전(PAYMENT_PENDING) 상태의 신청서 - 애초에 부스가 없었음
+            Long adminUserId = 1L;
+            Long applicationId = 1L;
+            Long fairId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId).fairId(fairId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
+            given(applicationMapper.selectPendingCancelRequest(applicationId))
+                    .willReturn(createCancelRequest(10L, applicationId));
+            given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+            given(applicationMapper.selectPaymentIdByApplicationId(applicationId)).willReturn(null);
+
+            // when
+            ApplicationCancelRequestResultResponse result =
+                    applicationService.approveCancelRequest(adminUserId, applicationId);
+
+            // then
+            assertThat(result.getBoothDeleted()).isFalse();
+            verify(boothMapper, never()).deleteBoothByApplicationId(any());
+
+        }
+
+        @Test
         @DisplayName("신청이 존재하지 않으면 예외를 던진다")
         void throwsWhenApplicationNotFound() {
 
@@ -2228,9 +2292,15 @@ class ApplicationServiceTest {
         @DisplayName("정상적으로 취소 처리한다")
         void cancelsSuccessfully() {
 
-            // given
+            // given: PAYMENT_PENDING 상태(결제 전)인 신청서
             Long applicationId = 1L;
 
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
             given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
 
             // when
@@ -2248,6 +2318,12 @@ class ApplicationServiceTest {
             // given
             Long applicationId = 1L;
 
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
             given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
 
             // when
@@ -2259,12 +2335,82 @@ class ApplicationServiceTest {
         }
 
         @Test
+        @DisplayName("이전 상태가 CONFIRMED였다면 부스도 함께 삭제한다")
+        void deletesBoothWhenPreviouslyConfirmed() {
+
+            // given: 결제완료(CONFIRMED) 상태였던 신청서
+            Long applicationId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.CONFIRMED)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+
+            // when
+            applicationService.cancelApplicationForCanceledFair(applicationId);
+
+            // then
+            verify(boothMapper).deleteBoothByApplicationId(applicationId);
+
+        }
+
+        @Test
+        @DisplayName("이전 상태가 CONFIRMED가 아니었다면 부스 삭제를 시도하지 않는다")
+        void doesNotDeleteBoothWhenNotPreviouslyConfirmed() {
+
+            // given: 결제 전(PAYMENT_PENDING) 상태였던 신청서 - 애초에 부스가 없었음
+            Long applicationId = 1L;
+
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+
+            // when
+            applicationService.cancelApplicationForCanceledFair(applicationId);
+
+            // then
+            verify(boothMapper, never()).deleteBoothByApplicationId(any());
+
+        }
+
+        @Test
+        @DisplayName("신청서가 존재하지 않으면 false를 반환하고 아무것도 시도하지 않는다")
+        void returnsFalseWhenApplicationNotFound() {
+
+            // given
+            Long applicationId = 999L;
+
+            given(applicationMapper.selectById(applicationId)).willReturn(null);
+
+            // when
+            boolean result = applicationService.cancelApplicationForCanceledFair(applicationId);
+
+            // then
+            assertThat(result).isFalse();
+            verify(applicationMapper, never()).updateApplicationCanceled(any());
+
+        }
+
+        @Test
         @DisplayName("이미 다른 경로로 처리돼(동시성) UPDATE가 0행 반영되면 false를 반환한다")
         void returnsFalseWhenAlreadyProcessed() {
 
             // given: 조회 시점 이후 이미 다른 경로(예: 사업자 자진 취소)로 처리돼버린 상황
             Long applicationId = 1L;
 
+            Application application = Application.builder()
+                    .applicationId(applicationId)
+                    .status(Application.Status.PAYMENT_PENDING)
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
             given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(0);
 
             // when

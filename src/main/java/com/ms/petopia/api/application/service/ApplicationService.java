@@ -589,6 +589,13 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_CANCELABLE);
         }
 
+        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
+        boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
+
+        if(wasConfirmed) {
+            boothMapper.deleteBoothByApplicationId(applicationId);
+        }
+
         // 결제가 있었다면(CONFIRMED 상태였던 경우) 환불 처리. PAYMENT_PENDING 상태에서 취소된 경우 결제가 없어 null.
         Long paymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
 
@@ -612,6 +619,7 @@ public class ApplicationService {
                 .status(ApplicationCancelRequest.Status.APPROVED.name())
                 .applicationStatus(Application.Status.CANCELED.name())
                 .decidedAt(decidedAt)
+                .boothDeleted(wasConfirmed)
                 .build();
         
     }
@@ -627,6 +635,14 @@ public class ApplicationService {
     @Transactional
     public boolean cancelApplicationForCanceledFair(Long applicationId) {
 
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            return false;
+        }
+
+        boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
+
         // 락 순서를 approveCancelRequest와 통일(취소요청 행 먼저)해서 교착상태 방지
         applicationMapper.lockPendingCancelRequestIfExists(applicationId);
 
@@ -634,6 +650,11 @@ public class ApplicationService {
 
         if(updated == 0) {
             return false; // 0이면 이미 다른 경로로 처리됨(동시성) - 배치 카운트에서 제외
+        }
+
+        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
+        if(wasConfirmed) {
+            boothMapper.deleteBoothByApplicationId(applicationId);
         }
 
         // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
