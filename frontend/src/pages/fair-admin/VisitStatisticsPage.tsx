@@ -39,6 +39,16 @@ export function VisitStatisticsPage() {
   const [fairIdInput, setFairIdInput] = useState(() => resolveInitialFairIdInput(fairIdParam, searchParams));
   const [fairId, setFairId] = useState<number | null>(() => resolveInitialFairId(fairIdParam, searchParams));
 
+  // fairIdParam이 바뀌면(같은 컴포넌트가 유지된 채 다른 행사로 라우팅) state를 동기화한다.
+  useEffect(() => {
+    const newInput = resolveInitialFairIdInput(fairIdParam, searchParams);
+    const newId = resolveInitialFairId(fairIdParam, searchParams);
+    setFairIdInput(newInput);
+    setFairId(newId);
+    setVisitStats(null);
+    setLoadError(null);
+  }, [fairIdParam]); // searchParams 변경은 수동 검색 폼이 담당하므로 제외
+
   const [fairDates, setFairDates] = useState<FairDate[]>([]);
   const [boothStats, setBoothStats] = useState<BoothVisitStat[]>([]);
   const [visitStats, setVisitStats] = useState<VisitStats | null>(null);
