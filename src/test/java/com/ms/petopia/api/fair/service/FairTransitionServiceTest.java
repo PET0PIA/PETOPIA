@@ -1,5 +1,9 @@
 package com.ms.petopia.api.fair.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.fair.dto.FairTransitionRow;
 import com.ms.petopia.api.fair.mapper.FairTransitionMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -12,9 +16,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,13 +39,16 @@ class FairTransitionServiceTest {
     @Mock
     private FairTimeProvider timeProvider;
 
+    @Mock
+    private AuditLogService auditLogService;
+
     @InjectMocks
     private FairTransitionService transitionService;
 
     // ===== completeDuePayments =====
 
     @Test
-    @DisplayName("개설비 결제가 완료된 PAYMENT_PENDING 행사를 PREPARING으로 바꾼다")
+    @DisplayName("개설비 결제가 완료된 PAYMENT_PENDING 행사를 PREPARING으로 바꾸고 감사로그를 남긴다")
     void completeDuePayments_결제완료된행사를_전환한다() {
         given(timeProvider.now()).willReturn(NOW);
         given(transitionMapper.selectPaymentCompletedForUpdate(200)).willReturn(List.of(row(4L), row(5L)));
@@ -47,6 +58,18 @@ class FairTransitionServiceTest {
         assertThat(transitionService.completeDuePayments(200)).isEqualTo(2);
         verify(transitionMapper).completeFairPayment(4L, NOW);
         verify(transitionMapper).completeFairPayment(5L, NOW);
+
+        Map<String, Object> expectedPayload = Map.of("status", "PREPARING", "completedAt", NOW);
+        verify(auditLogService).record(
+                isNull(), eq(ActorType.SYSTEM), eq("SYSTEM"),
+                eq(ActionType.PAYMENT_COMPLETION_RECEIVED), eq(TargetType.FAIR), eq(4L),
+                isNull(), eq(expectedPayload)
+        );
+        verify(auditLogService).record(
+                isNull(), eq(ActorType.SYSTEM), eq("SYSTEM"),
+                eq(ActionType.PAYMENT_COMPLETION_RECEIVED), eq(TargetType.FAIR), eq(5L),
+                isNull(), eq(expectedPayload)
+        );
     }
 
     /**
@@ -61,6 +84,7 @@ class FairTransitionServiceTest {
         given(transitionMapper.completeFairPayment(4L, NOW)).willReturn(0);
 
         assertThat(transitionService.completeDuePayments(200)).isZero();
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -71,6 +95,7 @@ class FairTransitionServiceTest {
 
         assertThat(transitionService.completeDuePayments(200)).isZero();
         verify(transitionMapper, never()).completeFairPayment(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     // ===== expireDuePayments =====

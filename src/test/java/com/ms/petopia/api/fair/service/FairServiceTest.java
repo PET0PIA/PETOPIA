@@ -189,7 +189,7 @@ class FairServiceTest {
         Fair fair = fairWithStatus(FairStatus.RECEIVED);
         given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
 
-        FairApplicationDetailResponse response = fairService.getApplication(FAIR_ID);
+        FairApplicationDetailResponse response = fairService.getApplication(FAIR_ID, REVIEWER_ID);
 
         assertThat(response.fairId()).isEqualTo(FAIR_ID);
         assertThat(response.name()).isEqualTo(fair.getName());
@@ -201,7 +201,14 @@ class FairServiceTest {
     @DisplayName("존재하지 않는 fairId를 조회하면 FAIR_NOT_FOUND를 던진다")
     void getApplication_없으면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(null);
-        assertErrorCode(() -> fairService.getApplication(FAIR_ID), ErrorCode.FAIR_NOT_FOUND);
+        assertErrorCode(() -> fairService.getApplication(FAIR_ID, REVIEWER_ID), ErrorCode.FAIR_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("requesterId가 없으면 조회하지 않고 INVALID_INPUT_VALUE를 던진다")
+    void getApplication_requesterId없으면_예외를_던진다() {
+        assertErrorCode(() -> fairService.getApplication(FAIR_ID, null), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).selectById(any());
     }
 
     // ===== review =====
@@ -210,6 +217,7 @@ class FairServiceTest {
     @DisplayName("RECEIVED 신청서를 승인하면 PAYMENT_PENDING으로 바뀌고 7일 뒤로 결제 기한을 잡는다")
     void review_승인하면_결제대기상태와_기한을_설정한다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateReviewResult(any())).willReturn(1);
 
         ReviewFairApplicationResponse response = fairService.review(
                 FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, null)
@@ -222,7 +230,7 @@ class FairServiceTest {
         assertThat(response.rejectReason()).isNull();
 
         ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
-        verify(fairMapper).update(captor.capture());
+        verify(fairMapper).updateReviewResult(captor.capture());
         Fair updated = captor.getValue();
         assertThat(updated.getFairId()).isEqualTo(FAIR_ID);
         assertThat(updated.getReviewedBy()).isEqualTo(REVIEWER_ID);
@@ -235,6 +243,7 @@ class FairServiceTest {
     @DisplayName("RECEIVED 신청서를 사유와 함께 반려하면 REJECTED로 바뀌고 사유를 저장한다")
     void review_반려하면_반려상태와_사유를_설정한다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateReviewResult(any())).willReturn(1);
 
         ReviewFairApplicationResponse response = fairService.review(
                 FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.REJECT, "  서류 미비  ")
@@ -250,17 +259,17 @@ class FairServiceTest {
     void review_반려사유없으면_예외를_던진다() {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.REJECT, "  ");
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_REJECT_REASON_REQUIRED);
-        verify(fairMapper, never()).update(any());
+        verify(fairMapper, never()).updateReviewResult(any());
     }
 
     @Test
-    @DisplayName("이미 검토된(RECEIVED가 아닌) 신청서는 FAIR_NOT_PENDING_REVIEW를 던진다")
-    void review_이미검토된신청서면_예외를_던진다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+    @DisplayName("조건부 UPDATE가 영향 행 0건이면(이미 검토됐거나 동시 요청에 밀리면) FAIR_NOT_PENDING_REVIEW를 던진다")
+    void review_조건부갱신이_0건이면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateReviewResult(any())).willReturn(0);
 
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_NOT_PENDING_REVIEW);
-        verify(fairMapper, never()).update(any());
     }
 
     @Test
@@ -283,7 +292,7 @@ class FairServiceTest {
                 () -> fairService.review(FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(null, null)),
                 ErrorCode.INVALID_INPUT_VALUE
         );
-        verify(fairMapper, never()).update(any());
+        verify(fairMapper, never()).updateReviewResult(any());
     }
 
     // ===== publish =====

@@ -11,6 +11,10 @@ import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestResponse;
 import com.ms.petopia.api.fair.mapper.FairCancelRequestMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,6 +54,7 @@ public class FairCancelRequestService {
     private final FairCancelRequestMapper cancelRequestMapper;
     private final FairMapper fairMapper;
     private final FairTimeProvider timeProvider;
+    private final AuditLogService auditLogService;
 
     /**
      * 취소를 신청한다. PENDING 상태로 등록되고, SUPER_ADMIN의 검토를 기다린다.
@@ -152,7 +158,25 @@ public class FairCancelRequestService {
             Fair fairUpdate = new Fair();
             fairUpdate.setFairId(fairId);
             fairUpdate.setCanceledAt(now);
-            fairMapper.update(fairUpdate);
+            // fair_cancel_requests는 이미 APPROVED로 갱신된 뒤라, 여기서 실패하면(정상 흐름에선
+            // 거의 일어나지 않지만 - fairs는 하드삭제하지 않음) 신청 상태와 fairs.canceled_at이
+            // 어긋난 채로 감사 로그만 "성공"으로 남을 수 있다. 결과를 확인해 즉시 롤백한다.
+            if (fairMapper.update(fairUpdate) != 1) {
+                throw new CommonException(ErrorCode.INTERNAL_SERVER_ERROR);
+            }
+
+            // TODO 인증 도메인 완성 전까지 reviewerId가 실제 SUPER_ADMIN인지는 검증하지 않는다
+            // (review() 상단 TODO와 동일한 한계). actorRole은 그 전제하에 고정값으로 남긴다.
+            auditLogService.record(
+                    reviewerId,
+                    ActorType.ADMIN,
+                    "SUPER_ADMIN",
+                    ActionType.FAIR_CANCEL_APPROVE,
+                    TargetType.FAIR,
+                    fairId,
+                    null,
+                    Map.of("fairCancelRequestId", cancelRequestId, "canceledAt", canceledAt)
+            );
         }
 
         return new ReviewFairCancelRequestResponse(

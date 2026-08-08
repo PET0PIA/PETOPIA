@@ -37,8 +37,14 @@ public class FairController {
     }
 
     @GetMapping("/{fairId}")
-    public FairApplicationDetailResponse getApplication(@PathVariable Long fairId) {
-        return fairService.getApplication(fairId);
+    public FairApplicationDetailResponse getApplication(
+            @PathVariable Long fairId,
+            @RequestHeader(FairTemporaryAuthHeaders.USER_ID) Long requesterId
+    ) {
+        // TODO 인증 도메인 완성 후 X-User-Id 대신 인증 Principal에서 requesterId를 가져오고,
+        // 신청자 본인 또는 SUPER_ADMIN만 조회 가능하도록 세분화한다(managerPhone/managerEmail
+        // 노출 - 인증 없이 누구나 조회 가능했던 문제 수정).
+        return fairService.getApplication(fairId, requesterId);
     }
 
     @PatchMapping("/{fairId}/review")
