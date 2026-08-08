@@ -4,6 +4,7 @@ import com.ms.petopia.api.fair.dto.BoothSlot;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -35,6 +36,13 @@ public interface BoothSlotMapper {
      * null이 아닌 필드만 갱신한다. hall_id는 갱신 대상이 아니다(슬롯이 다른 홀로 옮겨가지 않음).
      */
     int update(BoothSlot boothSlot);
+
+    /**
+     * locked_at을 명시적으로 NULL로 되돌린다. 일반 {@link #update}는 null이 아닌 필드만
+     * 갱신해서 locked_at을 NULL로 만들 방법이 없어(PATCH 방식이라 null = "안 건드림") 이
+     * 전용 메서드를 따로 둔다({@code BoothSlotService#unlockBoothSlot} 참고).
+     */
+    int clearLock(@Param("boothSlotId") Long boothSlotId, @Param("updatedAt") LocalDateTime updatedAt);
 
     int deleteById(@Param("boothSlotId") Long boothSlotId);
 }
