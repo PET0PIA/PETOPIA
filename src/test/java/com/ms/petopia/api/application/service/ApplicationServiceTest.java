@@ -2038,6 +2038,7 @@ class ApplicationServiceTest {
             // then: 취소 요청만 REJECTED로 바뀌고, application.status는 그대로인지 확인
             assertThat(result.getStatus()).isEqualTo("REJECTED");
             assertThat(result.getApplicationStatus()).isEqualTo("PAYMENT_PENDING");
+            assertThat(result.getBoothDeleted()).isFalse();
 
         }
 

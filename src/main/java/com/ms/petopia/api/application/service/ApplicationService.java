@@ -709,6 +709,7 @@ public class ApplicationService {
                 .status(ApplicationCancelRequest.Status.REJECTED.name())
                 .applicationStatus(application.getStatus().name())
                 .decidedAt(decidedAt)
+                .boothDeleted(false)
                 .build();
 
     }
