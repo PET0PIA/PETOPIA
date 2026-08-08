@@ -37,6 +37,13 @@ export async function login(payload: EmailLoginRequest): Promise<AccessTokenPayl
   return decodeAccessToken(accessToken);
 }
 
+/** SUPER_ADMIN 전용 로그인 - EVENT_ADMIN/일반 유저는 이 엔드포인트로 로그인 불가(서버가 role 체크 후 거부). */
+export async function adminLogin(payload: EmailLoginRequest): Promise<AccessTokenPayload> {
+  const { accessToken } = await apiClient.post<LoginResponse>("/api/admin/auth/login", payload);
+  setAccessToken(accessToken);
+  return decodeAccessToken(accessToken);
+}
+
 /**
  * httpOnly refreshToken 쿠키로 Access Token을 재발급받는다.
  * 페이지 새로고침 직후(메모리의 accessToken이 비어있을 때) silent refresh 용도로도 쓰인다.

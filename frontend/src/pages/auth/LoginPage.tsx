@@ -33,8 +33,8 @@ function startOAuthLogin(provider: OAuthProvider) {
   window.location.href = oauthLoginUrl(provider);
 }
 
-function label(text: string) {
-  return <span className="mb-1.5 block text-sm font-bold text-ink">{text}</span>;
+function label(text: string, htmlFor: string) {
+  return <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-ink">{text}</label>;
 }
 
 export function LoginPage() {
@@ -76,8 +76,9 @@ export function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            {label("이메일")}
+            {label("이메일", "login-email")}
             <Input
+              id="login-email"
               type="email"
               autoComplete="email"
               required
@@ -86,8 +87,9 @@ export function LoginPage() {
             />
           </div>
           <div>
-            {label("비밀번호")}
+            {label("비밀번호", "login-password")}
             <Input
+              id="login-password"
               type="password"
               autoComplete="current-password"
               required
