@@ -9,8 +9,8 @@ import { ApiError } from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
 import petopiaLogoOriginal from "../../assets/petopia-logo-original.png";
 
-function label(text: string) {
-  return <span className="mb-1.5 block text-sm font-bold text-ink">{text}</span>;
+function label(text: string, htmlFor: string) {
+  return <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-ink">{text}</label>;
 }
 
 // SUPER_ADMIN 전용 로그인. 공개 네비게이션 어디에도 링크를 걸지 않는다 - 일반 로그인 화면과
@@ -61,8 +61,9 @@ export function AdminLoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                {label("아이디")}
+                {label("아이디", "admin-email")}
                 <Input
+                  id="admin-email"
                   type="text"
                   autoComplete="username"
                   required
@@ -71,8 +72,9 @@ export function AdminLoginPage() {
                 />
               </div>
               <div>
-                {label("비밀번호")}
+                {label("비밀번호", "admin-password")}
                 <Input
+                  id="admin-password"
                   type="password"
                   autoComplete="current-password"
                   required

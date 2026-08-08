@@ -36,6 +36,15 @@ public class TokenService {
             throw new CommonException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
+        //정지된 계정인지 확인
+        /*
+         여기서 막지 않으면 로그인만 막히고 이미 발급된 refreshToken으로 계속 accessToken을 재발급받을 수 있어 정지가 무의미해짐.
+         이 시점에 기존 refreshToken은이미 consumeUserId(GETDEL)로 지워졌으니 재발급을 거부해도 세션은 정상적으로 끊김
+         */
+        if(user.getStatus().equals("INACTIVE")) {
+            throw new CommonException(ErrorCode.ACCOUNT_INACTIVE);
+        }
+
         //새 accessToken, 새 refreshToken 생성
         String newAccessToken = jwtTokenProvider.generateAccessToken(user.getUserId(), user.getRole());
         String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
