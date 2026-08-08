@@ -52,7 +52,7 @@ class BoothServiceTest {
     @InjectMocks
     private BoothService boothService;
 
-    // 테스트용 사업자
+    // 테스트용 사업자를 만드는 헬퍼 메서드
     private Business createBusiness(Long businessId, Long ownerId) {
 
         Business business = new Business();
@@ -63,7 +63,7 @@ class BoothServiceTest {
         return business;
     }
 
-    // 테스트용 부스
+    // 테스트용 부스를 만드는 헬퍼 메서드
     private Booth createBooth(Long boothId, Long businessId) {
 
         return Booth.builder()
@@ -83,7 +83,7 @@ class BoothServiceTest {
         @DisplayName("정상적으로 부스와 상품 목록을 조회한다")
         void getsBoothSuccessfully() {
 
-            // given
+            // given: 부스와 그 부스에 등록된 상품 1건이 존재하는 상황
             Long boothId = 1L;
 
             Booth booth = createBooth(boothId, 1L);
@@ -97,7 +97,7 @@ class BoothServiceTest {
             // when
             BoothResponse result = boothService.getBooth(boothId);
 
-            // then
+            // then: 부스 정보 + 상품 목록이 응답에 같이 담겼는지 확인
             assertThat(result.getBoothId()).isEqualTo(boothId);
             assertThat(result.getItems()).hasSize(1);
 
@@ -107,7 +107,7 @@ class BoothServiceTest {
         @DisplayName("부스가 없으면 예외를 던진다")
         void throwsWhenBoothNotFound() {
 
-            // given
+            // given: 존재하지 않는 boothId
             Long boothId = 999L;
 
             given(boothMapper.selectById(boothId)).willReturn(null);
@@ -129,7 +129,10 @@ class BoothServiceTest {
         @DisplayName("본인 소유 부스면 정상적으로 수정한다")
         void updatesSuccessfully() {
 
-            // given: 첫 조회(소유권 확인용)와 재조회(응답용)를 순서대로 스텁
+            /*
+             * given: 요청자(1L)가 그 부스가 속한 사업자의 owner인 상황.
+             * selectById는 소유권 확인용(1번째)과 갱신 후 재조회용(2번째) 두 번 불리므로 순서대로 스텁
+             */
             Long callerId = 1L;
             Long boothId = 1L;
             Long businessId = 1L;
@@ -144,7 +147,7 @@ class BoothServiceTest {
             // when
             BoothResponse result = boothService.updateBooth(callerId, boothId, request);
 
-            // then
+            // then: 수정 쿼리가 실제로 호출됐는지 확인
             assertThat(result).isNotNull();
             verify(boothMapper).updateBooth(any());
 
@@ -154,7 +157,7 @@ class BoothServiceTest {
         @DisplayName("본인 소유가 아니면 예외를 던진다")
         void throwsWhenNotOwner() {
 
-            // given: 부스는 businessId=1 소유인데, 요청자는 2L
+            // given: 부스는 businessId=1(owner=1L) 소유인데, 요청자는 2L인 상황
             Long callerId = 2L;
             Long boothId = 1L;
             Long businessId = 1L;
@@ -173,7 +176,7 @@ class BoothServiceTest {
         @DisplayName("부스가 없으면 예외를 던진다")
         void throwsWhenBoothNotFound() {
 
-            // given
+            // given: 존재하지 않는 boothId
             Long callerId = 1L;
             Long boothId = 999L;
 
@@ -190,7 +193,7 @@ class BoothServiceTest {
         @DisplayName("imageObjectKey를 objectKey 확정 후 공개 URL로 변환해서 저장한다")
         void resolvesImageUrlFromObjectKey() {
 
-            // given
+            // given: presigned-upload로 받은 임시 objectKey를 포함한 수정 요청
             Long callerId = 1L;
             Long boothId = 1L;
             Long businessId = 1L;
@@ -201,6 +204,7 @@ class BoothServiceTest {
             given(boothMapper.selectById(boothId))
                     .willReturn(createBooth(boothId, businessId), createBooth(boothId, businessId));
             given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, callerId));
+            // 스토리지 확정 흐름 스텁
             given(storageService.confirm("tmp/image/booth.jpg", UploadPolicy.IMAGE))
                     .willReturn("uploads/image/booth.jpg");
             given(storageService.toPublicUrl("uploads/image/booth.jpg"))
@@ -227,7 +231,7 @@ class BoothServiceTest {
         @DisplayName("본인 소유 부스면 정상적으로 등록한다")
         void addsSuccessfully() {
 
-            // given
+            // given: 요청자가 그 부스의 소유자인 상황
             Long callerId = 1L;
             Long boothId = 1L;
             Long businessId = 1L;
@@ -242,7 +246,7 @@ class BoothServiceTest {
             // when
             BoothItemResponse result = boothService.addItem(callerId, boothId, request);
 
-            // then
+            // then: 등록 쿼리가 호출됐고 응답에 입력값이 그대로 담겼는지 확인
             assertThat(result.getName()).isEqualTo("체험팩");
             verify(boothMapper).insertBoothItem(any());
 
@@ -252,7 +256,7 @@ class BoothServiceTest {
         @DisplayName("본인 소유가 아니면 예외를 던진다")
         void throwsWhenNotOwner() {
 
-            // given
+            // given: 부스는 owner=1L 소유인데, 요청자는 2L인 상황
             Long callerId = 2L;
             Long boothId = 1L;
             Long businessId = 1L;
@@ -281,7 +285,10 @@ class BoothServiceTest {
         @DisplayName("본인 소유 부스의 상품이면 정상적으로 수정한다")
         void updatesSuccessfully() {
 
-            // given
+            /*
+             * given: 요청자가 그 상품이 속한 부스의 소유자인 상황.
+             * selectItemById는 존재확인용(1번째)과 갱신 후 재조회용(2번째) 두 번 불리므로 순서대로 스텁
+             */
             Long callerId = 1L;
             Long boothId = 1L;
             Long boothItemId = 1L;
@@ -304,7 +311,7 @@ class BoothServiceTest {
             // when
             BoothItemResponse result = boothService.updateItem(callerId, boothItemId, request);
 
-            // then
+            // then: 수정된 이름이 응답에 반영됐는지 확인
             assertThat(result.getName()).isEqualTo("체험팩(수정)");
 
         }
@@ -313,7 +320,7 @@ class BoothServiceTest {
         @DisplayName("상품이 없으면 예외를 던진다")
         void throwsWhenItemNotFound() {
 
-            // given
+            // given: 존재하지 않는 boothItemId
             Long callerId = 1L;
             Long boothItemId = 999L;
 
@@ -330,7 +337,7 @@ class BoothServiceTest {
         @DisplayName("본인 소유가 아니면 예외를 던진다")
         void throwsWhenNotOwner() {
 
-            // given
+            // given: 상품은 존재하지만, 그 상품이 속한 부스의 소유자가 요청자(2L)가 아닌 상황
             Long callerId = 2L;
             Long boothId = 1L;
             Long boothItemId = 1L;
@@ -359,7 +366,7 @@ class BoothServiceTest {
         @DisplayName("본인 소유 부스의 상품이면 정상적으로 삭제한다")
         void deletesSuccessfully() {
 
-            // given
+            // given: 요청자가 그 상품이 속한 부스의 소유자인 상황
             Long callerId = 1L;
             Long boothId = 1L;
             Long boothItemId = 1L;
@@ -374,7 +381,7 @@ class BoothServiceTest {
             // when
             boothService.deleteItem(callerId, boothItemId);
 
-            // then
+            // then: 삭제 쿼리가 실제로 호출됐는지 확인
             verify(boothMapper).deleteBoothItem(boothItemId);
 
         }
@@ -383,7 +390,7 @@ class BoothServiceTest {
         @DisplayName("상품이 없으면 예외를 던지고 삭제를 시도하지 않는다")
         void throwsWhenItemNotFound() {
 
-            // given
+            // given: 존재하지 않는 boothItemId
             Long callerId = 1L;
             Long boothItemId = 999L;
 
@@ -394,6 +401,7 @@ class BoothServiceTest {
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("판매상품·이벤트를 찾을 수 없습니다");
 
+            // 상품 자체가 없으니, 삭제 쿼리는 시도되면 안 됨
             verify(boothMapper, never()).deleteBoothItem(any());
 
         }
@@ -408,7 +416,7 @@ class BoothServiceTest {
         @DisplayName("정상적으로 슬롯 목록을 조회한다")
         void getsConfirmedBoothsSuccessfully() {
 
-            // given
+            // given: 행사가 존재하고, 확정 부스 슬롯 1건이 있는 상황
             Long fairId = 1L;
             ConfirmedBoothResponse response = new ConfirmedBoothResponse(1L, "멍냥사료", "A-01", null, null);
 
@@ -427,7 +435,7 @@ class BoothServiceTest {
         @DisplayName("존재하지 않는 행사면 예외를 던지고 조회를 시도하지 않는다")
         void throwsWhenFairNotFound() {
 
-            // given
+            // given: 존재하지 않는 fairId
             Long fairId = 999L;
 
             given(boothMapper.existsFair(fairId)).willReturn(false);
@@ -437,6 +445,7 @@ class BoothServiceTest {
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("존재하지 않는 행사");
 
+            // 행사 자체가 없으니, 슬롯 조회 쿼리는 시도되면 안 됨
             verify(boothMapper, never()).selectConfirmedBooths(any());
 
         }
