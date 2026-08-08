@@ -221,6 +221,28 @@ class BoothServiceTest {
 
         }
 
+        @Test
+        @DisplayName("갱신할 필드가 하나도 없으면 UPDATE 없이 현재 상태를 그대로 반환한다")
+        void skipsUpdateWhenAllFieldsNull() {
+
+            // given: 요청 필드가 전부 null인 상황({} 바디)
+            Long callerId = 1L;
+            Long boothId = 1L;
+            Long businessId = 1L;
+
+            given(boothMapper.selectById(boothId))
+                    .willReturn(createBooth(boothId, businessId), createBooth(boothId, businessId));
+            given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, callerId));
+
+            // when
+            BoothResponse result = boothService.updateBooth(callerId, boothId, new BoothUpdateRequest());
+
+            // then: 빈 SET절로 SQL 오류가 나는 걸 막기 위해 updateBooth 자체가 호출되지 않아야 함
+            assertThat(result).isNotNull();
+            verify(boothMapper, never()).updateBooth(any());
+
+        }
+
     }
 
     @Nested
@@ -353,6 +375,31 @@ class BoothServiceTest {
             assertThatThrownBy(() -> boothService.updateItem(callerId, boothItemId, new BoothItemUpdateRequest()))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("본인 소유의 부스만");
+
+        }
+
+        @Test
+        @DisplayName("갱신할 필드가 하나도 없으면 UPDATE 없이 현재 상태를 그대로 반환한다")
+        void skipsUpdateWhenAllFieldsNull() {
+
+            // given: 요청 필드가 전부 null인 상황({} 바디)
+            Long callerId = 1L;
+            Long boothId = 1L;
+            Long boothItemId = 1L;
+            Long businessId = 1L;
+
+            BoothItem item = BoothItem.builder().boothItemId(boothItemId).boothId(boothId).build();
+
+            given(boothMapper.selectItemById(boothItemId)).willReturn(item, item);
+            given(boothMapper.selectById(boothId)).willReturn(createBooth(boothId, businessId));
+            given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, callerId));
+
+            // when
+            BoothItemResponse result = boothService.updateItem(callerId, boothItemId, new BoothItemUpdateRequest());
+
+            // then: 빈 SET절로 SQL 오류가 나는 걸 막기 위해 updateBoothItem 자체가 호출되지 않아야 함
+            assertThat(result).isNotNull();
+            verify(boothMapper, never()).updateBoothItem(any());
 
         }
 

@@ -70,7 +70,14 @@ public class BoothService {
                 .imageUrl(resolveImageUrl(request.getImageObjectKey()))
                 .build();
 
-        boothMapper.updateBooth(patch);
+        // 갱신할 필드가 하나도 없으면 UPDATE를 건너뛴다(<set>이 비어 SQL 문법 오류가 나는 걸 방지)
+        boolean hasChanges = patch.getName() != null || patch.getIntro() != null
+                || patch.getCategory() != null || patch.getTargetAnimal() != null
+                || patch.getImageUrl() != null;
+
+        if (hasChanges) {
+            boothMapper.updateBooth(patch);
+        }
 
         // 갱신된 최신 상태를 다시 조회해서 응답한다 (patch 객체엔 안 바뀐 필드가 비어있어서 그대로 응답하면 안 됨)
         Booth updated = boothMapper.selectById(boothId);
@@ -131,7 +138,13 @@ public class BoothService {
                 .note(request.getNote())
                 .build();
 
-        boothMapper.updateBoothItem(patch);
+        // 갱신할 필드가 하나도 없으면 UPDATE를 건너뛴다(<set>이 비어 SQL 문법 오류가 나는 걸 방지)
+        boolean hasChanges = patch.getName() != null || patch.getType() != null
+                || patch.getImageUrl() != null || patch.getNote() != null;
+
+        if (hasChanges) {
+            boothMapper.updateBoothItem(patch);
+        }
 
         // 갱신된 최신 상태를 다시 조회해서 응답한다 (patch 객체엔 안 바뀐 필드가 비어있음)
         BoothItem updated = boothMapper.selectItemById(boothItemId);
