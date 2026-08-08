@@ -43,4 +43,10 @@
         WHERE booth_id = #{boothId}
     </update>
 
+    <!-- 판매상품·이벤트 등록 -->
+    <insert id="insertBoothItem" useGeneratedKeys="true" keyProperty="boothItemId">
+        INSERT INTO booth_item (booth_id, name, type, image_url, note)
+        VALUES (#{boothId}, #{name}, #{type}, #{imageUrl}, #{note})
+    </insert>
+
 </mapper>

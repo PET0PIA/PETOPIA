@@ -1,6 +1,8 @@
 package com.ms.petopia.api.booth.service;
 
 import com.ms.petopia.api.booth.domain.Booth;
+import com.ms.petopia.api.booth.domain.BoothItem;
+import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
@@ -50,19 +52,7 @@ public class BoothService {
     @Transactional
     public BoothResponse updateBooth(Long callerId, Long boothId, BoothUpdateRequest request) {
 
-        // 부스 존재 확인
-        Booth booth = boothMapper.selectById(boothId);
-
-        if(booth == null) {
-            throw new CommonException(ErrorCode.BOOTH_NOT_FOUND);
-        }
-
-        // 소유권 확인 - 이 부스가 속한 사업자의 대표(owner)가 요청자 본인인지
-        Business business = businessMapper.selectById(booth.getBusinessId());
-
-        if(business == null || !business.getOwnerId().equals(callerId)) {
-            throw new CommonException(ErrorCode.BOOTH_ACCESS_DENIED);
-        }
+        verifyOwner(callerId, boothId);
 
         /*
          * 요청에 담긴 값만으로 patch 객체를 만든다 - null인 필드는 XML의 <if>가 걸러내서
@@ -101,6 +91,48 @@ public class BoothService {
         String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
 
         return storageService.toPublicUrl(confirmedKey);
+
+    }
+
+    // 판매상품·이벤트 등록 (본인 소유 부스만)
+    @Transactional
+    public BoothItemResponse addItem(Long callerId, Long boothId, BoothItemCreateRequest request) {
+
+        verifyOwner(callerId, boothId);
+
+        BoothItem item = BoothItem.builder()
+                .boothId(boothId)
+                .name(request.getName())
+                .type(request.getType())
+                .imageUrl(resolveImageUrl(request.getImageObjectKey()))
+                .note(request.getNote())
+                .build();
+
+        boothMapper.insertBoothItem(item);
+
+        return BoothItemResponse.from(item);
+
+    }
+
+    /*
+     * 부스 존재 + 소유권(부스가 속한 사업자의 owner가 요청자 본인인지) 확인 공용 헬퍼.
+     * updateBooth/addItem이 공유한다(상품 수정·삭제도 이어서 이 헬퍼를 재사용할 예정).
+     */
+    private void verifyOwner(Long callerId, Long boothId) {
+
+        // 부스 존재 확인
+        Booth booth = boothMapper.selectById(boothId);
+
+        if(booth == null) {
+            throw new CommonException(ErrorCode.BOOTH_NOT_FOUND);
+        }
+
+        // 본인 소유인지 확인
+        Business business = businessMapper.selectById(booth.getBusinessId());
+
+        if(business == null || !business.getOwnerId().equals(callerId)) {
+            throw new CommonException(ErrorCode.BOOTH_ACCESS_DENIED);
+        }
 
     }
 

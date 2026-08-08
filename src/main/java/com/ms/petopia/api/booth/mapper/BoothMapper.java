@@ -20,9 +20,12 @@ public interface BoothMapper {
     void insertBooth(Booth booth);
 
     // 신청 ID 기준으로 부스 삭제 (취소 승인 시, 이전 상태가 CONFIRMED였을 때)
-    int deleteBoothByApplicationId(@Param("applicationId") Long applicationId);
+    void deleteBoothByApplicationId(@Param("applicationId") Long applicationId);
 
     // 부스 프로필 부분 수정 (null이 아닌 필드만 갱신)
     void updateBooth(Booth booth);
+
+    // 판매상품·이벤트 등록
+    void insertBoothItem(BoothItem item);
 
 }

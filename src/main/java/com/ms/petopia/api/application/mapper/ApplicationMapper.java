@@ -107,7 +107,7 @@ public interface ApplicationMapper {
     int updateApplicationConfirmed(@Param("applicationId") Long applicationId);
 
     // 자동 취소 처리 시, 이 신청서에 처리 대기 중(REQUESTED)인 취소 요청이 있으면 함께 종료 처리 (없으면 0행 반영, 정상 상황 — 멱등)
-    int closeRequestedCancelRequestByApplicationId(@Param("applicationId") Long applicationId,
+    void closeRequestedCancelRequestByApplicationId(@Param("applicationId") Long applicationId,
                                                    @Param("decidedAt") LocalDateTime decidedAt);
 
     /*

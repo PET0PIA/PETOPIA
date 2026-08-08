@@ -1,11 +1,14 @@
 package com.ms.petopia.api.booth.controller;
 
+import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
+import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
 import com.ms.petopia.api.booth.service.BoothService;
 import com.ms.petopia.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,6 +38,21 @@ public class BoothController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(boothService.updateBooth(callerId, boothId, request)));
+
+    }
+
+    // 판매상품·이벤트 등록 (본인 소유 부스만)
+    @PostMapping("/booths/{boothId}/items")
+    public ResponseEntity<ApiResponse<BoothItemResponse>> addItem(
+            @RequestHeader(BoothTemporaryAuthHeaders.USER_ID) Long callerId,
+            @PathVariable Long boothId,
+            @Valid @RequestBody BoothItemCreateRequest request
+    ) {
+
+        BoothItemResponse response = boothService.addItem(callerId, boothId, request);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED, response));
 
     }
 
