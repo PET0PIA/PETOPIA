@@ -1795,6 +1795,7 @@ class ApplicationServiceTest {
 
             // then
             assertThat(result.getBoothDeleted()).isTrue();
+            verify(boothMapper).deleteBoothItemsByApplicationId(applicationId);
             verify(boothMapper).deleteBoothByApplicationId(applicationId);
 
         }
@@ -2354,6 +2355,7 @@ class ApplicationServiceTest {
             applicationService.cancelApplicationForCanceledFair(applicationId);
 
             // then
+            verify(boothMapper).deleteBoothItemsByApplicationId(applicationId);
             verify(boothMapper).deleteBoothByApplicationId(applicationId);
 
         }

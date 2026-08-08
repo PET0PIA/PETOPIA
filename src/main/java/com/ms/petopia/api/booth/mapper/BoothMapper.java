@@ -44,4 +44,7 @@ public interface BoothMapper {
     // 확정 부스 안내판 - 슬롯 하나당 한 행(같은 부스가 슬롯 여러 개 쓰면 여러 번 나옴)
     List<ConfirmedBoothResponse> selectConfirmedBooths(@Param("fairId") Long fairId);
 
+    // 신청 ID 기준으로 그 부스에 딸린 판매상품·이벤트 전부 삭제 (부스 삭제 전 자식 레코드 정리용)
+    void deleteBoothItemsByApplicationId(@Param("applicationId") Long applicationId);
+
 }

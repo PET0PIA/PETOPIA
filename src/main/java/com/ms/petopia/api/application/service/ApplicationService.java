@@ -593,7 +593,10 @@ public class ApplicationService {
         boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
 
         if(wasConfirmed) {
+
+            boothMapper.deleteBoothItemsByApplicationId(applicationId);
             boothMapper.deleteBoothByApplicationId(applicationId);
+
         }
 
         // 결제가 있었다면(CONFIRMED 상태였던 경우) 환불 처리. PAYMENT_PENDING 상태에서 취소된 경우 결제가 없어 null.
@@ -654,7 +657,10 @@ public class ApplicationService {
 
         // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
         if(wasConfirmed) {
+
+            boothMapper.deleteBoothItemsByApplicationId(applicationId);
             boothMapper.deleteBoothByApplicationId(applicationId);
+
         }
 
         // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
