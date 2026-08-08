@@ -4,6 +4,7 @@ import com.ms.petopia.api.auth.dto.LoginResponse;
 import com.ms.petopia.api.auth.dto.TokenPair;
 import com.ms.petopia.api.auth.service.TokenService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +22,10 @@ public class TokenController {
 
     private final TokenService tokenService;
 
+    // 로컬(http)은 false, 운영(https)은 true - application-{profile}.yaml의 cookie.secure 참고
+    @Value("${cookie.secure}")
+    private boolean cookieSecure;
+
     //새 토큰 발급
     @PostMapping("/refresh")
     public ResponseEntity<LoginResponse> refresh(@CookieValue String refreshToken) {
@@ -28,7 +33,7 @@ public class TokenController {
 
         ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", tokenPair.refreshToken())
                 .httpOnly(true)
-                .secure(true)
+                .secure(cookieSecure)
                 .sameSite("Strict")
                 .path("/")
                 .maxAge(Duration.ofDays(14))
@@ -49,7 +54,7 @@ public class TokenController {
         //값을 비우고 maxAge(0)으로 보내면 브라우저가 즉시 쿠키를 지움
         ResponseCookie expiredCookie = ResponseCookie.from("refreshToken", "")
                 .httpOnly(true)
-                .secure(true)
+                .secure(cookieSecure)
                 .sameSite("Strict")
                 .path("/")
                 .maxAge(0)

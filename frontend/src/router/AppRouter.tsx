@@ -28,6 +28,13 @@ import { TicketReservationPage } from "../pages/reservation/TicketReservationPag
 import { BoothVisitScanPage } from "../pages/vendor/BoothVisitScanPage";
 import { FairReservationsPage } from "../pages/fair-admin/FairReservationsPage";
 import { NotFoundPage, PlaceholderPage } from "../pages/PlaceholderPage";
+import { LoginPage } from "../pages/auth/LoginPage";
+import { SignupPage } from "../pages/auth/SignupPage";
+import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
+import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
+import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
+// TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin을 ProtectedRoute로 감싸기
+// import { ProtectedRoute } from "./ProtectedRoute";
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
@@ -82,6 +89,11 @@ export function AppRouter() {
           <Route index element={<HomePage />} />
           <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
