@@ -11,6 +11,8 @@ import java.time.LocalTime;
  */
 public record ReservationDetailResponse(
         Long reservationId,
+        String reservationNo,
+        Long fairId,
         String fairName,
         String fairPosterImageUrl,
         LocalDate visitDate,

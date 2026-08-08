@@ -100,6 +100,8 @@ class ReservationQueryServiceTest {
 
         ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
 
+        assertThat(detail.reservationNo()).isEqualTo("R20260802-0030");
+        assertThat(detail.fairId()).isEqualTo(7L);
         assertThat(detail.reservationType()).isEqualTo("ADVANCE");
         assertThat(detail.qrAvailable()).isTrue();
         assertThat(detail.canChangeVisitDate()).isTrue();
@@ -180,6 +182,8 @@ class ReservationQueryServiceTest {
     private ReservationListRow detailRow(String status, String type, long amount, LocalDateTime paymentExpiresAt) {
         ReservationListRow row = new ReservationListRow();
         row.setReservationId(30L);
+        row.setReservationNo("R20260802-0030");
+        row.setFairId(7L);
         row.setFairName("서울 펫페어");
         row.setVisitDate(LocalDate.of(2026, 8, 2));
         row.setEntryStartTime(LocalTime.of(10, 0));

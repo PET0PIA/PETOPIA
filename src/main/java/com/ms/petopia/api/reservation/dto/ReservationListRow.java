@@ -11,6 +11,8 @@ import java.time.LocalTime;
 @Setter
 public class ReservationListRow {
     private Long reservationId;
+    private String reservationNo;
+    private Long fairId;
     private String fairName;
     private String fairPosterImageUrl;
     private LocalDate visitDate;
