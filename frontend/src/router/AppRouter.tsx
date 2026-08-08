@@ -8,6 +8,8 @@ import { FairApplicationNewPage } from "../pages/fair/FairApplicationNewPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
 import { BoothLayoutEditPage } from "../pages/fair-admin/BoothLayoutEditPage";
 import { FairDateManagementPage } from "../pages/fair-admin/FairDateManagementPage";
+import { OnsiteSalesPolicyPage } from "../pages/fair-admin/OnsiteSalesPolicyPage";
+import { GateEntryScanPage } from "../pages/fair-admin/GateEntryScanPage";
 import { ReservationStatusPage } from "../pages/fair-admin/ReservationStatusPage";
 import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
@@ -23,6 +25,7 @@ import { NotificationsPage } from "../pages/notification/NotificationsPage";
 import { MyReservationsPage } from "../pages/reservation/MyReservationsPage";
 import { ReservationDetailPage } from "../pages/reservation/ReservationDetailPage";
 import { TicketReservationPage } from "../pages/reservation/TicketReservationPage";
+import { BoothVisitScanPage } from "../pages/vendor/BoothVisitScanPage";
 import { FairReservationsPage } from "../pages/fair-admin/FairReservationsPage";
 import { NotFoundPage, PlaceholderPage } from "../pages/PlaceholderPage";
 
@@ -48,6 +51,8 @@ const publicPages: Record<string, string> = {
 const fairAdminImplementedPaths = [
   "/fair-admin/booths",
   "/fair-admin/fair",
+  "/fair-admin/onsite-sales",
+  "/fair-admin/qr",
   "/fair-admin/reservations",
   "/fair-admin/statistics",
 ];
@@ -80,6 +85,7 @@ export function AppRouter() {
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
+          <Route path="/booths/scan" element={<BoothVisitScanPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
           ))}
@@ -90,6 +96,8 @@ export function AppRouter() {
           <Route path="booths" element={<HallManagementPage />} />
           <Route path="booths/:fairId/:hallId" element={<BoothLayoutEditPage />} />
           <Route path="fair" element={<FairDateManagementPage />} />
+          <Route path="onsite-sales" element={<OnsiteSalesPolicyPage />} />
+          <Route path="qr" element={<GateEntryScanPage />} />
           <Route path="reservations" element={<ReservationStatusPage />} />
           <Route path="reservations/list" element={<FairReservationsPage />} />
           <Route path="statistics" element={<VisitStatisticsPage />} />
