@@ -34,4 +34,7 @@ public interface BoothMapper {
     // 상품·이벤트 부분 수정 (null이 아닌 필드만 갱신)
     void updateBoothItem(BoothItem item);
 
+    // 상품·이벤트 삭제
+    void deleteBoothItem(@Param("boothItemId") Long boothItemId);
+
 }

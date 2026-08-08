@@ -70,4 +70,18 @@ public class BoothController {
 
     }
 
+    // 판매상품·이벤트 삭제 (본인 소유 부스만)
+    @DeleteMapping("/booth-items/{boothItemId}")
+    public ResponseEntity<ApiResponse<Void>> deleteItem(
+            @RequestHeader(BoothTemporaryAuthHeaders.USER_ID) Long callerId,
+            @PathVariable Long boothItemId
+    ) {
+
+        boothService.deleteItem(callerId, boothItemId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(null));
+
+    }
+
 }

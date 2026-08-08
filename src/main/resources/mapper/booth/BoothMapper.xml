@@ -68,4 +68,9 @@
         WHERE booth_item_id = #{boothItemId}
     </update>
 
+    <!-- 상품·이벤트 삭제 -->
+    <delete id="deleteBoothItem">
+        DELETE FROM booth_item WHERE booth_item_id = #{boothItemId}
+    </delete>
+
 </mapper>

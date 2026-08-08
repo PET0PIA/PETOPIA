@@ -139,6 +139,24 @@ public class BoothService {
 
     }
 
+    // 판매상품·이벤트 삭제 (본인 소유 부스만)
+    @Transactional
+    public void deleteItem(Long callerId, Long boothItemId) {
+
+        // 상품 존재 확인 + 소속 boothId 확보
+        BoothItem item = boothMapper.selectItemById(boothItemId);
+
+        if(item == null) {
+            throw new CommonException(ErrorCode.BOOTH_ITEM_NOT_FOUND);
+        }
+
+        // 부스 소유권 확인
+        verifyOwner(callerId, item.getBoothId());
+
+        boothMapper.deleteBoothItem(boothItemId);
+
+    }
+
     /*
      * 부스 존재 + 소유권(부스가 속한 사업자의 owner가 요청자 본인인지) 확인 공용 헬퍼.
      * updateBooth/addItem이 공유한다(상품 수정·삭제도 이어서 이 헬퍼를 재사용할 예정).
