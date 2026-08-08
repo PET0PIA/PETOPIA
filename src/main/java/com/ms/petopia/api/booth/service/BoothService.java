@@ -7,6 +7,7 @@ import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
+import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -193,6 +194,17 @@ public class BoothService {
         String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
 
         return storageService.toPublicUrl(confirmedKey);
+
+    }
+
+    // 확정 부스 안내판 조회 (비회원 포함 공개)
+    public List<ConfirmedBoothResponse> getConfirmedBooths(Long fairId) {
+
+        if(!boothMapper.existsFair(fairId)) {
+            throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
+        }
+
+        return boothMapper.selectConfirmedBooths(fairId);
 
     }
 

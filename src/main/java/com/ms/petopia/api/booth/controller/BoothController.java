@@ -5,6 +5,7 @@ import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
+import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
 import com.ms.petopia.api.booth.service.BoothService;
 import com.ms.petopia.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -12,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -81,6 +84,17 @@ public class BoothController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(null));
+
+    }
+
+    // 확정 부스 안내판 조회 (비회원 포함 공개, 인증 불필요)
+    @GetMapping("/fairs/{fairId}/confirmed-booths")
+    public ResponseEntity<ApiResponse<List<ConfirmedBoothResponse>>> getConfirmedBooths(
+            @PathVariable Long fairId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(boothService.getConfirmedBooths(fairId)));
 
     }
 

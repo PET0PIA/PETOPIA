@@ -2,6 +2,7 @@ package com.ms.petopia.api.booth.mapper;
 
 import com.ms.petopia.api.booth.domain.Booth;
 import com.ms.petopia.api.booth.domain.BoothItem;
+import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -36,5 +37,11 @@ public interface BoothMapper {
 
     // 상품·이벤트 삭제
     void deleteBoothItem(@Param("boothItemId") Long boothItemId);
+
+    // 행사 존재 확인 (안내판 조회 전 검증용)
+    boolean existsFair(@Param("fairId") Long fairId);
+
+    // 확정 부스 안내판 - 슬롯 하나당 한 행(같은 부스가 슬롯 여러 개 쓰면 여러 번 나옴)
+    List<ConfirmedBoothResponse> selectConfirmedBooths(@Param("fairId") Long fairId);
 
 }
