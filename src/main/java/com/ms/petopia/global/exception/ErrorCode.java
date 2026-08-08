@@ -111,6 +111,8 @@ public enum ErrorCode {
     FAIR_CANCEL_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F022", "취소 신청 반려 시 반려 사유를 입력해야 합니다."),
     HALL_HAS_BOOTH_SLOTS(HttpStatus.CONFLICT, "F023", "부스 슬롯이 남아있는 홀은 삭제할 수 없습니다."),
     FAIR_DATE_FAIR_NOT_EDITABLE(HttpStatus.CONFLICT, "F024", "취소되었거나 종료된 행사는 운영일을 관리할 수 없습니다."),
+    FAIR_APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "F025", "본인이 신청한 행사만 수정할 수 있습니다."),
+    FAIR_APPLICATION_NOT_EDITABLE(HttpStatus.CONFLICT, "F026", "심사 대기 중이거나 반려된 신청서만 수정할 수 있습니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
