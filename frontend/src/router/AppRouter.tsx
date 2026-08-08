@@ -11,6 +11,7 @@ import { FairDateManagementPage } from "../pages/fair-admin/FairDateManagementPa
 import { ReservationStatusPage } from "../pages/fair-admin/ReservationStatusPage";
 import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
+import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { PaymentDetailPage } from "../pages/payment/PaymentDetailPage";
 import { PaymentCreatePage } from "../pages/payment/PaymentCreatePage";
@@ -99,7 +100,8 @@ export function AppRouter() {
           <Route path="*" element={<AdminFallback kind="fair" />} />
         </Route>
         <Route path="admin" element={<SuperAdminLayout />}>
-          <Route index element={<PlaceholderPage title="전체 운영 대시보드" admin />} />
+          <Route index element={<AdminDashboardPage />} />
+          <Route path="dashboard/fairs/:fairId" element={<VisitStatisticsPage />} />
           <Route path="fair-applications" element={<FairApplicationReviewPage />} />
           <Route path="audit-logs" element={<AuditLogPage />} />
           <Route path="payments" element={<PaymentDetailPage />} />

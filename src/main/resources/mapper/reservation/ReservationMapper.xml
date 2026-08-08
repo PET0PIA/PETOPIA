@@ -64,6 +64,31 @@
          WHERE user_id = #{userId}
     </select>
 
+    <select id="selectReservationForOwner" resultType="ReservationListRow">
+        SELECT r.reservation_id
+             , f.name AS fair_name
+             , f.poster_image_url AS fair_poster_image_url
+             , r.visit_date
+             , fd.entry_start_time
+             , fd.entry_end_time
+             , r.status AS reservation_status
+             , r.reservation_type
+             , r.reservation_amount AS amount
+             , r.reserved_at
+             , r.payment_expires_at
+             , er.first_checked_in_at AS checked_in_at
+          FROM reservations r
+          JOIN fairs f
+            ON f.fair_id = r.fair_id
+          JOIN fair_dates fd
+            ON fd.fair_id = r.fair_id
+           AND fd.operation_date = r.visit_date
+     LEFT JOIN entry_records er
+            ON er.reservation_id = r.reservation_id
+         WHERE r.reservation_id = #{reservationId}
+           AND r.user_id = #{userId}
+    </select>
+
     <!--
         같은 운영일의 예약 생성 요청을 직렬화하는 잠금 기준점이다.
         정원 확인과 INSERT는 반드시 이 조회와 같은 트랜잭션에서 실행한다.

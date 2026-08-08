@@ -4,6 +4,7 @@ import com.ms.petopia.api.fair.dto.CreateHallRequest;
 import com.ms.petopia.api.fair.dto.Hall;
 import com.ms.petopia.api.fair.dto.HallResponse;
 import com.ms.petopia.api.fair.dto.UpdateHallRequest;
+import com.ms.petopia.api.fair.mapper.BoothSlotMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.fair.mapper.HallMapper;
 import com.ms.petopia.global.exception.CommonException;
@@ -26,6 +27,7 @@ public class HallService {
 
     private final HallMapper hallMapper;
     private final FairMapper fairMapper;
+    private final BoothSlotMapper boothSlotMapper;
     private final StorageService storageService;
 
     @Transactional
@@ -67,6 +69,12 @@ public class HallService {
         Hall hall = new Hall();
         hall.setHallId(hallId);
         if (request != null) {
+            // name == null이면 "변경하지 않음"(HallMapper#update의 <if> 규칙), name이
+            // 빈 문자열이면 create()와 동일하게 거부한다 - null이 아니라서 그 <if>를
+            // 통과해버려 빈 이름으로 그대로 저장되는 걸 막는다.
+            if (request.name() != null && request.name().isBlank()) {
+                throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+            }
             hall.setName(request.name());
             hall.setFloorPlanImageUrl(resolveImageUrl(request.floorPlanImageObjectKey()));
         }
@@ -78,6 +86,11 @@ public class HallService {
     @Transactional
     public void delete(Long fairId, Long hallId) {
         findHallInFair(fairId, hallId);
+        // booth_slots.hall_id에는 FK가 없어(DDL 참고) 이 체크 없이 지우면 슬롯이 고아 행으로
+        // 남는다 - 명시적으로 막는다.
+        if (boothSlotMapper.existsByHallId(hallId)) {
+            throw new CommonException(ErrorCode.HALL_HAS_BOOTH_SLOTS);
+        }
         hallMapper.deleteById(hallId);
     }
 

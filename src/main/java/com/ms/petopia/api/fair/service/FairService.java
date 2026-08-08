@@ -92,9 +92,15 @@ public class FairService {
 
     /**
      * 신청서 상세를 조회한다. 관리자 검토 화면 등에서 검토 전 내용을 보여줄 때 쓴다.
+     * managerPhone/managerEmail을 그대로 반환하므로 호출자 신원을 요구한다 - 다만 인증
+     * 도메인 완성 전까지는 신청자 본인/SUPER_ADMIN 여부를 세분화해서 검증하지 못하고
+     * requesterId가 유효한 값인지만 확인한다.
      */
     @Transactional(readOnly = true)
-    public FairApplicationDetailResponse getApplication(Long fairId) {
+    public FairApplicationDetailResponse getApplication(Long fairId, Long requesterId) {
+        if (requesterId == null || requesterId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
         Fair fair = findFairOrThrow(fairId);
         return toDetailResponse(fair);
     }
@@ -103,15 +109,18 @@ public class FairService {
      * 신청서를 승인하거나 반려한다. RECEIVED 상태의 신청서만 검토할 수 있다.
      * 승인 시 상태를 PAYMENT_PENDING으로 바꾸고 개설비 결제 기한을 잡는다. 결제/계정발급
      * 연동은 별도 작업(개설비 결제·계정발급 연동)에서 이 기한을 기준으로 처리한다.
+     *
+     * <p>RECEIVED 여부는 미리 SELECT로 확인하지 않고 UPDATE의 WHERE 절이 직접 검증한다
+     * ({@link FairMapper#updateReviewResult} 참고, {@code FairCancelRequestService.review()}와
+     * 동일한 패턴). "확인 후 갱신" 순서로 하면 두 검토 요청이 동시에 RECEIVED를 읽어 둘 다
+     * 통과해버릴 수 있는데, 조건부 UPDATE는 그 경합을 DB가 원자적으로 해소하게 해서 둘 중
+     * 먼저 커밋된 하나만 실제로 반영되고 나머지는 영향 행 0건으로 실패한다.
      */
     @Transactional
     public ReviewFairApplicationResponse review(Long fairId, Long reviewerId, ReviewFairApplicationRequest request) {
         validateReviewRequest(reviewerId, request);
-        Fair fair = findFairOrThrow(fairId);
-
-        if (fair.getStatus() != FairStatus.RECEIVED) {
-            throw new CommonException(ErrorCode.FAIR_NOT_PENDING_REVIEW);
-        }
+        // fairId 존재 여부(404) 확인용. 상태(RECEIVED) 판단은 아래 조건부 UPDATE로 넘긴다.
+        findFairOrThrow(fairId);
 
         LocalDateTime now = timeProvider.now();
         boolean approved = request.decision() == FairReviewDecision.APPROVE;
@@ -128,7 +137,10 @@ public class FairService {
             update.setRejectReason(request.rejectReason().trim());
         }
 
-        fairMapper.update(update);
+        int updated = fairMapper.updateReviewResult(update);
+        if (updated == 0) {
+            throw new CommonException(ErrorCode.FAIR_NOT_PENDING_REVIEW);
+        }
 
         return new ReviewFairApplicationResponse(
                 fairId,

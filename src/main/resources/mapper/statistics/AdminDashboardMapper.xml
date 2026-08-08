@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.statistics.mapper.AdminDashboardMapper">
+
+    <!-- ──────────────────────────────────────────── -->
+    <!-- 전체 운영 현황 통합 집계                       -->
+    <!-- RECEIVED/REJECTED/PAYMENT_PENDING/EXPIRED는  -->
+    <!-- 심사·결제 단계이므로 운영 통계에서 제외          -->
+    <!-- ──────────────────────────────────────────── -->
+    <select id="selectDashboardSummary"
+            resultType="com.ms.petopia.api.statistics.dto.AdminDashboardSummaryDto">
+        SELECT
+            COUNT(*) AS totalFairs,
+            SUM(CASE WHEN f.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS inProgressFairs,
+            SUM(CASE WHEN f.status = 'PREPARING' THEN 1 ELSE 0 END) AS preparingFairs,
+            SUM(CASE WHEN f.status = 'ENDED' THEN 1 ELSE 0 END) AS endedFairs,
+            COALESCE(SUM(r_agg.cnt), 0) AS totalReservations,
+            COALESCE(SUM(v_agg.cnt), 0) AS totalVisitors
+        FROM fairs f
+            LEFT JOIN (
+                SELECT fair_id, COUNT(DISTINCT user_id) AS cnt
+                FROM reservations
+                WHERE status IN ('CONFIRMED', 'CHECKED_IN')
+                GROUP BY fair_id
+               ) r_agg ON r_agg.fair_id = f.fair_id
+            LEFT JOIN (
+                SELECT fair_id, COUNT(DISTINCT user_id) AS cnt
+                FROM entry_records
+                GROUP BY fair_id
+               ) v_agg ON v_agg.fair_id = f.fair_id
+        WHERE f.status NOT IN ('RECEIVED', 'REJECTED', 'PAYMENT_PENDING', 'EXPIRED')
+    </select>
+
+    <!-- ──────────────────────────────────────────── -->
+    <!-- 행사별 요약 리스트                            -->
+    <!-- ──────────────────────────────────────────── -->
+    <select id="selectFairSummaryList"
+            resultType="com.ms.petopia.api.statistics.dto.FairSummaryDto">
+        SELECT
+            f.fair_id AS fairId,
+            f.name AS fairName,
+            f.status,
+            f.operation_start_date AS operationStartDate,
+            f.operation_end_date AS operationEndDate,
+            COALESCE(r_agg.cnt, 0) AS totalReservations,
+            COALESCE(v_agg.cnt, 0) AS totalVisitors
+        FROM fairs f
+            LEFT JOIN (
+                SELECT fair_id, COUNT(DISTINCT user_id) AS cnt
+                FROM reservations
+                WHERE status IN ('CONFIRMED', 'CHECKED_IN')
+                GROUP BY fair_id
+               ) r_agg ON r_agg.fair_id = f.fair_id
+            LEFT JOIN (
+                SELECT fair_id, COUNT(DISTINCT user_id) AS cnt
+                FROM entry_records
+                GROUP BY fair_id
+               ) v_agg ON v_agg.fair_id = f.fair_id
+        WHERE f.status NOT IN ('RECEIVED', 'REJECTED', 'PAYMENT_PENDING', 'EXPIRED')
+        ORDER BY f.operation_start_date DESC
+    </select>
+</mapper>

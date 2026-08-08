@@ -63,6 +63,12 @@
          ORDER BY slot_number
     </select>
 
+    <select id="existsByHallId" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM booth_slots WHERE hall_id = #{hallId}
+        )
+    </select>
+
     <!-- null이 아닌 필드만 갱신한다. hall_id는 갱신 대상에서 제외한다. -->
     <update id="update">
         UPDATE booth_slots
