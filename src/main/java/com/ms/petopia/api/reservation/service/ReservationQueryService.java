@@ -93,9 +93,10 @@ public class ReservationQueryService {
         boolean ended = isEnded(row, now);
         boolean qrAvailable = !ended && (CONFIRMED.equals(status) || CHECKED_IN.equals(status));
         // 케밥 노출용 대략 판단. 정확한 마감(12시간 전·취소 마감)은 각 변경/취소 API가 최종 검증한다.
-        boolean canChangeVisitDate = ADVANCE.equals(type) && CONFIRMED.equals(status) && !ended;
-        boolean canCancel = PENDING_PAYMENT.equals(status)
-                || (ADVANCE.equals(type) && CONFIRMED.equals(status) && row.getAmount() == 0 && !ended);
+        // 입장 종료된 예약은 화면에서 비활성 처리하므로 두 액션 모두 !ended를 전제로 한다.
+        boolean canChangeVisitDate = !ended && ADVANCE.equals(type) && CONFIRMED.equals(status);
+        boolean canCancel = !ended && (PENDING_PAYMENT.equals(status)
+                || (ADVANCE.equals(type) && CONFIRMED.equals(status) && row.getAmount() == 0));
         return new ReservationDetailResponse(
                 row.getReservationId(),
                 row.getFairName(),

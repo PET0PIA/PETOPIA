@@ -148,6 +148,18 @@ class ReservationQueryServiceTest {
     }
 
     @Test
+    void detailOfEndedPendingPaymentDisablesCancel() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 2, 18, 0, 1));
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("PENDING_PAYMENT", "ADVANCE", 10_000, LocalDateTime.of(2026, 8, 2, 18, 10)));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.isEnded()).isTrue();
+        assertThat(detail.canCancel()).isFalse(); // 종료된 예약은 결제대기여도 취소 비활성
+    }
+
+    @Test
     void detailNotFoundOrNotOwnedThrows() {
         given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(null);
 
