@@ -1,7 +1,9 @@
 package com.ms.petopia.api.application.service;
 
+import com.ms.petopia.api.application.domain.BoothSlotHallRef;
 import com.ms.petopia.api.application.mapper.ApplicationExpirationMapper;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
+import com.ms.petopia.api.fair.service.BoothSlotService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +37,9 @@ class ApplicationExpirationServiceTest {
     @Mock
     private ApplicationMapper applicationMapper;
 
+    @Mock
+    private BoothSlotService boothSlotService;
+
     @InjectMocks
     private ApplicationExpirationService applicationExpirationService;
 
@@ -49,12 +54,18 @@ class ApplicationExpirationServiceTest {
                 .willReturn(1);
         given(applicationExpirationMapper.expirePaymentPendingApplication(eq(2L), any(LocalDateTime.class)))
                 .willReturn(1);
+        given(applicationMapper.selectSlotHallRefsByApplicationId(1L)).willReturn(List.of(
+                BoothSlotHallRef.builder().boothSlotId(11L).hallId(10L).build()));
+        given(applicationMapper.selectSlotHallRefsByApplicationId(2L)).willReturn(List.of(
+                BoothSlotHallRef.builder().boothSlotId(12L).hallId(10L).build()));
 
         // when
         int expired = applicationExpirationService.expireDueApplications(200);
 
         // then: 2건 다 취소 처리된 걸로 카운트돼야 함
         assertThat(expired).isEqualTo(2);
+        verify(boothSlotService).unlockBoothSlot(10L, 11L);
+        verify(boothSlotService).unlockBoothSlot(10L, 12L);
 
     }
 
