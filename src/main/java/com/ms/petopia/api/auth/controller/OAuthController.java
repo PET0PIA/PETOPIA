@@ -10,6 +10,7 @@ import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -29,6 +30,10 @@ public class OAuthController {
 
     private final OAuthService oAuthService;
 
+    // 로컬(http)은 false, 운영(https)은 true - application-{profile}.yaml의 cookie.secure 참고
+    @Value("${cookie.secure}")
+    private boolean cookieSecure;
+
     //구글 로그인/동의 화면으로 브라우저를 리다이렉트.
     //JSON을 리턴하는 게 아니라 302 응답 + Location 헤더로 갈 곳 알려줌.
     //동시에 state를 HttpOnly 쿠키로도 심어둔다
@@ -39,7 +44,7 @@ public class OAuthController {
 
         ResponseCookie stateCookie = ResponseCookie.from(STATE_COOKIE_NAME, start.state())
                 .httpOnly(true)
-                .secure(true)
+                .secure(cookieSecure)
                 .sameSite("Lax")    //최상위 GET 이동 일 땐 쿠키를 실어줌
                 .path("/api/auth/oauth")
                 .maxAge(Duration.ofMinutes(5))
@@ -70,7 +75,7 @@ public class OAuthController {
         //성공했으니 상관관계 쿠키는 더 필요 없음 값 비우고 즉시 만료시켜 브라우저에서 지움
         ResponseCookie expiredStateCookie = ResponseCookie.from(STATE_COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(true)
+                .secure(cookieSecure)
                 .sameSite("Lax")
                 .path("/api/auth/oauth")
                 .maxAge(0)
@@ -100,7 +105,7 @@ public class OAuthController {
     private ResponseEntity<LoginResponse> tokenResponse(TokenPair tokenPair) {
         ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", tokenPair.refreshToken())
                 .httpOnly(true)
-                .secure(true)
+                .secure(cookieSecure)
                 .sameSite("Strict")
                 .path("/")
                 .maxAge(Duration.ofDays(14))

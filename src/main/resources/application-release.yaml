@@ -83,5 +83,9 @@ jwt:
   access-token-expiration: 3600000
   refresh-token-expiration: 1209600000
 
+cookie:
+  # 운영은 HTTPS로 서비스하므로 Secure 쿠키로 refreshToken을 보호한다.
+  secure: true
+
 nts:
   service-key: ${NTS_SERVICE_KEY}

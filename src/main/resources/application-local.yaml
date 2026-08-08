@@ -45,6 +45,11 @@ jwt:
   access-token-expiration: 3600000
   refresh-token-expiration: 1209600000
 
+cookie:
+  # refreshToken 쿠키의 Secure 속성. 로컬은 http://localhost라 Secure=true면
+  # 브라우저가 Set-Cookie 자체를 저장하지 않아 refresh가 항상 실패한다. local만 false.
+  secure: false
+
 oauth:
   google:
     client-id: ${GOOGLE_CLIENT_ID}
