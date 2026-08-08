@@ -13,7 +13,7 @@ import lombok.Setter;
 @Setter
 public class BoothUpdateRequest {
 
-    @Size(max = 100, message = "부스명은 100자 이하여야 합니다.")
+    @Size(min = 1, max = 100, message = "부스명은 100자 이하여야 합니다.")
     private String name;
 
     @Size(max = 1000, message = "소개글은 1000자 이하여야 합니다.")

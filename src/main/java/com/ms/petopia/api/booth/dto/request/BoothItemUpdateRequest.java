@@ -13,7 +13,7 @@ import lombok.Setter;
 @Setter
 public class BoothItemUpdateRequest {
 
-    @Size(max = 100, message = "상품·이벤트명은 100자 이하여야 합니다.")
+    @Size(min = 1, max = 100, message = "상품·이벤트명은 100자 이하여야 합니다.")
     private String name;
 
     private BoothItem.Type type; // PRODUCT / EVENT / SAMPLE
