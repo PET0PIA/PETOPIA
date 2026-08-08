@@ -3,6 +3,7 @@ package com.ms.petopia.api.booth.service;
 import com.ms.petopia.api.booth.domain.Booth;
 import com.ms.petopia.api.booth.domain.BoothItem;
 import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
+import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
@@ -30,6 +31,7 @@ public class BoothService {
     // 부스 상세 조회 (비회원 포함 공개)
     public BoothResponse getBooth(Long boothId) {
 
+        // 부스 존재 확인
         Booth booth = boothMapper.selectById(boothId);
 
         if(booth == null) {
@@ -78,23 +80,10 @@ public class BoothService {
     }
 
     /*
-     * presigned 업로드로 받은 임시 객체 키를 확정(tmp -> uploads)하고 공개 URL로 바꾼다.
-     * 키가 없으면(이미지를 안 바꾸는 경우) null을 그대로 반환한다 - 부분 업데이트에서
-     * null은 "이 필드는 갱신 안 함"을 뜻하므로 자연스럽게 기존 이미지가 유지된다.
+     * 판매상품·이벤트를 등록한다. 본인 소유(부스가 속한 사업자의 owner) 부스만 가능하다.
+     * 이름 중복은 의도적으로 막지 않는다 - 사업자가 같은 이름으로 여러 건(다른 배치 등)
+     * 등록하고 싶을 수 있어서, 중복 체크 대신 프론트의 이중 클릭 방지에 맡긴다.
      */
-    private String resolveImageUrl(String temporaryObjectKey) {
-
-        if(temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
-            return null;
-        }
-
-        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
-
-        return storageService.toPublicUrl(confirmedKey);
-
-    }
-
-    // 판매상품·이벤트 등록 (본인 소유 부스만)
     @Transactional
     public BoothItemResponse addItem(Long callerId, Long boothId, BoothItemCreateRequest request) {
 
@@ -110,7 +99,43 @@ public class BoothService {
 
         boothMapper.insertBoothItem(item);
 
+        // insertBoothItem이 useGeneratedKeys로 item.boothItemId를 채워준 상태라 재조회 없이 바로 응답 가능
         return BoothItemResponse.from(item);
+
+    }
+
+    /*
+     * 판매상품·이벤트를 수정한다. boothItemId만으로 들어오는 요청이라(booth 소속 정보가
+     * 경로에 없음), 먼저 상품을 조회해서 소속 boothId를 알아낸 다음 소유권을 확인한다.
+     * 보낸 필드만 갱신(부분 업데이트) - updateBooth와 동일한 패턴.
+     */
+    @Transactional
+    public BoothItemResponse updateItem(Long callerId, Long boothItemId, BoothItemUpdateRequest request) {
+
+        // 상품 존재 확인 + 소속 boothId 확보
+        BoothItem item = boothMapper.selectItemById(boothItemId);
+
+        if(item == null) {
+            throw new CommonException(ErrorCode.BOOTH_ITEM_NOT_FOUND);
+        }
+
+        // 그 상품이 속한 부스의 소유권 확인
+        verifyOwner(callerId, item.getBoothId());
+
+        BoothItem patch = BoothItem.builder()
+                .boothItemId(boothItemId)
+                .name(request.getName())
+                .type(request.getType())
+                .imageUrl(resolveImageUrl(request.getImageObjectKey()))
+                .note(request.getNote())
+                .build();
+
+        boothMapper.updateBoothItem(patch);
+
+        // 갱신된 최신 상태를 다시 조회해서 응답한다 (patch 객체엔 안 바뀐 필드가 비어있음)
+        BoothItem updated = boothMapper.selectItemById(boothItemId);
+
+        return BoothItemResponse.from(updated);
 
     }
 
@@ -133,6 +158,23 @@ public class BoothService {
         if(business == null || !business.getOwnerId().equals(callerId)) {
             throw new CommonException(ErrorCode.BOOTH_ACCESS_DENIED);
         }
+
+    }
+
+    /*
+     * presigned 업로드로 받은 임시 객체 키를 확정(tmp -> uploads)하고 공개 URL로 바꾼다.
+     * 키가 없으면(이미지를 안 바꾸는 경우) null을 그대로 반환한다 - 부분 업데이트에서
+     * null은 "이 필드는 갱신 안 함"을 뜻하므로 자연스럽게 기존 이미지가 유지된다.
+     */
+    private String resolveImageUrl(String temporaryObjectKey) {
+
+        if(temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
+            return null;
+        }
+
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
+
+        return storageService.toPublicUrl(confirmedKey);
 
     }
 

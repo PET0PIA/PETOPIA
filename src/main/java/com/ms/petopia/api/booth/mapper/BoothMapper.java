@@ -28,4 +28,10 @@ public interface BoothMapper {
     // 판매상품·이벤트 등록
     void insertBoothItem(BoothItem item);
 
+    // 상품·이벤트 단건 조회 (소유권 확인용 boothId 조회 + 존재 확인)
+    BoothItem selectItemById(@Param("boothItemId") Long boothItemId);
+
+    // 상품·이벤트 부분 수정 (null이 아닌 필드만 갱신)
+    void updateBoothItem(BoothItem item);
+
 }

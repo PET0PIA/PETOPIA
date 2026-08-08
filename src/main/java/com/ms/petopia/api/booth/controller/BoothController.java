@@ -1,6 +1,7 @@
 package com.ms.petopia.api.booth.controller;
 
 import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
+import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
@@ -53,6 +54,19 @@ public class BoothController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(HttpStatus.CREATED, response));
+
+    }
+
+    // 판매상품·이벤트 수정 (본인 소유 부스만)
+    @PutMapping("/booth-items/{boothItemId}")
+    public ResponseEntity<ApiResponse<BoothItemResponse>> updateItem(
+            @RequestHeader(BoothTemporaryAuthHeaders.USER_ID) Long callerId,
+            @PathVariable Long boothItemId,
+            @Valid @RequestBody BoothItemUpdateRequest request
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(boothService.updateItem(callerId, boothItemId, request)));
 
     }
 

@@ -49,4 +49,23 @@
         VALUES (#{boothId}, #{name}, #{type}, #{imageUrl}, #{note})
     </insert>
 
+    <!-- 상품·이벤트 단건 조회 -->
+    <select id="selectItemById" resultType="com.ms.petopia.api.booth.domain.BoothItem">
+        SELECT booth_item_id, booth_id, name, type, image_url, note
+        FROM booth_item
+        WHERE booth_item_id = #{boothItemId}
+    </select>
+
+    <!-- 상품·이벤트 부분 수정. null이 아닌 필드만 SET 절에 포함(보낸 필드만 갱신) -->
+    <update id="updateBoothItem">
+        UPDATE booth_item
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="imageUrl != null">image_url = #{imageUrl},</if>
+            <if test="note != null">note = #{note},</if>
+        </set>
+        WHERE booth_item_id = #{boothItemId}
+    </update>
+
 </mapper>
