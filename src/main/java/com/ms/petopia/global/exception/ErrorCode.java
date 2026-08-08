@@ -59,6 +59,23 @@ public enum ErrorCode {
     NTS_API_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "V005", "사업자 진위확인 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요."),
     BUSINESS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "V006", "사업자 정보를 확인할 수 없습니다. 입력하신 정보를 다시 확인해주세요."),
     BUSINESS_DUPLICATE(HttpStatus.CONFLICT, "V007", "이미 등록된 사업자등록번호입니다."),
+    APPLICATION_DUPLICATE_ACTIVE(HttpStatus.CONFLICT, "V008", "이미 진행 중인 신청이 존재합니다."),
+    BOOTH_SLOT_ALREADY_LOCKED(HttpStatus.CONFLICT, "V009", "이미 다른 신청에서 선택된 부스 슬롯이 포함되어 있습니다."),
+    TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "V010", "이용약관에 동의해야 신청서를 제출할 수 있습니다."),
+    RECRUIT_CLOSED(HttpStatus.CONFLICT, "V011", "모집이 마감되어 신청할 수 없습니다."),
+    APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "V012", "신청을 찾을 수 없습니다."),
+    BUSINESS_REGISTER_LOCK_TIMEOUT(HttpStatus.CONFLICT, "V013", "사업자 등록 처리 중입니다. 잠시 후 다시 시도해주세요."),
+    APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V014", "본인이 담당하는 행사가 아닙니다."),
+    APPLICATION_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "V015", "심사 대기 중인 신청서만 검토할 수 있습니다."),
+    APPLICATION_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V016", "반려 시 반려 사유를 입력해야 합니다."),
+    APPLICATION_NOT_CANCELABLE(HttpStatus.CONFLICT, "V017", "취소 요청은 결제 대기 또는 확정된 신청서만 가능합니다."),
+    APPLICATION_CANCEL_REQUEST_DUPLICATE(HttpStatus.CONFLICT, "V018", "이미 처리 대기 중인 취소 요청이 있습니다."),
+    APPLICATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "V019", "취소 요청은 행사 시작 7일 전까지만 가능합니다."),
+    APPLICATION_CANCEL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "V020", "처리 대기 중인 취소 요청을 찾을 수 없습니다."),
+    APPLICATION_PAYMENT_EVENT_CONFLICT(HttpStatus.CONFLICT, "V021", "이미 다른 결제로 완료 처리된 신청서입니다."),
+    APPLICATION_NOT_PAYMENT_PENDING(HttpStatus.CONFLICT, "V022", "결제 대기 중인 신청서만 결제 완료 처리할 수 있습니다."),
+    APPLICATION_PAYMENT_AMOUNT_MISMATCH(HttpStatus.CONFLICT, "V023", "통지된 결제 금액이 승인 시 확정된 금액과 일치하지 않습니다."),
+
 
     // ===== Payment =====
     PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
@@ -83,6 +100,16 @@ public enum ErrorCode {
     FAIR_DATE_DUPLICATE(HttpStatus.CONFLICT, "F014", "이미 등록된 운영 날짜입니다."),
     FAIR_DATE_OUT_OF_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F015", "운영 날짜가 행사 운영 기간을 벗어났습니다."),
     FAIR_DATE_INVALID_ENTRY_TIME(HttpStatus.BAD_REQUEST, "F016", "입장 종료 시간이 입장 시작 시간보다 빠릅니다."),
+    FAIR_NOT_PUBLISHABLE(HttpStatus.CONFLICT, "F017", "공개할 수 없는 상태의 행사입니다."),
+    FAIR_CANCEL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "F018", "존재하지 않는 취소 신청이거나 해당 행사의 취소 신청이 아닙니다."),
+    FAIR_CANCEL_NOT_REQUESTABLE(HttpStatus.CONFLICT, "F019", "취소를 신청할 수 없는 행사입니다."),
+    FAIR_CANCEL_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F020", "취소 신청 사유를 입력해야 합니다."),
+    FAIR_CANCEL_REQUEST_NOT_PENDING(HttpStatus.CONFLICT, "F021", "검토 대기 중인 취소 신청만 검토할 수 있습니다."),
+    FAIR_CANCEL_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F022", "취소 신청 반려 시 반려 사유를 입력해야 합니다."),
+    HALL_HAS_BOOTH_SLOTS(HttpStatus.CONFLICT, "F023", "부스 슬롯이 남아있는 홀은 삭제할 수 없습니다."),
+    FAIR_DATE_FAIR_NOT_EDITABLE(HttpStatus.CONFLICT, "F024", "취소되었거나 종료된 행사는 운영일을 관리할 수 없습니다."),
+    FAIR_APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "F025", "본인이 신청한 행사만 수정할 수 있습니다."),
+    FAIR_APPLICATION_NOT_EDITABLE(HttpStatus.CONFLICT, "F026", "심사 대기 중이거나 반려된 신청서만 수정할 수 있습니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -108,6 +135,21 @@ public enum ErrorCode {
     // ===== Notification =====
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),
     NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "N002", "해당 알림에 접근 권한이 없습니다."),
+
+    // ===== Refund =====
+    REFUND_NOT_FOUND(HttpStatus.NOT_FOUND, "RF001", "존재하지 않는 환불입니다."),
+    REFUND_TARGET_NOT_REFUNDABLE(HttpStatus.CONFLICT, "RF002", "환불할 수 없는 결제 상태입니다."),
+    REFUND_ALREADY_PROCESSED(HttpStatus.CONFLICT, "RF003", "이미 환불이 접수된 결제입니다."),
+
+    // ===== Settlement =====
+    SETTLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "ST001", "존재하지 않는 정산입니다."),
+    SETTLEMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ST002", "이미 계산된 정산이 있습니다."),
+    SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
+    SETTLEMENT_NOT_RECALCULABLE(HttpStatus.CONFLICT, "ST004", "재계산할 수 없는 정산 상태입니다."),
+    SETTLEMENT_RECALCULATION_REQUIRED(HttpStatus.CONFLICT, "ST005", "재계산이 필요한 정산은 확정할 수 없습니다. 먼저 재계산해 주세요."),
+
+    // ===== Commission Rate (수수료율) =====
+    COMMISSION_RATE_INVALID_SCOPE(HttpStatus.BAD_REQUEST, "CR001", "scope와 fairId 조합이 올바르지 않습니다(GLOBAL은 fairId 없이, FAIR는 fairId와 함께)."),
     ;
 
     private final HttpStatus httpStatus;

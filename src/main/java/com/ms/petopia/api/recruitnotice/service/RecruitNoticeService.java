@@ -3,23 +3,29 @@ package com.ms.petopia.api.recruitnotice.service;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.dto.request.RecruitNoticeRequest;
+import com.ms.petopia.api.recruitnotice.dto.response.BoothSlotStatusResponse;
 import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeResponse;
+import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeUpsertResponse;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class RecruitNoticeService {
 
     private final RecruitNoticeMapper recruitNoticeMapper;
+    private final StorageService storageService;
 
     // 모집 공고 작성/수정
-    public RecruitNoticeResponse upsertNotice(Long fairId, Long writerId, RecruitNoticeRequest request) {
+    public RecruitNoticeUpsertResponse upsertNotice(Long fairId, Long writerId, RecruitNoticeRequest request) {
 
         // 해당 행사의 담당자가 작성하는게 맞는지 확인
         Long fairAdminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
@@ -46,7 +52,7 @@ public class RecruitNoticeService {
                 .writerId(writerId)
                 .title(request.getTitle())
                 .content(request.getContent())
-                .imageUrl(request.getImageUrl())
+                .imageUrl(resolveImageUrl(request.getImageObjectKey()))
                 .recruitDeadline(request.getRecruitDeadline())
                 .build();
 
@@ -56,10 +62,7 @@ public class RecruitNoticeService {
         // 재조회(데이터 정확성을 위해)
         RecruitNotice saved = recruitNoticeMapper.selectByFairId(fairId);
 
-        // closed 계산(upsertNotice, getNotice 공통 기준 사용)
-        FairStatusInfo fairStatus = recruitNoticeMapper.selectFairStatusByFairId(fairId);
-
-        return RecruitNoticeResponse.from(saved, isClosed(saved, fairStatus));
+        return RecruitNoticeUpsertResponse.from(saved);
 
     }
 
@@ -76,10 +79,12 @@ public class RecruitNoticeService {
         // fairs 상태 조회
         FairStatusInfo fairStatus = recruitNoticeMapper.selectFairStatusByFairId(fairId);
 
-        // TODO: boothSlots 조회 로직 추가 필요 (booth_slots 상태 판정 - 확정 부스 안내판과 로직 공유)
+        // 부스 슬롯 현황 + 확정 업체명 조회
+        List<BoothSlotStatusResponse> boothSlots =
+                recruitNoticeMapper.selectBoothSlotStatusesByFairId(fairId);
 
         // closed 계산하여 반환
-        return RecruitNoticeResponse.from(notice, isClosed(notice, fairStatus));
+        return RecruitNoticeResponse.from(notice, isClosed(notice, fairStatus), boothSlots);
 
     }
 
@@ -99,6 +104,18 @@ public class RecruitNoticeService {
 
         return deadlinePassed || fairCanceled || fairEnded;
 
+    }
+
+    /*
+     * presigned 업로드로 받은 임시 객체 키를 확정(tmp -> uploads)하고 공개 URL로 바꾼다.
+     * 키가 없으면(이미지를 첨부하지 않았으면) null을 그대로 반환한다.
+     */
+    private String resolveImageUrl(String temporaryObjectKey) {
+        if (temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
+            return null;
+        }
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
+        return storageService.toPublicUrl(confirmedKey);
     }
 
 }

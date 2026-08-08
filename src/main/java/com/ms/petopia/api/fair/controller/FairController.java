@@ -3,8 +3,10 @@ package com.ms.petopia.api.fair.controller;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
+import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
+import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.service.FairService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -36,8 +38,24 @@ public class FairController {
     }
 
     @GetMapping("/{fairId}")
-    public FairApplicationDetailResponse getApplication(@PathVariable Long fairId) {
-        return fairService.getApplication(fairId);
+    public FairApplicationDetailResponse getApplication(
+            @PathVariable Long fairId,
+            @RequestHeader(FairTemporaryAuthHeaders.USER_ID) Long requesterId
+    ) {
+        // TODO 인증 도메인 완성 후 X-User-Id 대신 인증 Principal에서 requesterId를 가져오고,
+        // 신청자 본인 또는 SUPER_ADMIN만 조회 가능하도록 세분화한다(managerPhone/managerEmail
+        // 노출 - 인증 없이 누구나 조회 가능했던 문제 수정).
+        return fairService.getApplication(fairId, requesterId);
+    }
+
+    @PatchMapping("/{fairId}")
+    public FairApplicationDetailResponse updateApplication(
+            @PathVariable Long fairId,
+            @RequestHeader(FairTemporaryAuthHeaders.USER_ID) Long requesterId,
+            @RequestBody UpdateFairApplicationRequest request
+    ) {
+        // TODO 인증 도메인 완성 후 X-User-Id 대신 인증 Principal에서 requesterId를 가져온다.
+        return fairService.updateApplication(fairId, requesterId, request);
     }
 
     @PatchMapping("/{fairId}/review")
@@ -48,5 +66,14 @@ public class FairController {
     ) {
         // TODO 인증 도메인 완성 후 X-User-Id 대신 SUPER_ADMIN 인증 Principal에서 reviewerId를 가져온다.
         return fairService.review(fairId, reviewerId, request);
+    }
+
+    @PatchMapping("/{fairId}/publish")
+    public PublishFairResponse publish(
+            @PathVariable Long fairId,
+            @RequestHeader(FairTemporaryAuthHeaders.USER_ID) Long actorId
+    ) {
+        // TODO 인증 도메인 완성 후 X-User-Id 대신 SUPER_ADMIN 인증 Principal에서 actorId를 가져온다.
+        return fairService.publish(fairId, actorId);
     }
 }

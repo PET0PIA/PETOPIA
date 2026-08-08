@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.BoothVisitMapper">
+
+    <select id="selectBoothForVendor" resultType="BoothScanContext">
+        SELECT b.booth_id
+             , b.business_id
+             , a.fair_id
+          FROM booth b
+          JOIN application a
+            ON a.application_id = b.application_id
+          JOIN business bu
+            ON bu.business_id = b.business_id
+          JOIN users u
+            ON u.user_id = bu.owner_id
+         WHERE b.booth_id = #{boothId}
+           AND u.user_id = #{vendorUserId}
+           AND u.role = 'VENDOR'
+           AND u.status = 'ACTIVE'
+    </select>
+
+    <select id="selectBoothVisitForUpdate" resultType="BoothVisitRecord">
+        SELECT booth_visit_id
+             , visit_count
+             , first_visited_at
+          FROM booth_visits
+         WHERE reservation_id = #{reservationId}
+           AND booth_id = #{boothId}
+         FOR UPDATE
+    </select>
+
+    <insert id="insertBoothVisit">
+        INSERT INTO booth_visits (
+               fair_id
+             , booth_id
+             , business_id
+             , user_id
+             , reservation_id
+             , first_visited_at
+             , last_visited_at
+             , visit_count
+             , created_at
+             , updated_at
+        ) VALUES (
+               #{fairId}
+             , #{boothId}
+             , #{businessId}
+             , #{userId}
+             , #{reservationId}
+             , #{now}
+             , #{now}
+             , 1
+             , #{now}
+             , #{now}
+        )
+    </insert>
+
+    <update id="updateBoothVisitForRevisit">
+        UPDATE booth_visits
+           SET last_visited_at = #{now}
+             , visit_count = visit_count + 1
+             , updated_at = #{now}
+         WHERE booth_visit_id = #{boothVisitId}
+    </update>
+
+</mapper>

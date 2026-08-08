@@ -5,6 +5,7 @@ import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.Hall;
 import com.ms.petopia.api.fair.dto.HallResponse;
 import com.ms.petopia.api.fair.dto.UpdateHallRequest;
+import com.ms.petopia.api.fair.mapper.BoothSlotMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.fair.mapper.HallMapper;
 import com.ms.petopia.global.exception.CommonException;
@@ -42,6 +43,9 @@ class HallServiceTest {
 
     @Mock
     private FairMapper fairMapper;
+
+    @Mock
+    private BoothSlotMapper boothSlotMapper;
 
     @Mock
     private StorageService storageService;
@@ -192,6 +196,31 @@ class HallServiceTest {
         assertThat(response.name()).isEqualTo("변경된 이름");
     }
 
+    @Test
+    @DisplayName("이름을 빈 문자열로 수정하려 하면 INVALID_INPUT_VALUE를 던지고 갱신하지 않는다")
+    void update_이름이_빈문자열이면_예외를_던진다() {
+        given(hallMapper.selectById(HALL_ID)).willReturn(hall(HALL_ID, FAIR_ID));
+
+        assertErrorCode(
+                () -> hallService.update(FAIR_ID, HALL_ID, new UpdateHallRequest(" ", null)),
+                ErrorCode.INVALID_INPUT_VALUE
+        );
+        verify(hallMapper, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("이름이 null이면(변경 안 함) 검증 없이 통과한다")
+    void update_이름이_null이면_검증하지않는다() {
+        Hall existing = hall(HALL_ID, FAIR_ID);
+        given(hallMapper.selectById(HALL_ID)).willReturn(existing, existing);
+
+        hallService.update(FAIR_ID, HALL_ID, new UpdateHallRequest(null, null));
+
+        ArgumentCaptor<Hall> captor = ArgumentCaptor.forClass(Hall.class);
+        verify(hallMapper).update(captor.capture());
+        assertThat(captor.getValue().getName()).isNull();
+    }
+
     // ===== delete =====
 
     @Test
@@ -204,9 +233,20 @@ class HallServiceTest {
     }
 
     @Test
-    @DisplayName("같은 행사 소속 홀을 삭제하면 deleteById를 호출한다")
+    @DisplayName("부스 슬롯이 남아있으면 HALL_HAS_BOOTH_SLOTS를 던지고 삭제하지 않는다")
+    void delete_부스슬롯남아있으면_예외를_던진다() {
+        given(hallMapper.selectById(HALL_ID)).willReturn(hall(HALL_ID, FAIR_ID));
+        given(boothSlotMapper.existsByHallId(HALL_ID)).willReturn(true);
+
+        assertErrorCode(() -> hallService.delete(FAIR_ID, HALL_ID), ErrorCode.HALL_HAS_BOOTH_SLOTS);
+        verify(hallMapper, never()).deleteById(any());
+    }
+
+    @Test
+    @DisplayName("부스 슬롯이 없는 같은 행사 소속 홀을 삭제하면 deleteById를 호출한다")
     void delete_정상삭제() {
         given(hallMapper.selectById(HALL_ID)).willReturn(hall(HALL_ID, FAIR_ID));
+        given(boothSlotMapper.existsByHallId(HALL_ID)).willReturn(false);
 
         hallService.delete(FAIR_ID, HALL_ID);
 

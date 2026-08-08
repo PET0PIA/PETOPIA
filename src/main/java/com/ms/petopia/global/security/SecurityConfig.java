@@ -41,6 +41,19 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(
+                                "/api/v1/reservations/**",
+                                "/api/v1/fairs/*/reservations",
+                                "/api/v1/fairs/*/onsite-reservations"
+                        ).authenticated()
+                        .requestMatchers("/api/v1/admin/fairs/**")
+                        .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // TODO 인증 도메인 완성 후 SUPER_ADMIN 권한 검증(JWT)으로 되돌린다.
+                        // 지금은 다른 관리자 API들과 동일하게 X-User-Id 임시 헤더 방식(permitAll)을 쓴다 -
+                        // AuditLogController 등 /api/admin/** 하위 컨트롤러가 이미 이 전제로 작성돼 있다.
+                        //참가업체 부스 운영 API(부스 방문 스캔 등). 부스 소유 검증은 서비스 계층에서 한 번 더 한다.
+                        .requestMatchers("/api/v1/vendor/**")
+                        .hasRole("VENDOR")
                         //로그인한 본인만 비밀번호 변경 가능 - anyRequest().permitAll()보다 먼저 와야 함
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/password/change").authenticated()
                         //TODO 추후 role 기반 가드 확장

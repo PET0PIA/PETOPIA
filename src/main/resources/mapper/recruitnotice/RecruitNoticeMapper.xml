@@ -54,4 +54,45 @@
         WHERE fair_id = #{fairId}
     </select>
 
+    <!--
+        부스 슬롯 현황 + 확정 업체명.
+        한 슬롯을 참조하는 활성(PENDING_REVIEW/PAYMENT_PENDING/CONFIRMED) application_slot은
+        최대 1건만 존재한다는 전제(ApplicationService의 FOR UPDATE 락으로 보장됨).
+        그래서 상관 서브쿼리로 상태 하나만 뽑아도 안전하다 — JOIN으로 하면 과거
+        REJECTED/CANCELED 이력까지 같이 잡혀서 슬롯 하나가 여러 행으로 중복될 수 있음.
+    -->
+    <select id="selectBoothSlotStatusesByFairId" parameterType="long"
+            resultType="com.ms.petopia.api.recruitnotice.dto.response.BoothSlotStatusResponse">
+        SELECT bs.booth_slot_id AS boothSlotsId,
+            bs.slot_number AS slotNumber,
+            bs.price AS price,
+            CASE (
+                SELECT a.status
+                FROM application_slot aps
+                JOIN application a ON a.application_id = aps.application_id
+                WHERE aps.booth_slot_id = bs.booth_slot_id
+                AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+                LIMIT 1
+            )
+            WHEN 'CONFIRMED' THEN 'CONFIRMED'
+            WHEN 'PENDING_REVIEW' THEN 'PENDING'
+            WHEN 'PAYMENT_PENDING' THEN 'PENDING'
+            ELSE 'AVAILABLE'
+            END AS status,
+            (
+                SELECT b.name
+                FROM application_slot aps
+                JOIN application a ON a.application_id = aps.application_id
+                JOIN business b ON b.business_id = a.business_id
+                WHERE aps.booth_slot_id = bs.booth_slot_id
+                AND a.status = 'CONFIRMED'
+                LIMIT 1
+            ) AS businessName
+        FROM booth_slots bs
+        JOIN halls h ON bs.hall_id = h.hall_id
+        WHERE h.fair_id = #{fairId}
+        AND bs.is_active = TRUE
+        ORDER BY bs.slot_number
+    </select>
+
 </mapper>

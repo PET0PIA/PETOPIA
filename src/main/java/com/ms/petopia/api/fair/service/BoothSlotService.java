@@ -107,6 +107,68 @@ public class BoothSlotService {
     }
 
     /**
+     * 부스 슬롯을 잠근다(locked_at 설정) - 이 슬롯 배치(위치·번호·가격)를 더 이상 편집할 수
+     * 없게 한다. 이미 잠긴 슬롯을 다시 호출하면 아무것도 바꾸지 않고 조용히 넘어간다(멱등).
+     *
+     * <p><b>호출 시점</b>: application 도메인은 이미 신청 제출 순간(PENDING_REVIEW)부터 그
+     * 슬롯을 "잠김"으로 취급한다({@code ApplicationMapper#selectBoothSlotsWithLockStatus}가
+     * application_slot에 PENDING_REVIEW/PAYMENT_PENDING/CONFIRMED 신청이 걸려있는지를 실시간
+     * EXISTS로 판단 - 승인 시점이 아니라 제출 시점부터다). Fair 쪽 locked_at도 그 판단과
+     * 어긋나지 않으려면 같은 시점(신청 제출, application_slot 저장 시)에 걸어야 한다.
+     *
+     * <p>이 메서드는 "잠그는 능력"만 제공하고, 실제 호출 배선은 application 도메인 몫이다
+     * ({@link com.ms.petopia.api.fair.service.FairCancelRefundOrchestrationService}가
+     * PaymentService를 직접 호출하는 것과 동일하게 빈 주입으로 호출하면 된다). 신청이 반려·
+     * 취소돼 활성 신청이 없어지면 {@link #unlockBoothSlot}으로 반드시 되돌려줘야 한다 - 그래야
+     * Fair 관리자가 그 부스를 다시 배치 편집할 수 있다.
+     */
+    @Transactional
+    public void lockBoothSlot(Long hallId, Long boothSlotId) {
+        BoothSlot existing = findSlotInHallOrThrow(hallId, boothSlotId);
+        if (existing.getLockedAt() != null) {
+            return;
+        }
+
+        BoothSlot update = new BoothSlot();
+        update.setBoothSlotId(boothSlotId);
+        update.setLockedAt(timeProvider.now());
+        update.setUpdatedAt(timeProvider.now());
+        boothSlotMapper.update(update);
+    }
+
+    /**
+     * 부스 슬롯 잠금을 해제한다(locked_at을 NULL로 되돌림). {@link #lockBoothSlot}과 쌍을
+     * 이룬다 - 그 슬롯에 걸려있던 신청이 반려·취소되어 더 이상 활성 신청이 없어졌을 때
+     * 호출한다. 이미 풀려있으면(locked_at이 이미 NULL) 아무것도 바꾸지 않고 조용히
+     * 넘어간다(멱등).
+     *
+     * <p>일반 {@link BoothSlotMapper#update}는 null 필드를 건너뛰는 PATCH 방식이라 locked_at을
+     * NULL로 만들 수 없어서, 전용 {@link BoothSlotMapper#clearLock}을 쓴다.
+     *
+     * <p>호출 시점 배선은 {@link #lockBoothSlot}과 동일하게 application 도메인 몫이다.
+     */
+    @Transactional
+    public void unlockBoothSlot(Long hallId, Long boothSlotId) {
+        BoothSlot existing = findSlotInHallOrThrow(hallId, boothSlotId);
+        if (existing.getLockedAt() == null) {
+            return;
+        }
+
+        boothSlotMapper.clearLock(boothSlotId, timeProvider.now());
+    }
+
+    private BoothSlot findSlotInHallOrThrow(Long hallId, Long boothSlotId) {
+        if (hallId == null || hallId <= 0 || boothSlotId == null || boothSlotId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        BoothSlot slot = boothSlotMapper.selectById(boothSlotId);
+        if (slot == null || !slot.getHallId().equals(hallId)) {
+            throw new CommonException(ErrorCode.BOOTH_SLOT_NOT_FOUND);
+        }
+        return slot;
+    }
+
+    /**
      * hall_id + booth_layout_version을 WHERE 절에 함께 건 조건부 UPDATE로 버전을
      * 원자적으로 검증·증가시킨다. DB 레벨에서 처리하므로 "읽고 나서 비교" 방식과 달리
      * 두 트랜잭션이 동시에 같은 버전을 보고 둘 다 통과해버리는 경쟁 상태가 없다.
@@ -133,8 +195,8 @@ public class BoothSlotService {
         updateCommand.setMemo(item.memo());
         // DB의 NOW() 대신 앱이 정한 시각을 명시적으로 실어 보낸다 - 그래야 이 저장이
         // 응답으로 돌려주는 updatedAt(now)과 실제 DB에 박히는 값이 항상 일치한다
-        // (코드래빗 리뷰 반영: 이전엔 SQL이 updated_at = NOW()를 써서 앱 서버와 DB 서버의
-        // 시계가 어긋나면 응답이 실제 저장값과 달라질 수 있었다).
+        // (이전엔 SQL이 updated_at = NOW()를 써서 앱 서버와 DB 서버의 시계가 어긋나면
+        // 응답이 실제 저장값과 달라질 수 있었다).
         updateCommand.setUpdatedAt(now);
         if (!locked) {
             updateCommand.setSlotNumber(item.slotNumber());
@@ -206,7 +268,7 @@ public class BoothSlotService {
         // 같은 boothSlotId를 두 번 이상 참조하면 뒤 항목이 앞 항목의 update를 덮어써 버려서
         // (existingById 맵은 갱신되지 않으니 둘 다 "원본 existing" 기준으로 처리됨) DB에는
         // 마지막 항목만 반영되는데 응답에는 두 항목이 다 담기는 불일치가 생긴다. 그래서
-        // slotNumber 중복과 같은 자리에서 미리 막는다(코드래빗 리뷰 반영).
+        // slotNumber 중복과 같은 자리에서 미리 막는다.
         Set<Long> referencedSlotIds = new HashSet<>();
         for (BoothSlotItem item : items) {
             validateItem(item);

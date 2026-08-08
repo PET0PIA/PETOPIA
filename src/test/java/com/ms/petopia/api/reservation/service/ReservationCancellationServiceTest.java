@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ import java.time.LocalTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -25,6 +27,7 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class ReservationCancellationServiceTest {
 
+    private static final Long FAIR_ID = 10L;
     private static final Long RESERVATION_ID = 30L;
     private static final Long USER_ID = 20L;
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 4, 21, 0);
@@ -33,6 +36,8 @@ class ReservationCancellationServiceTest {
     private ReservationCancellationMapper cancellationMapper;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
     @InjectMocks
     private ReservationCancellationService service;
 
@@ -68,6 +73,22 @@ class ReservationCancellationServiceTest {
 
         verify(cancellationMapper).cancelReservation(
                 RESERVATION_ID, "CONFIRMED", null, USER_ID, NOW
+        );
+    }
+
+    @Test
+    void rejectsCancellationRequestFromAnotherUser() {
+        ReservationCancellationContext context = context("PENDING_PAYMENT", "ADVANCE", 10_000);
+        context.setUserId(99L);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+
+        assertError(() -> service.cancel(RESERVATION_ID, USER_ID, null), ErrorCode.ACCESS_DENIED);
+
+        verify(cancellationMapper, never()).cancelReservation(
+                any(), any(), any(), any(), any()
+        );
+        verify(cancellationMapper, never()).insertCanceledHistory(
+                any(), any(), any(), any(), any()
         );
     }
 
@@ -112,6 +133,7 @@ class ReservationCancellationServiceTest {
     private ReservationCancellationContext context(String status, String reservationType, long amount) {
         ReservationCancellationContext context = new ReservationCancellationContext();
         context.setReservationId(RESERVATION_ID);
+        context.setFairId(FAIR_ID);
         context.setUserId(USER_ID);
         context.setVisitDate(LocalDate.of(2026, 8, 5));
         context.setEntryStartTime(LocalTime.of(10, 0));
