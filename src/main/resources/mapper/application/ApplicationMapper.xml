@@ -334,4 +334,16 @@
         FOR UPDATE
     </select>
 
+    <!--
+         신청이 선택한 슬롯들의 boothSlotId+hallId.
+         fair 도메인 BoothSlotService.lockBoothSlot/unlockBoothSlot
+         호출에 필요한 hallId를 얻기 위함
+    -->
+    <select id="selectSlotHallRefsByApplicationId" resultType="com.ms.petopia.api.application.domain.BoothSlotHallRef">
+        SELECT aps.booth_slot_id AS boothSlotId, bs.hall_id AS hallId
+        FROM application_slot aps
+        JOIN booth_slots bs ON bs.booth_slot_id = aps.booth_slot_id
+        WHERE aps.application_id = #{applicationId}
+    </select>
+
 </mapper>
