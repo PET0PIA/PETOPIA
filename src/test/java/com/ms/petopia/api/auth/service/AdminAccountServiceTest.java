@@ -57,6 +57,8 @@ class AdminAccountServiceTest {
     private JwtTokenProvider jwtTokenProvider;
     @Mock
     private RefreshTokenStore refreshTokenStore;
+    @Mock
+    private AccountSuspensionStore accountSuspensionStore;
     @InjectMocks
     private AdminAccountService adminAccountService;
 
@@ -295,22 +297,38 @@ class AdminAccountServiceTest {
     // ===== updateAccountStatus =====
 
     @Test
-    void updateAccountStatus_정상변경되면_예외없이끝난다() {
+    void updateAccountStatus_INACTIVE로변경되면_Redis에정지를기록한다() {
         given(authMapper.updateUserStatus(ADMIN_USER_ID, "INACTIVE")).willReturn(1);
 
         adminAccountService.updateAccountStatus(ADMIN_USER_ID, "INACTIVE");
 
         verify(authMapper).updateUserStatus(ADMIN_USER_ID, "INACTIVE");
+        verify(accountSuspensionStore).suspend(ADMIN_USER_ID);
+        verify(accountSuspensionStore, never()).reactivate(any());
     }
 
     @Test
-    void updateAccountStatus_대상유저가없으면_USER_NOT_FOUND를던진다() {
+    void updateAccountStatus_ACTIVE로변경되면_Redis정지기록을지운다() {
+        given(authMapper.updateUserStatus(ADMIN_USER_ID, "ACTIVE")).willReturn(1);
+
+        adminAccountService.updateAccountStatus(ADMIN_USER_ID, "ACTIVE");
+
+        verify(authMapper).updateUserStatus(ADMIN_USER_ID, "ACTIVE");
+        verify(accountSuspensionStore).reactivate(ADMIN_USER_ID);
+        verify(accountSuspensionStore, never()).suspend(any());
+    }
+
+    @Test
+    void updateAccountStatus_대상유저가없으면_USER_NOT_FOUND를던지고_Redis는건드리지않는다() {
         given(authMapper.updateUserStatus(ADMIN_USER_ID, "INACTIVE")).willReturn(0);
 
         assertThatThrownBy(() -> adminAccountService.updateAccountStatus(ADMIN_USER_ID, "INACTIVE"))
                 .isInstanceOf(CommonException.class)
                 .extracting(ex -> ((CommonException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.USER_NOT_FOUND);
+
+        verify(accountSuspensionStore, never()).suspend(any());
+        verify(accountSuspensionStore, never()).reactivate(any());
     }
 
     private User superAdmin() {
