@@ -57,6 +57,11 @@ export function BoothVisitScanPage() {
       return;
     }
     setStartError(null);
+    // 이전 부스의 결과·로그·입력이 새 부스 화면에 남지 않도록 초기화한다.
+    setLastResult(null);
+    setLogs([]);
+    setScanError(null);
+    setQrInput("");
     setBoothId(parsed);
     setTimeout(() => qrInputRef.current?.focus(), 0);
   }
@@ -68,6 +73,8 @@ export function BoothVisitScanPage() {
 
     setScanning(true);
     setScanError(null);
+    // 이번 스캔 결과만 보이도록 직전 결과를 먼저 지운다(실패 시 이전 결과 오인 방지).
+    setLastResult(null);
     try {
       const res = await scanBoothVisit(boothId, token);
       setLastResult({ code: res.resultCode, visitCount: res.visitCount });
@@ -138,10 +145,13 @@ export function BoothVisitScanPage() {
 
       <Card className="mb-4 p-5">
         <form onSubmit={handleScan}>
-          <span className="mb-1.5 block text-sm font-bold text-ink">입장 QR 토큰</span>
+          <label htmlFor="booth-qr-token" className="mb-1.5 block text-sm font-bold text-ink">
+            입장 QR 토큰
+          </label>
           <div className="flex gap-2">
             {/* Input 컴포넌트는 ref를 받지 않아(공유 컴포넌트 미변경) 스캔 포커스용으로만 네이티브 input 사용 */}
             <input
+              id="booth-qr-token"
               ref={qrInputRef}
               value={qrInput}
               onChange={(event) => setQrInput(event.target.value)}

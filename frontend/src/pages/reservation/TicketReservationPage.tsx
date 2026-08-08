@@ -36,15 +36,19 @@ function formatTime(time: string) {
 }
 
 // 운영 시작~종료일을 "2026-09-18 ~ 09-20" 형태로 다듬는다.
+// 단, 해가 바뀌는 기간(2026-12-30 ~ 2027-01-02)은 종료 연도를 남긴다.
 function formatPeriod(start: string | null, end: string | null) {
   if (!start) return "";
   if (!end || end === start) return start;
-  return `${start} ~ ${end.slice(5)}`;
+  const sameYear = start.slice(0, 4) === end.slice(0, 4);
+  return `${start} ~ ${sameYear ? end.slice(5) : end}`;
 }
 
 export function TicketReservationPage() {
   const { fairId } = useParams<{ fairId: string }>();
   const id = Number(fairId);
+  // 경로 파라미터가 양의 정수가 아니면(예: /tickets/abc) NaN을 API URL에 싣지 않는다.
+  const idValid = Number.isInteger(id) && id > 0;
   const { confirm, confirmDialog } = useConfirm();
 
   const [availability, setAvailability] = useState<ReservationAvailability | null>(null);
@@ -64,6 +68,7 @@ export function TicketReservationPage() {
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
 
   useEffect(() => {
+    if (!idValid) return; // 잘못된 경로 파라미터면 요청하지 않는다
     let alive = true;
     // 행사 이름·장소는 fair 도메인, 예약금·날짜는 예약 도메인에서 각각 가져온다.
     // 행사 정보 조회는 실패해도 예매는 계속할 수 있게 막지 않는다(이름만 못 보여줄 뿐).
@@ -88,7 +93,20 @@ export function TicketReservationPage() {
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, idValid]);
+
+  if (!idValid) {
+    return (
+      <div className="mx-auto max-w-3xl py-2">
+        <EmptyState
+          title="잘못된 예매 주소예요."
+          description="행사 주소가 올바르지 않아요. 예매 가능한 행사에서 다시 선택해 주세요."
+          actionTo="/tickets"
+          actionLabel="예매 가능한 행사 보기"
+        />
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -133,11 +151,13 @@ export function TicketReservationPage() {
   async function handleAdvance() {
     if (!advanceVisitDate) return;
     const proceed = await confirm({
-      title: isPaid ? "결제하고 예약할까요?" : "예약할까요?",
+      title: isPaid ? "유료 예약을 진행할까요?" : "예약할까요?",
       description: `${fairName} · ${advanceVisitDate} 방문으로 사전예약해요. ${
-        isPaid ? `결제 금액은 ${price.toLocaleString()}원이에요.` : "무료 예약이에요."
+        isPaid
+          ? `결제 금액은 ${price.toLocaleString()}원이에요. 결제 기능은 준비 중이라 지금은 예약을 완료할 수 없어요.`
+          : "무료 예약이에요."
       }`,
-      confirmLabel: isPaid ? "결제하기" : "예약하기",
+      confirmLabel: isPaid ? "다음" : "예약하기",
     });
     if (!proceed) return;
 
@@ -237,7 +257,11 @@ export function TicketReservationPage() {
   if (phase === "payment" && paymentInfo) {
     return (
       <div className="mx-auto max-w-3xl py-2">
-        <PageHeader eyebrow="결제" title="결제하기" description="예약을 확정하려면 결제를 완료해 주세요." />
+        <PageHeader
+          eyebrow="결제"
+          title="결제 준비 중"
+          description="유료 예약의 결제 기능은 아직 준비 중이에요. 준비되면 이 화면에서 결제를 완료할 수 있어요."
+        />
 
         <Card className="mb-4 p-5">
           <div className="flex items-center justify-between">
@@ -257,8 +281,9 @@ export function TicketReservationPage() {
             결제 수단
           </div>
           {/* 결제위젯 자리 — 결제 도메인 연동 예정. 유료 예약 생성·결제는 그때 함께 붙인다. */}
-          <div className="grid place-items-center rounded-button border border-dashed border-line bg-page py-10 text-center text-sm text-muted">
-            결제위젯 자리 (연동 예정)
+          <div className="grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-10 text-center text-sm text-muted">
+            <p className="font-bold text-ink">결제 기능 준비 중</p>
+            <p>지금은 결제를 완료할 수 없어요. 곧 지원할 예정이에요.</p>
           </div>
         </Card>
 
@@ -383,11 +408,17 @@ export function TicketReservationPage() {
             </label>
           )}
 
+          {isPaid && (
+            <p className="mb-4 text-sm text-muted">
+              ※ 유료 예약 결제는 준비 중이라 지금은 예약을 완료할 수 없어요. 무료 예약만 바로 확정돼요.
+            </p>
+          )}
+
           {submitError && <p className="mb-4 text-sm font-bold text-primary-strong">{submitError}</p>}
 
           <div className="flex justify-end">
             <Button disabled={!canProceedAdvance} onClick={handleAdvance}>
-              {submitting ? "예약 중…" : isPaid ? "결제하고 예약하기" : "예약 완료하기"}
+              {submitting ? "예약 중…" : isPaid ? "다음" : "예약 완료하기"}
             </Button>
           </div>
         </>

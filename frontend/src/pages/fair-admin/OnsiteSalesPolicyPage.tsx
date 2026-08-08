@@ -1,5 +1,5 @@
 import { AlertCircle, Search, Settings2 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import { getFairDates, type FairDate } from "../../api/fair";
 import {
@@ -53,7 +53,11 @@ export function OnsiteSalesPolicyPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // 요청 세대 번호. 늦게 도착한 이전 조회 응답이 최신 화면을 덮어쓰지 못하게 막는다.
+  const loadSeq = useRef(0);
+
   async function loadPolicies(targetFairId: number) {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setLoadError(null);
     try {
@@ -62,12 +66,14 @@ export function OnsiteSalesPolicyPage() {
       const policies = await Promise.all(
         dates.map((date) => getOnsiteSalesPolicy(targetFairId, date.fairDateId)),
       );
+      if (seq !== loadSeq.current) return; // 더 최신 조회가 있으면 이 응답은 버린다
       setRows(dates.map((fairDate, index) => ({ fairDate, policy: policies[index] })));
     } catch (error) {
+      if (seq !== loadSeq.current) return;
       setRows([]);
       setLoadError(error instanceof ApiError ? error.message : "현장예매 정책을 불러오지 못했어요.");
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }
 
@@ -75,6 +81,9 @@ export function OnsiteSalesPolicyPage() {
     event.preventDefault();
     const parsed = Number(fairIdInput);
     if (!Number.isInteger(parsed) || parsed <= 0) {
+      // 새 조회를 시작하지 않더라도 진행 중이던 이전 조회는 무효화한다.
+      loadSeq.current += 1;
+      setLoading(false);
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }

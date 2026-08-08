@@ -97,8 +97,11 @@ export function ReservationDetailPage() {
   const [changeError, setChangeError] = useState<string | null>(null);
 
   const id = Number(reservationId);
+  // 경로 파라미터가 양의 정수가 아니면(예: /reservations/me/abc) NaN을 API URL에 싣지 않는다.
+  const idValid = Number.isInteger(id) && id > 0;
 
   useEffect(() => {
+    if (!idValid) return; // 잘못된 경로 파라미터면 요청하지 않는다
     let alive = true;
     getReservationDetail(id)
       .then((res) => {
@@ -114,7 +117,7 @@ export function ReservationDetailPage() {
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, idValid]);
 
   // 상세가 로드되고 QR 표시 가능 상태면 실제 토큰을 받아온다.
   const qrAvailable = reservation?.qrAvailable ?? false;
@@ -134,6 +137,22 @@ export function ReservationDetailPage() {
       alive = false;
     };
   }, [id, qrAvailable]);
+
+  if (!idValid) {
+    return (
+      <div className="mx-auto max-w-3xl py-2">
+        <BackLink />
+        <div className="mt-4">
+          <EmptyState
+            title="잘못된 예약 주소예요."
+            description="예약 주소가 올바르지 않아요. 목록에서 다시 선택해 주세요."
+            actionTo="/reservations/me"
+            actionLabel="내 예약 목록으로"
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

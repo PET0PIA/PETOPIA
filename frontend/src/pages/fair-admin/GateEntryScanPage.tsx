@@ -71,6 +71,11 @@ export function GateEntryScanPage() {
       return;
     }
     setStartError(null);
+    // 이전 행사의 결과·로그·입력이 새 행사 화면에 남지 않도록 초기화한다.
+    setLastResult(null);
+    setLogs([]);
+    setScanError(null);
+    setQrInput("");
     setFairId(parsed);
     // 스캐너 입력이 바로 들어오도록 QR 입력창에 포커스.
     setTimeout(() => qrInputRef.current?.focus(), 0);
@@ -83,6 +88,8 @@ export function GateEntryScanPage() {
 
     setScanning(true);
     setScanError(null);
+    // 이번 스캔 결과만 보이도록 직전 결과를 먼저 지운다(실패 시 이전 성공 배너 오인 방지).
+    setLastResult(null);
     try {
       const res = await scanGateEntry(fairId, token, deviceInfo.trim() || undefined);
       setLastResult({
@@ -156,10 +163,13 @@ export function GateEntryScanPage() {
       <Card className="mb-4 p-5">
         <form onSubmit={handleScan} className="space-y-4">
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">입장 QR 토큰</span>
+            <label htmlFor="gate-qr-token" className="mb-1.5 block text-sm font-bold text-ink">
+              입장 QR 토큰
+            </label>
             <div className="flex gap-2">
               {/* Input 컴포넌트는 ref를 받지 않아(공유 컴포넌트 미변경) 스캔 포커스용으로만 네이티브 input 사용 */}
               <input
+                id="gate-qr-token"
                 ref={qrInputRef}
                 value={qrInput}
                 onChange={(event) => setQrInput(event.target.value)}
