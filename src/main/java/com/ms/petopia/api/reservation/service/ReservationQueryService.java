@@ -99,6 +99,8 @@ public class ReservationQueryService {
                 || (ADVANCE.equals(type) && CONFIRMED.equals(status) && row.getAmount() == 0));
         return new ReservationDetailResponse(
                 row.getReservationId(),
+                row.getReservationNo(),
+                row.getFairId(),
                 row.getFairName(),
                 row.getFairPosterImageUrl(),
                 row.getVisitDate(),

@@ -66,6 +66,8 @@
 
     <select id="selectReservationForOwner" resultType="ReservationListRow">
         SELECT r.reservation_id
+             , r.reservation_no
+             , r.fair_id
              , f.name AS fair_name
              , f.poster_image_url AS fair_poster_image_url
              , r.visit_date
