@@ -17,6 +17,7 @@ public class ReservationListRow {
     private LocalTime entryStartTime;
     private LocalTime entryEndTime;
     private String reservationStatus;
+    private String reservationType;
     private long amount;
     private LocalDateTime reservedAt;
     private LocalDateTime paymentExpiresAt;

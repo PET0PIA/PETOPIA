@@ -30,6 +30,11 @@ public interface ReservationMapper {
 
     long countMyReservations(@Param("userId") Long userId);
 
+    ReservationListRow selectReservationForOwner(
+            @Param("reservationId") Long reservationId,
+            @Param("userId") Long userId
+    );
+
     ReservationCreationContext selectCreationContextForUpdate(
             @Param("fairId") Long fairId,
             @Param("visitDate") LocalDate visitDate
