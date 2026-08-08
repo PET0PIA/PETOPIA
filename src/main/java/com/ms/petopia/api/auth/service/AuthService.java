@@ -101,6 +101,11 @@ public class AuthService {
             throw new CommonException(ErrorCode.INVALID_LOGIN);
         }
 
+        //정지된 계정인지 확인
+        if(user.getStatus().equals("INACTIVE")) {
+            throw new CommonException(ErrorCode.ACCOUNT_INACTIVE);
+        }
+
         //이메일 인증 여부 확인
         if(!user.isEmailVerified()) {
             throw new CommonException(ErrorCode.EMAIL_NOT_VERIFIED);
