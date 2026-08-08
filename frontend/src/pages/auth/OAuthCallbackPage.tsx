@@ -8,7 +8,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
-import { maxBirthDate } from "../../utils/date";
+import { maxBirthDate, today } from "../../utils/date";
 
 const PHONE_PATTERN = /^01[0-9]-?\d{3,4}-?\d{4}$/;
 
@@ -99,6 +99,7 @@ function validate(form: SignupFormState): string[] {
   const errors: string[] = [];
   if (form.nickname.trim() === "") errors.push("닉네임을 입력해 주세요.");
   if (form.birthDate === "") errors.push("생년월일을 입력해 주세요.");
+  else if (form.birthDate >= today()) errors.push("생년월일은 오늘 이전 날짜여야 해요.");
   if (!PHONE_PATTERN.test(form.phone)) errors.push("휴대폰 번호 형식이 올바르지 않아요. (예: 010-1234-5678)");
   if (form.gender === "") errors.push("성별을 선택해 주세요.");
   if (form.address.trim() === "") errors.push("주소를 입력해 주세요.");

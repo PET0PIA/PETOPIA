@@ -48,10 +48,13 @@ function label(text: string, required = false) {
   return <span className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</span>;
 }
 
-function validate(form: FormState, emailChecked: boolean): string[] {
+type EmailCheckStatus = "idle" | "checking" | "available" | "unavailable";
+
+function validate(form: FormState, emailCheckStatus: EmailCheckStatus): string[] {
   const errors: string[] = [];
   if (form.email.trim() === "") errors.push("이메일을 입력해 주세요.");
-  else if (!emailChecked) errors.push("이메일 중복 확인을 먼저 해 주세요.");
+  else if (emailCheckStatus === "unavailable") errors.push("이미 사용 중인 이메일이에요. 다른 이메일을 입력해 주세요.");
+  else if (emailCheckStatus !== "available") errors.push("이메일 중복 확인을 먼저 해 주세요.");
   if (!PASSWORD_PATTERN.test(form.password)) errors.push("비밀번호는 영문, 숫자, 특수문자(!@#$%^&*)를 포함한 8자 이상이어야 해요.");
   if (form.password !== form.passwordConfirm) errors.push("비밀번호가 일치하지 않아요.");
   if (form.nickname.trim() === "") errors.push("닉네임을 입력해 주세요.");
@@ -89,7 +92,7 @@ export function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const [emailCheckStatus, setEmailCheckStatus] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
+  const [emailCheckStatus, setEmailCheckStatus] = useState<EmailCheckStatus>("idle");
   const [emailCheckError, setEmailCheckError] = useState<string | null>(null);
 
   const [code, setCode] = useState("");
@@ -119,7 +122,7 @@ export function SignupPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationErrors = validate(form, emailCheckStatus === "available");
+    const validationErrors = validate(form, emailCheckStatus);
     setErrors(validationErrors);
     if (validationErrors.length > 0) return;
 

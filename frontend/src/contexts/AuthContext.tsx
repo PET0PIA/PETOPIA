@@ -70,9 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    await logoutRequest();
-    setUser(null);
-    setStatus("unauthenticated");
+    try {
+      await logoutRequest();
+    } finally {
+      setUser(null);
+      setStatus("unauthenticated");
+    }
   }
 
   return (
