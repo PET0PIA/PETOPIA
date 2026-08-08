@@ -165,8 +165,8 @@ public class FairCancelRequestService {
                 throw new CommonException(ErrorCode.INTERNAL_SERVER_ERROR);
             }
 
-            // TODO 인증 도메인 완성 전까지 reviewerId가 실제 SUPER_ADMIN인지는 검증하지 않는다
-            // (review() 상단 TODO와 동일한 한계). actorRole은 그 전제하에 고정값으로 남긴다.
+            // reviewerId가 실제 SUPER_ADMIN인지는 SecurityConfig가 이 엔드포인트 진입 전에
+            // role로 이미 검증했다(FairCancelRequestController 참고). actorRole은 그 전제로 고정값을 쓴다.
             auditLogService.record(
                     reviewerId,
                     ActorType.ADMIN,

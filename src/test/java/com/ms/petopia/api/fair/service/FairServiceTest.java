@@ -4,6 +4,8 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
+import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
 import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
@@ -27,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -213,6 +216,103 @@ class FairServiceTest {
     @DisplayName("requesterId가 없으면 조회하지 않고 INVALID_INPUT_VALUE를 던진다")
     void getApplication_requesterId없으면_예외를_던진다() {
         assertErrorCode(() -> fairService.getApplication(FAIR_ID, null), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).selectById(any());
+    }
+
+    // ===== getPublicSummary =====
+
+    @Test
+    @DisplayName("공개된 행사는 PII 없이 요약 정보로 매핑한다")
+    void getPublicSummary_공개됐으면_요약으로_매핑한다() {
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
+        fair.setPlaceName("코엑스");
+        fair.setPublishedAt(NOW.minusDays(1));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        FairPublicSummaryResponse response = fairService.getPublicSummary(FAIR_ID);
+
+        assertThat(response.fairId()).isEqualTo(FAIR_ID);
+        assertThat(response.name()).isEqualTo(fair.getName());
+        assertThat(response.placeName()).isEqualTo("코엑스");
+        assertThat(response.status()).isEqualTo("PREPARING");
+    }
+
+    @Test
+    @DisplayName("공개되지 않은 행사는 존재하지 않는 것과 동일하게 FAIR_NOT_FOUND를 던진다")
+    void getPublicSummary_공개안됐으면_예외를_던진다() {
+        Fair fair = fairWithStatus(FairStatus.PAYMENT_PENDING);
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        assertErrorCode(() -> fairService.getPublicSummary(FAIR_ID), ErrorCode.FAIR_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 fairId를 조회하면 FAIR_NOT_FOUND를 던진다")
+    void getPublicSummary_존재하지않으면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(null);
+
+        assertErrorCode(() -> fairService.getPublicSummary(FAIR_ID), ErrorCode.FAIR_NOT_FOUND);
+    }
+
+    // ===== getMyApplications =====
+
+    @Test
+    @DisplayName("본인이 낸 신청서를 요약 목록으로 반환한다")
+    void getMyApplications_정상조회() {
+        Fair fair = fairWithStatus(FairStatus.RECEIVED);
+        given(fairMapper.selectByApplicantUserId(USER_ID)).willReturn(List.of(fair));
+
+        List<FairApplicationSummaryResponse> response = fairService.getMyApplications(USER_ID);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).fairId()).isEqualTo(FAIR_ID);
+        assertThat(response.get(0).name()).isEqualTo(fair.getName());
+        assertThat(response.get(0).status()).isEqualTo("RECEIVED");
+    }
+
+    @Test
+    @DisplayName("requesterId가 없으면 조회하지 않고 INVALID_INPUT_VALUE를 던진다")
+    void getMyApplications_requesterId없으면_예외를_던진다() {
+        assertErrorCode(() -> fairService.getMyApplications(null), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).selectByApplicantUserId(any());
+    }
+
+    // ===== getMyApplicationDetail =====
+
+    @Test
+    @DisplayName("본인 신청서를 조회하면 상세로 매핑한다")
+    void getMyApplicationDetail_본인이면_상세로_매핑한다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+
+        FairApplicationDetailResponse response = fairService.getMyApplicationDetail(FAIR_ID, USER_ID);
+
+        assertThat(response.fairId()).isEqualTo(FAIR_ID);
+        assertThat(response.managerEmail()).isEqualTo("manager@petopia.example");
+    }
+
+    @Test
+    @DisplayName("본인이 아니면 FAIR_APPLICATION_ACCESS_DENIED를 던진다")
+    void getMyApplicationDetail_본인아니면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+
+        assertErrorCode(
+                () -> fairService.getMyApplicationDetail(FAIR_ID, REVIEWER_ID),
+                ErrorCode.FAIR_APPLICATION_ACCESS_DENIED
+        );
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 신청서를 조회하면 FAIR_NOT_FOUND를 던진다")
+    void getMyApplicationDetail_존재하지않으면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(null);
+
+        assertErrorCode(() -> fairService.getMyApplicationDetail(FAIR_ID, USER_ID), ErrorCode.FAIR_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("requesterId가 없으면 조회하지 않고 INVALID_INPUT_VALUE를 던진다")
+    void getMyApplicationDetail_requesterId없으면_예외를_던진다() {
+        assertErrorCode(() -> fairService.getMyApplicationDetail(FAIR_ID, null), ErrorCode.INVALID_INPUT_VALUE);
         verify(fairMapper, never()).selectById(any());
     }
 

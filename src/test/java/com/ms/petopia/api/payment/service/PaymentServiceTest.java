@@ -628,8 +628,8 @@ class PaymentServiceTest {
     @Test
     @DisplayName("호출 도메인이 그 결제의 소유 도메인이 아니면 취소를 거부한다")
     void cancelPayment_캐스터불일치_예외를던진다() {
-        // VENDOR_FEE 결제인데 RESERVATION 도메인이 취소하려는 상황(CodeRabbit 리뷰 지적, PR #71 —
-        // 캐스터 값 자체는 허용목록에 있어도 그 결제의 소유 도메인인지는 확인 안 하던 문제)
+        // VENDOR_FEE 결제인데 RESERVATION 도메인이 취소하려는 상황 — 캐스터 값 자체는
+        // 허용목록에 있어도 그 결제의 소유 도메인인지는 확인해야 한다.
         given(paymentMapper.selectById(1L)).willReturn(pendingRow());
 
         assertThatThrownBy(() -> paymentService.cancelPayment(1L, "RESERVATION"))
@@ -638,6 +638,21 @@ class PaymentServiceTest {
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
 
         verify(paymentMapper, never()).markCanceled(any(), any());
+    }
+
+    @Test
+    @DisplayName("FAIR 도메인은 예외적으로 예약금·참가비·개설비 결제를 전부 취소할 수 있다")
+    void cancelPayment_FAIR도메인은_세유형다_취소할수있다() {
+        // 행사가 취소되면 그 행사에 딸린 예약금(RESERVATION_DEPOSIT)/참가비(VENDOR_FEE) PENDING
+        // 결제까지 Fair 도메인이 한 번에 정리한다 - reservation/vendor application 도메인이
+        // 각자 fairs.canceled_at을 감지해서 반응하는 로직을 따로 만들지 않아도 되게 하려는 목적.
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markCanceled(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.cancelPayment(1L, "FAIR").status()).isEqualTo("CANCELED");
+
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+        given(paymentMapper.markCanceled(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.cancelPayment(2L, "FAIR").status()).isEqualTo("CANCELED");
     }
 
     @Test
@@ -693,15 +708,27 @@ class PaymentServiceTest {
     @Test
     @DisplayName("호출 도메인이 그 결제의 소유 도메인이 아니면 만료 처리를 거부한다")
     void expirePayment_캐스터불일치_예외를던진다() {
-        // RESERVATION_DEPOSIT 결제인데 FAIR 도메인이 만료 처리하려는 상황
+        // RESERVATION_DEPOSIT 결제인데 VENDOR_APPLICATION 도메인이 만료 처리하려는 상황
         given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
 
-        assertThatThrownBy(() -> paymentService.expirePayment(2L, "FAIR"))
+        assertThatThrownBy(() -> paymentService.expirePayment(2L, "VENDOR_APPLICATION"))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
 
         verify(paymentMapper, never()).markExpired(any(), any());
+    }
+
+    @Test
+    @DisplayName("FAIR 도메인은 예외적으로 예약금·참가비·개설비 결제를 전부 만료 처리할 수 있다")
+    void expirePayment_FAIR도메인은_세유형다_만료처리할수있다() {
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+        given(paymentMapper.markExpired(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.expirePayment(2L, "FAIR").status()).isEqualTo("EXPIRED");
+
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markExpired(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.expirePayment(1L, "FAIR").status()).isEqualTo("EXPIRED");
     }
 
     @Test

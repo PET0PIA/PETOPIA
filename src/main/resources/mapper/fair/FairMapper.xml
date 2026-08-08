@@ -79,6 +79,23 @@
          WHERE fair_id = #{fairId}
     </select>
 
+    <!-- 마이페이지 "내 신청 현황" 목록용. 최신 신청이 위로 오도록 created_at 역순 정렬한다. -->
+    <select id="selectByApplicantUserId" resultType="Fair">
+        SELECT fair_id, applicant_user_id, name, description, category, poster_image_url, notice_text,
+               place_name, address, indoor_outdoor,
+               vendor_recruit_start_date, vendor_recruit_end_date,
+               reservation_start_date, reservation_end_date,
+               operation_start_date, operation_end_date,
+               reservation_fee, reservation_cancel_deadline_hours, reservation_change_deadline_hours,
+               manager_name, manager_phone, manager_email,
+               status, reject_reason, reviewed_by, reviewed_at,
+               payment_due_at, public_scheduled_at, published_at, canceled_at,
+               submitted_snapshot, created_at, updated_at
+          FROM fairs
+         WHERE applicant_user_id = #{applicantUserId}
+         ORDER BY created_at DESC
+    </select>
+
     <!--
         null이 아닌 필드만 갱신한다(승인/반려/재제출마다 채우는 필드가 달라서 범용으로 둠).
         updated_at은 호출부 값과 무관하게 항상 NOW()로 덮어쓴다.
@@ -181,5 +198,13 @@
         WHERE fair_id = #{fairId}
           AND status IN ('RECEIVED', 'REJECTED')
     </update>
+
+    <select id="selectCanceledFairIds" resultType="long">
+        SELECT fair_id
+          FROM fairs
+         WHERE canceled_at IS NOT NULL
+         ORDER BY canceled_at DESC
+         LIMIT #{limit}
+    </select>
 
 </mapper>

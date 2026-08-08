@@ -4,6 +4,8 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
+import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
 import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
@@ -24,6 +26,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -94,17 +97,16 @@ public class FairService {
     }
 
     /**
-     * 신청서 상세를 조회한다. 관리자 검토 화면 등에서 검토 전 내용을 보여줄 때 쓴다.
-     * managerPhone/managerEmail을 그대로 반환하므로 호출자 신원을 요구한다 - 다만 인증
-     * 도메인 완성 전까지는 신청자 본인/SUPER_ADMIN 여부를 세분화해서 검증하지 못하고
-     * requesterId가 유효한 값인지만 확인한다.
+     * 신청서 상세를 조회한다. 관리자 검토 화면 전용이다 - managerPhone/managerEmail을
+     * 그대로 반환하므로(PII) SecurityConfig에서 SUPER_ADMIN role만 이 엔드포인트에
+     * 도달하도록 막는다({@code @PathVariable}까지 오면 호출자가 이미 SUPER_ADMIN임이
+     * JWT로 검증된 상태 - 이전에는 위조 가능한 X-User-Id 헤더만으로 PII가 유출될 수
+     * 있었는데 실제 인증 도입으로 닫혔다).
      *
-     * <p><b>리스크 등급: 높음</b> - 이 API는 위조된 X-User-Id로도 PII(managerPhone/
-     * managerEmail)를 조회해갈 수 있다. createApplication/review/publish 같은 쓰기
-     * API는 결과가 DB에 남아 사후 감사로그로 추적 가능하지만, 이 API는 읽기라 위조된
-     * 헤더로 조회당하는 순간 데이터가 유출되고 사후에 막을 방법이 없다(되돌릴 수 없음).
-     * 그래서 인증 도메인 작업 우선순위에서 다른 신청서 API보다 먼저 다뤄야 한다.
-     * 접근 로그(누가 어떤 fairId를 조회했는지)라도 남기는 절충안을 검토했으나, 여기
+     * <p>신청자 본인의 조회는 이 API가 아니라 {@link #getMyApplicationDetail}을 쓴다
+     * (SUPER_ADMIN이 아닌 로그인 사용자 전용, 소유자 검증 포함).
+     *
+     * <p>접근 로그(누가 어떤 fairId를 조회했는지)까지 남기는 방안은 검토했으나, 여기
      * 쓸 ActionType(예: FAIR_APPLICATION_VIEWED)이 audit 도메인 소유 enum에 아직 없어
      * 별도 확인 후 추가해야 한다 - 이번 범위에서는 보류.
      */
@@ -118,9 +120,63 @@ public class FairService {
     }
 
     /**
+     * 마이페이지 "내 신청 현황" 목록. requesterId 본인이 낸 신청서만 최신순으로 반환한다.
+     * PII(managerPhone/managerEmail)는 목록에 담지 않는다({@link FairApplicationSummaryResponse}
+     * 참고) - 목록 단계에서부터 상세 조회와 같은 리스크를 안을 필요가 없어서 필드를 줄였다.
+     */
+    @Transactional(readOnly = true)
+    public List<FairApplicationSummaryResponse> getMyApplications(Long requesterId) {
+        if (requesterId == null || requesterId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        return fairMapper.selectByApplicantUserId(requesterId).stream()
+                .map(this::toSummaryResponse)
+                .toList();
+    }
+
+    /**
+     * 마이페이지 "내 신청 현황" 상세. {@link #getApplication}과 달리 requesterId가 실제
+     * 신청자 본인인지 검증한다({@code fairs.applicant_user_id}와 비교) - role(로그인 여부)만으로는
+     * "이 신청서의 소유자"까지 가려낼 수 없어서 서비스 계층에서 확인한다. {@link #getApplication}은
+     * SUPER_ADMIN 전용(관리자 검토 화면)이라 소유자 검증을 걸면 안 되므로 별도 메서드로 분리했다.
+     */
+    @Transactional(readOnly = true)
+    public FairApplicationDetailResponse getMyApplicationDetail(Long fairId, Long requesterId) {
+        if (requesterId == null || requesterId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        Fair fair = findFairOrThrow(fairId);
+        if (!requesterId.equals(fair.getApplicantUserId())) {
+            throw new CommonException(ErrorCode.FAIR_APPLICATION_ACCESS_DENIED);
+        }
+        return toDetailResponse(fair);
+    }
+
+    /**
+     * 공개된 행사의 요약 정보를 인증 없이 조회한다(티켓 예매 화면 등). {@link #getApplication}·
+     * {@link #getMyApplicationDetail}과 달리 managerName/managerPhone/managerEmail 같은 PII와
+     * 심사 관련 필드(reviewedAt/rejectReason/paymentDueAt)를 아예 응답에 담지 않는다
+     * ({@link FairPublicSummaryResponse} 참고) - 그래서 요청자 신원 검증 자체가 필요 없다.
+     *
+     * <p>공개(publish)되지 않은 행사(아직 심사·결제 대기 중)는 조회되지 않는다 - 존재하지 않는
+     * 것과 동일하게 {@link ErrorCode#FAIR_NOT_FOUND}로 응답해서, 미공개 행사의 존재 여부 자체가
+     * 외부에 새어나가지 않게 한다. reservation 도메인이 예약 가능 여부를 판단하는 기준
+     * (published_at IS NOT NULL)과 동일한 기준을 쓴다({@link #publish} javadoc 참고).
+     */
+    @Transactional(readOnly = true)
+    public FairPublicSummaryResponse getPublicSummary(Long fairId) {
+        Fair fair = findFairOrThrow(fairId);
+        if (fair.getPublishedAt() == null) {
+            throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
+        }
+        return toPublicSummaryResponse(fair);
+    }
+
+    /**
      * 신청서를 수정(재제출)한다. RECEIVED(심사 대기) 또는 REJECTED(반려) 상태에서만 가능하고,
      * 본인이 신청한 행사만 수정할 수 있다(신청자 본인 여부는 requesterId가 fairs.applicant_user_id와
-     * 같은지로 판단 - 인증 도메인 완성 전까지는 헤더로 받은 requesterId를 그대로 신뢰한다).
+     * 같은지로 판단 - requesterId 자체는 JWT로 검증됐지만, "로그인한 누구나"와 "이 신청서의
+     * 소유자"는 role만으로 구분되지 않는 별개의 검증이라 서비스 계층에서 확인한다).
      *
      * <p>REJECTED였던 신청서는 이 수정이 성공하는 순간 RECEIVED로 되돌아가 다시 심사
      * 대기열에 선다({@link FairMapper#updateApplication} 참고, 이전 반려 사유·검토자·검토일시는
@@ -317,6 +373,36 @@ public class FairService {
                 fair.getReviewedAt(),
                 fair.getPaymentDueAt(),
                 fair.getCreatedAt()
+        );
+    }
+
+    private FairPublicSummaryResponse toPublicSummaryResponse(Fair fair) {
+        return new FairPublicSummaryResponse(
+                fair.getFairId(),
+                fair.getName(),
+                fair.getDescription(),
+                fair.getCategory(),
+                fair.getPosterImageUrl(),
+                fair.getNoticeText(),
+                fair.getPlaceName(),
+                fair.getAddress(),
+                fair.getIndoorOutdoor(),
+                fair.getOperationStartDate(),
+                fair.getOperationEndDate(),
+                fair.getStatus() == null ? null : fair.getStatus().name()
+        );
+    }
+
+    private FairApplicationSummaryResponse toSummaryResponse(Fair fair) {
+        return new FairApplicationSummaryResponse(
+                fair.getFairId(),
+                fair.getName(),
+                fair.getStatus() == null ? null : fair.getStatus().name(),
+                fair.getOperationStartDate(),
+                fair.getOperationEndDate(),
+                fair.getRejectReason(),
+                fair.getCreatedAt(),
+                fair.getReviewedAt()
         );
     }
 

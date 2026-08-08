@@ -15,6 +15,7 @@ import org.springframework.dao.DuplicateKeyException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
@@ -337,16 +338,23 @@ public class PaymentService {
     }
 
     /**
-     * 취소/만료 계약 API를 부를 수 있는 호출 도메인이 각각 어떤 결제유형을 다뤄야 하는지 매핑.
-     * {@code PaymentInternalAuthHeaders}의 캐스터 값과 1:1 대응 — 예약 도메인이 참가비 결제를,
-     * 참가업체 도메인이 예약금 결제를 잘못(또는 악의적으로) 건드리는 걸 막는다(CodeRabbit 리뷰
-     * 지적, PR #71 — 캐스터 검증만 있고 그 캐스터가 실제로 그 결제의 소유 도메인인지는 안 봤음).
-     * 인증 도메인 완성 전까지는 여전히 헤더값을 그대로 신뢰하는 한계는 남아있다(TODO).
+     * 취소/만료 계약 API를 부를 수 있는 호출 도메인이 각각 어떤 결제유형(들)을 다룰 수 있는지
+     * 매핑. {@code PaymentInternalAuthHeaders}의 캐스터 값과 대응 — 예약 도메인이 참가비 결제를,
+     * 참가업체 도메인이 예약금 결제를 잘못(또는 악의적으로) 건드리는 걸 막는다.
+     *
+     * <p>FAIR는 예외적으로 세 유형을 전부 다룰 수 있다 - 행사가 취소되면 그 행사에 딸린
+     * 예약금/참가비 PENDING 결제까지 Fair 도메인이 한 번에 정리한다. 이미 완료된 결제를
+     * 환불하는 {@link com.ms.petopia.api.fair.service.FairCancelRefundOrchestrationService}와
+     * 같은 방향(Fair 도메인이 취소된 행사의 결제 뒷정리를 전담) - reservation/vendor
+     * application 도메인이 각자 fairs.canceled_at을 감지해서 반응하는 로직을 따로 만들지
+     * 않아도 되게 하려는 목적이다.
+     *
+     * <p>인증 도메인 완성 전까지는 여전히 헤더값을 그대로 신뢰하는 한계는 남아있다(TODO).
      */
-    private static final Map<String, String> CALLER_PAYMENT_TYPES = Map.of(
-            "RESERVATION", "RESERVATION_DEPOSIT",
-            "FAIR", "FAIR_OPENING_FEE",
-            "VENDOR_APPLICATION", "VENDOR_FEE"
+    private static final Map<String, Set<String>> CALLER_PAYMENT_TYPES = Map.of(
+            "RESERVATION", Set.of("RESERVATION_DEPOSIT"),
+            "FAIR", Set.of("FAIR_OPENING_FEE", "RESERVATION_DEPOSIT", "VENDOR_FEE"),
+            "VENDOR_APPLICATION", Set.of("VENDOR_FEE")
     );
 
     /**
@@ -356,7 +364,9 @@ public class PaymentService {
      * 처리한다(FAILED처럼 재사용하지 않음).
      *
      * @param callerDomain 호출 도메인(RESERVATION/FAIR/VENDOR_APPLICATION) — 그 결제의
-     *                     paymentType과 안 맞으면 남의 결제를 건드리는 셈이라 거부한다.
+     *                     paymentType이 이 도메인이 다룰 수 있는 유형에 없으면 남의 결제를
+     *                     건드리는 셈이라 거부한다(FAIR는 예외적으로 세 유형 다 허용 -
+     *                     {@link #CALLER_PAYMENT_TYPES} 참고).
      * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 존재하지 않는 결제 ID일 때
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 호출 도메인이 그 결제의 소유
      *         도메인이 아닐 때
@@ -382,8 +392,8 @@ public class PaymentService {
         if (row == null) {
             throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
         }
-        String expectedType = CALLER_PAYMENT_TYPES.get(callerDomain);
-        if (expectedType != null && !expectedType.equals(row.getPaymentType())) {
+        Set<String> allowedTypes = CALLER_PAYMENT_TYPES.get(callerDomain);
+        if (allowedTypes != null && !allowedTypes.contains(row.getPaymentType())) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
         if (!"PENDING".equals(row.getStatus())) {
