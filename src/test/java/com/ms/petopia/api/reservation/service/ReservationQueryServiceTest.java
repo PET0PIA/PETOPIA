@@ -1,5 +1,6 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.reservation.dto.ReservationDetailResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListRow;
 import com.ms.petopia.api.reservation.mapper.ReservationMapper;
@@ -89,6 +90,110 @@ class ReservationQueryServiceTest {
         ReservationListResponse response = service.getMyReservations(20L, 0, 20);
 
         assertThat(response.items().getFirst().paymentAvailable()).isFalse();
+    }
+
+    @Test
+    void detailOfPaidConfirmedAdvanceAllowsChangeButNotCancel() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CONFIRMED", "ADVANCE", 10_000, null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.reservationNo()).isEqualTo("R20260802-0030");
+        assertThat(detail.fairId()).isEqualTo(7L);
+        assertThat(detail.reservationType()).isEqualTo("ADVANCE");
+        assertThat(detail.qrAvailable()).isTrue();
+        assertThat(detail.canChangeVisitDate()).isTrue();
+        assertThat(detail.canCancel()).isFalse(); // 유료 확정은 취소 불가(코스 판단)
+    }
+
+    @Test
+    void detailOfFreeConfirmedAdvanceAllowsCancel() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CONFIRMED", "ADVANCE", 0, null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.canChangeVisitDate()).isTrue();
+        assertThat(detail.canCancel()).isTrue();
+    }
+
+    @Test
+    void detailOfPendingPaymentAllowsCancelButNotChange() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 1, 9, 0);
+        given(timeProvider.now()).willReturn(now);
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("PENDING_PAYMENT", "ADVANCE", 10_000, now.plusMinutes(10)));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.paymentAvailable()).isTrue();
+        assertThat(detail.canCancel()).isTrue();
+        assertThat(detail.canChangeVisitDate()).isFalse();
+        assertThat(detail.qrAvailable()).isFalse();
+    }
+
+    @Test
+    void detailOfEndedReservationDisablesAllActions() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 2, 18, 0, 1));
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CONFIRMED", "ADVANCE", 0, null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.isEnded()).isTrue();
+        assertThat(detail.qrAvailable()).isFalse();
+        assertThat(detail.canChangeVisitDate()).isFalse();
+        assertThat(detail.canCancel()).isFalse();
+    }
+
+    @Test
+    void detailOfEndedPendingPaymentDisablesCancel() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 2, 18, 0, 1));
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("PENDING_PAYMENT", "ADVANCE", 10_000, LocalDateTime.of(2026, 8, 2, 18, 10)));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.isEnded()).isTrue();
+        assertThat(detail.canCancel()).isFalse(); // 종료된 예약은 결제대기여도 취소 비활성
+    }
+
+    @Test
+    void detailNotFoundOrNotOwnedThrows() {
+        given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(null);
+
+        assertThatThrownBy(() -> service.getReservationDetail(30L, 20L))
+                .isInstanceOf(CommonException.class)
+                .extracting(exception -> ((CommonException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.RESERVATION_NOT_FOUND);
+    }
+
+    @Test
+    void detailRejectsInvalidReservationId() {
+        assertThatThrownBy(() -> service.getReservationDetail(0L, 20L))
+                .isInstanceOf(CommonException.class)
+                .extracting(exception -> ((CommonException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    private ReservationListRow detailRow(String status, String type, long amount, LocalDateTime paymentExpiresAt) {
+        ReservationListRow row = new ReservationListRow();
+        row.setReservationId(30L);
+        row.setReservationNo("R20260802-0030");
+        row.setFairId(7L);
+        row.setFairName("서울 펫페어");
+        row.setVisitDate(LocalDate.of(2026, 8, 2));
+        row.setEntryStartTime(LocalTime.of(10, 0));
+        row.setEntryEndTime(LocalTime.of(18, 0));
+        row.setReservationStatus(status);
+        row.setReservationType(type);
+        row.setAmount(amount);
+        row.setReservedAt(LocalDateTime.of(2026, 8, 1, 9, 0));
+        row.setPaymentExpiresAt(paymentExpiresAt);
+        return row;
     }
 
     private ReservationListRow row(

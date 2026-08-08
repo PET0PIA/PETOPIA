@@ -285,7 +285,7 @@
         UPDATE application
         SET status = 'CANCELED'
         WHERE application_id = #{applicationId}
-        AND status IN ('PAYMENT_PENDING', 'CONFIRMED')
+        AND status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
     </update>
 
     <!-- 취소 요청 반려 처리: REQUESTED일 때만 전환 (동시 처리 방지) -->
@@ -314,5 +314,24 @@
         WHERE application_id = #{applicationId}
         AND status = 'PAYMENT_PENDING'
     </update>
+
+    <!--
+         자동 취소(결제기한 초과/행사취소) 처리 시 딸려있는 REQUESTED 취소 요청을 같이 닫는다.
+         결과적으로 신청서가 취소되는 거라 의미상 APPROVED로 전환한다(REJECTED는 "취소가 거부됨"이라
+         반대 의미가 됨). REQUESTED가 없으면 0행 반영 - 정상 상황이라 에러 아님.
+    -->
+    <update id="closeRequestedCancelRequestByApplicationId">
+        UPDATE application_cancel_request
+        SET status = 'APPROVED', decided_at = #{decidedAt}
+        WHERE application_id = #{applicationId}
+        AND status = 'REQUESTED'
+    </update>
+
+    <!-- 신청 행을 UPDATE하기 전에, 취소요청 행 잠금 -->
+    <select id="lockPendingCancelRequestIfExists">
+        SELECT cancel_request_id FROM application_cancel_request
+        WHERE application_id = #{applicationId} AND status = 'REQUESTED'
+        FOR UPDATE
+    </select>
 
 </mapper>

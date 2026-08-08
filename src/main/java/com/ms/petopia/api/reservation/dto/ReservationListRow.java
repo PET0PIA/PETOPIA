@@ -11,12 +11,15 @@ import java.time.LocalTime;
 @Setter
 public class ReservationListRow {
     private Long reservationId;
+    private String reservationNo;
+    private Long fairId;
     private String fairName;
     private String fairPosterImageUrl;
     private LocalDate visitDate;
     private LocalTime entryStartTime;
     private LocalTime entryEndTime;
     private String reservationStatus;
+    private String reservationType;
     private long amount;
     private LocalDateTime reservedAt;
     private LocalDateTime paymentExpiresAt;
