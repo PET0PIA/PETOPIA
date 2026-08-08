@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, MailCheck } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -94,6 +94,9 @@ export function SignupPage() {
 
   const [emailCheckStatus, setEmailCheckStatus] = useState<EmailCheckStatus>("idle");
   const [emailCheckError, setEmailCheckError] = useState<string | null>(null);
+  // 이메일 변경/재확인마다 증가시켜서, 응답이 늦게 와도 그 사이 값이 바뀌었으면 무시하기 위한 용도
+  // (A 확인 중 B로 바꾸면 A의 응답이 B 칸에 그대로 반영되는 경쟁 상태 방지)
+  const emailCheckRequestId = useRef(0);
 
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
@@ -103,18 +106,26 @@ export function SignupPage() {
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
-    // 이메일을 바꾸면 이전 중복확인 결과는 더 이상 유효하지 않다.
-    if (key === "email") setEmailCheckStatus("idle");
+    // 이메일을 바꾸면 이전 중복확인 결과는 더 이상 유효하지 않다. 진행 중이던 요청의 응답도 무시해야 하므로 요청 ID도 갱신한다.
+    if (key === "email") {
+      emailCheckRequestId.current += 1;
+      setEmailCheckStatus("idle");
+      setEmailCheckError(null);
+    }
   }
 
   async function handleCheckEmail() {
     if (form.email.trim() === "") return;
+    const requestId = ++emailCheckRequestId.current;
     setEmailCheckStatus("checking");
     setEmailCheckError(null);
     try {
       const { available } = await checkEmailAvailable(form.email.trim());
+      // 응답 도착 전에 이메일이 바뀌었거나 재확인이 또 눌렸으면(요청 ID가 바뀌었으면) 이 응답은 버린다.
+      if (emailCheckRequestId.current !== requestId) return;
       setEmailCheckStatus(available ? "available" : "unavailable");
     } catch (error) {
+      if (emailCheckRequestId.current !== requestId) return;
       setEmailCheckStatus("idle");
       setEmailCheckError(error instanceof ApiError ? error.message : "이메일 확인에 실패했어요.");
     }
