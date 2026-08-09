@@ -1,8 +1,14 @@
 package com.ms.petopia.api.settlement.service;
 
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.mapper.RefundMapper;
 import com.ms.petopia.api.settlement.dto.SettlementItemRow;
@@ -12,6 +18,7 @@ import com.ms.petopia.api.settlement.mapper.SettlementMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +43,7 @@ import java.util.List;
  * 쓴다 — PENDING 상태인 동안만 가능하고, CONFIRMED 이후는 "확정 이후 변경은 감사기록 필수"라는
  * 규칙 때문에 지원하지 않는다(재계산 정정 절차는 이번 스코프 밖).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SettlementService {
@@ -47,6 +55,8 @@ public class SettlementService {
     private final PaymentMapper paymentMapper;
     private final RefundMapper refundMapper;
     private final CommissionRateService commissionRateService;
+    private final NotificationService notificationService;
+    private final RecruitNoticeMapper recruitNoticeMapper;
 
     /**
      * 특정 행사·업체의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
@@ -231,7 +241,31 @@ public class SettlementService {
         row.setStatus("CONFIRMED");
         row.setConfirmedByUserId(confirmedByUserId);
         row.setConfirmedAt(now);
+
+        notifySettlementCompleted(row.getFairId(), row.getSettlementId());
+
         return SettlementResponse.from(row);
+    }
+
+    private void notifySettlementCompleted(Long fairId, Long settlementId) {
+        try {
+            Long adminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
+            if (adminUserId == null) {
+                return;
+            }
+            notificationService.save(new SaveNotificationDto.Request(
+                    adminUserId,
+                    RecipientType.EVENT_ADMIN,
+                    NotificationType.SETTLEMENT_COMPLETED,
+                    "정산이 확정되었습니다",
+                    "행사 정산(ID: " + settlementId + ")이 확정 처리되었습니다.",
+                    null,
+                    List.of(DeliveryChannel.IN_APP),
+                    null
+            ));
+        } catch (Exception e) {
+            log.error("정산 확정 알림 저장 실패. fairId={}, settlementId={}", fairId, settlementId, e);
+        }
     }
 
     /** 행사·업체 조합으로 정산 단건 조회(참가업체 본인 조회용). */

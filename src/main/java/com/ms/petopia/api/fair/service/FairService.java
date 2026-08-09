@@ -10,20 +10,30 @@ import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FairService {
@@ -44,6 +54,7 @@ public class FairService {
     private final FairMapper fairMapper;
     private final FairTimeProvider timeProvider;
     private final StorageService storageService;
+    private final NotificationService notificationService;
 
     /**
      * 행사 신청서를 등록한다. 심사 전 상태이므로 status는 채우지 않고 DDL 기본값(RECEIVED)에
@@ -130,6 +141,17 @@ public class FairService {
 
         fairMapper.update(update);
 
+        Long applicantUserId = fair.getApplicantUserId();
+        if (approved) {
+            notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_APPROVED,
+                    "행사 신청이 승인되었습니다",
+                    "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.");
+        } else {
+            notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_REJECTED,
+                    "행사 신청이 반려되었습니다",
+                    "반려 사유: " + update.getRejectReason());
+        }
+
         return new ReviewFairApplicationResponse(
                 fairId,
                 update.getStatus().name(),
@@ -137,6 +159,29 @@ public class FairService {
                 update.getPaymentDueAt(),
                 update.getRejectReason()
         );
+    }
+
+    private void notifyFairReviewAfterCommit(Long recipientUserId, NotificationType type,
+                                             String title, String body) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.save(new SaveNotificationDto.Request(
+                            recipientUserId,
+                            RecipientType.USER,
+                            type,
+                            title,
+                            body,
+                            null,
+                            List.of(DeliveryChannel.IN_APP),
+                            null
+                    ));
+                } catch (Exception e) {
+                    log.error("행사 심사 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
+                }
+            }
+        });
     }
 
     /**

@@ -1,5 +1,10 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
@@ -8,12 +13,17 @@ import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher; // 실시간 통계 확인용
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReservationCancellationService {
@@ -27,6 +37,7 @@ public class ReservationCancellationService {
     private final ReservationCancellationMapper cancellationMapper;
     private final ReservationTimeProvider timeProvider;
     private final ApplicationEventPublisher eventPublisher; // 실시간 통계 확인용
+    private final NotificationService notificationService;
 
     /** 결제 전 예약 또는 무료 사전예약을 취소한다. */
     @Transactional
@@ -69,6 +80,27 @@ public class ReservationCancellationService {
         );
 
         eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
+
+        Long notifyUserId = reservation.getUserId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.save(new SaveNotificationDto.Request(
+                            notifyUserId,
+                            RecipientType.USER,
+                            NotificationType.RESERVATION_CANCELED,
+                            "예약이 취소되었습니다",
+                            "예약이 정상적으로 취소 처리되었습니다.",
+                            null,
+                            List.of(DeliveryChannel.IN_APP),
+                            null
+                    ));
+                } catch (Exception e) {
+                    log.error("예약 취소 알림 저장 실패. userId={}, reservationId={}", notifyUserId, reservationId, e);
+                }
+            }
+        });
 
         return new CancelReservationResponse(reservationId, CANCELED, now);
     }

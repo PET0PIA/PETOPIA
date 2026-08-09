@@ -1,5 +1,10 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.dto.ReservationChangeFairDateRow;
 import com.ms.petopia.api.reservation.dto.ReservationChangeReservationRow;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateRequest;
@@ -9,13 +14,17 @@ import com.ms.petopia.api.reservation.mapper.ReservationChangeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReservationVisitDateChangeService {
@@ -27,6 +36,7 @@ public class ReservationVisitDateChangeService {
     private final ReservationChangeMapper changeMapper;
     private final EntryMapper entryMapper;
     private final ReservationTimeProvider timeProvider;
+    private final NotificationService notificationService;
 
     /** 확정된 사전예약의 방문 날짜와 발급된 QR 유효시간을 함께 변경한다. */
     @Transactional
@@ -103,6 +113,26 @@ public class ReservationVisitDateChangeService {
                 userId,
                 now
         );
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.save(new SaveNotificationDto.Request(
+                            userId,
+                            RecipientType.USER,
+                            NotificationType.RESERVATION_CHANGED,
+                            "예약 날짜가 변경되었습니다",
+                            "방문 날짜가 " + request.visitDate() + "(으)로 변경되었습니다.",
+                            null,
+                            List.of(DeliveryChannel.IN_APP),
+                            null
+                    ));
+                } catch (Exception e) {
+                    log.error("예약 날짜 변경 알림 저장 실패. userId={}, reservationId={}", userId, reservationId, e);
+                }
+            }
+        });
 
         return response(reservationId, reservation.getVisitDate(), targetDate, reservation.getStatus());
     }
