@@ -1,13 +1,13 @@
-import { AlertCircle, CheckCircle2, Send } from "lucide-react";
+import { AlertCircle, Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
-import { registerBusiness, type Business, type BusinessRegisterRequest } from "../../api/business";
+import { registerBusiness, type BusinessRegisterRequest } from "../../api/business";
 import { useAuth } from "../../contexts/AuthContext";
 
 interface FormState {
@@ -59,11 +59,11 @@ function toRequest(form: FormState): BusinessRegisterRequest {
 
 export function BusinessRegisterPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [result, setResult] = useState<Business | null>(null);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -83,32 +83,13 @@ export function BusinessRegisterPage() {
     setSubmitError(null);
     try {
       const response = await registerBusiness(toRequest(form), user.userId);
-      setResult(response);
+      // 등록 성공 시 바로 상세 페이지로 이동해서 진위확인 결과를 보여준다.
+      navigate(`/businesses/${response.businessId}`, { state: { justRegistered: true } });
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : "사업자 등록에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
     }
-  }
-
-  if (result) {
-    return (
-      <PageContainer className="py-10">
-        <div className="surface mx-auto max-w-lg p-8 text-center">
-          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-leaf-soft text-ink">
-            <CheckCircle2 size={26} />
-          </div>
-          <h1 className="text-xl font-extrabold">사업자 등록이 완료됐어요.</h1>
-          <p className="mt-2 text-sm leading-6 text-muted">
-            {result.name}(#{result.businessId})의 진위확인이 완료됐어요. 이제 부스 참가 신청을 진행할 수 있어요.
-          </p>
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-            <Link to="/participations/new" className="inline-flex min-h-11 items-center justify-center rounded-button bg-primary-strong px-4 text-sm font-bold text-white hover:opacity-90">참여 부스 신청하기</Link>
-            <Link to="/" className="inline-flex min-h-11 items-center justify-center rounded-button border border-line bg-card px-4 text-sm font-bold hover:bg-page">홈으로 이동</Link>
-          </div>
-        </div>
-      </PageContainer>
-    );
   }
 
   return (

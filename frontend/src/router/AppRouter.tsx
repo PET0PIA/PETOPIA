@@ -35,6 +35,8 @@ import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
 import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
 import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
+import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
+import { BusinessDetailPage } from "../pages/business/BusinessDetailPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin을 ProtectedRoute로 감싸기
 // import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -46,7 +48,6 @@ const publicPages: Record<string, string> = {
   "/tickets": "티켓 예매",
   "/businesses": "행사별 참여 기업",
   "/businesses/status": "사업자 등록 현황",
-  "/businesses/me": "내 사업자 목록",
   "/participations/new": "참여 부스 신청",
   "/participations/me": "참가 신청 현황",
   "/booths/me": "내 부스 관리",
@@ -100,6 +101,8 @@ export function AppRouter() {
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           <Route path="/booths/scan" element={<BoothVisitScanPage />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
+          <Route path="/businesses/me" element={<MyBusinessesPage />} />
+          <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
