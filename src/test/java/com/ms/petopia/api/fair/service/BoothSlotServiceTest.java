@@ -52,6 +52,9 @@ class BoothSlotServiceTest {
     @Mock
     private FairTimeProvider timeProvider;
 
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     @InjectMocks
     private BoothSlotService boothSlotService;
 

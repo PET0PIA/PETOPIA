@@ -63,6 +63,9 @@ class FairCancelRequestServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     @InjectMocks
     private FairCancelRequestService cancelRequestService;
 
@@ -173,6 +176,20 @@ class FairCancelRequestServiceTest {
         );
     }
 
+    @Test
+    @DisplayName("담당 행사가 아니면(FairAdminAccessGuard 거부) 신청을 저장하지 않고 예외를 전파한다")
+    void create_담당행사아니면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertErrorCode(
+                () -> cancelRequestService.create(FAIR_ID, REQUESTED_BY, new CreateFairCancelRequestRequest("사유")),
+                ErrorCode.ACCESS_DENIED
+        );
+        verify(cancelRequestMapper, never()).insert(any());
+    }
+
     // ===== getCancelRequests =====
 
     @Test
@@ -192,6 +209,17 @@ class FairCancelRequestServiceTest {
 
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).status()).isEqualTo(FairCancelRequestStatus.PENDING.name());
+    }
+
+    @Test
+    @DisplayName("담당 행사가 아니면(FairAdminAccessGuard 거부) 이력을 조회하지 않고 예외를 전파한다")
+    void getCancelRequests_담당행사아니면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertErrorCode(() -> cancelRequestService.getCancelRequests(FAIR_ID), ErrorCode.ACCESS_DENIED);
+        verify(cancelRequestMapper, never()).selectByFairId(any());
     }
 
     // ===== review =====

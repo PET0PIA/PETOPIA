@@ -5,8 +5,8 @@ import java.time.LocalDate;
 /**
  * 행사 신청 등록 요청.
  *
- * <p>{@code applicant_user_id}는 요청 본문이 아니라 (임시로) X-User-Id 헤더에서 받는다.
- * {@code status}는 신청 시점에 항상 RECEIVED로 시작하므로 요청에 포함하지 않는다.
+ * <p>{@code applicant_user_id}는 요청 본문이 아니라 JWT({@code @AuthenticationPrincipal})에서
+ * 받는다. {@code status}는 신청 시점에 항상 RECEIVED로 시작하므로 요청에 포함하지 않는다.
  */
 public record CreateFairApplicationRequest(
         String name,

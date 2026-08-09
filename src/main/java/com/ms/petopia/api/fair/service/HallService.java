@@ -29,10 +29,12 @@ public class HallService {
     private final FairMapper fairMapper;
     private final BoothSlotMapper boothSlotMapper;
     private final StorageService storageService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     @Transactional
     public HallResponse create(Long fairId, CreateHallRequest request) {
         validateFairExists(fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         if (request == null || request.name() == null || request.name().isBlank()) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
@@ -52,6 +54,7 @@ public class HallService {
     @Transactional(readOnly = true)
     public List<HallResponse> getHalls(Long fairId) {
         validateFairExists(fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         return hallMapper.selectByFairId(fairId).stream()
                 .map(this::toResponse)
                 .toList();
@@ -59,12 +62,15 @@ public class HallService {
 
     @Transactional(readOnly = true)
     public HallResponse getHall(Long fairId, Long hallId) {
-        return toResponse(findHallInFair(fairId, hallId));
+        Hall hall = findHallInFair(fairId, hallId);
+        fairAdminAccessGuard.checkAssigned(fairId);
+        return toResponse(hall);
     }
 
     @Transactional
     public HallResponse update(Long fairId, Long hallId, UpdateHallRequest request) {
         findHallInFair(fairId, hallId);
+        fairAdminAccessGuard.checkAssigned(fairId);
 
         Hall hall = new Hall();
         hall.setHallId(hallId);
@@ -86,6 +92,7 @@ public class HallService {
     @Transactional
     public void delete(Long fairId, Long hallId) {
         findHallInFair(fairId, hallId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         // booth_slots.hall_id에는 FK가 없어(DDL 참고) 이 체크 없이 지우면 슬롯이 고아 행으로
         // 남는다 - 명시적으로 막는다.
         if (boothSlotMapper.existsByHallId(hallId)) {
