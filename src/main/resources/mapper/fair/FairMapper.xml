@@ -225,4 +225,26 @@
          LIMIT #{limit}
     </select>
 
+    <!--
+        PII/심사 관련 컬럼은 아예 SELECT하지 않는다 - 인증 없이 누구나 호출하는 목록이라
+        FairPublicSummaryResponse와 같은 이유로 노출 자체를 막는다.
+        UPCOMING: operation_end_date가 없거나(일정 미정) today 이상인 것 - 끝났다고 볼 근거가
+        없는 행사는 예정으로 취급한다. PAST: operation_end_date가 있고 today보다 이전인 것.
+    -->
+    <select id="selectPublicFairs" resultType="Fair">
+        SELECT fair_id, name, category, poster_image_url, place_name,
+               operation_start_date, operation_end_date
+          FROM fairs
+         WHERE published_at IS NOT NULL
+           AND canceled_at IS NULL
+        <if test="filter.name() == 'UPCOMING'">
+           AND (operation_end_date IS NULL OR operation_end_date &gt;= #{today})
+         ORDER BY (operation_start_date IS NULL), operation_start_date ASC
+        </if>
+        <if test="filter.name() == 'PAST'">
+           AND operation_end_date IS NOT NULL AND operation_end_date &lt; #{today}
+         ORDER BY operation_end_date DESC
+        </if>
+    </select>
+
 </mapper>

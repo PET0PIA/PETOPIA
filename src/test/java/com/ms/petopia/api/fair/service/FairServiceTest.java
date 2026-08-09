@@ -5,9 +5,11 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
 import com.ms.petopia.api.fair.dto.FairStatus;
+import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
@@ -739,6 +741,53 @@ class FairServiceTest {
     void publish_actorId없으면_예외를_던진다() {
         assertErrorCode(() -> fairService.publish(FAIR_ID, null), ErrorCode.INVALID_INPUT_VALUE);
         verify(fairMapper, never()).selectById(any());
+    }
+
+    // ===== listPublicFairs =====
+
+    @Test
+    @DisplayName("filter가 없으면 조회하지 않고 INVALID_INPUT_VALUE를 던진다")
+    void listPublicFairs_filter없으면_예외를_던진다() {
+        assertErrorCode(() -> fairService.listPublicFairs(null), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).selectPublicFairs(any(), any());
+    }
+
+    @Test
+    @DisplayName("오늘 날짜(timeProvider 기준)와 filter를 그대로 매퍼에 넘기고 결과를 목록 응답으로 매핑한다")
+    void listPublicFairs_오늘날짜와_필터로_조회해서_매핑한다() {
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
+        fair.setCategory("DOG");
+        fair.setPlaceName("코엑스");
+        fair.setPosterImageUrl("https://cdn.petopia.example/poster.jpg");
+        fair.setOperationStartDate(FUTURE_START);
+        fair.setOperationEndDate(FUTURE_END);
+        given(fairMapper.selectPublicFairs(PublicFairListFilter.UPCOMING, NOW.toLocalDate()))
+                .willReturn(List.of(fair));
+
+        List<FairPublicListItemResponse> response = fairService.listPublicFairs(PublicFairListFilter.UPCOMING);
+
+        verify(fairMapper).selectPublicFairs(PublicFairListFilter.UPCOMING, NOW.toLocalDate());
+        assertThat(response).hasSize(1);
+        FairPublicListItemResponse item = response.get(0);
+        assertThat(item.fairId()).isEqualTo(FAIR_ID);
+        assertThat(item.name()).isEqualTo(fair.getName());
+        assertThat(item.category()).isEqualTo("DOG");
+        assertThat(item.posterImageUrl()).isEqualTo("https://cdn.petopia.example/poster.jpg");
+        assertThat(item.placeName()).isEqualTo("코엑스");
+        assertThat(item.operationStartDate()).isEqualTo(FUTURE_START);
+        assertThat(item.operationEndDate()).isEqualTo(FUTURE_END);
+    }
+
+    @Test
+    @DisplayName("PAST 필터로 조회하면 매퍼에 PAST를 그대로 넘긴다")
+    void listPublicFairs_PAST필터로_조회한다() {
+        given(fairMapper.selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate()))
+                .willReturn(List.of());
+
+        List<FairPublicListItemResponse> response = fairService.listPublicFairs(PublicFairListFilter.PAST);
+
+        verify(fairMapper).selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate());
+        assertThat(response).isEmpty();
     }
 
     // ===== fixtures =====

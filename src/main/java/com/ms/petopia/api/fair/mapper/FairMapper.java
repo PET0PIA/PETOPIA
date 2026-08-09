@@ -1,9 +1,11 @@
 package com.ms.petopia.api.fair.mapper;
 
 import com.ms.petopia.api.fair.dto.Fair;
+import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -79,4 +81,16 @@ public interface FairMapper {
      * 결제가 배치 슬롯을 영영 못 받을 수 있다.
      */
     List<Long> selectCanceledFairIds(@Param("limit") int limit);
+
+    /**
+     * 공개된(published_at IS NOT NULL) 행사 중 취소되지 않은 것만 {@code filter}에 맞게
+     * 골라 반환한다({@code FairService#listPublicFairs} 전용, 인증 없이 누구나 볼 수 있는
+     * 목록이라 PII/심사 필드는 아예 SELECT하지 않는다).
+     *
+     * <p>UPCOMING/PAST는 operation_end_date를 {@code today}와 비교해서 가른다 -
+     * operation_end_date가 없는(일정 미정) 행사는 끝났다고 볼 근거가 없어 UPCOMING으로 묶인다.
+     * UPCOMING은 임박한 순으로(operation_start_date ASC, NULL은 맨 뒤), PAST는 최근에 끝난
+     * 순으로(operation_end_date DESC) 정렬한다.
+     */
+    List<Fair> selectPublicFairs(@Param("filter") PublicFairListFilter filter, @Param("today") LocalDate today);
 }

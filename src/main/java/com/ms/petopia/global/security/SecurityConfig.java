@@ -69,6 +69,10 @@ public class SecurityConfig {
                         // "/api/fairs/*"(SUPER_ADMIN 전용, 아래)와 세그먼트 수가 달라 원래도 안 겹치지만
                         // (Ant *는 세그먼트 하나만 매치), 의도를 명시하려고 따로 적어둔다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/public").permitAll()
+                        // Fair 도메인 - 공개 행사 목록(지난/예정 행사) 조회도 인증 없이 허용.
+                        // "/api/fairs/*"(SUPER_ADMIN 전용, 바로 아래)와 세그먼트 패턴이 겹쳐서
+                        // ("/api/fairs/public"도 "/api/fairs/*"에 매치됨) 반드시 그 규칙보다 먼저 와야 한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/public").permitAll()
                         // Fair 도메인 - SUPER_ADMIN 전용(신청서 검토 화면 조회, 심사, 공개, 취소 신청 검토)
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/review", "/api/fairs/*/publish").hasRole("SUPER_ADMIN")

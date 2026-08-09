@@ -184,6 +184,28 @@ export function getFairPublicSummary(fairId: number) {
   return apiClient.get<FairPublicSummary>(`/api/fairs/${fairId}/public`);
 }
 
+export type PublicFairListFilter = "UPCOMING" | "PAST";
+
+export interface FairPublicListItem {
+  fairId: number;
+  name: string;
+  category: FairCategory | null;
+  posterImageUrl: string | null;
+  placeName: string | null;
+  operationStartDate: string | null;
+  operationEndDate: string | null;
+}
+
+/**
+ * 공개된(published) 행사 중 취소되지 않은 것만 목록으로 조회한다(인증 없이 누구나 호출 가능).
+ * UPCOMING은 아직 끝나지 않은(또는 일정 미정) 행사를 임박한 순으로, PAST는 이미 끝난 행사를
+ * 최근에 끝난 순으로 반환한다. 상세 화면(getFairPublicSummary)보다 필드가 적다 - 목록에서
+ * 카드로 훑어보는 용도라 description/noticeText/address 등은 내려오지 않는다.
+ */
+export function getPublicFairs(filter: PublicFairListFilter) {
+  return apiClient.get<FairPublicListItem[]>(`/api/fairs/public?filter=${filter}`);
+}
+
 export type FairReviewDecision = "APPROVE" | "REJECT";
 
 export interface ReviewFairApplicationRequest {

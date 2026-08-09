@@ -5,9 +5,11 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
 import com.ms.petopia.api.fair.dto.FairStatus;
+import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
@@ -191,6 +193,26 @@ public class FairService {
             throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
         }
         return toPublicSummaryResponse(fair);
+    }
+
+    /**
+     * 공개된 행사 목록을 인증 없이 조회한다(지난 행사/예정 행사/티켓 예매 가능한 행사 화면).
+     * {@link #getPublicSummary}와 같은 기준(published_at IS NOT NULL, canceled_at IS NULL)으로
+     * 걸러진 행사만 반환하고, PII·심사 필드는 목록 단계부터 아예 담지 않는다
+     * ({@link FairPublicListItemResponse} 참고).
+     *
+     * <p>UPCOMING/PAST 구분과 정렬은 {@link FairMapper#selectPublicFairs} 쿼리가 담당한다 -
+     * "오늘" 기준은 {@link FairTimeProvider}로 고정해서 테스트에서 시각을 통제할 수 있게 한다.
+     */
+    @Transactional(readOnly = true)
+    public List<FairPublicListItemResponse> listPublicFairs(PublicFairListFilter filter) {
+        if (filter == null) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        LocalDate today = timeProvider.now().toLocalDate();
+        return fairMapper.selectPublicFairs(filter, today).stream()
+                .map(this::toPublicListItemResponse)
+                .toList();
     }
 
     /**
@@ -475,6 +497,18 @@ public class FairService {
                 fair.getOperationStartDate(),
                 fair.getOperationEndDate(),
                 fair.getStatus() == null ? null : fair.getStatus().name()
+        );
+    }
+
+    private FairPublicListItemResponse toPublicListItemResponse(Fair fair) {
+        return new FairPublicListItemResponse(
+                fair.getFairId(),
+                fair.getName(),
+                fair.getCategory(),
+                fair.getPosterImageUrl(),
+                fair.getPlaceName(),
+                fair.getOperationStartDate(),
+                fair.getOperationEndDate()
         );
     }
 

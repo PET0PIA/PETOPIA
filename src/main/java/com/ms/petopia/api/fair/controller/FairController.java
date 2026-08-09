@@ -4,7 +4,9 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
+import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -71,6 +74,13 @@ public class FairController {
         // SecurityConfig에서 이 경로는 인증 없이 permitAll이다 - 티켓 예매 화면처럼 로그인
         // 여부와 무관하게 볼 수 있어야 하는 화면 전용(PII·심사 정보는 응답에 없음).
         return fairService.getPublicSummary(fairId);
+    }
+
+    @GetMapping("/public")
+    public List<FairPublicListItemResponse> listPublicFairs(@RequestParam PublicFairListFilter filter) {
+        // SecurityConfig에서 이 경로는 인증 없이 permitAll이다 - getPublicSummary와 동일한 이유
+        // (지난/예정 행사 목록을 로그인 여부와 무관하게 훑어볼 수 있어야 한다).
+        return fairService.listPublicFairs(filter);
     }
 
     @GetMapping("/{fairId}")
