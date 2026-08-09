@@ -8,7 +8,7 @@ import { Card } from "../../components/ui/Card";
 import { QrCanvas } from "../../components/ui/QrCanvas";
 import { useConfirm } from "../../components/ui/useConfirm";
 import { ApiError } from "../../api/client";
-import { getFairApplication, type FairApplicationDetail } from "../../api/fair";
+import { getFairPublicSummary, type FairPublicSummary } from "../../api/fair";
 import {
   createAdvanceReservation,
   createOnsiteReservation,
@@ -52,7 +52,7 @@ export function TicketReservationPage() {
   const { confirm, confirmDialog } = useConfirm();
 
   const [availability, setAvailability] = useState<ReservationAvailability | null>(null);
-  const [fair, setFair] = useState<FairApplicationDetail | null>(null);
+  const [fair, setFair] = useState<FairPublicSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -72,7 +72,7 @@ export function TicketReservationPage() {
     let alive = true;
     // 행사 이름·장소는 fair 도메인, 예약금·날짜는 예약 도메인에서 각각 가져온다.
     // 행사 정보 조회는 실패해도 예매는 계속할 수 있게 막지 않는다(이름만 못 보여줄 뿐).
-    getFairApplication(id)
+    getFairPublicSummary(id)
       .then((res) => {
         if (alive) setFair(res);
       })

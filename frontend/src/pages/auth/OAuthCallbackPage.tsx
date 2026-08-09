@@ -91,7 +91,12 @@ const initialForm: SignupFormState = {
   agreedPrivacy: false,
 };
 
-function label(text: string, required = false) {
+function label(text: string, htmlFor: string, required = false) {
+  return <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</label>;
+}
+
+// 성별 라디오 그룹처럼 특정 input 하나에 매어둘 수 없는 제목은 label() 대신 이걸 쓴다
+function groupLabel(text: string, required = false) {
   return <span className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</span>;
 }
 
@@ -168,19 +173,19 @@ function OAuthSignupCompleteForm({ tempKey }: { tempKey: string }) {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            {label("닉네임", true)}
-            <Input placeholder="실명을 입력해 주세요" required value={form.nickname} onChange={(event) => update("nickname", event.target.value)} />
+            {label("닉네임", "oauth-nickname", true)}
+            <Input id="oauth-nickname" placeholder="실명을 입력해 주세요" required value={form.nickname} onChange={(event) => update("nickname", event.target.value)} />
           </div>
           <div>
-            {label("생년월일", true)}
-            <Input type="date" max={maxBirthDate()} required value={form.birthDate} onChange={(event) => update("birthDate", event.target.value)} />
+            {label("생년월일", "oauth-birth-date", true)}
+            <Input id="oauth-birth-date" type="date" max={maxBirthDate()} required value={form.birthDate} onChange={(event) => update("birthDate", event.target.value)} />
           </div>
           <div>
-            {label("휴대폰 번호", true)}
-            <Input placeholder="010-1234-5678" required value={form.phone} onChange={(event) => update("phone", event.target.value)} />
+            {label("휴대폰 번호", "oauth-phone", true)}
+            <Input id="oauth-phone" placeholder="010-1234-5678" required value={form.phone} onChange={(event) => update("phone", event.target.value)} />
           </div>
           <div>
-            {label("성별", true)}
+            {groupLabel("성별", true)}
             <div className="flex gap-4">
               {(["남성", "여성"] as const).map((option) => (
                 <label key={option} className="flex items-center gap-2 text-sm text-ink">
@@ -191,8 +196,8 @@ function OAuthSignupCompleteForm({ tempKey }: { tempKey: string }) {
             </div>
           </div>
           <div>
-            {label("주소", true)}
-            <Input placeholder="예) 서울특별시 노원구" required value={form.address} onChange={(event) => update("address", event.target.value)} />
+            {label("주소", "oauth-address", true)}
+            <Input id="oauth-address" placeholder="예) 서울특별시 노원구" required value={form.address} onChange={(event) => update("address", event.target.value)} />
           </div>
 
           <div className="space-y-2 border-t border-line pt-5">

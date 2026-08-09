@@ -86,8 +86,9 @@ export function ResetPasswordPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">새 비밀번호</span>
+            <label htmlFor="reset-password-new" className="mb-1.5 block text-sm font-bold text-ink">새 비밀번호</label>
             <Input
+              id="reset-password-new"
               type="password"
               autoComplete="new-password"
               required
@@ -97,8 +98,9 @@ export function ResetPasswordPage() {
             />
           </div>
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">새 비밀번호 확인</span>
+            <label htmlFor="reset-password-confirm" className="mb-1.5 block text-sm font-bold text-ink">새 비밀번호 확인</label>
             <Input
+              id="reset-password-confirm"
               type="password"
               autoComplete="new-password"
               required

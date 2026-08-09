@@ -5,6 +5,12 @@ import { PublicLayout } from "../layouts/PublicLayout";
 import { SuperAdminLayout } from "../layouts/SuperAdminLayout";
 import { HomePage } from "../pages/home/HomePage";
 import { FairApplicationNewPage } from "../pages/fair/FairApplicationNewPage";
+import { FairApplicationEditPage } from "../pages/fair/FairApplicationEditPage";
+import { MyFairApplicationsPage } from "../pages/fair/MyFairApplicationsPage";
+import { MyFairApplicationDetailPage } from "../pages/fair/MyFairApplicationDetailPage";
+import { FairUpcomingPage } from "../pages/fair/FairUpcomingPage";
+import { FairPastPage } from "../pages/fair/FairPastPage";
+import { TicketFairListPage } from "../pages/reservation/TicketFairListPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
 import { BoothLayoutEditPage } from "../pages/fair-admin/BoothLayoutEditPage";
 import { FairDateManagementPage } from "../pages/fair-admin/FairDateManagementPage";
@@ -13,8 +19,10 @@ import { GateEntryScanPage } from "../pages/fair-admin/GateEntryScanPage";
 import { ReservationStatusPage } from "../pages/fair-admin/ReservationStatusPage";
 import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
+import { FairCancelRequestPage } from "../pages/fair-admin/FairCancelRequestPage";
 import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
+import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
 import { PaymentDetailPage } from "../pages/payment/PaymentDetailPage";
 import { PaymentCreatePage } from "../pages/payment/PaymentCreatePage";
 import { PaymentListPage } from "../pages/payment/PaymentListPage";
@@ -33,6 +41,7 @@ import { SignupPage } from "../pages/auth/SignupPage";
 import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
+import { AdminLoginPage } from "../pages/auth/AdminLoginPage";
 import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
 import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
 import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
@@ -42,10 +51,6 @@ import { BusinessDetailPage } from "../pages/business/BusinessDetailPage";
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
-  "/fairs/past": "지난 행사",
-  "/fairs/upcoming": "예정 행사",
-  "/fair-applications/me": "내 행사 신청 목록",
-  "/tickets": "티켓 예매",
   "/businesses": "행사별 참여 기업",
   "/businesses/status": "사업자 등록 현황",
   "/participations/new": "참여 부스 신청",
@@ -64,6 +69,7 @@ const fairAdminImplementedPaths = [
   "/fair-admin/qr",
   "/fair-admin/reservations",
   "/fair-admin/statistics",
+  "/fair-admin/cancellation",
 ];
 const fairAdminFallbackNavigation = fairAdminNavigation.filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
 const superAdminFallbackNavigation = superAdminNavigation.filter(
@@ -75,7 +81,8 @@ const superAdminFallbackNavigation = superAdminNavigation.filter(
     item.path !== "/admin/payments/create" &&
     item.path !== "/admin/payments/list" &&
     item.path !== "/admin/refunds" &&
-    item.path !== "/admin/settlements"
+    item.path !== "/admin/settlements" &&
+    item.path !== "/admin/cancellations"
 );
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
@@ -87,9 +94,14 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* PublicLayout(공개 헤더/푸터) 밖에 독립 라우트로 둔다 - 일반 홈페이지 어디에도 링크 안 걸린 숨겨진 진입점 */}
+        <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route element={<PublicLayout />}>
           <Route index element={<HomePage />} />
           <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />
+          <Route path="/fair-applications/me" element={<MyFairApplicationsPage />} />
+          <Route path="/fair-applications/me/:fairId" element={<MyFairApplicationDetailPage />} />
+          <Route path="/fair-applications/me/:fairId/edit" element={<FairApplicationEditPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
@@ -98,6 +110,9 @@ export function AppRouter() {
           <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
+          <Route path="/fairs/upcoming" element={<FairUpcomingPage />} />
+          <Route path="/fairs/past" element={<FairPastPage />} />
+          <Route path="/tickets" element={<TicketFairListPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           <Route path="/booths/scan" element={<BoothVisitScanPage />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
@@ -120,6 +135,7 @@ export function AppRouter() {
           <Route path="reservations/list" element={<FairReservationsPage />} />
           <Route path="statistics" element={<VisitStatisticsPage />} />
           <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
+          <Route path="cancellation" element={<FairCancelRequestPage />} />
           {fairAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
           ))}
@@ -135,6 +151,7 @@ export function AppRouter() {
           <Route path="payments/list" element={<PaymentListPage />} />
           <Route path="refunds" element={<RefundPage />} />
           <Route path="settlements" element={<SettlementPage />} />
+          <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
           {superAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
           ))}

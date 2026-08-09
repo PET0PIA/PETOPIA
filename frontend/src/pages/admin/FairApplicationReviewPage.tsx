@@ -1,19 +1,24 @@
-import { AlertCircle, Check, Search, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { AlertCircle, Check, Globe, Search, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   getFairApplication,
+  getFairApplications,
+  publishFair,
   reviewFairApplication,
   type FairApplicationDetail,
+  type FairApplicationSummary,
 } from "../../api/fair";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
+import { Table } from "../../components/ui/Table";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Textarea } from "../../components/ui/Textarea";
+import { useConfirm } from "../../components/ui/useConfirm";
 
 const statusLabels: Record<string, string> = {
   RECEIVED: "심사 대기",
@@ -24,6 +29,13 @@ const statusLabels: Record<string, string> = {
   IN_PROGRESS: "진행 중",
   ENDED: "종료",
 };
+
+// 공개(publish)는 개설비 결제가 끝난 이후(PREPARING~IN_PROGRESS) 상태에서만 가능하다
+// (FairService.PUBLISHABLE_STATUSES와 동일한 목록을 FE에서도 미리 확인해 불필요한 요청을 막는다 -
+// 최종 판단은 항상 백엔드가 한다). PAYMENT_PENDING(개설비 결제 대기 중)은 제외 - 개설비를
+// 아직 내지 않은 행사를 공개해버리면 이후 결제 기한이 지나 EXPIRED로 자동 만료될 때 이미
+// 들어온 예약을 정리해야 하는 문제가 생긴다.
+const PUBLISHABLE_STATUSES = new Set(["PREPARING", "IN_PROGRESS"]);
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -44,6 +56,12 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export function FairApplicationReviewPage() {
+  const { confirm, confirmDialog } = useConfirm();
+
+  const [queue, setQueue] = useState<FairApplicationSummary[]>([]);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
+
   const [fairIdInput, setFairIdInput] = useState("");
   const [detail, setDetail] = useState<FairApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,19 +72,53 @@ export function FairApplicationReviewPage() {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
 
-  async function handleLoad(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
+  // 승인/반려 후 큐를 새로고침할 때 재사용한다(그때는 이미 마운트된 상태라 setQueueLoading(true)를
+  // 먼저 불러 로딩 표시를 다시 보여줘도 된다). 최초 마운트 시 큐를 받아오는 아래 useEffect는
+  // queueLoading의 초기값이 이미 true라 이 함수 대신 별도로 fetch만 한다(react-hooks/set-state-in-effect
+  // 회피 - effect 안에서 setState를 동기 호출하는 함수를 부르면 안 된다).
+  async function loadQueue() {
+    setQueueLoading(true);
+    setQueueError(null);
+    try {
+      const data = await getFairApplications("RECEIVED");
+      setQueue(data);
+    } catch (error) {
+      setQueue([]);
+      setQueueError(error instanceof ApiError ? error.message : "심사 대기 목록을 불러오지 못했어요.");
+    } finally {
+      setQueueLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let alive = true;
+    getFairApplications("RECEIVED")
+      .then((data) => {
+        if (alive) setQueue(data);
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        setQueue([]);
+        setQueueError(error instanceof ApiError ? error.message : "심사 대기 목록을 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (alive) setQueueLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function loadDetail(fairId: number) {
     setLoading(true);
     setLoadError(null);
     setReviewError(null);
+    setPublishError(null);
     try {
-      const data = await getFairApplication(parsed);
+      const data = await getFairApplication(fairId);
       setDetail(data);
     } catch (error) {
       setDetail(null);
@@ -76,6 +128,21 @@ export function FairApplicationReviewPage() {
     }
   }
 
+  function openFair(fairId: number) {
+    setFairIdInput(String(fairId));
+    void loadDetail(fairId);
+  }
+
+  function handleLoad(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Number(fairIdInput);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+    void loadDetail(parsed);
+  }
+
   async function handleApprove() {
     if (!detail) return;
     setReviewing(true);
@@ -83,6 +150,7 @@ export function FairApplicationReviewPage() {
     try {
       const result = await reviewFairApplication(detail.fairId, { decision: "APPROVE" });
       setDetail({ ...detail, status: result.status, reviewedAt: result.reviewedAt, paymentDueAt: result.paymentDueAt, rejectReason: result.rejectReason });
+      void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
     } finally {
@@ -105,6 +173,7 @@ export function FairApplicationReviewPage() {
       setDetail({ ...detail, status: result.status, reviewedAt: result.reviewedAt, paymentDueAt: result.paymentDueAt, rejectReason: result.rejectReason });
       setRejectDialogOpen(false);
       setRejectReason("");
+      void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "반려 처리에 실패했어요.");
     } finally {
@@ -112,11 +181,70 @@ export function FairApplicationReviewPage() {
     }
   }
 
+  async function handlePublish() {
+    if (!detail) return;
+    const proceed = await confirm({
+      title: "행사를 공개할까요?",
+      description: "공개하면 즉시 티켓 예매 화면에 노출되고 관람객 예약을 받을 수 있어요.",
+      confirmLabel: "공개",
+    });
+    if (!proceed) return;
+
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const result = await publishFair(detail.fairId);
+      setDetail({ ...detail, publishedAt: result.publishedAt });
+    } catch (error) {
+      setPublishError(error instanceof ApiError ? error.message : "공개 처리에 실패했어요.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   const isPendingReview = detail?.status === "RECEIVED";
+  const canPublish = detail !== null && !detail.canceledAt && !detail.publishedAt && PUBLISHABLE_STATUSES.has(detail.status);
 
   return (
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader eyebrow="전체 운영" title="행사 등록 신청 검토" description="신청서를 확인하고 승인 또는 반려해요." />
+
+      <div className="mb-6">
+        <h2 className="mb-3 text-sm font-extrabold text-muted">심사 대기 중인 신청서</h2>
+        {queueLoading ? (
+          <div className="surface grid min-h-24 place-items-center text-sm text-muted">불러오는 중이에요...</div>
+        ) : queueError ? (
+          <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p>{queueError}</p>
+          </div>
+        ) : queue.length === 0 ? (
+          <EmptyState title="심사 대기 중인 신청서가 없어요." description="새 신청이 들어오면 이곳에 표시돼요." />
+        ) : (
+          <Table>
+            <thead>
+              <tr className="border-b border-line text-xs font-bold text-muted">
+                <th className="px-4 py-3">행사명</th>
+                <th className="px-4 py-3">신청일</th>
+                <th className="px-4 py-3" aria-label="심사" />
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((application) => (
+                <tr key={application.fairId} className="border-b border-line last:border-0 hover:bg-page">
+                  <td className="px-4 py-3 font-bold text-ink">{application.name}</td>
+                  <td className="px-4 py-3 text-muted">{formatDateTime(application.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button variant="outline" onClick={() => openFair(application.fairId)}>
+                      심사하기
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </div>
 
       <form onSubmit={handleLoad} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
@@ -150,19 +278,42 @@ export function FairApplicationReviewPage() {
               <p className="text-sm text-muted">신청서 #{detail.fairId} · 신청자 #{detail.applicantUserId}</p>
               {detail.rejectReason && <p className="mt-2 text-sm text-primary-strong">반려 사유: {detail.rejectReason}</p>}
               {detail.paymentDueAt && <p className="mt-2 text-sm text-muted">개설비 결제 기한: {formatDateTime(detail.paymentDueAt)}</p>}
+              {detail.publishedAt ? (
+                <p className="mt-2 flex items-center gap-1.5 text-sm font-bold text-ink">
+                  <Globe size={14} />
+                  {formatDateTime(detail.publishedAt)}에 공개됨 (티켓 예매 화면에 노출 중)
+                </p>
+              ) : detail.canceledAt ? (
+                <p className="mt-2 text-sm text-muted">취소된 행사라 공개할 수 없어요.</p>
+              ) : null}
             </div>
-            {isPendingReview && (
-              <div className="flex shrink-0 gap-2">
-                <Button variant="outline" onClick={() => setRejectDialogOpen(true)} disabled={reviewing}><X size={16} />반려</Button>
-                <Button onClick={handleApprove} disabled={reviewing}><Check size={16} />{reviewing ? "처리 중..." : "승인"}</Button>
-              </div>
-            )}
+            <div className="flex shrink-0 gap-2">
+              {isPendingReview && (
+                <>
+                  <Button variant="outline" onClick={() => setRejectDialogOpen(true)} disabled={reviewing}><X size={16} />반려</Button>
+                  <Button onClick={handleApprove} disabled={reviewing}><Check size={16} />{reviewing ? "처리 중..." : "승인"}</Button>
+                </>
+              )}
+              {canPublish && (
+                <Button onClick={handlePublish} disabled={publishing}>
+                  <Globe size={16} />
+                  {publishing ? "공개 처리 중..." : "공개하기"}
+                </Button>
+              )}
+            </div>
           </Card>
 
           {reviewError && (
             <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
               <p>{reviewError}</p>
+            </div>
+          )}
+
+          {publishError && (
+            <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <p>{publishError}</p>
             </div>
           )}
 
@@ -226,6 +377,8 @@ export function FairApplicationReviewPage() {
           </div>
         </form>
       </Dialog>
+
+      {confirmDialog}
     </div>
   );
 }

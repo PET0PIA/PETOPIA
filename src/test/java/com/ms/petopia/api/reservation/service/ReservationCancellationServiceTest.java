@@ -3,9 +3,13 @@ package com.ms.petopia.api.reservation.service;
 import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.mapper.ReservationCancellationMapper;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -38,8 +42,20 @@ class ReservationCancellationServiceTest {
     private ReservationTimeProvider timeProvider;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private NotificationService notificationService;
     @InjectMocks
     private ReservationCancellationService service;
+
+    @BeforeEach
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
 
     @Test
     void cancelsPaymentPendingReservationImmediately() {

@@ -4,10 +4,14 @@ import com.ms.petopia.api.reservation.dto.ReservationChangeFairDateRow;
 import com.ms.petopia.api.reservation.dto.ReservationChangeReservationRow;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateRequest;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateResponse;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.mapper.EntryMapper;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.api.reservation.mapper.ReservationChangeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -43,8 +47,20 @@ class ReservationVisitDateChangeServiceTest {
     private EntryMapper entryMapper;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private NotificationService notificationService;
     @InjectMocks
     private ReservationVisitDateChangeService service;
+
+    @BeforeEach
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
 
     @Test
     void changesConfirmedReservationAndUpdatesIssuedQrWindow() {

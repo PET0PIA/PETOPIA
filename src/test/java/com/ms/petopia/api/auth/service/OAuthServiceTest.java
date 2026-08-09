@@ -182,7 +182,7 @@ class OAuthServiceTest {
     @Test
     void exchangeLogin_유효한code면_토큰쌍을반환한다() {
         given(oauthPendingStore.consumeLogin("code")).willReturn(USER_ID);
-        given(authMapper.selectUserById(USER_ID)).willReturn(User.builder().userId(USER_ID).role("USER").build());
+        given(authMapper.selectUserById(USER_ID)).willReturn(User.builder().userId(USER_ID).role("USER").status("ACTIVE").build());
         given(jwtTokenProvider.generateAccessToken(USER_ID, "USER")).willReturn("access-token");
         given(jwtTokenProvider.generateRefreshToken(USER_ID)).willReturn("refresh-token");
 

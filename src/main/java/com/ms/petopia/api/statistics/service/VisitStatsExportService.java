@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -16,6 +17,7 @@ public class VisitStatsExportService {
 
     private final ReservationDashboardService dashboardService;
 
+    @Transactional(readOnly = true)
     public byte[] exportAsExcel(Long fairId) throws IOException {
         VisitStatsDto stats = dashboardService.getVisitStats(fairId);
 

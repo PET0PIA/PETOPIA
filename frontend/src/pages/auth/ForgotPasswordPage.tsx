@@ -62,8 +62,8 @@ export function ForgotPasswordPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">이메일</span>
-            <Input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+            <label htmlFor="forgot-password-email" className="mb-1.5 block text-sm font-bold text-ink">이메일</label>
+            <Input id="forgot-password-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
           </div>
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? "전송 중..." : "재설정 링크 받기"}

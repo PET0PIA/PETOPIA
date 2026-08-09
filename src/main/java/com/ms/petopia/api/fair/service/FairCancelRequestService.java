@@ -3,6 +3,8 @@ package com.ms.petopia.api.fair.service;
 import com.ms.petopia.api.fair.dto.CreateFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairCancelRequest;
+import com.ms.petopia.api.fair.dto.FairCancelRequestQueueItemResponse;
+import com.ms.petopia.api.fair.dto.FairCancelRequestQueueRow;
 import com.ms.petopia.api.fair.dto.FairCancelRequestResponse;
 import com.ms.petopia.api.fair.dto.FairCancelRequestStatus;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
@@ -55,6 +57,7 @@ public class FairCancelRequestService {
     private final FairMapper fairMapper;
     private final FairTimeProvider timeProvider;
     private final AuditLogService auditLogService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     /**
      * 취소를 신청한다. PENDING 상태로 등록되고, SUPER_ADMIN의 검토를 기다린다.
@@ -66,6 +69,10 @@ public class FairCancelRequestService {
      * (V11 마이그레이션, {@code application.active_key}와 동일한 패턴)이 DB 레벨에서
      * 맡는다. 그 제약을 위반하면(동시에 들어온 다른 요청이 먼저 커밋됐으면)
      * {@link DuplicateKeyException}을 잡아 동일한 에러 코드로 변환한다.
+     *
+     * <p>SecurityConfig는 EVENT_ADMIN role만 확인하고 "그 행사 담당자인지"는 못 가린다
+     * (role만 있으면 다른 행사 EVENT_ADMIN도 신청할 수 있다) - 그래서
+     * {@link FairAdminAccessGuard}로 여기서 한 번 더 확인한다.
      */
     @Transactional
     public FairCancelRequestResponse create(Long fairId, Long requestedBy, CreateFairCancelRequestRequest request) {
@@ -77,6 +84,7 @@ public class FairCancelRequestService {
         }
 
         Fair fair = findFairOrThrow(fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         if (fair.getCanceledAt() != null || !CANCELABLE_STATUSES.contains(fair.getStatus())) {
             throw new CommonException(ErrorCode.FAIR_CANCEL_NOT_REQUESTABLE);
         }
@@ -99,13 +107,33 @@ public class FairCancelRequestService {
     }
 
     /**
-     * 특정 행사의 취소 신청 이력을 최신순으로 조회한다.
+     * 특정 행사의 취소 신청 이력을 최신순으로 조회한다. requestedBy/reason/rejectReason처럼
+     * 그 행사 내부 사정이 담기므로, SecurityConfig의 role 검증(EVENT_ADMIN/SUPER_ADMIN)만으로는
+     * 부족하다 - 다른 행사 EVENT_ADMIN이 이 API로 남의 행사 이력을 볼 수 있는 문제를 막기
+     * 위해 {@link FairAdminAccessGuard}로 담당 행사인지 한 번 더 확인한다.
      */
     @Transactional(readOnly = true)
     public List<FairCancelRequestResponse> getCancelRequests(Long fairId) {
         findFairOrThrow(fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         return cancelRequestMapper.selectByFairId(fairId).stream()
                 .map(this::toResponse)
+                .toList();
+    }
+
+    /**
+     * 관리자 취소 신청 큐 조회. {@link #getCancelRequests}는 fairId를 이미 아는 상태에서
+     * 그 행사 이력을 보는 화면 전용이라, SUPER_ADMIN이 fairId 없이 "지금 심사해야 할 취소
+     * 신청이 뭐가 있는지"를 찾을 방법이 없었다 - 이 메서드가 전체 행사를 가로질러 그 역할을
+     * 한다.
+     *
+     * <p>{@code status}가 없으면 전체, 있으면 그 상태만 걸러 오래된 신청 순으로 반환한다.
+     * 기본 화면은 PENDING만 걸러 큐로 쓴다({@link FairService#getApplications}와 동일한 설계).
+     */
+    @Transactional(readOnly = true)
+    public List<FairCancelRequestQueueItemResponse> getQueue(FairCancelRequestStatus status) {
+        return cancelRequestMapper.selectQueue(status).stream()
+                .map(this::toQueueItemResponse)
                 .toList();
     }
 
@@ -165,8 +193,8 @@ public class FairCancelRequestService {
                 throw new CommonException(ErrorCode.INTERNAL_SERVER_ERROR);
             }
 
-            // TODO 인증 도메인 완성 전까지 reviewerId가 실제 SUPER_ADMIN인지는 검증하지 않는다
-            // (review() 상단 TODO와 동일한 한계). actorRole은 그 전제하에 고정값으로 남긴다.
+            // reviewerId가 실제 SUPER_ADMIN인지는 SecurityConfig가 이 엔드포인트 진입 전에
+            // role로 이미 검증했다(FairCancelRequestController 참고). actorRole은 그 전제로 고정값을 쓴다.
             auditLogService.record(
                     reviewerId,
                     ActorType.ADMIN,
@@ -213,6 +241,18 @@ public class FairCancelRequestService {
             throw new CommonException(ErrorCode.FAIR_CANCEL_REQUEST_NOT_FOUND);
         }
         return cancelRequest;
+    }
+
+    private FairCancelRequestQueueItemResponse toQueueItemResponse(FairCancelRequestQueueRow row) {
+        return new FairCancelRequestQueueItemResponse(
+                row.getFairCancelRequestId(),
+                row.getFairId(),
+                row.getFairName(),
+                row.getRequestedBy(),
+                row.getReason(),
+                row.getStatus() == null ? FairCancelRequestStatus.PENDING.name() : row.getStatus().name(),
+                row.getCreatedAt()
+        );
     }
 
     private FairCancelRequestResponse toResponse(FairCancelRequest cancelRequest) {

@@ -50,6 +50,9 @@ class HallServiceTest {
     @Mock
     private StorageService storageService;
 
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     @InjectMocks
     private HallService hallService;
 

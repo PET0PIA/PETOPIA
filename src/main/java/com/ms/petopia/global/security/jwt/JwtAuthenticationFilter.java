@@ -1,10 +1,13 @@
 package com.ms.petopia.global.security.jwt;
 
+import com.ms.petopia.api.auth.service.AccountSuspensionStore;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -28,6 +31,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
 
+    // 생성자 필수 의존성으로 두면 이 필터를 로드하는 다른 도메인의 모든 @WebMvcTest가
+    // AccountSuspensionStore 빈을 몰라서 컨텍스트 생성부터 깨진다 - 그래서 필드 주입 + optional로 뺐다.
+    // 실제 앱 구동 시에는 항상 빈이 있어서 정상 동작하고, 이 기능을 안 쓰는 테스트 슬라이스에서만 null로 남는다.
+    @Autowired(required = false)
+    @Nullable
+    private AccountSuspensionStore accountSuspensionStore;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
         // 헤더에서 토큰 문자열 뽑아온다
@@ -43,6 +53,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // 여기서 막지 않으면 "ROLE_null"이라는 무의미한 권한으로 인증이 통과해버린다.
                 if (role == null || role.isBlank()) {
                     throw new IllegalArgumentException("role 클레임이 없는 토큰입니다.");
+                }
+
+                // 정지된 계정인지 Redis로 확인 - DB를 매 요청 찌르지 않고 GET 1회로 끝냄.
+                // Redis 장애시 여기서 예외가 그대로 아래 catch로 던져져서 인증이 거부된다
+                // accountSuspensionStore가 null인 건 이 기능을 안 쓰는 테스트 컨텍스트뿐이라 그때는 건너뛴다.
+                if (accountSuspensionStore != null && accountSuspensionStore.isSuspended(userId)) {
+                    throw new IllegalStateException("정지된 계정입니다.");
                 }
 
                 // Spring Security가 이해하는 권한 형태로 변환

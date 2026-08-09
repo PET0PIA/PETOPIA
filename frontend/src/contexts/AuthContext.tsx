@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { setAccessToken } from "../api/client";
 import {
+  adminLogin as adminLoginRequest,
   completeOAuthSignup as completeOAuthSignupRequest,
   decodeAccessToken,
   exchangeOAuthLogin,
@@ -18,6 +19,7 @@ interface AuthContextValue {
   user: AccessTokenPayload | null;
   status: AuthStatus;
   login: (payload: EmailLoginRequest) => Promise<void>;
+  loginAsAdmin: (payload: EmailLoginRequest) => Promise<void>;
   loginWithOAuthCode: (code: string) => Promise<void>;
   completeOAuthSignup: (payload: OAuthSignupCompleteRequest) => Promise<void>;
   logout: () => Promise<void>;
@@ -57,6 +59,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("authenticated");
   }
 
+  async function loginAsAdmin(payload: EmailLoginRequest) {
+    const decoded = await adminLoginRequest(payload);
+    setUser(decoded);
+    setStatus("authenticated");
+  }
+
   async function loginWithOAuthCode(code: string) {
     const decoded = await exchangeOAuthLogin(code);
     setUser(decoded);
@@ -79,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, status, login, loginWithOAuthCode, completeOAuthSignup, logout }}>
+    <AuthContext.Provider value={{ user, status, login, loginAsAdmin, loginWithOAuthCode, completeOAuthSignup, logout }}>
       {children}
     </AuthContext.Provider>
   );
