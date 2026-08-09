@@ -70,8 +70,8 @@ function formStateFromDetail(detail: FairApplicationDetail): FormState {
   };
 }
 
-function label(text: string, required = false) {
-  return <span className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</span>;
+function label(htmlFor: string, text: string, required = false) {
+  return <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</label>;
 }
 
 function validate(form: FormState): string[] {
@@ -94,27 +94,33 @@ function validate(form: FormState): string[] {
   return errors;
 }
 
-function toRequest(form: FormState, posterImageObjectKey: string | null): UpdateFairApplicationRequest {
+/**
+ * 폼은 항상 기존 신청서 전체를 불러와 채운 상태로 시작하므로(formStateFromDetail), 여기서는
+ * "생략"(undefined) 없이 화면에 보이는 값을 그대로(비어 있으면 null로) 보낸다 - 사용자가 필드를
+ * 지우고 제출하면 실제로 지워져야 하기 때문이다("PATCH 계약" 참고). posterImageObjectKey만
+ * 예외로, 새로 업로드하지도 삭제하지도 않았으면 undefined를 보내 기존 포스터를 그대로 둔다.
+ */
+function toRequest(form: FormState, uploadedPosterKey: string | null, posterRemoved: boolean): UpdateFairApplicationRequest {
   return {
     name: form.name.trim(),
-    description: form.description.trim() || undefined,
-    category: form.category || undefined,
-    posterImageObjectKey: posterImageObjectKey ?? undefined,
-    noticeText: form.noticeText.trim() || undefined,
-    placeName: form.placeName.trim() || undefined,
-    address: form.address.trim() || undefined,
-    indoorOutdoor: form.indoorOutdoor || undefined,
-    vendorRecruitStartDate: form.vendorRecruitStartDate || undefined,
-    vendorRecruitEndDate: form.vendorRecruitEndDate || undefined,
-    reservationStartDate: form.reservationStartDate || undefined,
-    reservationEndDate: form.reservationEndDate || undefined,
-    operationStartDate: form.operationStartDate || undefined,
-    operationEndDate: form.operationEndDate || undefined,
-    reservationFee: form.reservationFee === "" ? undefined : Number(form.reservationFee),
-    reservationCancelDeadlineHours: form.reservationCancelDeadlineHours === "" ? undefined : Number(form.reservationCancelDeadlineHours),
-    reservationChangeDeadlineHours: form.reservationChangeDeadlineHours === "" ? undefined : Number(form.reservationChangeDeadlineHours),
+    description: form.description.trim() || null,
+    category: form.category || null,
+    posterImageObjectKey: uploadedPosterKey ?? (posterRemoved ? null : undefined),
+    noticeText: form.noticeText.trim() || null,
+    placeName: form.placeName.trim() || null,
+    address: form.address.trim() || null,
+    indoorOutdoor: form.indoorOutdoor || null,
+    vendorRecruitStartDate: form.vendorRecruitStartDate || null,
+    vendorRecruitEndDate: form.vendorRecruitEndDate || null,
+    reservationStartDate: form.reservationStartDate || null,
+    reservationEndDate: form.reservationEndDate || null,
+    operationStartDate: form.operationStartDate || null,
+    operationEndDate: form.operationEndDate || null,
+    reservationFee: form.reservationFee === "" ? null : Number(form.reservationFee),
+    reservationCancelDeadlineHours: form.reservationCancelDeadlineHours === "" ? null : Number(form.reservationCancelDeadlineHours),
+    reservationChangeDeadlineHours: form.reservationChangeDeadlineHours === "" ? null : Number(form.reservationChangeDeadlineHours),
     managerName: form.managerName.trim(),
-    managerPhone: form.managerPhone.trim() || undefined,
+    managerPhone: form.managerPhone.trim() || null,
     managerEmail: form.managerEmail.trim(),
   };
 }
@@ -152,6 +158,7 @@ function FairApplicationEditContent({ id }: { id: number }) {
   const [form, setForm] = useState<FormState | null>(null);
   const [posterImageObjectKey, setPosterImageObjectKey] = useState<string | null>(null);
   const [posterImageUploading, setPosterImageUploading] = useState(false);
+  const [posterRemoved, setPosterRemoved] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -191,7 +198,7 @@ function FairApplicationEditContent({ id }: { id: number }) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await updateFairApplication(id, toRequest(form, posterImageObjectKey));
+      await updateFairApplication(id, toRequest(form, posterImageObjectKey, posterRemoved));
       navigate(`/fair-applications/me/${id}`);
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : "신청서를 수정하지 못했어요. 잠시 후 다시 시도해 주세요.");
@@ -274,13 +281,13 @@ function FairApplicationEditContent({ id }: { id: number }) {
           <SectionHeader title="기본 정보" description="행사를 소개하는 내용이에요." />
           <Card className="space-y-5 p-6">
             <div>
-              {label("행사명", true)}
-              <Input value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="예: 2026 서울 펫페어" required />
+              {label("name", "행사명", true)}
+              <Input id="name" value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="예: 2026 서울 펫페어" required />
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
-                {label("카테고리")}
-                <Select value={form.category} onChange={(event) => update("category", event.target.value as FormState["category"])}>
+                {label("category", "카테고리")}
+                <Select id="category" value={form.category} onChange={(event) => update("category", event.target.value as FormState["category"])}>
                   <option value="">선택 안 함</option>
                   <option value="DOG">강아지</option>
                   <option value="CAT">고양이</option>
@@ -290,17 +297,25 @@ function FairApplicationEditContent({ id }: { id: number }) {
               <ImageUploadField
                 label="포스터 이미지"
                 initialImageUrl={detail.posterImageUrl}
-                onObjectKeyChange={setPosterImageObjectKey}
+                onObjectKeyChange={(key) => {
+                  setPosterImageObjectKey(key);
+                  if (key) setPosterRemoved(false);
+                }}
                 onUploadingChange={setPosterImageUploading}
+                removable
+                onRemove={() => {
+                  setPosterImageObjectKey(null);
+                  setPosterRemoved(true);
+                }}
               />
             </div>
             <div>
-              {label("행사 소개")}
-              <Textarea value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="행사를 간단히 소개해 주세요." />
+              {label("description", "행사 소개")}
+              <Textarea id="description" value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="행사를 간단히 소개해 주세요." />
             </div>
             <div>
-              {label("유의사항")}
-              <Textarea value={form.noticeText} onChange={(event) => update("noticeText", event.target.value)} placeholder="방문객이 꼭 알아야 할 유의사항을 입력해 주세요." />
+              {label("noticeText", "유의사항")}
+              <Textarea id="noticeText" value={form.noticeText} onChange={(event) => update("noticeText", event.target.value)} placeholder="방문객이 꼭 알아야 할 유의사항을 입력해 주세요." />
             </div>
           </Card>
         </section>
@@ -310,12 +325,12 @@ function FairApplicationEditContent({ id }: { id: number }) {
           <Card className="space-y-5 p-6">
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
-                {label("장소명")}
-                <Input value={form.placeName} onChange={(event) => update("placeName", event.target.value)} placeholder="예: 서울 코엑스 C홀" />
+                {label("placeName", "장소명")}
+                <Input id="placeName" value={form.placeName} onChange={(event) => update("placeName", event.target.value)} placeholder="예: 서울 코엑스 C홀" />
               </div>
               <div>
-                {label("실내/실외")}
-                <Select value={form.indoorOutdoor} onChange={(event) => update("indoorOutdoor", event.target.value as FormState["indoorOutdoor"])}>
+                {label("indoorOutdoor", "실내/실외")}
+                <Select id="indoorOutdoor" value={form.indoorOutdoor} onChange={(event) => update("indoorOutdoor", event.target.value as FormState["indoorOutdoor"])}>
                   <option value="">선택 안 함</option>
                   <option value="INDOOR">실내</option>
                   <option value="OUTDOOR">실외</option>
@@ -323,8 +338,8 @@ function FairApplicationEditContent({ id }: { id: number }) {
               </div>
             </div>
             <div>
-              {label("주소")}
-              <Input value={form.address} onChange={(event) => update("address", event.target.value)} placeholder="상세 주소를 입력해 주세요." />
+              {label("address", "주소")}
+              <Input id="address" value={form.address} onChange={(event) => update("address", event.target.value)} placeholder="상세 주소를 입력해 주세요." />
             </div>
           </Card>
         </section>
@@ -334,28 +349,28 @@ function FairApplicationEditContent({ id }: { id: number }) {
           <Card className="space-y-5 p-6">
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
-                {label("참가업체 모집 시작")}
-                <Input type="date" value={form.vendorRecruitStartDate} onChange={(event) => update("vendorRecruitStartDate", event.target.value)} />
+                {label("vendorRecruitStartDate", "참가업체 모집 시작")}
+                <Input id="vendorRecruitStartDate" type="date" value={form.vendorRecruitStartDate} onChange={(event) => update("vendorRecruitStartDate", event.target.value)} />
               </div>
               <div>
-                {label("참가업체 모집 종료")}
-                <Input type="date" value={form.vendorRecruitEndDate} onChange={(event) => update("vendorRecruitEndDate", event.target.value)} />
+                {label("vendorRecruitEndDate", "참가업체 모집 종료")}
+                <Input id="vendorRecruitEndDate" type="date" value={form.vendorRecruitEndDate} onChange={(event) => update("vendorRecruitEndDate", event.target.value)} />
               </div>
               <div>
-                {label("사전예약 시작")}
-                <Input type="date" value={form.reservationStartDate} onChange={(event) => update("reservationStartDate", event.target.value)} />
+                {label("reservationStartDate", "사전예약 시작")}
+                <Input id="reservationStartDate" type="date" value={form.reservationStartDate} onChange={(event) => update("reservationStartDate", event.target.value)} />
               </div>
               <div>
-                {label("사전예약 종료")}
-                <Input type="date" value={form.reservationEndDate} onChange={(event) => update("reservationEndDate", event.target.value)} />
+                {label("reservationEndDate", "사전예약 종료")}
+                <Input id="reservationEndDate" type="date" value={form.reservationEndDate} onChange={(event) => update("reservationEndDate", event.target.value)} />
               </div>
               <div>
-                {label("행사 운영 시작")}
-                <Input type="date" value={form.operationStartDate} onChange={(event) => update("operationStartDate", event.target.value)} />
+                {label("operationStartDate", "행사 운영 시작")}
+                <Input id="operationStartDate" type="date" value={form.operationStartDate} onChange={(event) => update("operationStartDate", event.target.value)} />
               </div>
               <div>
-                {label("행사 운영 종료")}
-                <Input type="date" value={form.operationEndDate} onChange={(event) => update("operationEndDate", event.target.value)} />
+                {label("operationEndDate", "행사 운영 종료")}
+                <Input id="operationEndDate" type="date" value={form.operationEndDate} onChange={(event) => update("operationEndDate", event.target.value)} />
               </div>
             </div>
           </Card>
@@ -366,16 +381,16 @@ function FairApplicationEditContent({ id }: { id: number }) {
           <Card className="space-y-5 p-6">
             <div className="grid gap-5 sm:grid-cols-3">
               <div>
-                {label("예약금(원)")}
-                <Input type="number" min={0} value={form.reservationFee} onChange={(event) => update("reservationFee", event.target.value)} placeholder="0" />
+                {label("reservationFee", "예약금(원)")}
+                <Input id="reservationFee" type="number" min={0} value={form.reservationFee} onChange={(event) => update("reservationFee", event.target.value)} placeholder="0" />
               </div>
               <div>
-                {label("취소 가능 기한(시간)")}
-                <Input type="number" min={0} value={form.reservationCancelDeadlineHours} onChange={(event) => update("reservationCancelDeadlineHours", event.target.value)} />
+                {label("reservationCancelDeadlineHours", "취소 가능 기한(시간)")}
+                <Input id="reservationCancelDeadlineHours" type="number" min={0} value={form.reservationCancelDeadlineHours} onChange={(event) => update("reservationCancelDeadlineHours", event.target.value)} />
               </div>
               <div>
-                {label("변경 가능 기한(시간)")}
-                <Input type="number" min={0} value={form.reservationChangeDeadlineHours} onChange={(event) => update("reservationChangeDeadlineHours", event.target.value)} />
+                {label("reservationChangeDeadlineHours", "변경 가능 기한(시간)")}
+                <Input id="reservationChangeDeadlineHours" type="number" min={0} value={form.reservationChangeDeadlineHours} onChange={(event) => update("reservationChangeDeadlineHours", event.target.value)} />
               </div>
             </div>
           </Card>
@@ -386,16 +401,16 @@ function FairApplicationEditContent({ id }: { id: number }) {
           <Card className="space-y-5 p-6">
             <div className="grid gap-5 sm:grid-cols-3">
               <div>
-                {label("담당자 이름", true)}
-                <Input value={form.managerName} onChange={(event) => update("managerName", event.target.value)} required />
+                {label("managerName", "담당자 이름", true)}
+                <Input id="managerName" value={form.managerName} onChange={(event) => update("managerName", event.target.value)} required />
               </div>
               <div>
-                {label("담당자 연락처")}
-                <Input value={form.managerPhone} onChange={(event) => update("managerPhone", event.target.value)} placeholder="010-0000-0000" />
+                {label("managerPhone", "담당자 연락처")}
+                <Input id="managerPhone" value={form.managerPhone} onChange={(event) => update("managerPhone", event.target.value)} placeholder="010-0000-0000" />
               </div>
               <div>
-                {label("담당자 이메일", true)}
-                <Input type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} required />
+                {label("managerEmail", "담당자 이메일", true)}
+                <Input id="managerEmail" type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} required />
               </div>
             </div>
           </Card>

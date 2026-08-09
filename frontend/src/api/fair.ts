@@ -98,29 +98,35 @@ export function getFairApplication(fairId: number) {
 /**
  * 신청서 수정(재제출) 요청. RECEIVED(심사 대기) 또는 REJECTED(반려) 상태의 신청서만 수정할 수
  * 있고, REJECTED였다면 이 요청이 성공하는 순간 RECEIVED로 되돌아가 다시 심사 대기열에 선다.
- * PATCH 의미론이라 값을 비우면(undefined) 기존 값을 유지한다 - 값을 지우고 싶다는 의도는
- * 이 요청으로 표현할 수 없다(CreateFairApplicationRequest와 동일한 제약).
+ *
+ * PATCH 계약: 키를 아예 안 보내면(undefined - apiClient가 JSON.stringify할 때 자동으로
+ * 빠진다) 기존 값을 유지하고, 키를 보내되 값을 null로 보내면 그 필드를 명시적으로 지운다
+ * (백엔드가 이 둘을 구분한다). 즉 "생략"과 "빈 값으로 지움"은 서로 다른 의미다 - 이 필드들에
+ * undefined 대신 빈 문자열을 넣어 보내면 값이 지워지지 않고 기존 값이 그대로 남으니 주의한다.
  */
 export interface UpdateFairApplicationRequest {
   name: string;
-  description?: string;
-  category?: FairCategory;
-  posterImageObjectKey?: string;
-  noticeText?: string;
-  placeName?: string;
-  address?: string;
-  indoorOutdoor?: IndoorOutdoor;
-  vendorRecruitStartDate?: string;
-  vendorRecruitEndDate?: string;
-  reservationStartDate?: string;
-  reservationEndDate?: string;
-  operationStartDate?: string;
-  operationEndDate?: string;
-  reservationFee?: number;
-  reservationCancelDeadlineHours?: number;
-  reservationChangeDeadlineHours?: number;
+  description?: string | null;
+  category?: FairCategory | null;
+  /** 새로 업로드한 임시 objectKey. 포스터를 새로 첨부하지 않았고 지우지도 않을 거면 이 키
+   * 자체를 요청 객체에서 빼서(undefined) 보내야 기존 포스터가 유지된다. null을 보내면
+   * 기존 포스터를 삭제한다. */
+  posterImageObjectKey?: string | null;
+  noticeText?: string | null;
+  placeName?: string | null;
+  address?: string | null;
+  indoorOutdoor?: IndoorOutdoor | null;
+  vendorRecruitStartDate?: string | null;
+  vendorRecruitEndDate?: string | null;
+  reservationStartDate?: string | null;
+  reservationEndDate?: string | null;
+  operationStartDate?: string | null;
+  operationEndDate?: string | null;
+  reservationFee?: number | null;
+  reservationCancelDeadlineHours?: number | null;
+  reservationChangeDeadlineHours?: number | null;
   managerName: string;
-  managerPhone?: string;
+  managerPhone?: string | null;
   managerEmail: string;
 }
 

@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * fairs 테이블 매퍼.
@@ -53,12 +54,17 @@ public interface FairMapper {
     /**
      * 신청서 수정(재제출, FairService#updateApplication) 전용 조건부 갱신. status가
      * RECEIVED 또는 REJECTED일 때만 실제로 갱신된다(동시성 방어 - {@link #updateReviewResult}와
-     * 동일한 패턴). 내용 필드는 null이 아닌 것만 반영하지만(PATCH), status/reject_reason/
-     * reviewed_by/reviewed_at은 이 갱신이 성공하는 순간 항상 RECEIVED/NULL/NULL/NULL로
-     * 되돌린다 - REJECTED였던 신청서가 수정으로 다시 심사 대기열에 설 때 이전 반려 사유가
-     * 남아있으면 안 되기 때문이다.
+     * 동일한 패턴). status/reject_reason/reviewed_by/reviewed_at은 이 갱신이 성공하는 순간
+     * 항상 RECEIVED/NULL/NULL/NULL로 되돌린다 - REJECTED였던 신청서가 수정으로 다시 심사
+     * 대기열에 설 때 이전 반려 사유가 남아있으면 안 되기 때문이다.
+     *
+     * <p>내용 필드는 {@code fair}의 null 여부가 아니라 {@code setFields}(요청 JSON에 실제로
+     * 있었던 필드명 집합)로 갱신 여부를 정한다 - null 여부만으로 판단하면 "필드를 생략함(기존
+     * 값 유지)"과 "필드를 명시적으로 비움(NULL로 지움)"을 구분할 수 없다. {@code setFields}에
+     * 있는 필드는 {@code fair}에 담긴 값(null이면 NULL로 지움, 아니면 그 값으로) 그대로
+     * 반영하고, 없는 필드는 컬럼을 건드리지 않는다.
      */
-    int updateApplication(Fair fair);
+    int updateApplication(@Param("fair") Fair fair, @Param("setFields") Set<String> setFields);
 
     /**
      * 취소된({@code canceled_at IS NOT NULL}) 행사 중, 아직 정리할 PENDING 예약금·참가비

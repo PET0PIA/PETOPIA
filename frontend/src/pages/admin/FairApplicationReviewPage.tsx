@@ -27,10 +27,12 @@ const statusLabels: Record<string, string> = {
   ENDED: "종료",
 };
 
-// 공개(publish)는 심사 승인 이후(PAYMENT_PENDING~IN_PROGRESS) 상태에서만 가능하다
+// 공개(publish)는 개설비 결제가 끝난 이후(PREPARING~IN_PROGRESS) 상태에서만 가능하다
 // (FairService.PUBLISHABLE_STATUSES와 동일한 목록을 FE에서도 미리 확인해 불필요한 요청을 막는다 -
-// 최종 판단은 항상 백엔드가 한다).
-const PUBLISHABLE_STATUSES = new Set(["PAYMENT_PENDING", "PREPARING", "IN_PROGRESS"]);
+// 최종 판단은 항상 백엔드가 한다). PAYMENT_PENDING(개설비 결제 대기 중)은 제외 - 개설비를
+// 아직 내지 않은 행사를 공개해버리면 이후 결제 기한이 지나 EXPIRED로 자동 만료될 때 이미
+// 들어온 예약을 정리해야 하는 문제가 생긴다.
+const PUBLISHABLE_STATUSES = new Set(["PREPARING", "IN_PROGRESS"]);
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";

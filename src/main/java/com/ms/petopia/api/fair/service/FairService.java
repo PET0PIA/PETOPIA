@@ -34,6 +34,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -49,11 +50,14 @@ public class FairService {
     private static final Duration PAYMENT_DUE_PERIOD = Duration.ofDays(7);
 
     /**
-     * 공개(publish)를 허용하는 상태. 심사 승인 이후(PAYMENT_PENDING~IN_PROGRESS)에만 공개할 수 있고,
-     * 심사 전(RECEIVED)이거나 더 이상 진행되지 않는 상태(REJECTED/EXPIRED/ENDED)는 제외한다.
+     * 공개(publish)를 허용하는 상태. 개설비 결제가 끝난 이후(PREPARING~IN_PROGRESS)에만 공개할 수
+     * 있다. PAYMENT_PENDING(개설비 결제 대기 중)은 제외한다 - 개설비를 아직 내지 않은 행사를
+     * 공개해 관람객 예약을 받기 시작하면, 그 뒤 개설비 결제 기한이 지나 EXPIRED로 자동 만료돼도
+     * 이미 들어온 예약을 정리해야 하는 문제가 생긴다. 심사 전(RECEIVED)이거나 더 이상 진행되지
+     * 않는 상태(REJECTED/EXPIRED/ENDED)도 당연히 제외한다.
      */
     private static final Set<FairStatus> PUBLISHABLE_STATUSES =
-            EnumSet.of(FairStatus.PAYMENT_PENDING, FairStatus.PREPARING, FairStatus.IN_PROGRESS);
+            EnumSet.of(FairStatus.PREPARING, FairStatus.IN_PROGRESS);
 
     private final FairMapper fairMapper;
     private final FairTimeProvider timeProvider;
@@ -199,19 +203,28 @@ public class FairService {
      * 대기열에 선다({@link FairMapper#updateApplication} 참고, 이전 반려 사유·검토자·검토일시는
      * 함께 초기화된다).
      *
-     * <p>내용 필드는 PATCH 방식이라 null로 보낸 필드는 기존 값을 유지한다. 기간 검증
-     * ({@code validatePeriod})은 이번 요청에 시작일·종료일이 함께 왔을 때만 적용되고, 한쪽만
-     * 보내 DB에 남은 기존 값과 조합했을 때의 유효성까지는 검증하지 않는다(알려진 제한).
+     * <p>내용 필드는 PATCH 방식이지만 "생략(기존 값 유지)"과 "명시적으로 비움(NULL로 지움)"을
+     * 구분한다 - {@code request}의 null 여부만으로는 이 둘을 구분할 수 없으므로, 요청 JSON에
+     * 실제로 있었던 필드명 집합인 {@code presentFields}({@link FairController}가 원본 바디에서
+     * 뽑아 넘긴다)를 함께 받는다. presentFields에 없는 필드는 기존 값을 유지하고, 있는 필드는
+     * request의 값(null이면 지움, 아니면 그 값)을 그대로 반영한다. posterImageObjectKey만
+     * posterImageUrl 컬럼에 대응한다(요청 필드명과 엔티티/컬럼명이 다른 유일한 필드).
+     *
+     * <p>기간 검증({@code validatePeriod})은 이번 요청에 시작일·종료일이 함께 왔을 때만 적용되고,
+     * 한쪽만 보내 DB에 남은 기존 값과 조합했을 때의 유효성까지는 검증하지 않는다(알려진 제한).
      *
      * <p>RECEIVED 여부는 미리 SELECT로 확인하지 않고 UPDATE의 WHERE 절이 직접 검증한다
      * ({@link #review} javadoc과 동일한 이유).
      */
     @Transactional
-    public FairApplicationDetailResponse updateApplication(Long fairId, Long requesterId, UpdateFairApplicationRequest request) {
+    public FairApplicationDetailResponse updateApplication(
+            Long fairId, Long requesterId, UpdateFairApplicationRequest request, Set<String> presentFields
+    ) {
         if (requesterId == null || requesterId <= 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        validateUpdateRequest(request);
+        Set<String> setFields = resolveUpdateSetFields(presentFields);
+        validateUpdateRequest(request, setFields);
 
         Fair fair = findFairOrThrow(fairId);
         if (!requesterId.equals(fair.getApplicantUserId())) {
@@ -223,7 +236,10 @@ public class FairService {
         update.setName(request.name());
         update.setDescription(request.description());
         update.setCategory(request.category());
-        update.setPosterImageUrl(resolveImageUrl(request.posterImageObjectKey()));
+        // posterImageObjectKey가 명시적으로 왔을 때만(포함해 null=삭제도) URL을 다시 계산한다 -
+        // 안 그러면 resolveImageUrl(null)이 null을 돌려줘도 setFields에 'posterImageUrl'이 없으니
+        // 매퍼가 이 값을 무시하고 기존 URL을 그대로 둔다.
+        update.setPosterImageUrl(setFields.contains("posterImageUrl") ? resolveImageUrl(request.posterImageObjectKey()) : null);
         update.setNoticeText(request.noticeText());
         update.setPlaceName(request.placeName());
         update.setAddress(request.address());
@@ -241,12 +257,28 @@ public class FairService {
         update.setManagerPhone(request.managerPhone());
         update.setManagerEmail(request.managerEmail());
 
-        int updated = fairMapper.updateApplication(update);
+        int updated = fairMapper.updateApplication(update, setFields);
         if (updated == 0) {
             throw new CommonException(ErrorCode.FAIR_APPLICATION_NOT_EDITABLE);
         }
 
         return toDetailResponse(findFairOrThrow(fairId));
+    }
+
+    /**
+     * 요청 JSON에 실제로 있었던 필드명을 매퍼가 쓰는 엔티티/컬럼 지향 이름으로 바꾼다.
+     * posterImageObjectKey만 posterImageUrl로 바뀌고, 나머지는 요청 필드명과 엔티티 필드명이
+     * 1:1이라 그대로 통과시킨다.
+     */
+    private Set<String> resolveUpdateSetFields(Set<String> presentFields) {
+        if (presentFields == null || presentFields.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> setFields = new HashSet<>();
+        for (String field : presentFields) {
+            setFields.add("posterImageObjectKey".equals(field) ? "posterImageUrl" : field);
+        }
+        return setFields;
     }
 
     /**
@@ -487,14 +519,22 @@ public class FairService {
 
     /**
      * updateApplication 전용 검증. createApplication과 달리 PATCH라 필드가 null일 수 있으므로
-     * "필수" 대신 "보냈다면 빈 문자열이면 안 된다"만 확인한다.
+     * "필수" 대신 "보냈다면 빈 문자열이면 안 된다"만 확인한다. name/managerName/managerEmail은
+     * 그 자체로는 nullable해 보이지만(record에서 null 허용) 실제로는 필수 컬럼이라, setFields에
+     * 있는데(=요청에 명시적으로 포함됐는데) 값이 null이면(=명시적으로 지우려는 시도) 거부한다 -
+     * 그냥 생략(setFields에 없음)했다면 기존 값이 유지되니 문제없다.
      */
-    private void validateUpdateRequest(UpdateFairApplicationRequest request) {
+    private void validateUpdateRequest(UpdateFairApplicationRequest request, Set<String> setFields) {
         if (request == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if (isBlankIfPresent(request.name()) || isBlankIfPresent(request.managerName())
                 || isBlankIfPresent(request.managerEmail())) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        if ((setFields.contains("name") && request.name() == null)
+                || (setFields.contains("managerName") && request.managerName() == null)
+                || (setFields.contains("managerEmail") && request.managerEmail() == null)) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if (request.reservationFee() != null && request.reservationFee() < 0) {
