@@ -199,11 +199,25 @@
           AND status IN ('RECEIVED', 'REJECTED')
     </update>
 
+    <!--
+        canceled_at IS NOT NULL만 걸면(코드래빗 지적) 취소된 행사 수가 limit를 넘는 순간
+        canceled_at DESC 정렬로 매번 같은 최신 N개만 뽑혀서, 그보다 오래된 행사의 PENDING
+        결제가 영영 처리되지 못하고 배치 슬롯을 못 받을 수 있다. 그래서 이 결제가 아직 남아있는
+        행사만(EXISTS) 고르고 오래된 순(ASC)으로 처리한다 - 한 행사가 다 정리되면(더 이상
+        PENDING이 없으면) 이 목록에서 자연히 빠지니 다음 실행에서 그 자리를 다른 행사가 채운다.
+    -->
     <select id="selectCanceledFairIds" resultType="long">
-        SELECT fair_id
-          FROM fairs
-         WHERE canceled_at IS NOT NULL
-         ORDER BY canceled_at DESC
+        SELECT f.fair_id
+          FROM fairs f
+         WHERE f.canceled_at IS NOT NULL
+           AND EXISTS (
+               SELECT 1
+                 FROM payment p
+                WHERE p.fair_id = f.fair_id
+                  AND p.status = 'PENDING'
+                  AND p.payment_type IN ('RESERVATION_DEPOSIT', 'VENDOR_FEE')
+           )
+         ORDER BY f.canceled_at
          LIMIT #{limit}
     </select>
 

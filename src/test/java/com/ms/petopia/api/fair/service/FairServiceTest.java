@@ -247,6 +247,17 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("공개됐더라도 이후 취소됐으면 FAIR_NOT_FOUND를 던진다")
+    void getPublicSummary_공개후취소됐으면_예외를_던진다() {
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
+        fair.setPublishedAt(NOW.minusDays(2));
+        fair.setCanceledAt(NOW.minusDays(1));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        assertErrorCode(() -> fairService.getPublicSummary(FAIR_ID), ErrorCode.FAIR_NOT_FOUND);
+    }
+
+    @Test
     @DisplayName("존재하지 않는 fairId를 조회하면 FAIR_NOT_FOUND를 던진다")
     void getPublicSummary_존재하지않으면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(null);

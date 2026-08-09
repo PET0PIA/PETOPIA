@@ -653,6 +653,25 @@ class PaymentServiceTest {
         given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
         given(paymentMapper.markCanceled(eq(2L), any(LocalDateTime.class))).willReturn(1);
         assertThat(paymentService.cancelPayment(2L, "FAIR").status()).isEqualTo("CANCELED");
+
+        given(paymentMapper.selectById(3L)).willReturn(pendingOpeningFeeRow());
+        given(paymentMapper.markCanceled(eq(3L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.cancelPayment(3L, "FAIR").status()).isEqualTo("CANCELED");
+    }
+
+    @Test
+    @DisplayName("CALLER_PAYMENT_TYPES에 등록 안 된 호출 도메인은 어떤 결제유형이든 거부한다")
+    void cancelPayment_미등록캐스터는_예외를던진다() {
+        // 오타나 아직 등록 안 된 호출 도메인이 오면 Map.get()이 null을 반환하는데, 이걸
+        // "제한 없음"으로 잘못 취급하면 미등록 호출자가 아무 결제나 건드릴 수 있게 열려버린다.
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(1L, "UNKNOWN_DOMAIN"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).markCanceled(any(), any());
     }
 
     @Test
@@ -729,6 +748,23 @@ class PaymentServiceTest {
         given(paymentMapper.selectById(1L)).willReturn(pendingRow());
         given(paymentMapper.markExpired(eq(1L), any(LocalDateTime.class))).willReturn(1);
         assertThat(paymentService.expirePayment(1L, "FAIR").status()).isEqualTo("EXPIRED");
+
+        given(paymentMapper.selectById(3L)).willReturn(pendingOpeningFeeRow());
+        given(paymentMapper.markExpired(eq(3L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.expirePayment(3L, "FAIR").status()).isEqualTo("EXPIRED");
+    }
+
+    @Test
+    @DisplayName("CALLER_PAYMENT_TYPES에 등록 안 된 호출 도메인은 어떤 결제유형이든 만료 처리를 거부한다")
+    void expirePayment_미등록캐스터는_예외를던진다() {
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+
+        assertThatThrownBy(() -> paymentService.expirePayment(2L, "UNKNOWN_DOMAIN"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).markExpired(any(), any());
     }
 
     @Test
@@ -781,6 +817,20 @@ class PaymentServiceTest {
         row.setPayerUserId(90L);
         row.setFairId(10L);
         row.setReservationId(500L);
+        return row;
+    }
+
+    // PENDING 상태의 개설비 결제 하나를 미리 만들어두는 헬퍼. FAIR 캐스터가 세 유형을
+    // 전부 다룰 수 있는지 검증할 때 pendingRow()/pendingReservationDepositRow()와 함께 쓴다.
+    private PaymentRow pendingOpeningFeeRow() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(3L);
+        row.setPaymentType("FAIR_OPENING_FEE");
+        row.setAmount(100000L);
+        row.setStatus("PENDING");
+        row.setMethod("TOSS");
+        row.setPayerUserId(90L);
+        row.setFairId(10L);
         return row;
     }
 
