@@ -1,17 +1,17 @@
 package com.ms.petopia.api.application.service;
 
-import com.ms.petopia.api.application.domain.Application;
-import com.ms.petopia.api.application.domain.ApplicationCancelRequest;
-import com.ms.petopia.api.application.domain.ApplicationForm;
-import com.ms.petopia.api.application.domain.ApplicationSlot;
+import com.ms.petopia.api.application.domain.*;
 import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
+import com.ms.petopia.api.booth.domain.Booth;
+import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.fair.service.BoothSlotService;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -54,6 +54,8 @@ public class ApplicationService {
     private final StorageService storageService;
     private final RefundService refundService;
     private final NotificationService notificationService;
+    private final BoothMapper boothMapper;
+    private final BoothSlotService boothSlotService;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -77,6 +79,9 @@ public class ApplicationService {
         Application application = saveApplication(fairId, request);
         ApplicationForm form = saveApplicationForm(application.getApplicationId(), request);
         saveApplicationSlots(application.getApplicationId(), request.getBoothSlotIds(), slotsById);
+
+        // 슬롯 잠그기
+        lockSlots(application.getApplicationId());
 
         // 재조회 후 응답 조립
         Application saved = applicationMapper.selectById(application.getApplicationId());
@@ -460,6 +465,9 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
         }
 
+        // 슬롯 잠금 풀기
+        unlockSlots(applicationId);
+
         // 알림
         Business business = businessMapper.selectById(application.getBusinessId());
 
@@ -491,6 +499,24 @@ public class ApplicationService {
         // 담당자는 있지만 요청자 본인이 아닌 경우
         if(!fairAdminUserId.equals(adminUserId)) {
             throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "본인이 담당하는 행사가 아닙니다.");
+        }
+
+    }
+
+    // 신청이 선택한 슬롯 전부를 fair 도메인에 잠금 요청한다(제출 시점부터 배치 편집기에서 못 건드리게)
+    private void lockSlots(Long applicationId) {
+
+        for (BoothSlotHallRef ref : applicationMapper.selectSlotHallRefsByApplicationId(applicationId)) {
+            boothSlotService.lockBoothSlot(ref.getHallId(), ref.getBoothSlotId());
+        }
+
+    }
+
+    // 신청이 더 이상 슬롯을 점유하지 않게 됐을 때(반려·취소) fair 도메인에 잠금 해제를 요청한다
+    private void unlockSlots(Long applicationId) {
+
+        for (BoothSlotHallRef ref : applicationMapper.selectSlotHallRefsByApplicationId(applicationId)) {
+            boothSlotService.unlockBoothSlot(ref.getHallId(), ref.getBoothSlotId());
         }
 
     }
@@ -586,6 +612,19 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_CANCELABLE);
         }
 
+        // 슬롯 잠금 풀기
+        unlockSlots(applicationId);
+
+        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
+        boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
+
+        if(wasConfirmed) {
+
+            boothMapper.deleteBoothItemsByApplicationId(applicationId);
+            boothMapper.deleteBoothByApplicationId(applicationId);
+
+        }
+
         // 결제가 있었다면(CONFIRMED 상태였던 경우) 환불 처리. PAYMENT_PENDING 상태에서 취소된 경우 결제가 없어 null.
         Long paymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
 
@@ -609,6 +648,7 @@ public class ApplicationService {
                 .status(ApplicationCancelRequest.Status.APPROVED.name())
                 .applicationStatus(Application.Status.CANCELED.name())
                 .decidedAt(decidedAt)
+                .boothDeleted(wasConfirmed)
                 .build();
         
     }
@@ -624,6 +664,14 @@ public class ApplicationService {
     @Transactional
     public boolean cancelApplicationForCanceledFair(Long applicationId) {
 
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            return false;
+        }
+
+        boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
+
         // 락 순서를 approveCancelRequest와 통일(취소요청 행 먼저)해서 교착상태 방지
         applicationMapper.lockPendingCancelRequestIfExists(applicationId);
 
@@ -631,6 +679,17 @@ public class ApplicationService {
 
         if(updated == 0) {
             return false; // 0이면 이미 다른 경로로 처리됨(동시성) - 배치 카운트에서 제외
+        }
+
+        // 슬롯 잠금 풀기
+        unlockSlots(applicationId);
+
+        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
+        if(wasConfirmed) {
+
+            boothMapper.deleteBoothItemsByApplicationId(applicationId);
+            boothMapper.deleteBoothByApplicationId(applicationId);
+
         }
 
         // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
@@ -685,6 +744,7 @@ public class ApplicationService {
                 .status(ApplicationCancelRequest.Status.REJECTED.name())
                 .applicationStatus(application.getStatus().name())
                 .decidedAt(decidedAt)
+                .boothDeleted(false)
                 .build();
 
     }
@@ -731,6 +791,15 @@ public class ApplicationService {
         if (updated == 0) {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
         }
+
+        // 결제 완료로 확정됐으니 부스 프로필을 자동 생성한다.
+        Booth booth = Booth.builder()
+                .applicationId(applicationId)
+                .businessId(application.getBusinessId())
+                .confirmedAt(LocalDateTime.now())
+                .build();
+
+        boothMapper.insertBooth(booth);
 
     }
 

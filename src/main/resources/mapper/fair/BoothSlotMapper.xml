@@ -63,6 +63,12 @@
          ORDER BY slot_number
     </select>
 
+    <select id="existsByHallId" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM booth_slots WHERE hall_id = #{hallId}
+        )
+    </select>
+
     <!-- null이 아닌 필드만 갱신한다. hall_id는 갱신 대상에서 제외한다. -->
     <update id="update">
         UPDATE booth_slots
@@ -78,6 +84,17 @@
             <if test="lockedAt != null">locked_at = #{lockedAt},</if>
             updated_at = #{updatedAt},
         </set>
+        WHERE booth_slot_id = #{boothSlotId}
+    </update>
+
+    <!--
+        locked_at을 명시적으로 NULL로 되돌리는 전용 UPDATE. 일반 update()는 <if>로 null 필드를
+        건너뛰어서 이 컬럼을 NULL로 만들 수 없다.
+    -->
+    <update id="clearLock">
+        UPDATE booth_slots
+        SET locked_at = NULL,
+            updated_at = #{updatedAt}
         WHERE booth_slot_id = #{boothSlotId}
     </update>
 

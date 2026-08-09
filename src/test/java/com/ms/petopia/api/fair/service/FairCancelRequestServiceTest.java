@@ -11,6 +11,10 @@ import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairCancelRequestResponse;
 import com.ms.petopia.api.fair.mapper.FairCancelRequestMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,10 +29,13 @@ import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
@@ -52,6 +59,9 @@ class FairCancelRequestServiceTest {
 
     @Mock
     private FairTimeProvider timeProvider;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     @InjectMocks
     private FairCancelRequestService cancelRequestService;
@@ -191,6 +201,7 @@ class FairCancelRequestServiceTest {
     void review_승인하면_행사canceledAt을_채운다() {
         given(cancelRequestMapper.selectById(CANCEL_REQUEST_ID)).willReturn(cancelRequest(FairCancelRequestStatus.PENDING));
         given(cancelRequestMapper.update(any())).willReturn(1);
+        given(fairMapper.update(any())).willReturn(1);
 
         ReviewFairCancelRequestResponse response = cancelRequestService.review(
                 FAIR_ID, CANCEL_REQUEST_ID, REVIEWER_ID, new ReviewFairCancelRequestRequest(FairReviewDecision.APPROVE, null)
@@ -209,6 +220,29 @@ class FairCancelRequestServiceTest {
         verify(fairMapper).update(fairCaptor.capture());
         assertThat(fairCaptor.getValue().getFairId()).isEqualTo(FAIR_ID);
         assertThat(fairCaptor.getValue().getCanceledAt()).isEqualTo(NOW);
+
+        verify(auditLogService).record(
+                eq(REVIEWER_ID), eq(ActorType.ADMIN), eq("SUPER_ADMIN"),
+                eq(ActionType.FAIR_CANCEL_APPROVE), eq(TargetType.FAIR), eq(FAIR_ID),
+                isNull(), eq(Map.of("fairCancelRequestId", CANCEL_REQUEST_ID, "canceledAt", NOW))
+        );
+    }
+
+    @Test
+    @DisplayName("fairs 갱신이 실패하면(영향 행 0건) INTERNAL_SERVER_ERROR를 던지고 감사 로그를 남기지 않는다")
+    void review_fairs갱신실패하면_예외를_던진다() {
+        given(cancelRequestMapper.selectById(CANCEL_REQUEST_ID)).willReturn(cancelRequest(FairCancelRequestStatus.PENDING));
+        given(cancelRequestMapper.update(any())).willReturn(1);
+        given(fairMapper.update(any())).willReturn(0);
+
+        assertErrorCode(
+                () -> cancelRequestService.review(
+                        FAIR_ID, CANCEL_REQUEST_ID, REVIEWER_ID,
+                        new ReviewFairCancelRequestRequest(FairReviewDecision.APPROVE, null)
+                ),
+                ErrorCode.INTERNAL_SERVER_ERROR
+        );
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -226,6 +260,7 @@ class FairCancelRequestServiceTest {
         assertThat(response.rejectReason()).isEqualTo("서류 미비");
         assertThat(response.canceledAt()).isNull();
         verify(fairMapper, never()).update(any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

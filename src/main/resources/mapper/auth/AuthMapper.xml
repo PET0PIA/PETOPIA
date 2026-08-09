@@ -269,4 +269,30 @@
         AND used_at IS NULL
     </select>
 
+    <!-- ===== 관리자 계정 관리 ===== -->
+
+    <select id="selectAdminAccounts" resultType="AdminAccountRow">
+        SELECT u.user_id
+             , u.email
+             , u.nickname
+             , u.status
+             , f.fair_id
+             , f.name                 AS fair_name
+             , f.operation_start_date
+             , f.operation_end_date
+          FROM users u
+    INNER JOIN fair_admin_assignments faa ON faa.admin_user_id = u.user_id
+    INNER JOIN fairs f                    ON f.fair_id = faa.fair_id
+         WHERE u.role = 'EVENT_ADMIN'
+         ORDER BY faa.assigned_at DESC
+    </select>
+
+    <!-- 관리자 계정 정지/정지 해제 -->
+    <update id="updateUserStatus">
+        UPDATE users
+           SET status     = #{status}
+             , updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+    </update>
+
 </mapper>

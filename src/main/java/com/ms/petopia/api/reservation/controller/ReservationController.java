@@ -8,6 +8,7 @@ import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.EntryQrResponse;
 import com.ms.petopia.api.reservation.dto.ReservationAvailabilityResponse;
+import com.ms.petopia.api.reservation.dto.ReservationDetailResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListResponse;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateRequest;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateResponse;
@@ -56,6 +57,14 @@ public class ReservationController {
             @RequestParam(defaultValue = "20") int size
     ) {
         return reservationQueryService.getMyReservations(userId, page, size);
+    }
+
+    @GetMapping("/reservations/{reservationId}")
+    public ReservationDetailResponse getReservationDetail(
+            @PathVariable Long reservationId,
+            @AuthenticationPrincipal Long userId
+    ) {
+        return reservationQueryService.getReservationDetail(reservationId, userId);
     }
 
     @PatchMapping("/reservations/{reservationId}/visit-date")

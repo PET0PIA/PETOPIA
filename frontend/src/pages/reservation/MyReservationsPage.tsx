@@ -1,10 +1,12 @@
 import { ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { Table } from "../../components/ui/Table";
-import { mockReservations, type ReservationStatus } from "../../mocks/reservations";
+import { ApiError } from "../../api/client";
+import { getMyReservations, type ReservationListItem, type ReservationStatus } from "../../api/reservation";
 
 // 예약 상태 표시 규칙(AI_UI_RULES 색 규칙):
 // 빨강=결제 대기(사용자가 이어서 결제해야 하는 핵심 행동), 초록=확정·입장 완료(정상),
@@ -29,8 +31,27 @@ function formatTime(time: string) {
 }
 
 export function MyReservationsPage() {
-  // 백엔드 연동 전이라 mock 데이터를 그대로 그린다.
-  const reservations = mockReservations;
+  const [reservations, setReservations] = useState<ReservationListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getMyReservations()
+      .then((res) => {
+        if (alive) setReservations(res.items);
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        setError(err instanceof ApiError ? err.message : "예약 목록을 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <div className="mx-auto max-w-5xl py-2">
@@ -40,7 +61,11 @@ export function MyReservationsPage() {
         description="예매한 행사를 눌러 방문일·입장 정보와 입장 QR을 확인하고, 예약을 변경하거나 취소할 수 있어요."
       />
 
-      {reservations.length === 0 ? (
+      {loading ? (
+        <p className="py-16 text-center text-sm text-muted">예약 목록을 불러오는 중이에요…</p>
+      ) : error ? (
+        <EmptyState title="예약 목록을 불러오지 못했어요." description={error} />
+      ) : reservations.length === 0 ? (
         <EmptyState
           title="아직 예약한 행사가 없어요."
           description="티켓 예매에서 관심 있는 행사를 예약하면 이곳에서 확인할 수 있어요."

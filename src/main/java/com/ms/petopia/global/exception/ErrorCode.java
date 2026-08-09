@@ -41,6 +41,7 @@ public enum ErrorCode {
     OAUTH_INVALID_STATE(HttpStatus.BAD_REQUEST, "A015", "잘못되었거나 만료된 요청입니다. 다시 시도해주세요."),
     OAUTH_PENDING_NOT_FOUND(HttpStatus.BAD_REQUEST, "A016", "만료되었거나 잘못된 요청입니다. 처음부터 다시 시도해주세요."),
     OAUTH_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY, "A017", "소셜 로그인 제공자와 통신 중 오류가 발생했습니다."),
+    ACCOUNT_INACTIVE(HttpStatus.FORBIDDEN, "A018", "정지된 계정입니다."),
 
     // ===== Storage =====
     STORAGE_UNSUPPORTED_EXTENSION(HttpStatus.BAD_REQUEST, "S001", "허용하지 않는 파일 확장자입니다."),
@@ -75,6 +76,9 @@ public enum ErrorCode {
     APPLICATION_PAYMENT_EVENT_CONFLICT(HttpStatus.CONFLICT, "V021", "이미 다른 결제로 완료 처리된 신청서입니다."),
     APPLICATION_NOT_PAYMENT_PENDING(HttpStatus.CONFLICT, "V022", "결제 대기 중인 신청서만 결제 완료 처리할 수 있습니다."),
     APPLICATION_PAYMENT_AMOUNT_MISMATCH(HttpStatus.CONFLICT, "V023", "통지된 결제 금액이 승인 시 확정된 금액과 일치하지 않습니다."),
+    BOOTH_NOT_FOUND(HttpStatus.NOT_FOUND, "V024", "부스를 찾을 수 없습니다."),
+    BOOTH_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "V025", "판매상품·이벤트를 찾을 수 없습니다."),
+    BOOTH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V026", "본인 소유의 부스만 관리할 수 있습니다."),
 
 
     // ===== Payment =====
@@ -106,6 +110,10 @@ public enum ErrorCode {
     FAIR_CANCEL_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F020", "취소 신청 사유를 입력해야 합니다."),
     FAIR_CANCEL_REQUEST_NOT_PENDING(HttpStatus.CONFLICT, "F021", "검토 대기 중인 취소 신청만 검토할 수 있습니다."),
     FAIR_CANCEL_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F022", "취소 신청 반려 시 반려 사유를 입력해야 합니다."),
+    HALL_HAS_BOOTH_SLOTS(HttpStatus.CONFLICT, "F023", "부스 슬롯이 남아있는 홀은 삭제할 수 없습니다."),
+    FAIR_DATE_FAIR_NOT_EDITABLE(HttpStatus.CONFLICT, "F024", "취소되었거나 종료된 행사는 운영일을 관리할 수 없습니다."),
+    FAIR_APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "F025", "본인이 신청한 행사만 수정할 수 있습니다."),
+    FAIR_APPLICATION_NOT_EDITABLE(HttpStatus.CONFLICT, "F026", "심사 대기 중이거나 반려된 신청서만 수정할 수 있습니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),

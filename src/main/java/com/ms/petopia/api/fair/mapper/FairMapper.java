@@ -30,4 +30,23 @@ public interface FairMapper {
      * updated_at은 항상 현재 시각으로 갱신된다. applicant_user_id/created_at은 변경 대상이 아니다.
      */
     int update(Fair fair);
+
+    /**
+     * 신청서 심사(FairService#review) 전용 조건부 갱신. status = 'RECEIVED'일 때만 실제로
+     * 갱신된다(동시성 방어) - {@code FairCancelRequestMapper#update}와 동일한 패턴. "SELECT로
+     * RECEIVED 확인 후 UPDATE"는 두 검토 요청이 동시에 들어오면 둘 다 체크를 통과해버릴 수
+     * 있는데, 이 조건이 있으면 먼저 커밋되는 쪽만 실제로 행을 바꾸고 나머지는 영향 행 0건으로
+     * 실패한다.
+     */
+    int updateReviewResult(Fair fair);
+
+    /**
+     * 신청서 수정(재제출, FairService#updateApplication) 전용 조건부 갱신. status가
+     * RECEIVED 또는 REJECTED일 때만 실제로 갱신된다(동시성 방어 - {@link #updateReviewResult}와
+     * 동일한 패턴). 내용 필드는 null이 아닌 것만 반영하지만(PATCH), status/reject_reason/
+     * reviewed_by/reviewed_at은 이 갱신이 성공하는 순간 항상 RECEIVED/NULL/NULL/NULL로
+     * 되돌린다 - REJECTED였던 신청서가 수정으로 다시 심사 대기열에 설 때 이전 반려 사유가
+     * 남아있으면 안 되기 때문이다.
+     */
+    int updateApplication(Fair fair);
 }
