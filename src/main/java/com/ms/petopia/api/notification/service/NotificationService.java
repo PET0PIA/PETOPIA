@@ -14,6 +14,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -29,7 +30,7 @@ public class NotificationService {
     private final EmailSenderService emailSenderService;
     private final AuthMapper authMapper;
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SaveNotificationDto.Response save(SaveNotificationDto.Request request) {
         if (request.channels().size() != new HashSet<>(request.channels()).size()) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE, "channels에 중복된 값이 있습니다");
@@ -90,26 +91,18 @@ public class NotificationService {
         return user.getEmail();
     }
 
-    private void sendEmail(NotificationDelivery delivery, SaveNotificationDto.Request request){
-        try{
-            emailSenderService.send(
-                    delivery.getRecipientContact(),
-                    request.title(),
-                    request.body()
-            );
-            notificationDeliveryMapper.updateStatus(
-                    delivery.getDeliveryId(),
-                    DeliveryStatus.SENT,
-                    LocalDateTime.now(),
-                    null
-            );
+    private void sendEmail(NotificationDelivery delivery, SaveNotificationDto.Request request) {
+        try {
+            emailSenderService.send(delivery.getRecipientContact(), request.title(), request.body());
         } catch (Exception e) {
-            notificationDeliveryMapper.updateStatus(
-                    delivery.getDeliveryId(),
-                    DeliveryStatus.FAILED,
-                    null,
-                    e.getMessage()
-            );
+            notificationDeliveryMapper.updateStatus(delivery.getDeliveryId(), DeliveryStatus.FAILED, null, e.getMessage());
+            return;
+        }
+        // 발송 성공 — 상태 기록 실패 시 FAILED로 덮어쓰지 않고 PENDING으로 남긴다.
+        try {
+            notificationDeliveryMapper.updateStatus(delivery.getDeliveryId(), DeliveryStatus.SENT, LocalDateTime.now(), null);
+        } catch (Exception e) {
+            log.warn("이메일 발송 성공했으나 상태 갱신 실패. deliveryId={}", delivery.getDeliveryId(), e);
         }
     }
 

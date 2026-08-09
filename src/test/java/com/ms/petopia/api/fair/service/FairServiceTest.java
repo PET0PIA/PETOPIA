@@ -12,8 +12,11 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.auth.service.AdminAccountService;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
+import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
@@ -345,6 +348,14 @@ class FairServiceTest {
         verify(adminAccountService).issueEventAdminAccount(
                 FAIR_ID, USER_ID, "김담당", "manager@petopia.example", null
         );
+
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+        ArgumentCaptor<SaveNotificationDto.Request> notifCaptor =
+                ArgumentCaptor.forClass(SaveNotificationDto.Request.class);
+        verify(notificationService).save(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
+        assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_APPLICATION_APPROVED);
     }
 
     @Test
@@ -361,6 +372,14 @@ class FairServiceTest {
         assertThat(response.paymentDueAt()).isNull();
         assertThat(response.rejectReason()).isEqualTo("서류 미비");
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any());
+
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+        ArgumentCaptor<SaveNotificationDto.Request> notifCaptor =
+                ArgumentCaptor.forClass(SaveNotificationDto.Request.class);
+        verify(notificationService).save(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
+        assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_APPLICATION_REJECTED);
     }
 
     @Test

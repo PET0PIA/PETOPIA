@@ -120,6 +120,28 @@ class AuditLogQueryServiceTest {
         verify(auditLogMapper, never()).countByActionType(any());
     }
 
+    // ===== 빈 문자열·공백 정규화 =====
+
+    @Test
+    @DisplayName("targetType이 공백이면 null로 정규화되어 필터 없음 예외를 던진다")
+    void query_targetType이공백이면_null정규화로_예외를_던진다() {
+        assertThatThrownBy(() -> auditLogQueryService.query("  ", 3L, null, null, 0, 20))
+                .isInstanceOf(CommonException.class)
+                .satisfies(ex -> assertThat(((CommonException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        verify(auditLogMapper, never()).selectByTarget(any(), any(), anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("actionType이 빈 문자열이면 null로 정규화되어 필터 없음 예외를 던진다")
+    void query_actionType이빈문자열이면_null정규화로_예외를_던진다() {
+        assertThatThrownBy(() -> auditLogQueryService.query(null, null, null, "", 0, 20))
+                .isInstanceOf(CommonException.class)
+                .satisfies(ex -> assertThat(((CommonException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        verify(auditLogMapper, never()).selectByActionType(any(), anyLong(), anyInt());
+    }
+
     // ===== 페이지네이션 offset 계산 =====
 
     @Test
