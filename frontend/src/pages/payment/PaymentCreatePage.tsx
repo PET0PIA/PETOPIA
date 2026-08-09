@@ -6,6 +6,7 @@ import {
   createFairOpeningPayment,
   createReservationDepositPayment,
   createVendorFeePayment,
+  TEMP_PAYER_USER_ID,
   type PaymentDetail,
 } from "../../api/payment";
 import { Badge } from "../../components/ui/Badge";
@@ -134,7 +135,8 @@ function ConfirmSection() {
     setSubmitting(true);
     setError(null);
     try {
-      const confirmed = await confirmPayment(parsedPaymentId, paymentKey.trim());
+      // 관리자 테스트 도구라 로그인 사용자가 아니라 임시 결제자 ID로 호출한다.
+      const confirmed = await confirmPayment(parsedPaymentId, paymentKey.trim(), TEMP_PAYER_USER_ID);
       setResult(confirmed);
     } catch (err) {
       setResult(null);
@@ -176,7 +178,8 @@ function ConfirmSection() {
   );
 }
 
-// 예약금 결제. 예약이 "정원 임시선점" 상태여야 하고, 모의결제라 성공하면 바로 COMPLETED로 온다.
+// 예약금 결제. 참가비와 마찬가지로 PENDING + orderId로 응답이 오고, 실제 완료는
+// 위 "결제 승인 확정" 섹션(토스 confirm)까지 이어져야 한다.
 function ReservationDepositSection() {
   const [reservationId, setReservationId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -194,7 +197,8 @@ function ReservationDepositSection() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await createReservationDepositPayment(parsed);
+      // 관리자 테스트 도구라 로그인 사용자가 아니라 임시 결제자 ID로 호출한다.
+      const created = await createReservationDepositPayment(parsed, TEMP_PAYER_USER_ID);
       setResult(created);
     } catch (err) {
       setResult(null);
@@ -206,7 +210,7 @@ function ReservationDepositSection() {
 
   return (
     <section className="mb-10">
-      <SectionHeader title="예약금 결제 생성" description="예약이 정원 임시선점 상태이고 예약금이 0원보다 커야 해요. 모의결제라 성공 시 바로 완료 처리돼요." />
+      <SectionHeader title="예약금 결제 생성" description="예약이 결제대기 상태이고 예약금이 0원보다 커야 해요. 성공하면 PENDING 상태로 생성되고, 실제 완료는 위 승인 확정까지 필요해요." />
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
