@@ -2,18 +2,26 @@ package com.ms.petopia.api.auth.service;
 
 import com.ms.petopia.api.auth.domain.FairAdminAssignment;
 import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.dto.AdminAccountListItemResponse;
+import com.ms.petopia.api.auth.dto.EmailLoginRequest;
+import com.ms.petopia.api.auth.dto.TokenPair;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.auth.mapper.FairAdminAssignmentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.TokenHashUtil;
+import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /*
     행사 신청이 승인될 때 관리자 계정을 새로 발급해 주는 service
@@ -29,7 +37,11 @@ public class AdminAccountService {
     private final FairAdminAssignmentMapper fairAdminAssignmentMapper;
     private final MailService mailService;
     private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final RefreshTokenStore refreshTokenStore;
+    private final AccountSuspensionStore accountSuspensionStore;
 
+    //행사 관리자 계정 생성
     @Transactional
     public Long issueEventAdminAccount(Long fairId, Long applicantUserId,
                                        String managerName, String managerEmail, String managerPhone) {
@@ -88,4 +100,78 @@ public class AdminAccountService {
         return newAdmin.getUserId();
 
     }
+
+    //SUPER_ADMIN 전용 로그인
+    public TokenPair adminLogin(EmailLoginRequest request) {
+        User user = authMapper.selectUserByEmail(request.getEmail());
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            throw new CommonException(ErrorCode.INVALID_LOGIN);
+        }
+
+        if (!user.getRole().equals("SUPER_ADMIN")) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+
+        if (user.getStatus().equals("INACTIVE")) {
+            throw new CommonException(ErrorCode.ACCOUNT_INACTIVE);
+        }
+
+        String accessToken = jwtTokenProvider.generateAccessToken(user.getUserId(), user.getRole());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
+        String refreshTokenHash = TokenHashUtil.sha256(refreshToken);
+        refreshTokenStore.save(refreshTokenHash, user.getUserId(), Duration.ofDays(14));
+
+        return new TokenPair(accessToken, refreshToken);
+    }
+
+
+    //관리자 계정 목록 조회
+    public List<AdminAccountListItemResponse> getAdminAccounts() {
+        return authMapper.selectAdminAccounts().stream()
+                .map(row -> new AdminAccountListItemResponse(
+                        row.getUserId(),
+                        row.getEmail(),
+                        row.getNickname(),
+                        row.getStatus(),
+                        row.getFairId(),
+                        row.getFairName(),
+                        row.getOperationStartDate(),
+                        row.getOperationEndDate()
+                ))
+                .toList();
+    }
+
+    //관리자 계정 정지/정지 해제
+    @Transactional
+    public void updateAccountStatus(Long userId, String status) {
+        int updated = authMapper.updateUserStatus(userId, status);
+        if (updated == 0) {
+            //대상 userId의 계정 자체가 없는 경우
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        //DB 커밋이 성공한 뒤에만 Redis denylist에 반영한다
+        deferOrRunNow(() -> {
+            if (status.equals("INACTIVE")) {
+                accountSuspensionStore.suspend(userId);
+            } else {
+                accountSuspensionStore.reactivate(userId);
+            }
+        });
+    }
+
+    //현재 진행 중인 @Transactional이 있으면 그 커밋 성공 후로 실행을 미루고 없으면 즉시 실행한다
+    private void deferOrRunNow(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
+    }
+
 }

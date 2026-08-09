@@ -33,6 +33,7 @@ import { SignupPage } from "../pages/auth/SignupPage";
 import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
+import { AdminLoginPage } from "../pages/auth/AdminLoginPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin을 ProtectedRoute로 감싸기
 // import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -85,6 +86,8 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* PublicLayout(공개 헤더/푸터) 밖에 독립 라우트로 둔다 - 일반 홈페이지 어디에도 링크 안 걸린 숨겨진 진입점 */}
+        <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route element={<PublicLayout />}>
           <Route index element={<HomePage />} />
           <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />

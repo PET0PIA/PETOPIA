@@ -177,6 +177,7 @@ class AuthServiceTest {
                 .email(EMAIL)
                 .passwordHash("hashed")
                 .role("USER")
+                .status("ACTIVE")
                 .emailVerified(false)
                 .build();
         given(authMapper.selectUserByEmail(EMAIL)).willReturn(user);
@@ -196,6 +197,7 @@ class AuthServiceTest {
                 .email(EMAIL)
                 .passwordHash("hashed")
                 .role("USER")
+                .status("ACTIVE")
                 .emailVerified(true)
                 .build();
     }

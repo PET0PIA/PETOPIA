@@ -44,7 +44,13 @@ const PHONE_PATTERN = /^01[0-9]-?\d{3,4}-?\d{4}$/;
 //  날아가 "다시 회원가입하라"는 화면이 뜨는 문제가 있었음)
 type Step = "form" | "verify" | "verified";
 
-function label(text: string, required = false) {
+function label(text: string, htmlFor: string, required = false) {
+  return <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</label>;
+}
+
+// 성별처럼 라디오 그룹 전체를 아우르는 제목은 특정 input 하나에 매어둘 수 없어서 label() 대신 이걸 쓴다
+// (진짜로 접근성을 제대로 하려면 <fieldset><legend>이 맞지만, 지금 범위 밖이라 시각적 표기만 맞춤)
+function groupLabel(text: string, required = false) {
   return <span className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</span>;
 }
 
@@ -213,8 +219,8 @@ export function SignupPage() {
 
           <form onSubmit={handleVerifySubmit} className="space-y-5">
             <div>
-              <span className="mb-1.5 block text-sm font-bold text-ink">인증 코드</span>
-              <Input required value={code} onChange={(event) => setCode(event.target.value)} />
+              <label htmlFor="signup-code" className="mb-1.5 block text-sm font-bold text-ink">인증 코드</label>
+              <Input id="signup-code" required value={code} onChange={(event) => setCode(event.target.value)} />
             </div>
             <Button type="submit" className="w-full" disabled={verifying}>
               {verifying ? "확인 중..." : "인증하기"}
@@ -245,9 +251,9 @@ export function SignupPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            {label("이메일", true)}
+            {label("이메일", "signup-email", true)}
             <div className="flex gap-2">
-              <Input type="email" required value={form.email} onChange={(event) => update("email", event.target.value)} />
+              <Input id="signup-email" type="email" required value={form.email} onChange={(event) => update("email", event.target.value)} />
               <Button type="button" variant="outline" className="shrink-0 whitespace-nowrap" onClick={handleCheckEmail} disabled={emailCheckStatus === "checking"}>
                 중복확인
               </Button>
@@ -258,8 +264,9 @@ export function SignupPage() {
           </div>
 
           <div>
-            {label("비밀번호", true)}
+            {label("비밀번호", "signup-password", true)}
             <Input
+              id="signup-password"
               type="password"
               autoComplete="new-password"
               required
@@ -269,23 +276,23 @@ export function SignupPage() {
             />
           </div>
           <div>
-            {label("비밀번호 확인", true)}
-            <Input type="password" autoComplete="new-password" required value={form.passwordConfirm} onChange={(event) => update("passwordConfirm", event.target.value)} />
+            {label("비밀번호 확인", "signup-password-confirm", true)}
+            <Input id="signup-password-confirm" type="password" autoComplete="new-password" required value={form.passwordConfirm} onChange={(event) => update("passwordConfirm", event.target.value)} />
           </div>
           <div>
-            {label("닉네임", true)}
-            <Input placeholder="실명을 입력해 주세요" required value={form.nickname} onChange={(event) => update("nickname", event.target.value)} />
+            {label("닉네임", "signup-nickname", true)}
+            <Input id="signup-nickname" placeholder="실명을 입력해 주세요" required value={form.nickname} onChange={(event) => update("nickname", event.target.value)} />
           </div>
           <div>
-            {label("생년월일", true)}
-            <Input type="date" max={maxBirthDate()} required value={form.birthDate} onChange={(event) => update("birthDate", event.target.value)} />
+            {label("생년월일", "signup-birth-date", true)}
+            <Input id="signup-birth-date" type="date" max={maxBirthDate()} required value={form.birthDate} onChange={(event) => update("birthDate", event.target.value)} />
           </div>
           <div>
-            {label("휴대폰 번호", true)}
-            <Input placeholder="010-1234-5678" required value={form.phone} onChange={(event) => update("phone", event.target.value)} />
+            {label("휴대폰 번호", "signup-phone", true)}
+            <Input id="signup-phone" placeholder="010-1234-5678" required value={form.phone} onChange={(event) => update("phone", event.target.value)} />
           </div>
           <div>
-            {label("성별", true)}
+            {groupLabel("성별", true)}
             <div className="flex gap-4">
               {(["남성", "여성"] as const).map((option) => (
                 <label key={option} className="flex items-center gap-2 text-sm text-ink">
@@ -296,8 +303,8 @@ export function SignupPage() {
             </div>
           </div>
           <div>
-            {label("주소", true)}
-            <Input placeholder="예) 서울특별시 노원구" required value={form.address} onChange={(event) => update("address", event.target.value)} />
+            {label("주소", "signup-address", true)}
+            <Input id="signup-address" placeholder="예) 서울특별시 노원구" required value={form.address} onChange={(event) => update("address", event.target.value)} />
           </div>
 
           <div className="space-y-2 border-t border-line pt-5">

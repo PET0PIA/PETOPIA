@@ -2,6 +2,7 @@ package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationCancelRequest;
+import com.ms.petopia.api.application.domain.BoothSlotHallRef;
 import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
@@ -11,6 +12,7 @@ import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.fair.service.BoothSlotService;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
@@ -80,6 +82,9 @@ class ApplicationServiceTest {
 
     @Mock
     private BoothMapper boothMapper;
+
+    @Mock
+    private BoothSlotService boothSlotService;
 
     @InjectMocks
     private ApplicationService applicationService;
@@ -256,6 +261,11 @@ class ApplicationServiceTest {
                     .build();
             given(applicationMapper.selectById(any())).willReturn(saved);
 
+            given(applicationMapper.selectSlotHallRefsByApplicationId(any())).willReturn(List.of(
+                    BoothSlotHallRef.builder().boothSlotId(1L).hallId(10L).build(),
+                    BoothSlotHallRef.builder().boothSlotId(2L).hallId(10L).build()
+            ));
+
             // when
             ApplicationResponse result = applicationService.submitApplication(ownerId, fairId, request);
 
@@ -277,6 +287,9 @@ class ApplicationServiceTest {
             verify(applicationMapper).releaseBoothSlotLock(2L);
             // 같은 사업자 동시 신청 직렬화용 락이 걸렸는지 확인
             verify(businessMapper).lockBusinessForApplication(1L);
+            // 슬롯 저장 직후 fair 도메인에 잠금 요청했는지 확인
+            verify(boothSlotService).lockBoothSlot(10L, 1L);
+            verify(boothSlotService).lockBoothSlot(10L, 2L);
 
         }
 
@@ -1221,6 +1234,9 @@ class ApplicationServiceTest {
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.updateApplicationRejected(eq(applicationId), eq("부적합"), any()))
                     .willReturn(1);
+            given(applicationMapper.selectSlotHallRefsByApplicationId(applicationId)).willReturn(List.of(
+                    BoothSlotHallRef.builder().boothSlotId(1L).hallId(10L).build()
+            ));
 
             // when
             ApplicationReviewResultResponse result =
@@ -1229,6 +1245,8 @@ class ApplicationServiceTest {
             // then: 상태와 반려 사유가 응답에 정확히 담겼는지 확인
             assertThat(result.getStatus()).isEqualTo("REJECTED");
             assertThat(result.getRejectReason()).isEqualTo("부적합");
+
+            verify(boothSlotService).unlockBoothSlot(10L, 1L);
 
         }
 
@@ -1720,6 +1738,9 @@ class ApplicationServiceTest {
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
             given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
             given(applicationMapper.selectPaymentIdByApplicationId(applicationId)).willReturn(null);
+            given(applicationMapper.selectSlotHallRefsByApplicationId(applicationId)).willReturn(List.of(
+                    BoothSlotHallRef.builder().boothSlotId(1L).hallId(10L).build()
+            ));
 
             // when
             ApplicationCancelRequestResultResponse result =
@@ -1731,6 +1752,7 @@ class ApplicationServiceTest {
 
             // 결제 전(PAYMENT_PENDING) 상태였으니 환불은 시도되지 않아야 함
             verify(refundService, never()).refund(any(), any(), any());
+            verify(boothSlotService).unlockBoothSlot(10L, 1L);
 
         }
 
@@ -2304,12 +2326,16 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
             given(applicationMapper.updateApplicationCanceled(applicationId)).willReturn(1);
+            given(applicationMapper.selectSlotHallRefsByApplicationId(applicationId)).willReturn(List.of(
+                    BoothSlotHallRef.builder().boothSlotId(1L).hallId(10L).build()
+            ));
 
             // when
             boolean result = applicationService.cancelApplicationForCanceledFair(applicationId);
 
             // then
             assertThat(result).isTrue();
+            verify(boothSlotService).unlockBoothSlot(10L, 1L);
 
         }
 

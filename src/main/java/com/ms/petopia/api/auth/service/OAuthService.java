@@ -94,6 +94,11 @@ public class OAuthService {
             throw new CommonException(ErrorCode.OAUTH_PENDING_NOT_FOUND);
         }
 
+        //정지된 계정인지 확인 - 안 하면 정지된 EVENT_ADMIN이 소셜 로그인으로는 여전히 뚫림 (AuthService.login()과 동일 체크)
+        if (user.getStatus().equals("INACTIVE")) {
+            throw new CommonException(ErrorCode.ACCOUNT_INACTIVE);
+        }
+
         return issueTokens(user.getUserId(), user.getRole());
     }
 

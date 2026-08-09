@@ -2,8 +2,11 @@ package com.ms.petopia.api.auth.mapper;
 
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.domain.UserToken;
+import com.ms.petopia.api.auth.dto.AdminAccountRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 @Mapper
 public interface AuthMapper {
@@ -64,4 +67,10 @@ public interface AuthMapper {
             @Param("tokenHash") String tokenHash,
             @Param("purpose") String purpose
     );
+
+    //관리자 계정 목록 조회
+    List<AdminAccountRow> selectAdminAccounts();
+
+    //관리자 계정 활성/정지 전환
+    int updateUserStatus(@Param("userId") Long userId, @Param("status") String status);
 }
