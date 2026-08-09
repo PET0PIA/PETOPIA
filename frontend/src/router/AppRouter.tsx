@@ -5,6 +5,7 @@ import { PublicLayout } from "../layouts/PublicLayout";
 import { SuperAdminLayout } from "../layouts/SuperAdminLayout";
 import { HomePage } from "../pages/home/HomePage";
 import { FairApplicationNewPage } from "../pages/fair/FairApplicationNewPage";
+import { FairApplicationEditPage } from "../pages/fair/FairApplicationEditPage";
 import { MyFairApplicationsPage } from "../pages/fair/MyFairApplicationsPage";
 import { MyFairApplicationDetailPage } from "../pages/fair/MyFairApplicationDetailPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
@@ -98,6 +99,7 @@ export function AppRouter() {
           <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />
           <Route path="/fair-applications/me" element={<MyFairApplicationsPage />} />
           <Route path="/fair-applications/me/:fairId" element={<MyFairApplicationDetailPage />} />
+          <Route path="/fair-applications/me/:fairId/edit" element={<FairApplicationEditPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />

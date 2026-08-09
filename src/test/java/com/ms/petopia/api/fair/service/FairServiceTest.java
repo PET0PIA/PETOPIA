@@ -215,6 +215,19 @@ class FairServiceTest {
         assertThat(response.name()).isEqualTo(fair.getName());
         assertThat(response.status()).isEqualTo("RECEIVED");
         assertThat(response.managerEmail()).isEqualTo(fair.getManagerEmail());
+        assertThat(response.publishedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("공개된 행사는 publishedAt이 그대로 매핑된다 (관리자 화면이 공개 여부를 판단하는 값)")
+    void getApplication_공개된행사는_publishedAt이_매핑된다() {
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
+        fair.setPublishedAt(NOW.minusHours(3));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        FairApplicationDetailResponse response = fairService.getApplication(FAIR_ID, REVIEWER_ID);
+
+        assertThat(response.publishedAt()).isEqualTo(NOW.minusHours(3));
     }
 
     @Test

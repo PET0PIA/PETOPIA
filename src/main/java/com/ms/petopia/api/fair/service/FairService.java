@@ -424,7 +424,8 @@ public class FairService {
                 fair.getReviewedAt(),
                 fair.getPaymentDueAt(),
                 fair.getCreatedAt(),
-                fair.getCanceledAt()
+                fair.getCanceledAt(),
+                fair.getPublishedAt()
         );
     }
 

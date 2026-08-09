@@ -82,6 +82,9 @@ export interface FairApplicationDetail {
   /** 취소 승인 일시(취소 아니면 null). 취소 승인은 status는 그대로 두고 이 필드만 채우므로,
    * 취소 여부는 status가 아니라 이 필드로 판단해야 한다. */
   canceledAt: string | null;
+  /** 공개(예약 오픈) 일시(미공개면 null). publish()로만 채워지고 status와는 독립적이다 -
+   * 관리자 검토 화면이 "공개하기" 버튼을 보여줄지 이 값으로 판단한다. */
+  publishedAt: string | null;
 }
 
 // 백엔드 SecurityConfig 기준 SUPER_ADMIN 전용(관리자 검토 화면). 신청자 본인 조회는
@@ -90,6 +93,41 @@ export interface FairApplicationDetail {
 // 일반 사용자가 이 함수를 부르면 403이 난다.
 export function getFairApplication(fairId: number) {
   return apiClient.get<FairApplicationDetail>(`/api/fairs/${fairId}`);
+}
+
+/**
+ * 신청서 수정(재제출) 요청. RECEIVED(심사 대기) 또는 REJECTED(반려) 상태의 신청서만 수정할 수
+ * 있고, REJECTED였다면 이 요청이 성공하는 순간 RECEIVED로 되돌아가 다시 심사 대기열에 선다.
+ * PATCH 의미론이라 값을 비우면(undefined) 기존 값을 유지한다 - 값을 지우고 싶다는 의도는
+ * 이 요청으로 표현할 수 없다(CreateFairApplicationRequest와 동일한 제약).
+ */
+export interface UpdateFairApplicationRequest {
+  name: string;
+  description?: string;
+  category?: FairCategory;
+  posterImageObjectKey?: string;
+  noticeText?: string;
+  placeName?: string;
+  address?: string;
+  indoorOutdoor?: IndoorOutdoor;
+  vendorRecruitStartDate?: string;
+  vendorRecruitEndDate?: string;
+  reservationStartDate?: string;
+  reservationEndDate?: string;
+  operationStartDate?: string;
+  operationEndDate?: string;
+  reservationFee?: number;
+  reservationCancelDeadlineHours?: number;
+  reservationChangeDeadlineHours?: number;
+  managerName: string;
+  managerPhone?: string;
+  managerEmail: string;
+}
+
+/** 본인 신청서를 수정(재제출)한다. 본인 신청서가 아니거나 수정 가능한 상태(RECEIVED/REJECTED)가
+ * 아니면 에러가 난다. */
+export function updateFairApplication(fairId: number, payload: UpdateFairApplicationRequest) {
+  return apiClient.patch<FairApplicationDetail>(`/api/fairs/${fairId}`, payload);
 }
 
 export interface FairApplicationSummary {
@@ -157,6 +195,21 @@ export interface ReviewFairApplicationResponse {
 
 export function reviewFairApplication(fairId: number, payload: ReviewFairApplicationRequest) {
   return apiClient.patch<ReviewFairApplicationResponse>(`/api/fairs/${fairId}/review`, payload);
+}
+
+export interface PublishFairResponse {
+  fairId: number;
+  status: string;
+  publishedAt: string;
+}
+
+/**
+ * 행사를 공개해 예약을 받을 수 있게 한다(fairs.published_at 설정). 심사 승인 이후
+ * (PAYMENT_PENDING~IN_PROGRESS) 상태에서만 가능하고, 취소된 행사는 공개할 수 없다.
+ * 이미 공개된 행사를 다시 호출해도 에러 없이 최초 공개 결과를 그대로 반환한다(멱등).
+ */
+export function publishFair(fairId: number) {
+  return apiClient.patch<PublishFairResponse>(`/api/fairs/${fairId}/publish`);
 }
 
 export interface Hall {

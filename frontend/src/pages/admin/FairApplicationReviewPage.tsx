@@ -1,8 +1,9 @@
-import { AlertCircle, Check, Search, X } from "lucide-react";
+import { AlertCircle, Check, Globe, Search, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   getFairApplication,
+  publishFair,
   reviewFairApplication,
   type FairApplicationDetail,
 } from "../../api/fair";
@@ -14,6 +15,7 @@ import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Textarea } from "../../components/ui/Textarea";
+import { useConfirm } from "../../components/ui/useConfirm";
 
 const statusLabels: Record<string, string> = {
   RECEIVED: "심사 대기",
@@ -24,6 +26,11 @@ const statusLabels: Record<string, string> = {
   IN_PROGRESS: "진행 중",
   ENDED: "종료",
 };
+
+// 공개(publish)는 심사 승인 이후(PAYMENT_PENDING~IN_PROGRESS) 상태에서만 가능하다
+// (FairService.PUBLISHABLE_STATUSES와 동일한 목록을 FE에서도 미리 확인해 불필요한 요청을 막는다 -
+// 최종 판단은 항상 백엔드가 한다).
+const PUBLISHABLE_STATUSES = new Set(["PAYMENT_PENDING", "PREPARING", "IN_PROGRESS"]);
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -44,6 +51,8 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export function FairApplicationReviewPage() {
+  const { confirm, confirmDialog } = useConfirm();
+
   const [fairIdInput, setFairIdInput] = useState("");
   const [detail, setDetail] = useState<FairApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,6 +62,9 @@ export function FairApplicationReviewPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
+
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   async function handleLoad(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -65,6 +77,7 @@ export function FairApplicationReviewPage() {
     setLoading(true);
     setLoadError(null);
     setReviewError(null);
+    setPublishError(null);
     try {
       const data = await getFairApplication(parsed);
       setDetail(data);
@@ -112,7 +125,29 @@ export function FairApplicationReviewPage() {
     }
   }
 
+  async function handlePublish() {
+    if (!detail) return;
+    const proceed = await confirm({
+      title: "행사를 공개할까요?",
+      description: "공개하면 즉시 티켓 예매 화면에 노출되고 관람객 예약을 받을 수 있어요.",
+      confirmLabel: "공개",
+    });
+    if (!proceed) return;
+
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const result = await publishFair(detail.fairId);
+      setDetail({ ...detail, publishedAt: result.publishedAt });
+    } catch (error) {
+      setPublishError(error instanceof ApiError ? error.message : "공개 처리에 실패했어요.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   const isPendingReview = detail?.status === "RECEIVED";
+  const canPublish = detail !== null && !detail.canceledAt && !detail.publishedAt && PUBLISHABLE_STATUSES.has(detail.status);
 
   return (
     <div className="mx-auto max-w-5xl py-2">
@@ -150,19 +185,42 @@ export function FairApplicationReviewPage() {
               <p className="text-sm text-muted">신청서 #{detail.fairId} · 신청자 #{detail.applicantUserId}</p>
               {detail.rejectReason && <p className="mt-2 text-sm text-primary-strong">반려 사유: {detail.rejectReason}</p>}
               {detail.paymentDueAt && <p className="mt-2 text-sm text-muted">개설비 결제 기한: {formatDateTime(detail.paymentDueAt)}</p>}
+              {detail.publishedAt ? (
+                <p className="mt-2 flex items-center gap-1.5 text-sm font-bold text-ink">
+                  <Globe size={14} />
+                  {formatDateTime(detail.publishedAt)}에 공개됨 (티켓 예매 화면에 노출 중)
+                </p>
+              ) : detail.canceledAt ? (
+                <p className="mt-2 text-sm text-muted">취소된 행사라 공개할 수 없어요.</p>
+              ) : null}
             </div>
-            {isPendingReview && (
-              <div className="flex shrink-0 gap-2">
-                <Button variant="outline" onClick={() => setRejectDialogOpen(true)} disabled={reviewing}><X size={16} />반려</Button>
-                <Button onClick={handleApprove} disabled={reviewing}><Check size={16} />{reviewing ? "처리 중..." : "승인"}</Button>
-              </div>
-            )}
+            <div className="flex shrink-0 gap-2">
+              {isPendingReview && (
+                <>
+                  <Button variant="outline" onClick={() => setRejectDialogOpen(true)} disabled={reviewing}><X size={16} />반려</Button>
+                  <Button onClick={handleApprove} disabled={reviewing}><Check size={16} />{reviewing ? "처리 중..." : "승인"}</Button>
+                </>
+              )}
+              {canPublish && (
+                <Button onClick={handlePublish} disabled={publishing}>
+                  <Globe size={16} />
+                  {publishing ? "공개 처리 중..." : "공개하기"}
+                </Button>
+              )}
+            </div>
           </Card>
 
           {reviewError && (
             <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
               <p>{reviewError}</p>
+            </div>
+          )}
+
+          {publishError && (
+            <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <p>{publishError}</p>
             </div>
           )}
 
@@ -226,6 +284,8 @@ export function FairApplicationReviewPage() {
           </div>
         </form>
       </Dialog>
+
+      {confirmDialog}
     </div>
   );
 }

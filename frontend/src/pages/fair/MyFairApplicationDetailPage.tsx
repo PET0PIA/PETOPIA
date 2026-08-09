@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronLeft } from "lucide-react";
+import { AlertCircle, ChevronLeft, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -6,6 +6,10 @@ import { Badge } from "../../components/ui/Badge";
 import { Card } from "../../components/ui/Card";
 import { ApiError } from "../../api/client";
 import { getMyApplicationDetail, type FairApplicationDetail } from "../../api/fair";
+
+// 신청서 수정(재제출)은 RECEIVED(심사 대기)·REJECTED(반려) 상태에서만 가능하다
+// (FairService#updateApplication 참고).
+const EDITABLE_STATUSES = new Set(["RECEIVED", "REJECTED"]);
 
 const statusLabels: Record<string, string> = {
   RECEIVED: "심사 대기",
@@ -146,13 +150,23 @@ function MyFairApplicationDetailContent({ id }: { id: number }) {
     <div className="mx-auto max-w-3xl py-2">
       <BackLink />
 
-      <div className="mt-4 mb-6">
-        <div className="mb-2 flex items-center gap-2">
-          <Badge tone={statusTones[displayStatus] ?? "neutral"}>
-            {statusLabels[displayStatus] ?? displayStatus}
-          </Badge>
+      <div className="mt-4 mb-6 flex items-start justify-between gap-4">
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <Badge tone={statusTones[displayStatus] ?? "neutral"}>
+              {statusLabels[displayStatus] ?? displayStatus}
+            </Badge>
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{detail.name}</h1>
         </div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{detail.name}</h1>
+        {!detail.canceledAt && EDITABLE_STATUSES.has(detail.status) && (
+          <Link
+            to={`/fair-applications/me/${detail.fairId}/edit`}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-button border border-line bg-card px-4 text-sm font-bold text-ink hover:bg-page"
+          >
+            <Pencil size={16} />수정하기
+          </Link>
+        )}
       </div>
 
       {detail.canceledAt && (
