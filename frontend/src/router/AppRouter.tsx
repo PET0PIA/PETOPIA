@@ -46,6 +46,7 @@ import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
 import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
 import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
 import { BusinessDetailPage } from "../pages/business/BusinessDetailPage";
+import { RecruitNoticeFormPage } from "../pages/recruit-notice/RecruitNoticeFormPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin을 ProtectedRoute로 감싸기
 // import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -136,6 +137,7 @@ export function AppRouter() {
           <Route path="statistics" element={<VisitStatisticsPage />} />
           <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
           <Route path="cancellation" element={<FairCancelRequestPage />} />
+          <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
           {fairAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
           ))}

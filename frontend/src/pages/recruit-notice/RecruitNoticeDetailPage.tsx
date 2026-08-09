@@ -3,18 +3,22 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
+import { SectionHeader } from "../../components/common/SectionHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Badge } from "../../components/ui/Badge";
 import { Card } from "../../components/ui/Card";
-import { Table } from "../../components/ui/Table";
+import { HallBoothMap } from "../../components/booth-map/HallBoothMap";
 import { ApiError } from "../../api/client";
-import { getRecruitNotice, type BoothSlotStatus, type RecruitNotice } from "../../api/recruitNotice";
+import { useAuth } from "../../contexts/AuthContext";
+import { Pencil } from "lucide-react";
+import { getRecruitNotice, type BoothSlotStatus, type RecruitNotice, type RecruitNoticeBoothSlot } from "../../api/recruitNotice";
 
 const slotStatusLabels: Record<BoothSlotStatus, string> = {
   AVAILABLE: "선택 가능",
   PENDING: "확정 대기",
   CONFIRMED: "확정 완료",
 };
+
 const slotStatusTones: Record<BoothSlotStatus, "leaf" | "sun" | "neutral"> = {
   AVAILABLE: "leaf",
   PENDING: "sun",
@@ -25,8 +29,29 @@ function formatDeadline(value: string) {
   return new Date(value).toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+// 슬롯이 속한 booth_slots.locked_at 여부가 아니라, 우리 도메인이 계산한 status로 배치도 잠금 표시를 결정한다.
+function toSlotCaption(slot: RecruitNoticeBoothSlot): string {
+  if (slot.status === "CONFIRMED" && slot.businessName) return slot.businessName;
+  return slotStatusLabels[slot.status];
+}
+
+// 홀별로 그룹핑한다 - posX/posY가 홀마다 다른 도면 기준 좌표라 섞어서 그리면 안 된다.
+function groupByHall(slots: RecruitNoticeBoothSlot[]) {
+  const groups = new Map<number, { hallName: string; floorPlanImageUrl: string | null; slots: RecruitNoticeBoothSlot[] }>();
+  for (const slot of slots) {
+    const group = groups.get(slot.hallId);
+    if (group) {
+      group.slots.push(slot);
+    } else {
+      groups.set(slot.hallId, { hallName: slot.hallName, floorPlanImageUrl: slot.floorPlanImageUrl, slots: [slot] });
+    }
+  }
+  return [...groups.entries()].map(([hallId, group]) => ({ hallId, ...group }));
+}
+
 export function RecruitNoticeDetailPage() {
   const { fairId } = useParams<{ fairId: string }>();
+  const { user } = useAuth();
   const [notice, setNotice] = useState<RecruitNotice | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -58,12 +83,25 @@ export function RecruitNoticeDetailPage() {
     );
   }
 
+  const hallGroups = groupByHall(notice.boothSlots);
+
   return (
     <PageContainer className="py-10">
       <PageHeader
         eyebrow="참가업체 모집"
         title={notice.title}
         description={notice.closed ? "모집이 마감된 공고예요." : "아래 부스 슬롯 현황을 확인하고 신청해 주세요."}
+        action={
+          user?.role === "EVENT_ADMIN" ? (
+            <Link
+              to={`/fairs/${notice.fairId}/recruit-notice/edit`}
+              className="inline-flex min-h-11 items-center gap-2 rounded-button border border-line bg-card px-4 text-sm font-bold hover:bg-page"
+            >
+              <Pencil size={16} />
+              수정하기
+            </Link>
+          ) : undefined
+        }
       />
 
       {notice.imageUrl && (
@@ -82,30 +120,37 @@ export function RecruitNoticeDetailPage() {
       </Card>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-lg font-extrabold">부스 슬롯 현황</h2>
-        {notice.boothSlots.length === 0 ? (
+        <SectionHeader title="부스 슬롯 현황" />
+        {hallGroups.length === 0 ? (
           <EmptyState title="등록된 부스 슬롯이 없어요" />
         ) : (
-          <Table>
-            <thead>
-              <tr className="border-b border-line text-xs font-bold text-muted">
-                <th className="px-4 py-3">슬롯 번호</th>
-                <th className="px-4 py-3">가격</th>
-                <th className="px-4 py-3">상태</th>
-                <th className="px-4 py-3">확정 업체</th>
-              </tr>
-            </thead>
-            <tbody>
-              {notice.boothSlots.map((slot) => (
-                <tr key={slot.boothSlotsId} className="border-b border-line last:border-0">
-                  <td className="px-4 py-3 font-bold">{slot.slotNumber}</td>
-                  <td className="px-4 py-3">{slot.price.toLocaleString()}원</td>
-                  <td className="px-4 py-3"><Badge tone={slotStatusTones[slot.status]}>{slotStatusLabels[slot.status]}</Badge></td>
-                  <td className="px-4 py-3 text-muted">{slot.businessName ?? "-"}</td>
-                </tr>
+          <>
+            <div className="space-y-6">
+              {hallGroups.map((group) => (
+                <HallBoothMap
+                  key={group.hallId}
+                  hallName={group.hallName}
+                  backgroundImageUrl={group.floorPlanImageUrl}
+                  slots={group.slots.map((slot) => ({
+                    boothSlotsId: slot.boothSlotsId,
+                    slotNumber: slot.slotNumber,
+                    posX: slot.posX,
+                    posY: slot.posY,
+                    width: slot.width,
+                    height: slot.height,
+                    caption: toSlotCaption(slot),
+                    tone: slotStatusTones[slot.status],
+                    locked: slot.status !== "AVAILABLE",
+                  }))}
+                />
               ))}
-            </tbody>
-          </Table>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
+              <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded-sm bg-leaf-soft" /> 선택 가능</span>
+              <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded-sm bg-sun-soft" /> 확정 대기</span>
+              <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded-sm bg-muted/15" /> 확정 완료</span>
+            </div>
+          </>
         )}
       </section>
 
