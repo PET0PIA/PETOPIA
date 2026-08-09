@@ -69,7 +69,7 @@ public class FairCancelRequestService {
      * {@link DuplicateKeyException}을 잡아 동일한 에러 코드로 변환한다.
      *
      * <p>SecurityConfig는 EVENT_ADMIN role만 확인하고 "그 행사 담당자인지"는 못 가린다
-     * (코드래빗 지적 - role만 있으면 다른 행사 EVENT_ADMIN도 신청할 수 있었음) - 그래서
+     * (role만 있으면 다른 행사 EVENT_ADMIN도 신청할 수 있다) - 그래서
      * {@link FairAdminAccessGuard}로 여기서 한 번 더 확인한다.
      */
     @Transactional
@@ -107,8 +107,8 @@ public class FairCancelRequestService {
     /**
      * 특정 행사의 취소 신청 이력을 최신순으로 조회한다. requestedBy/reason/rejectReason처럼
      * 그 행사 내부 사정이 담기므로, SecurityConfig의 role 검증(EVENT_ADMIN/SUPER_ADMIN)만으로는
-     * 부족하다 - 다른 행사 EVENT_ADMIN이 이 API로 남의 행사 이력을 볼 수 있었던 문제(코드래빗
-     * 지적)를 막기 위해 {@link FairAdminAccessGuard}로 담당 행사인지 한 번 더 확인한다.
+     * 부족하다 - 다른 행사 EVENT_ADMIN이 이 API로 남의 행사 이력을 볼 수 있는 문제를 막기
+     * 위해 {@link FairAdminAccessGuard}로 담당 행사인지 한 번 더 확인한다.
      */
     @Transactional(readOnly = true)
     public List<FairCancelRequestResponse> getCancelRequests(Long fairId) {

@@ -1,25 +1,13 @@
 import { apiClient } from "./client";
 
 /**
- * 백엔드 Fair 도메인이 실제 JWT 인증(@AuthenticationPrincipal)으로 전환돼서, 이 파일의 API는
- * 더 이상 X-User-Id로 사용자를 식별하지 않는다 - 아래 authHeaders()가 붙이는
- * Authorization: Bearer 토큰만 본다(reservation.ts와 동일 패턴).
- *
  * TEMP_USER_ID_HEADER / TEMP_APPLICANT_USER_ID는 이 파일 자체는 더 이상 안 쓰지만,
  * audit.ts/commissionRate.ts/notification.ts/settlement.ts가 아직 이 상수를 가져다 쓰고
- * 있어(해당 백엔드 도메인은 이번에 JWT로 전환 안 됨) 그대로 export만 유지한다.
+ * 있어(해당 백엔드 도메인은 JWT로 전환 안 됨) 그대로 export만 유지한다.
  * TODO 그 도메인들도 JWT로 전환되면 이 export를 제거한다.
  */
 export const TEMP_USER_ID_HEADER = "X-User-Id";
 export const TEMP_APPLICANT_USER_ID = 1;
-
-// TODO 인증 도메인(로그인/토큰 발급) 완성 후 client.ts가 토큰을 자동 주입하면 이 헬퍼는 불필요하다.
-const DEV_ACCESS_TOKEN_KEY = "accessToken";
-
-function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem(DEV_ACCESS_TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 export type FairCategory = "DOG" | "CAT" | "ETC";
 export type IndoorOutdoor = "INDOOR" | "OUTDOOR";
@@ -56,9 +44,7 @@ export interface CreateFairApplicationResponse {
 }
 
 export function createFairApplication(payload: CreateFairApplicationRequest) {
-  return apiClient.post<CreateFairApplicationResponse>("/api/fairs", payload, {
-    headers: authHeaders(),
-  });
+  return apiClient.post<CreateFairApplicationResponse>("/api/fairs", payload);
 }
 
 export interface FairApplicationDetail {
@@ -92,13 +78,32 @@ export interface FairApplicationDetail {
 }
 
 // 백엔드 SecurityConfig 기준 SUPER_ADMIN 전용(관리자 검토 화면). 신청자 본인 조회는
-// 별도 마이페이지 API(GET /api/fairs/mine, /api/fairs/{fairId}/mine, 아직 FE 미연동)를 쓴다.
-// 로그인 여부와 무관하게 누구나 볼 수 있어야 하는 화면(티켓 예매 등)은 이 함수 대신
-// getFairPublicSummary를 쓴다 - SUPER_ADMIN이 아닌 일반 사용자가 부르면 403이 난다.
+// getMyApplications/getMyApplicationDetail을 쓴다. 로그인 여부와 무관하게 누구나 볼 수
+// 있어야 하는 화면(티켓 예매 등)은 getFairPublicSummary를 쓴다 - SUPER_ADMIN이 아닌
+// 일반 사용자가 이 함수를 부르면 403이 난다.
 export function getFairApplication(fairId: number) {
-  return apiClient.get<FairApplicationDetail>(`/api/fairs/${fairId}`, {
-    headers: authHeaders(),
-  });
+  return apiClient.get<FairApplicationDetail>(`/api/fairs/${fairId}`);
+}
+
+export interface FairApplicationSummary {
+  fairId: number;
+  name: string;
+  status: string;
+  operationStartDate: string | null;
+  operationEndDate: string | null;
+  rejectReason: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+/** 마이페이지 "내 신청 현황" 목록. 로그인한 본인이 낸 신청서만 최신순으로 반환한다. */
+export function getMyApplications() {
+  return apiClient.get<FairApplicationSummary[]>("/api/fairs/mine");
+}
+
+/** 마이페이지 "내 신청 현황" 상세. 본인 신청서가 아니면 403이 난다. */
+export function getMyApplicationDetail(fairId: number) {
+  return apiClient.get<FairApplicationDetail>(`/api/fairs/${fairId}/mine`);
 }
 
 export interface FairPublicSummary {
@@ -141,9 +146,7 @@ export interface ReviewFairApplicationResponse {
 }
 
 export function reviewFairApplication(fairId: number, payload: ReviewFairApplicationRequest) {
-  return apiClient.patch<ReviewFairApplicationResponse>(`/api/fairs/${fairId}/review`, payload, {
-    headers: authHeaders(),
-  });
+  return apiClient.patch<ReviewFairApplicationResponse>(`/api/fairs/${fairId}/review`, payload);
 }
 
 export interface Hall {
@@ -162,27 +165,19 @@ export interface HallInput {
 }
 
 export function getHalls(fairId: number) {
-  return apiClient.get<Hall[]>(`/api/fairs/${fairId}/halls`, {
-    headers: authHeaders(),
-  });
+  return apiClient.get<Hall[]>(`/api/fairs/${fairId}/halls`);
 }
 
 export function createHall(fairId: number, payload: HallInput) {
-  return apiClient.post<Hall>(`/api/fairs/${fairId}/halls`, payload, {
-    headers: authHeaders(),
-  });
+  return apiClient.post<Hall>(`/api/fairs/${fairId}/halls`, payload);
 }
 
 export function updateHall(fairId: number, hallId: number, payload: HallInput) {
-  return apiClient.put<Hall>(`/api/fairs/${fairId}/halls/${hallId}`, payload, {
-    headers: authHeaders(),
-  });
+  return apiClient.put<Hall>(`/api/fairs/${fairId}/halls/${hallId}`, payload);
 }
 
 export function deleteHall(fairId: number, hallId: number) {
-  return apiClient.delete<void>(`/api/fairs/${fairId}/halls/${hallId}`, {
-    headers: authHeaders(),
-  });
+  return apiClient.delete<void>(`/api/fairs/${fairId}/halls/${hallId}`);
 }
 
 export interface BoothSlot {
@@ -227,15 +222,11 @@ export interface BoothLayoutResponse {
 }
 
 export function getBoothSlots(fairId: number, hallId: number) {
-  return apiClient.get<BoothLayoutResponse>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`, {
-    headers: authHeaders(),
-  });
+  return apiClient.get<BoothLayoutResponse>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`);
 }
 
 export function bulkSaveBoothSlots(fairId: number, hallId: number, payload: BulkSaveBoothSlotsRequest) {
-  return apiClient.put<BoothLayoutResponse>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`, payload, {
-    headers: authHeaders(),
-  });
+  return apiClient.put<BoothLayoutResponse>(`/api/fairs/${fairId}/halls/${hallId}/booth-slots`, payload);
 }
 
 export interface FairDate {
@@ -269,25 +260,69 @@ export interface UpdateFairDateRequest {
 }
 
 export function getFairDates(fairId: number) {
-  return apiClient.get<FairDate[]>(`/api/fairs/${fairId}/fair-dates`, {
-    headers: authHeaders(),
-  });
+  return apiClient.get<FairDate[]>(`/api/fairs/${fairId}/fair-dates`);
 }
 
 export function createFairDate(fairId: number, payload: CreateFairDateRequest) {
-  return apiClient.post<FairDate>(`/api/fairs/${fairId}/fair-dates`, payload, {
-    headers: authHeaders(),
-  });
+  return apiClient.post<FairDate>(`/api/fairs/${fairId}/fair-dates`, payload);
 }
 
 export function updateFairDate(fairId: number, fairDateId: number, payload: UpdateFairDateRequest) {
-  return apiClient.put<FairDate>(`/api/fairs/${fairId}/fair-dates/${fairDateId}`, payload, {
-    headers: authHeaders(),
-  });
+  return apiClient.put<FairDate>(`/api/fairs/${fairId}/fair-dates/${fairDateId}`, payload);
 }
 
 export function deleteFairDate(fairId: number, fairDateId: number) {
-  return apiClient.delete<void>(`/api/fairs/${fairId}/fair-dates/${fairDateId}`, {
-    headers: authHeaders(),
-  });
+  return apiClient.delete<void>(`/api/fairs/${fairId}/fair-dates/${fairDateId}`);
+}
+
+// ===== 행사 취소 신청/검토 =====
+
+export type FairCancelRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export interface FairCancelRequestItem {
+  fairCancelRequestId: number;
+  fairId: number;
+  requestedBy: number;
+  reason: string;
+  status: FairCancelRequestStatus;
+  rejectReason: string | null;
+  reviewedBy: number | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+/** 취소를 신청한다(EVENT_ADMIN, 자기 담당 행사만). PENDING 상태로 등록되고 SUPER_ADMIN 검토를 기다린다. */
+export function createFairCancelRequest(fairId: number, reason: string) {
+  return apiClient.post<FairCancelRequestItem>(`/api/fairs/${fairId}/fair-cancel-requests`, { reason });
+}
+
+/** 특정 행사의 취소 신청 이력을 최신순으로 조회한다(그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN). */
+export function getFairCancelRequests(fairId: number) {
+  return apiClient.get<FairCancelRequestItem[]>(`/api/fairs/${fairId}/fair-cancel-requests`);
+}
+
+export interface ReviewFairCancelRequestPayload {
+  decision: FairReviewDecision;
+  rejectReason?: string;
+}
+
+export interface ReviewFairCancelRequestResult {
+  fairCancelRequestId: number;
+  fairId: number;
+  status: string;
+  reviewedAt: string;
+  rejectReason: string | null;
+  canceledAt: string | null;
+}
+
+/** 취소 신청을 승인/반려한다(SUPER_ADMIN 전용). 승인하면 그 행사가 즉시 취소 처리된다. */
+export function reviewFairCancelRequest(
+  fairId: number,
+  cancelRequestId: number,
+  payload: ReviewFairCancelRequestPayload,
+) {
+  return apiClient.patch<ReviewFairCancelRequestResult>(
+    `/api/fairs/${fairId}/fair-cancel-requests/${cancelRequestId}/review`,
+    payload,
+  );
 }

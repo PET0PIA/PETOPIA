@@ -394,7 +394,7 @@ public class PaymentService {
         }
         // callerDomain이 CALLER_PAYMENT_TYPES에 등록 안 된 값(오타·미등록 호출자)이면
         // allowedTypes가 null이 되는데, 이걸 "제한 없음"으로 잘못 취급하면 등록 안 된 호출자가
-        // 모든 결제유형을 건드릴 수 있게 열려버린다(코드래빗 지적) - null도 명시적으로 거부한다.
+        // 모든 결제유형을 건드릴 수 있게 열려버린다 - null도 명시적으로 거부한다.
         Set<String> allowedTypes = CALLER_PAYMENT_TYPES.get(callerDomain);
         if (allowedTypes == null || !allowedTypes.contains(row.getPaymentType())) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
