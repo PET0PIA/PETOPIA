@@ -4,9 +4,13 @@ import com.ms.petopia.api.reservation.dto.PaymentConfirmationReservationRow;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletedCommand;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletionResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentReceiptRow;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.mapper.ReservationPaymentConfirmationMapper;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -41,8 +45,20 @@ class ReservationPaymentCompletionServiceTest {
     private ReservationTimeProvider timeProvider;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private NotificationService notificationService;
     @InjectMocks
     private ReservationPaymentCompletionService service;
+
+    @BeforeEach
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
 
     @Test
     void confirmsPendingReservationAndIssuesQr() {

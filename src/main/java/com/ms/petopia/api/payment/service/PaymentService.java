@@ -1,5 +1,10 @@
 package com.ms.petopia.api.payment.service;
 
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.*;
@@ -34,6 +39,7 @@ public class PaymentService {
     private final PaymentMapper paymentMapper;
     private final TossPaymentClient tossPaymentClient;
     private final ReservationPaymentContractClient reservationPaymentContractClient;
+    private final NotificationService notificationService;
 
     /**
      * 결제 ID로 상세 조회한다.
@@ -334,7 +340,27 @@ public class PaymentService {
             notifyReservationDomain(row);
         }
 
+        notifyPaymentCompleted(row);
+
         return PaymentResponse.from(row);
+    }
+
+    private void notifyPaymentCompleted(PaymentRow row) {
+        try {
+            notificationService.save(new SaveNotificationDto.Request(
+                    row.getPayerUserId(),
+                    RecipientType.USER,
+                    NotificationType.PAYMENT_COMPLETED,
+                    "결제가 완료되었습니다",
+                    row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
+                    null,
+                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                    null
+            ));
+        } catch (Exception e) {
+            log.error("결제 완료 알림 저장 실패. paymentId={}, userId={}",
+                    row.getPaymentId(), row.getPayerUserId(), e);
+        }
     }
 
     /**

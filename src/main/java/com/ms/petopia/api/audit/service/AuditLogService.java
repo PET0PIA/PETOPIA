@@ -7,6 +7,7 @@ import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
@@ -17,6 +18,7 @@ public class AuditLogService {
     private final AuditLogMapper auditLogMapper;
     private final ObjectMapper objectMapper; // JSON 변환용
 
+    @Transactional
     public void record(
         Long userId,
         ActorType actorType,

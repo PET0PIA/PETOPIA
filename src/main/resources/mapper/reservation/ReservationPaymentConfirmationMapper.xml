@@ -43,6 +43,7 @@
     <select id="selectReservationForUpdate" resultType="PaymentConfirmationReservationRow">
         SELECT reservation_id
              , fair_id          <!-- 실시간 통계 확인용 -->
+             , user_id
              , status
              , reservation_amount
              , payment_expires_at

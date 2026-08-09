@@ -12,6 +12,7 @@ import com.ms.petopia.api.payment.dto.ReservationPaymentCompletionResult;
 import com.ms.petopia.api.payment.dto.ReservationPaymentContext;
 import com.ms.petopia.api.payment.dto.TossPaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -60,6 +61,9 @@ class PaymentServiceTest {
     // payReservationDeposit(컨텍스트 조회)와 confirmPayment(완료 통지) 양쪽 테스트에서 씀.
     @Mock
     private ReservationPaymentContractClient reservationPaymentContractClient;
+
+    @Mock
+    private NotificationService notificationService;
 
     // PaymentService 생성자가 PaymentMapper를 받는 구조여야 동작함
     // (@RequiredArgsConstructor 패턴).

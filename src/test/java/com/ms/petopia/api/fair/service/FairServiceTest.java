@@ -14,10 +14,13 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.auth.service.AdminAccountService;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,12 +64,21 @@ class FairServiceTest {
     @Mock
     private AdminAccountService adminAccountService;
 
+    @Mock
+    private NotificationService notificationService;
+
     @InjectMocks
     private FairService fairService;
 
     @BeforeEach
-    void setUpTime() {
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
         org.mockito.Mockito.lenient().when(timeProvider.now()).thenReturn(NOW);
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
     }
 
     // ===== createApplication =====
