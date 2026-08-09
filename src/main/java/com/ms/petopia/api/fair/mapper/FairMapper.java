@@ -4,6 +4,8 @@ import com.ms.petopia.api.fair.dto.Fair;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 /**
  * fairs 테이블 매퍼.
  *
@@ -23,6 +25,14 @@ public interface FairMapper {
      * fairId로 단건 조회한다. 없으면 null.
      */
     Fair selectById(@Param("fairId") Long fairId);
+
+    /**
+     * 특정 신청자가 낸 모든 신청서를 최신순으로 조회한다. 마이페이지 "내 신청 현황"
+     * 목록용이라 상세 컬럼(managerPhone/managerEmail 등)까지 다 끌고 오지만, 응답
+     * DTO({@link com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse})에서 필요한
+     * 것만 추린다.
+     */
+    List<Fair> selectByApplicantUserId(@Param("applicantUserId") Long applicantUserId);
 
     /**
      * null이 아닌 필드만 갱신한다. 승인/반려/수정 등 API마다 채우는 필드가 달라서
@@ -49,4 +59,18 @@ public interface FairMapper {
      * 남아있으면 안 되기 때문이다.
      */
     int updateApplication(Fair fair);
+
+    /**
+     * 취소된({@code canceled_at IS NOT NULL}) 행사 중, 아직 정리할 PENDING 예약금·참가비
+     * 결제가 남아있는 것만 오래된 취소순으로 조회한다({@code FairCancelPendingPaymentService}
+     * 전용). {@code FairCancelRefundTargetMapper#selectUnenumeratedCanceledFairIds}처럼 별도
+     * 완료 기록 테이블을 두지 않는다 - PENDING 결제는 우리가 취소에 성공하지 못하는 한 계속
+     * PENDING으로 남아 다음 호출에서 자연히 다시 걸리므로(멱등) 완료 기록이 필요 없다.
+     *
+     * <p>다만 "아직 남은 PENDING이 있는지"(EXISTS)는 반드시 걸러야 한다(코드래빗 지적) -
+     * 이 조건 없이 canceled_at DESC로만 limit를 걸면, 취소된 행사 수가 limit를 넘는 순간
+     * 이미 다 정리된 최신 행사들이 매번 그 자리를 계속 차지해서 더 오래된 행사의 PENDING
+     * 결제가 배치 슬롯을 영영 못 받을 수 있다.
+     */
+    List<Long> selectCanceledFairIds(@Param("limit") int limit);
 }

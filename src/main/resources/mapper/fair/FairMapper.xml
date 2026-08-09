@@ -79,6 +79,23 @@
          WHERE fair_id = #{fairId}
     </select>
 
+    <!-- 마이페이지 "내 신청 현황" 목록용. 최신 신청이 위로 오도록 created_at 역순 정렬한다. -->
+    <select id="selectByApplicantUserId" resultType="Fair">
+        SELECT fair_id, applicant_user_id, name, description, category, poster_image_url, notice_text,
+               place_name, address, indoor_outdoor,
+               vendor_recruit_start_date, vendor_recruit_end_date,
+               reservation_start_date, reservation_end_date,
+               operation_start_date, operation_end_date,
+               reservation_fee, reservation_cancel_deadline_hours, reservation_change_deadline_hours,
+               manager_name, manager_phone, manager_email,
+               status, reject_reason, reviewed_by, reviewed_at,
+               payment_due_at, public_scheduled_at, published_at, canceled_at,
+               submitted_snapshot, created_at, updated_at
+          FROM fairs
+         WHERE applicant_user_id = #{applicantUserId}
+         ORDER BY created_at DESC
+    </select>
+
     <!--
         null이 아닌 필드만 갱신한다(승인/반려/재제출마다 채우는 필드가 달라서 범용으로 둠).
         updated_at은 호출부 값과 무관하게 항상 NOW()로 덮어쓴다.
@@ -181,5 +198,27 @@
         WHERE fair_id = #{fairId}
           AND status IN ('RECEIVED', 'REJECTED')
     </update>
+
+    <!--
+        canceled_at IS NOT NULL만 걸면(코드래빗 지적) 취소된 행사 수가 limit를 넘는 순간
+        canceled_at DESC 정렬로 매번 같은 최신 N개만 뽑혀서, 그보다 오래된 행사의 PENDING
+        결제가 영영 처리되지 못하고 배치 슬롯을 못 받을 수 있다. 그래서 이 결제가 아직 남아있는
+        행사만(EXISTS) 고르고 오래된 순(ASC)으로 처리한다 - 한 행사가 다 정리되면(더 이상
+        PENDING이 없으면) 이 목록에서 자연히 빠지니 다음 실행에서 그 자리를 다른 행사가 채운다.
+    -->
+    <select id="selectCanceledFairIds" resultType="long">
+        SELECT f.fair_id
+          FROM fairs f
+         WHERE f.canceled_at IS NOT NULL
+           AND EXISTS (
+               SELECT 1
+                 FROM payment p
+                WHERE p.fair_id = f.fair_id
+                  AND p.status = 'PENDING'
+                  AND p.payment_type IN ('RESERVATION_DEPOSIT', 'VENDOR_FEE')
+           )
+         ORDER BY f.canceled_at
+         LIMIT #{limit}
+    </select>
 
 </mapper>
