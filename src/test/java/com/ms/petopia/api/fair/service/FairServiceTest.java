@@ -300,6 +300,19 @@ class FairServiceTest {
         verify(fairMapper, never()).selectByApplicantUserId(any());
     }
 
+    @Test
+    @DisplayName("취소 승인된 행사는 status와 별개로 canceledAt이 채워져 내려간다")
+    void getMyApplications_취소된행사는_canceledAt이_채워진다() {
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
+        fair.setCanceledAt(NOW.minusHours(1));
+        given(fairMapper.selectByApplicantUserId(USER_ID)).willReturn(List.of(fair));
+
+        List<FairApplicationSummaryResponse> response = fairService.getMyApplications(USER_ID);
+
+        assertThat(response.get(0).status()).isEqualTo("PREPARING");
+        assertThat(response.get(0).canceledAt()).isEqualTo(NOW.minusHours(1));
+    }
+
     // ===== getMyApplicationDetail =====
 
     @Test
@@ -311,6 +324,20 @@ class FairServiceTest {
 
         assertThat(response.fairId()).isEqualTo(FAIR_ID);
         assertThat(response.managerEmail()).isEqualTo("manager@petopia.example");
+        assertThat(response.canceledAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("취소 승인된 행사는 status와 별개로 canceledAt이 채워져 내려간다")
+    void getMyApplicationDetail_취소된행사는_canceledAt이_채워진다() {
+        Fair fair = fairWithStatus(FairStatus.IN_PROGRESS);
+        fair.setCanceledAt(NOW.minusHours(2));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        FairApplicationDetailResponse response = fairService.getMyApplicationDetail(FAIR_ID, USER_ID);
+
+        assertThat(response.status()).isEqualTo("IN_PROGRESS");
+        assertThat(response.canceledAt()).isEqualTo(NOW.minusHours(2));
     }
 
     @Test

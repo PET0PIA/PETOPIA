@@ -173,11 +173,12 @@ public class FairService {
      * 외부에 새어나가지 않게 한다. reservation 도메인이 예약 가능 여부를 판단하는 기준
      * (published_at IS NOT NULL)과 동일한 기준을 쓴다({@link #publish} javadoc 참고).
      *
-     * <p>취소된(canceled_at IS NOT NULL) 행사도 조회되지 않는다(코드래빗 지적) - 취소 승인
-     * 흐름({@code FairCancelRequestService#review})은 canceled_at만 채우고 published_at·
-     * status는 그대로 두므로, 이미 공개된 행사가 취소되더라도 published_at 조건만으로는
-     * 계속 걸러진다. 취소 여부는 이 응답에 담기지 않으니(취소 사실을 알릴 목적이 아니라
-     * 애초에 노출을 막는 것) 걸러진 이유도 미공개와 동일하게 FAIR_NOT_FOUND로 응답한다.
+     * <p>취소된(canceled_at IS NOT NULL) 행사도 조회되지 않는다 - 취소 승인 흐름
+     * ({@code FairCancelRequestService#review})은 canceled_at만 채우고 published_at·status는
+     * 그대로 두므로, 이미 공개된 행사가 취소되더라도 published_at 조건만으로는 걸러지지 않는다
+     * (그래서 canceledAt을 별도로 확인한다). 취소 여부는 이 응답에 담기지 않으니(취소 사실을
+     * 알릴 목적이 아니라 애초에 노출을 막는 것) 걸러진 이유도 미공개와 동일하게 FAIR_NOT_FOUND로
+     * 응답한다.
      */
     @Transactional(readOnly = true)
     public FairPublicSummaryResponse getPublicSummary(Long fairId) {
@@ -422,7 +423,8 @@ public class FairService {
                 fair.getRejectReason(),
                 fair.getReviewedAt(),
                 fair.getPaymentDueAt(),
-                fair.getCreatedAt()
+                fair.getCreatedAt(),
+                fair.getCanceledAt()
         );
     }
 
@@ -452,7 +454,8 @@ public class FairService {
                 fair.getOperationEndDate(),
                 fair.getRejectReason(),
                 fair.getCreatedAt(),
-                fair.getReviewedAt()
+                fair.getReviewedAt(),
+                fair.getCanceledAt()
         );
     }
 

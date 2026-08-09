@@ -67,7 +67,7 @@ public interface FairMapper {
      * 완료 기록 테이블을 두지 않는다 - PENDING 결제는 우리가 취소에 성공하지 못하는 한 계속
      * PENDING으로 남아 다음 호출에서 자연히 다시 걸리므로(멱등) 완료 기록이 필요 없다.
      *
-     * <p>다만 "아직 남은 PENDING이 있는지"(EXISTS)는 반드시 걸러야 한다(코드래빗 지적) -
+     * <p>다만 "아직 남은 PENDING이 있는지"(EXISTS)는 반드시 걸러야 한다 -
      * 이 조건 없이 canceled_at DESC로만 limit를 걸면, 취소된 행사 수가 limit를 넘는 순간
      * 이미 다 정리된 최신 행사들이 매번 그 자리를 계속 차지해서 더 오래된 행사의 PENDING
      * 결제가 배치 슬롯을 영영 못 받을 수 있다.

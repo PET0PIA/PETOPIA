@@ -74,9 +74,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/review", "/api/fairs/*/publish").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/fair-cancel-requests/*/review").hasRole("SUPER_ADMIN")
                         // Fair 도메인 - 행사 관리자(EVENT_ADMIN)가 자기 행사의 취소를 신청/이력 조회.
-                        // role만으로는 "그 행사 담당자인지"까지 못 가려서(코드래빗 지적 - 다른 행사
-                        // EVENT_ADMIN이 남의 행사 취소를 신청하거나 이력을 볼 수 있었음)
-                        // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
+                        // role만으로는 "그 행사 담당자인지"까지 못 가린다(다른 행사 EVENT_ADMIN이
+                        // 남의 행사 취소를 신청하거나 이력을 볼 수 있음) - FairAdminAccessGuard가
+                        // 서비스 계층에서 한 번 더 확인한다.
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/fair-cancel-requests").hasRole("EVENT_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/fair-cancel-requests").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // Fair 도메인 - 홀/부스 슬롯/운영일 관리(그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN).
