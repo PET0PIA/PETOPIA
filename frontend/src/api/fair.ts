@@ -155,6 +155,17 @@ export function getMyApplications() {
   return apiClient.get<FairApplicationSummary[]>("/api/fairs/mine");
 }
 
+export type FairStatus = "RECEIVED" | "REJECTED" | "EXPIRED" | "PAYMENT_PENDING" | "PREPARING" | "IN_PROGRESS" | "ENDED";
+
+/**
+ * 관리자 심사 큐(SUPER_ADMIN 전용). status를 생략하면 전체, 주면(예: "RECEIVED") 그 상태만
+ * 걸러 오래된 신청 순으로 반환한다 - 기본값 없이 그대로 서버에 위임한다(호출부가 용도에 맞게
+ * 지정: 심사 화면은 "RECEIVED"로 큐처럼 쓰고, 필요하면 다른 상태로 이력을 훑어본다).
+ */
+export function getFairApplications(status?: FairStatus) {
+  return apiClient.get<FairApplicationSummary[]>(`/api/fairs${status ? `?status=${status}` : ""}`);
+}
+
 /** 마이페이지 "내 신청 현황" 상세. 본인 신청서가 아니면 403이 난다. */
 export function getMyApplicationDetail(fairId: number) {
   return apiClient.get<FairApplicationDetail>(`/api/fairs/${fairId}/mine`);
@@ -416,4 +427,26 @@ export function reviewFairCancelRequest(
     `/api/fairs/${fairId}/fair-cancel-requests/${cancelRequestId}/review`,
     payload,
   );
+}
+
+export interface FairCancelRequestQueueItem {
+  fairCancelRequestId: number;
+  fairId: number;
+  /** 어느 행사의 취소 신청인지. 전체 행사를 가로질러 보여주는 목록이라 fairId만으로는
+   * 바로 알아보기 어려워 함께 내려온다. */
+  fairName: string;
+  requestedBy: number;
+  reason: string;
+  status: FairCancelRequestStatus;
+  createdAt: string;
+}
+
+/**
+ * 관리자 취소 신청 큐(SUPER_ADMIN 전용, 특정 행사에 갇히지 않고 전체를 가로질러 조회).
+ * status를 생략하면 전체, 주면(예: "PENDING") 그 상태만 걸러 오래된 신청 순으로 반환한다.
+ * {@link getFairCancelRequests}는 fairId를 이미 아는 상태에서 그 행사 이력만 보는 용도라,
+ * "지금 심사해야 할 취소 신청이 뭐가 있는지" 찾을 때는 이 함수를 쓴다.
+ */
+export function getFairCancelRequestQueue(status?: FairCancelRequestStatus) {
+  return apiClient.get<FairCancelRequestQueueItem[]>(`/api/fair-cancel-requests${status ? `?status=${status}` : ""}`);
 }

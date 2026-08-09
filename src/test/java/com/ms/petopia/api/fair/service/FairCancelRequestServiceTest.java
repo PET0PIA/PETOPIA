@@ -3,6 +3,8 @@ package com.ms.petopia.api.fair.service;
 import com.ms.petopia.api.fair.dto.CreateFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairCancelRequest;
+import com.ms.petopia.api.fair.dto.FairCancelRequestQueueItemResponse;
+import com.ms.petopia.api.fair.dto.FairCancelRequestQueueRow;
 import com.ms.petopia.api.fair.dto.FairCancelRequestResponse;
 import com.ms.petopia.api.fair.dto.FairCancelRequestStatus;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
@@ -220,6 +222,43 @@ class FairCancelRequestServiceTest {
 
         assertErrorCode(() -> cancelRequestService.getCancelRequests(FAIR_ID), ErrorCode.ACCESS_DENIED);
         verify(cancelRequestMapper, never()).selectByFairId(any());
+    }
+
+    // ===== getQueue (관리자 취소 신청 큐) =====
+
+    @Test
+    @DisplayName("status를 주면 그 상태만 걸러 매퍼에 그대로 넘기고 fairName까지 매핑한다")
+    void getQueue_status를_주면_그대로_넘기고_매핑한다() {
+        FairCancelRequestQueueRow row = new FairCancelRequestQueueRow();
+        row.setFairCancelRequestId(CANCEL_REQUEST_ID);
+        row.setFairId(FAIR_ID);
+        row.setFairName("2026 서울 펫페어");
+        row.setRequestedBy(REQUESTED_BY);
+        row.setReason("경영상 사유");
+        row.setStatus(FairCancelRequestStatus.PENDING);
+        row.setCreatedAt(NOW.minusDays(1));
+        given(cancelRequestMapper.selectQueue(FairCancelRequestStatus.PENDING)).willReturn(List.of(row));
+
+        List<FairCancelRequestQueueItemResponse> response = cancelRequestService.getQueue(FairCancelRequestStatus.PENDING);
+
+        verify(cancelRequestMapper).selectQueue(FairCancelRequestStatus.PENDING);
+        assertThat(response).hasSize(1);
+        FairCancelRequestQueueItemResponse item = response.get(0);
+        assertThat(item.fairCancelRequestId()).isEqualTo(CANCEL_REQUEST_ID);
+        assertThat(item.fairId()).isEqualTo(FAIR_ID);
+        assertThat(item.fairName()).isEqualTo("2026 서울 펫페어");
+        assertThat(item.status()).isEqualTo(FairCancelRequestStatus.PENDING.name());
+    }
+
+    @Test
+    @DisplayName("status가 없으면 null을 그대로 매퍼에 넘겨 전체를 조회한다")
+    void getQueue_status없으면_전체를_조회한다() {
+        given(cancelRequestMapper.selectQueue(null)).willReturn(List.of());
+
+        List<FairCancelRequestQueueItemResponse> response = cancelRequestService.getQueue(null);
+
+        verify(cancelRequestMapper).selectQueue(null);
+        assertThat(response).isEmpty();
     }
 
     // ===== review =====

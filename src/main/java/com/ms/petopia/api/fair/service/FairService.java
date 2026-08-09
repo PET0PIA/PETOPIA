@@ -113,6 +113,23 @@ public class FairService {
     }
 
     /**
+     * 관리자 심사 큐 조회. SUPER_ADMIN이 fairId를 미리 알지 못해도 심사 대기 중인 신청서를
+     * 훑어볼 수 있게 한다 - {@link #getApplication}은 fairId를 이미 아는 상태에서 상세를
+     * 보는 화면 전용이라, 애초에 "무엇을 심사해야 하는지" 찾을 방법이 없었다.
+     *
+     * <p>{@code status}가 없으면 전체, 있으면 그 상태만 걸러 오래된 신청 순으로 반환한다.
+     * 기본 화면은 RECEIVED만 걸러 "지금 처리해야 할 것"을 큐처럼 보여주고, 필요하면 상태를
+     * 바꿔가며 이력도 훑어볼 수 있다. PII(managerPhone/managerEmail)는 담지 않는다
+     * ({@link #getMyApplications}와 동일한 이유).
+     */
+    @Transactional(readOnly = true)
+    public List<FairApplicationSummaryResponse> getApplications(FairStatus status) {
+        return fairMapper.selectByStatus(status).stream()
+                .map(this::toSummaryResponse)
+                .toList();
+    }
+
+    /**
      * 신청서 상세를 조회한다. 관리자 검토 화면 전용이다 - managerPhone/managerEmail을
      * 그대로 반환하므로(PII) SecurityConfig에서 SUPER_ADMIN role만 이 엔드포인트에
      * 도달하도록 막는다({@code @PathVariable}까지 오면 호출자가 이미 SUPER_ADMIN임이

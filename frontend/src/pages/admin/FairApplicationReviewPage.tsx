@@ -1,17 +1,20 @@
 import { AlertCircle, Check, Globe, Search, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   getFairApplication,
+  getFairApplications,
   publishFair,
   reviewFairApplication,
   type FairApplicationDetail,
+  type FairApplicationSummary,
 } from "../../api/fair";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
+import { Table } from "../../components/ui/Table";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Textarea } from "../../components/ui/Textarea";
@@ -55,6 +58,10 @@ function Field({ label, value }: { label: string; value: string }) {
 export function FairApplicationReviewPage() {
   const { confirm, confirmDialog } = useConfirm();
 
+  const [queue, setQueue] = useState<FairApplicationSummary[]>([]);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
+
   const [fairIdInput, setFairIdInput] = useState("");
   const [detail, setDetail] = useState<FairApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -68,20 +75,50 @@ export function FairApplicationReviewPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
-  async function handleLoad(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
+  // 승인/반려 후 큐를 새로고침할 때 재사용한다(그때는 이미 마운트된 상태라 setQueueLoading(true)를
+  // 먼저 불러 로딩 표시를 다시 보여줘도 된다). 최초 마운트 시 큐를 받아오는 아래 useEffect는
+  // queueLoading의 초기값이 이미 true라 이 함수 대신 별도로 fetch만 한다(react-hooks/set-state-in-effect
+  // 회피 - effect 안에서 setState를 동기 호출하는 함수를 부르면 안 된다).
+  async function loadQueue() {
+    setQueueLoading(true);
+    setQueueError(null);
+    try {
+      const data = await getFairApplications("RECEIVED");
+      setQueue(data);
+    } catch (error) {
+      setQueue([]);
+      setQueueError(error instanceof ApiError ? error.message : "심사 대기 목록을 불러오지 못했어요.");
+    } finally {
+      setQueueLoading(false);
     }
+  }
 
+  useEffect(() => {
+    let alive = true;
+    getFairApplications("RECEIVED")
+      .then((data) => {
+        if (alive) setQueue(data);
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        setQueue([]);
+        setQueueError(error instanceof ApiError ? error.message : "심사 대기 목록을 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (alive) setQueueLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function loadDetail(fairId: number) {
     setLoading(true);
     setLoadError(null);
     setReviewError(null);
     setPublishError(null);
     try {
-      const data = await getFairApplication(parsed);
+      const data = await getFairApplication(fairId);
       setDetail(data);
     } catch (error) {
       setDetail(null);
@@ -91,6 +128,21 @@ export function FairApplicationReviewPage() {
     }
   }
 
+  function openFair(fairId: number) {
+    setFairIdInput(String(fairId));
+    void loadDetail(fairId);
+  }
+
+  function handleLoad(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Number(fairIdInput);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+    void loadDetail(parsed);
+  }
+
   async function handleApprove() {
     if (!detail) return;
     setReviewing(true);
@@ -98,6 +150,7 @@ export function FairApplicationReviewPage() {
     try {
       const result = await reviewFairApplication(detail.fairId, { decision: "APPROVE" });
       setDetail({ ...detail, status: result.status, reviewedAt: result.reviewedAt, paymentDueAt: result.paymentDueAt, rejectReason: result.rejectReason });
+      void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
     } finally {
@@ -120,6 +173,7 @@ export function FairApplicationReviewPage() {
       setDetail({ ...detail, status: result.status, reviewedAt: result.reviewedAt, paymentDueAt: result.paymentDueAt, rejectReason: result.rejectReason });
       setRejectDialogOpen(false);
       setRejectReason("");
+      void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "반려 처리에 실패했어요.");
     } finally {
@@ -154,6 +208,43 @@ export function FairApplicationReviewPage() {
   return (
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader eyebrow="전체 운영" title="행사 등록 신청 검토" description="신청서를 확인하고 승인 또는 반려해요." />
+
+      <div className="mb-6">
+        <h2 className="mb-3 text-sm font-extrabold text-muted">심사 대기 중인 신청서</h2>
+        {queueLoading ? (
+          <div className="surface grid min-h-24 place-items-center text-sm text-muted">불러오는 중이에요...</div>
+        ) : queueError ? (
+          <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p>{queueError}</p>
+          </div>
+        ) : queue.length === 0 ? (
+          <EmptyState title="심사 대기 중인 신청서가 없어요." description="새 신청이 들어오면 이곳에 표시돼요." />
+        ) : (
+          <Table>
+            <thead>
+              <tr className="border-b border-line text-xs font-bold text-muted">
+                <th className="px-4 py-3">행사명</th>
+                <th className="px-4 py-3">신청일</th>
+                <th className="px-4 py-3" aria-label="심사" />
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((application) => (
+                <tr key={application.fairId} className="border-b border-line last:border-0 hover:bg-page">
+                  <td className="px-4 py-3 font-bold text-ink">{application.name}</td>
+                  <td className="px-4 py-3 text-muted">{formatDateTime(application.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button variant="outline" onClick={() => openFair(application.fairId)}>
+                      심사하기
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </div>
 
       <form onSubmit={handleLoad} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">

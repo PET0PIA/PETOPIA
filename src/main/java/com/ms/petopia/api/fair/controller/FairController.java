@@ -6,6 +6,7 @@ import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
@@ -81,6 +82,15 @@ public class FairController {
         // SecurityConfig에서 이 경로는 인증 없이 permitAll이다 - getPublicSummary와 동일한 이유
         // (지난/예정 행사 목록을 로그인 여부와 무관하게 훑어볼 수 있어야 한다).
         return fairService.listPublicFairs(filter);
+    }
+
+    @GetMapping
+    public List<FairApplicationSummaryResponse> getApplications(
+            @RequestParam(required = false) FairStatus status
+    ) {
+        // SecurityConfig에서 SUPER_ADMIN role만 이 엔드포인트에 도달할 수 있게 막는다.
+        // status를 생략하면 전체, 주면(예: RECEIVED) 그 상태만 걸러 심사 큐로 쓸 수 있다.
+        return fairService.getApplications(status);
     }
 
     @GetMapping("/{fairId}")

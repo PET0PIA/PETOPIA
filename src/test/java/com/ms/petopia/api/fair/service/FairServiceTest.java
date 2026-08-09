@@ -316,6 +316,33 @@ class FairServiceTest {
         assertErrorCode(() -> fairService.getPublicSummary(FAIR_ID), ErrorCode.FAIR_NOT_FOUND);
     }
 
+    // ===== getApplications (관리자 심사 큐) =====
+
+    @Test
+    @DisplayName("status를 주면 그 상태만 걸러 매퍼에 그대로 넘긴다")
+    void getApplications_status를_주면_그대로_넘긴다() {
+        Fair fair = fairWithStatus(FairStatus.RECEIVED);
+        given(fairMapper.selectByStatus(FairStatus.RECEIVED)).willReturn(List.of(fair));
+
+        List<FairApplicationSummaryResponse> response = fairService.getApplications(FairStatus.RECEIVED);
+
+        verify(fairMapper).selectByStatus(FairStatus.RECEIVED);
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).fairId()).isEqualTo(FAIR_ID);
+        assertThat(response.get(0).status()).isEqualTo("RECEIVED");
+    }
+
+    @Test
+    @DisplayName("status가 없으면 null을 그대로 매퍼에 넘겨 전체를 조회한다")
+    void getApplications_status없으면_전체를_조회한다() {
+        given(fairMapper.selectByStatus(null)).willReturn(List.of());
+
+        List<FairApplicationSummaryResponse> response = fairService.getApplications(null);
+
+        verify(fairMapper).selectByStatus(null);
+        assertThat(response).isEmpty();
+    }
+
     // ===== getMyApplications =====
 
     @Test

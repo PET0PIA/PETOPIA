@@ -1,6 +1,7 @@
 package com.ms.petopia.api.fair.mapper;
 
 import com.ms.petopia.api.fair.dto.Fair;
+import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -93,4 +94,12 @@ public interface FairMapper {
      * 순으로(operation_end_date DESC) 정렬한다.
      */
     List<Fair> selectPublicFairs(@Param("filter") PublicFairListFilter filter, @Param("today") LocalDate today);
+
+    /**
+     * 관리자 심사 큐 조회({@code FairService#getApplications} 전용). {@code status}가 없으면
+     * 전체, 있으면 그 상태만 걸러 오래된 신청 순(created_at ASC)으로 반환한다 - RECEIVED만
+     * 걸러서 보면 "지금 처리해야 할 것"을 먼저 들어온 순서대로 보여주는 큐가 되고, 상태 없이
+     * 전체를 볼 때도 같은 순서가 자연스럽다.
+     */
+    List<Fair> selectByStatus(@Param("status") FairStatus status);
 }

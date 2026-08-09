@@ -247,4 +247,21 @@
         </if>
     </select>
 
+    <!--
+        관리자 심사 큐(FairService#getApplications) 전용. status가 없으면 전체, 있으면 그
+        상태만 걸러 오래된 신청 순으로 반환한다 - RECEIVED만 걸러서 보면 "지금 처리해야 할 것"을
+        보여주는 큐가 되고, 필요하면 상태를 바꿔가며 이력도 훑어볼 수 있다. 관리자 화면 전용이라
+        managerPhone/managerEmail 같은 PII는 목록에 넣지 않는다(FairApplicationSummaryResponse와
+        동일한 이유 - 상세 조회에서만 노출).
+    -->
+    <select id="selectByStatus" resultType="Fair">
+        SELECT fair_id, name, status, operation_start_date, operation_end_date,
+               reject_reason, created_at, reviewed_at, canceled_at
+          FROM fairs
+        <if test="status != null">
+         WHERE status = #{status}
+        </if>
+         ORDER BY created_at ASC
+    </select>
+
 </mapper>
