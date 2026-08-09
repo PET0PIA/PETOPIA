@@ -1,10 +1,12 @@
 import { AlertCircle, Check, Search, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
+  getFairCancelRequestQueue,
   getFairCancelRequests,
   reviewFairCancelRequest,
   type FairCancelRequestItem,
+  type FairCancelRequestQueueItem,
 } from "../../api/fair";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -35,6 +37,10 @@ function formatDateTime(value: string | null) {
 export function FairCancelRequestReviewPage() {
   const { confirm, confirmDialog } = useConfirm();
 
+  const [queue, setQueue] = useState<FairCancelRequestQueueItem[]>([]);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
+
   const [fairIdInput, setFairIdInput] = useState("");
   const [fairId, setFairId] = useState<number | null>(null);
   const [requests, setRequests] = useState<FairCancelRequestItem[]>([]);
@@ -46,6 +52,42 @@ export function FairCancelRequestReviewPage() {
 
   const [rejectTarget, setRejectTarget] = useState<FairCancelRequestItem | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  // 승인/반려 후 큐를 새로고침할 때 재사용한다. 최초 마운트 시 큐를 받아오는 아래 useEffect는
+  // queueLoading의 초기값이 이미 true라 이 함수 대신 별도로 fetch만 한다(react-hooks/set-state-in-effect
+  // 회피 - effect 안에서 setState를 동기 호출하는 함수를 부르면 안 된다).
+  async function loadQueue() {
+    setQueueLoading(true);
+    setQueueError(null);
+    try {
+      const data = await getFairCancelRequestQueue("PENDING");
+      setQueue(data);
+    } catch (error) {
+      setQueue([]);
+      setQueueError(error instanceof ApiError ? error.message : "취소 심사 대기 목록을 불러오지 못했어요.");
+    } finally {
+      setQueueLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let alive = true;
+    getFairCancelRequestQueue("PENDING")
+      .then((data) => {
+        if (alive) setQueue(data);
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        setQueue([]);
+        setQueueError(error instanceof ApiError ? error.message : "취소 심사 대기 목록을 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (alive) setQueueLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function loadRequests(targetFairId: number) {
     setLoading(true);
@@ -62,6 +104,12 @@ export function FairCancelRequestReviewPage() {
     }
   }
 
+  function openFair(targetFairId: number) {
+    setFairIdInput(String(targetFairId));
+    setFairId(targetFairId);
+    void loadRequests(targetFairId);
+  }
+
   function handleLoadFair(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsed = Number(fairIdInput);
@@ -69,8 +117,7 @@ export function FairCancelRequestReviewPage() {
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
-    setFairId(parsed);
-    void loadRequests(parsed);
+    openFair(parsed);
   }
 
   async function handleApprove(request: FairCancelRequestItem) {
@@ -87,6 +134,7 @@ export function FairCancelRequestReviewPage() {
     try {
       await reviewFairCancelRequest(fairId, request.fairCancelRequestId, { decision: "APPROVE" });
       await loadRequests(fairId);
+      void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
     } finally {
@@ -110,6 +158,7 @@ export function FairCancelRequestReviewPage() {
         rejectReason: rejectReason.trim(),
       });
       await loadRequests(fairId);
+      void loadQueue();
       setRejectTarget(null);
       setRejectReason("");
     } catch (error) {
@@ -122,6 +171,45 @@ export function FairCancelRequestReviewPage() {
   return (
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader eyebrow="전체 운영" title="행사 취소 신청 처리" description="행사 관리자가 신청한 취소를 검토하고 승인 또는 반려해요." />
+
+      <div className="mb-6">
+        <h2 className="mb-3 text-sm font-extrabold text-muted">심사 대기 중인 취소 신청</h2>
+        {queueLoading ? (
+          <div className="surface grid min-h-24 place-items-center text-sm text-muted">불러오는 중이에요...</div>
+        ) : queueError ? (
+          <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p>{queueError}</p>
+          </div>
+        ) : queue.length === 0 ? (
+          <EmptyState title="심사 대기 중인 취소 신청이 없어요." description="새 취소 신청이 들어오면 이곳에 표시돼요." />
+        ) : (
+          <Table>
+            <thead>
+              <tr className="border-b border-line text-xs font-bold text-muted">
+                <th className="px-4 py-3">행사</th>
+                <th className="px-4 py-3">사유</th>
+                <th className="px-4 py-3">신청일</th>
+                <th className="px-4 py-3" aria-label="심사" />
+              </tr>
+            </thead>
+            <tbody>
+              {queue.map((item) => (
+                <tr key={item.fairCancelRequestId} className="border-b border-line last:border-0 hover:bg-page">
+                  <td className="px-4 py-3 font-bold text-ink">{item.fairName}</td>
+                  <td className="px-4 py-3 text-muted">{item.reason}</td>
+                  <td className="px-4 py-3 text-muted">{formatDateTime(item.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button variant="outline" onClick={() => openFair(item.fairId)}>
+                      심사하기
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </div>
 
       <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">

@@ -82,6 +82,9 @@ export interface FairApplicationDetail {
   /** 취소 승인 일시(취소 아니면 null). 취소 승인은 status는 그대로 두고 이 필드만 채우므로,
    * 취소 여부는 status가 아니라 이 필드로 판단해야 한다. */
   canceledAt: string | null;
+  /** 공개(예약 오픈) 일시(미공개면 null). publish()로만 채워지고 status와는 독립적이다 -
+   * 관리자 검토 화면이 "공개하기" 버튼을 보여줄지 이 값으로 판단한다. */
+  publishedAt: string | null;
 }
 
 // 백엔드 SecurityConfig 기준 SUPER_ADMIN 전용(관리자 검토 화면). 신청자 본인 조회는
@@ -90,6 +93,47 @@ export interface FairApplicationDetail {
 // 일반 사용자가 이 함수를 부르면 403이 난다.
 export function getFairApplication(fairId: number) {
   return apiClient.get<FairApplicationDetail>(`/api/fairs/${fairId}`);
+}
+
+/**
+ * 신청서 수정(재제출) 요청. RECEIVED(심사 대기) 또는 REJECTED(반려) 상태의 신청서만 수정할 수
+ * 있고, REJECTED였다면 이 요청이 성공하는 순간 RECEIVED로 되돌아가 다시 심사 대기열에 선다.
+ *
+ * PATCH 계약: 키를 아예 안 보내면(undefined - apiClient가 JSON.stringify할 때 자동으로
+ * 빠진다) 기존 값을 유지하고, 키를 보내되 값을 null로 보내면 그 필드를 명시적으로 지운다
+ * (백엔드가 이 둘을 구분한다). 즉 "생략"과 "빈 값으로 지움"은 서로 다른 의미다 - 이 필드들에
+ * undefined 대신 빈 문자열을 넣어 보내면 값이 지워지지 않고 기존 값이 그대로 남으니 주의한다.
+ */
+export interface UpdateFairApplicationRequest {
+  name: string;
+  description?: string | null;
+  category?: FairCategory | null;
+  /** 새로 업로드한 임시 objectKey. 포스터를 새로 첨부하지 않았고 지우지도 않을 거면 이 키
+   * 자체를 요청 객체에서 빼서(undefined) 보내야 기존 포스터가 유지된다. null을 보내면
+   * 기존 포스터를 삭제한다. */
+  posterImageObjectKey?: string | null;
+  noticeText?: string | null;
+  placeName?: string | null;
+  address?: string | null;
+  indoorOutdoor?: IndoorOutdoor | null;
+  vendorRecruitStartDate?: string | null;
+  vendorRecruitEndDate?: string | null;
+  reservationStartDate?: string | null;
+  reservationEndDate?: string | null;
+  operationStartDate?: string | null;
+  operationEndDate?: string | null;
+  reservationFee?: number | null;
+  reservationCancelDeadlineHours?: number | null;
+  reservationChangeDeadlineHours?: number | null;
+  managerName: string;
+  managerPhone?: string | null;
+  managerEmail: string;
+}
+
+/** 본인 신청서를 수정(재제출)한다. 본인 신청서가 아니거나 수정 가능한 상태(RECEIVED/REJECTED)가
+ * 아니면 에러가 난다. */
+export function updateFairApplication(fairId: number, payload: UpdateFairApplicationRequest) {
+  return apiClient.patch<FairApplicationDetail>(`/api/fairs/${fairId}`, payload);
 }
 
 export interface FairApplicationSummary {
@@ -109,6 +153,17 @@ export interface FairApplicationSummary {
 /** 마이페이지 "내 신청 현황" 목록. 로그인한 본인이 낸 신청서만 최신순으로 반환한다. */
 export function getMyApplications() {
   return apiClient.get<FairApplicationSummary[]>("/api/fairs/mine");
+}
+
+export type FairStatus = "RECEIVED" | "REJECTED" | "EXPIRED" | "PAYMENT_PENDING" | "PREPARING" | "IN_PROGRESS" | "ENDED";
+
+/**
+ * 관리자 심사 큐(SUPER_ADMIN 전용). status를 생략하면 전체, 주면(예: "RECEIVED") 그 상태만
+ * 걸러 오래된 신청 순으로 반환한다 - 기본값 없이 그대로 서버에 위임한다(호출부가 용도에 맞게
+ * 지정: 심사 화면은 "RECEIVED"로 큐처럼 쓰고, 필요하면 다른 상태로 이력을 훑어본다).
+ */
+export function getFairApplications(status?: FairStatus) {
+  return apiClient.get<FairApplicationSummary[]>(`/api/fairs${status ? `?status=${status}` : ""}`);
 }
 
 /** 마이페이지 "내 신청 현황" 상세. 본인 신청서가 아니면 403이 난다. */
@@ -140,6 +195,28 @@ export function getFairPublicSummary(fairId: number) {
   return apiClient.get<FairPublicSummary>(`/api/fairs/${fairId}/public`);
 }
 
+export type PublicFairListFilter = "UPCOMING" | "PAST";
+
+export interface FairPublicListItem {
+  fairId: number;
+  name: string;
+  category: FairCategory | null;
+  posterImageUrl: string | null;
+  placeName: string | null;
+  operationStartDate: string | null;
+  operationEndDate: string | null;
+}
+
+/**
+ * 공개된(published) 행사 중 취소되지 않은 것만 목록으로 조회한다(인증 없이 누구나 호출 가능).
+ * UPCOMING은 아직 끝나지 않은(또는 일정 미정) 행사를 임박한 순으로, PAST는 이미 끝난 행사를
+ * 최근에 끝난 순으로 반환한다. 상세 화면(getFairPublicSummary)보다 필드가 적다 - 목록에서
+ * 카드로 훑어보는 용도라 description/noticeText/address 등은 내려오지 않는다.
+ */
+export function getPublicFairs(filter: PublicFairListFilter) {
+  return apiClient.get<FairPublicListItem[]>(`/api/fairs/public?filter=${filter}`);
+}
+
 export type FairReviewDecision = "APPROVE" | "REJECT";
 
 export interface ReviewFairApplicationRequest {
@@ -157,6 +234,21 @@ export interface ReviewFairApplicationResponse {
 
 export function reviewFairApplication(fairId: number, payload: ReviewFairApplicationRequest) {
   return apiClient.patch<ReviewFairApplicationResponse>(`/api/fairs/${fairId}/review`, payload);
+}
+
+export interface PublishFairResponse {
+  fairId: number;
+  status: string;
+  publishedAt: string;
+}
+
+/**
+ * 행사를 공개해 예약을 받을 수 있게 한다(fairs.published_at 설정). 심사 승인 이후
+ * (PAYMENT_PENDING~IN_PROGRESS) 상태에서만 가능하고, 취소된 행사는 공개할 수 없다.
+ * 이미 공개된 행사를 다시 호출해도 에러 없이 최초 공개 결과를 그대로 반환한다(멱등).
+ */
+export function publishFair(fairId: number) {
+  return apiClient.patch<PublishFairResponse>(`/api/fairs/${fairId}/publish`);
 }
 
 export interface Hall {
@@ -335,4 +427,26 @@ export function reviewFairCancelRequest(
     `/api/fairs/${fairId}/fair-cancel-requests/${cancelRequestId}/review`,
     payload,
   );
+}
+
+export interface FairCancelRequestQueueItem {
+  fairCancelRequestId: number;
+  fairId: number;
+  /** 어느 행사의 취소 신청인지. 전체 행사를 가로질러 보여주는 목록이라 fairId만으로는
+   * 바로 알아보기 어려워 함께 내려온다. */
+  fairName: string;
+  requestedBy: number;
+  reason: string;
+  status: FairCancelRequestStatus;
+  createdAt: string;
+}
+
+/**
+ * 관리자 취소 신청 큐(SUPER_ADMIN 전용, 특정 행사에 갇히지 않고 전체를 가로질러 조회).
+ * status를 생략하면 전체, 주면(예: "PENDING") 그 상태만 걸러 오래된 신청 순으로 반환한다.
+ * {@link getFairCancelRequests}는 fairId를 이미 아는 상태에서 그 행사 이력만 보는 용도라,
+ * "지금 심사해야 할 취소 신청이 뭐가 있는지" 찾을 때는 이 함수를 쓴다.
+ */
+export function getFairCancelRequestQueue(status?: FairCancelRequestStatus) {
+  return apiClient.get<FairCancelRequestQueueItem[]>(`/api/fair-cancel-requests${status ? `?status=${status}` : ""}`);
 }
