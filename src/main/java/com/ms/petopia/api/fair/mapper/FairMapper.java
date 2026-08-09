@@ -1,10 +1,14 @@
 package com.ms.petopia.api.fair.mapper;
 
 import com.ms.petopia.api.fair.dto.Fair;
+import com.ms.petopia.api.fair.dto.FairStatus;
+import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 /**
  * fairs 테이블 매퍼.
@@ -53,12 +57,17 @@ public interface FairMapper {
     /**
      * 신청서 수정(재제출, FairService#updateApplication) 전용 조건부 갱신. status가
      * RECEIVED 또는 REJECTED일 때만 실제로 갱신된다(동시성 방어 - {@link #updateReviewResult}와
-     * 동일한 패턴). 내용 필드는 null이 아닌 것만 반영하지만(PATCH), status/reject_reason/
-     * reviewed_by/reviewed_at은 이 갱신이 성공하는 순간 항상 RECEIVED/NULL/NULL/NULL로
-     * 되돌린다 - REJECTED였던 신청서가 수정으로 다시 심사 대기열에 설 때 이전 반려 사유가
-     * 남아있으면 안 되기 때문이다.
+     * 동일한 패턴). status/reject_reason/reviewed_by/reviewed_at은 이 갱신이 성공하는 순간
+     * 항상 RECEIVED/NULL/NULL/NULL로 되돌린다 - REJECTED였던 신청서가 수정으로 다시 심사
+     * 대기열에 설 때 이전 반려 사유가 남아있으면 안 되기 때문이다.
+     *
+     * <p>내용 필드는 {@code fair}의 null 여부가 아니라 {@code setFields}(요청 JSON에 실제로
+     * 있었던 필드명 집합)로 갱신 여부를 정한다 - null 여부만으로 판단하면 "필드를 생략함(기존
+     * 값 유지)"과 "필드를 명시적으로 비움(NULL로 지움)"을 구분할 수 없다. {@code setFields}에
+     * 있는 필드는 {@code fair}에 담긴 값(null이면 NULL로 지움, 아니면 그 값으로) 그대로
+     * 반영하고, 없는 필드는 컬럼을 건드리지 않는다.
      */
-    int updateApplication(Fair fair);
+    int updateApplication(@Param("fair") Fair fair, @Param("setFields") Set<String> setFields);
 
     /**
      * 취소된({@code canceled_at IS NOT NULL}) 행사 중, 아직 정리할 PENDING 예약금·참가비
@@ -73,4 +82,24 @@ public interface FairMapper {
      * 결제가 배치 슬롯을 영영 못 받을 수 있다.
      */
     List<Long> selectCanceledFairIds(@Param("limit") int limit);
+
+    /**
+     * 공개된(published_at IS NOT NULL) 행사 중 취소되지 않은 것만 {@code filter}에 맞게
+     * 골라 반환한다({@code FairService#listPublicFairs} 전용, 인증 없이 누구나 볼 수 있는
+     * 목록이라 PII/심사 필드는 아예 SELECT하지 않는다).
+     *
+     * <p>UPCOMING/PAST는 operation_end_date를 {@code today}와 비교해서 가른다 -
+     * operation_end_date가 없는(일정 미정) 행사는 끝났다고 볼 근거가 없어 UPCOMING으로 묶인다.
+     * UPCOMING은 임박한 순으로(operation_start_date ASC, NULL은 맨 뒤), PAST는 최근에 끝난
+     * 순으로(operation_end_date DESC) 정렬한다.
+     */
+    List<Fair> selectPublicFairs(@Param("filter") PublicFairListFilter filter, @Param("today") LocalDate today);
+
+    /**
+     * 관리자 심사 큐 조회({@code FairService#getApplications} 전용). {@code status}가 없으면
+     * 전체, 있으면 그 상태만 걸러 오래된 신청 순(created_at ASC)으로 반환한다 - RECEIVED만
+     * 걸러서 보면 "지금 처리해야 할 것"을 먼저 들어온 순서대로 보여주는 큐가 되고, 상태 없이
+     * 전체를 볼 때도 같은 순서가 자연스럽다.
+     */
+    List<Fair> selectByStatus(@Param("status") FairStatus status);
 }

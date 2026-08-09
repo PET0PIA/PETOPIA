@@ -5,8 +5,12 @@ import { PublicLayout } from "../layouts/PublicLayout";
 import { SuperAdminLayout } from "../layouts/SuperAdminLayout";
 import { HomePage } from "../pages/home/HomePage";
 import { FairApplicationNewPage } from "../pages/fair/FairApplicationNewPage";
+import { FairApplicationEditPage } from "../pages/fair/FairApplicationEditPage";
 import { MyFairApplicationsPage } from "../pages/fair/MyFairApplicationsPage";
 import { MyFairApplicationDetailPage } from "../pages/fair/MyFairApplicationDetailPage";
+import { FairUpcomingPage } from "../pages/fair/FairUpcomingPage";
+import { FairPastPage } from "../pages/fair/FairPastPage";
+import { TicketFairListPage } from "../pages/reservation/TicketFairListPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
 import { BoothLayoutEditPage } from "../pages/fair-admin/BoothLayoutEditPage";
 import { FairDateManagementPage } from "../pages/fair-admin/FairDateManagementPage";
@@ -43,9 +47,6 @@ import { AdminLoginPage } from "../pages/auth/AdminLoginPage";
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
-  "/fairs/past": "지난 행사",
-  "/fairs/upcoming": "예정 행사",
-  "/tickets": "티켓 예매",
   "/businesses": "행사별 참여 기업",
   "/businesses/new": "사업자 등록 신청",
   "/businesses/status": "사업자 등록 현황",
@@ -98,6 +99,7 @@ export function AppRouter() {
           <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />
           <Route path="/fair-applications/me" element={<MyFairApplicationsPage />} />
           <Route path="/fair-applications/me/:fairId" element={<MyFairApplicationDetailPage />} />
+          <Route path="/fair-applications/me/:fairId/edit" element={<FairApplicationEditPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
@@ -106,6 +108,9 @@ export function AppRouter() {
           <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
+          <Route path="/fairs/upcoming" element={<FairUpcomingPage />} />
+          <Route path="/fairs/past" element={<FairPastPage />} />
+          <Route path="/tickets" element={<TicketFairListPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           <Route path="/booths/scan" element={<BoothVisitScanPage />} />
           {Object.entries(publicPages).map(([path, title]) => (

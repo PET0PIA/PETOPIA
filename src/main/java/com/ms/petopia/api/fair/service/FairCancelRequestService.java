@@ -3,6 +3,8 @@ package com.ms.petopia.api.fair.service;
 import com.ms.petopia.api.fair.dto.CreateFairCancelRequestRequest;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairCancelRequest;
+import com.ms.petopia.api.fair.dto.FairCancelRequestQueueItemResponse;
+import com.ms.petopia.api.fair.dto.FairCancelRequestQueueRow;
 import com.ms.petopia.api.fair.dto.FairCancelRequestResponse;
 import com.ms.petopia.api.fair.dto.FairCancelRequestStatus;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
@@ -120,6 +122,22 @@ public class FairCancelRequestService {
     }
 
     /**
+     * 관리자 취소 신청 큐 조회. {@link #getCancelRequests}는 fairId를 이미 아는 상태에서
+     * 그 행사 이력을 보는 화면 전용이라, SUPER_ADMIN이 fairId 없이 "지금 심사해야 할 취소
+     * 신청이 뭐가 있는지"를 찾을 방법이 없었다 - 이 메서드가 전체 행사를 가로질러 그 역할을
+     * 한다.
+     *
+     * <p>{@code status}가 없으면 전체, 있으면 그 상태만 걸러 오래된 신청 순으로 반환한다.
+     * 기본 화면은 PENDING만 걸러 큐로 쓴다({@link FairService#getApplications}와 동일한 설계).
+     */
+    @Transactional(readOnly = true)
+    public List<FairCancelRequestQueueItemResponse> getQueue(FairCancelRequestStatus status) {
+        return cancelRequestMapper.selectQueue(status).stream()
+                .map(this::toQueueItemResponse)
+                .toList();
+    }
+
+    /**
      * 취소 신청을 승인하거나 반려한다. PENDING 상태의 신청만 검토할 수 있다.
      * 승인 시 fairs.canceled_at을 채운다 - fairs.status는 바꾸지 않는다(취소는 상태값이 아니라
      * 플래그로 관리한다는 기존 설계, {@link FairStatus} javadoc 참고).
@@ -223,6 +241,18 @@ public class FairCancelRequestService {
             throw new CommonException(ErrorCode.FAIR_CANCEL_REQUEST_NOT_FOUND);
         }
         return cancelRequest;
+    }
+
+    private FairCancelRequestQueueItemResponse toQueueItemResponse(FairCancelRequestQueueRow row) {
+        return new FairCancelRequestQueueItemResponse(
+                row.getFairCancelRequestId(),
+                row.getFairId(),
+                row.getFairName(),
+                row.getRequestedBy(),
+                row.getReason(),
+                row.getStatus() == null ? FairCancelRequestStatus.PENDING.name() : row.getStatus().name(),
+                row.getCreatedAt()
+        );
     }
 
     private FairCancelRequestResponse toResponse(FairCancelRequest cancelRequest) {

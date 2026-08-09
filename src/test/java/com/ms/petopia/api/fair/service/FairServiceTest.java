@@ -5,9 +5,11 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
 import com.ms.petopia.api.fair.dto.FairStatus;
+import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
@@ -33,10 +35,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.never;
@@ -51,6 +55,28 @@ class FairServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 1, 10, 0);
     private static final LocalDate FUTURE_START = LocalDate.of(2026, 9, 1);
     private static final LocalDate FUTURE_END = LocalDate.of(2026, 9, 10);
+
+    // updateRequest()가 채우는 모든 필드가 요청에 있었다고 가정할 때(=요약/상세 폼을 통째로
+    // 다시 제출하는 실제 FE 흐름과 동일) presentFields로 넘길 값. ALL_UPDATE_SET_FIELDS는
+    // FairService#resolveUpdateSetFields를 거친 뒤의 값(posterImageObjectKey -> posterImageUrl)이다.
+    private static final Set<String> ALL_UPDATE_FIELDS = Set.of(
+            "name", "description", "category", "posterImageObjectKey", "noticeText",
+            "placeName", "address", "indoorOutdoor",
+            "vendorRecruitStartDate", "vendorRecruitEndDate",
+            "reservationStartDate", "reservationEndDate",
+            "operationStartDate", "operationEndDate",
+            "reservationFee", "reservationCancelDeadlineHours", "reservationChangeDeadlineHours",
+            "managerName", "managerPhone", "managerEmail"
+    );
+    private static final Set<String> ALL_UPDATE_SET_FIELDS = Set.of(
+            "name", "description", "category", "posterImageUrl", "noticeText",
+            "placeName", "address", "indoorOutdoor",
+            "vendorRecruitStartDate", "vendorRecruitEndDate",
+            "reservationStartDate", "reservationEndDate",
+            "operationStartDate", "operationEndDate",
+            "reservationFee", "reservationCancelDeadlineHours", "reservationChangeDeadlineHours",
+            "managerName", "managerPhone", "managerEmail"
+    );
 
     @Mock
     private FairMapper fairMapper;
@@ -215,6 +241,19 @@ class FairServiceTest {
         assertThat(response.name()).isEqualTo(fair.getName());
         assertThat(response.status()).isEqualTo("RECEIVED");
         assertThat(response.managerEmail()).isEqualTo(fair.getManagerEmail());
+        assertThat(response.publishedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("공개된 행사는 publishedAt이 그대로 매핑된다 (관리자 화면이 공개 여부를 판단하는 값)")
+    void getApplication_공개된행사는_publishedAt이_매핑된다() {
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
+        fair.setPublishedAt(NOW.minusHours(3));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        FairApplicationDetailResponse response = fairService.getApplication(FAIR_ID, REVIEWER_ID);
+
+        assertThat(response.publishedAt()).isEqualTo(NOW.minusHours(3));
     }
 
     @Test
@@ -275,6 +314,33 @@ class FairServiceTest {
         given(fairMapper.selectById(FAIR_ID)).willReturn(null);
 
         assertErrorCode(() -> fairService.getPublicSummary(FAIR_ID), ErrorCode.FAIR_NOT_FOUND);
+    }
+
+    // ===== getApplications (관리자 심사 큐) =====
+
+    @Test
+    @DisplayName("status를 주면 그 상태만 걸러 매퍼에 그대로 넘긴다")
+    void getApplications_status를_주면_그대로_넘긴다() {
+        Fair fair = fairWithStatus(FairStatus.RECEIVED);
+        given(fairMapper.selectByStatus(FairStatus.RECEIVED)).willReturn(List.of(fair));
+
+        List<FairApplicationSummaryResponse> response = fairService.getApplications(FairStatus.RECEIVED);
+
+        verify(fairMapper).selectByStatus(FairStatus.RECEIVED);
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).fairId()).isEqualTo(FAIR_ID);
+        assertThat(response.get(0).status()).isEqualTo("RECEIVED");
+    }
+
+    @Test
+    @DisplayName("status가 없으면 null을 그대로 매퍼에 넘겨 전체를 조회한다")
+    void getApplications_status없으면_전체를_조회한다() {
+        given(fairMapper.selectByStatus(null)).willReturn(List.of());
+
+        List<FairApplicationSummaryResponse> response = fairService.getApplications(null);
+
+        verify(fairMapper).selectByStatus(null);
+        assertThat(response).isEmpty();
     }
 
     // ===== getMyApplications =====
@@ -372,15 +438,15 @@ class FairServiceTest {
     @DisplayName("RECEIVED 상태에서 본인이 수정하면 내용을 갱신하고 상세 응답을 반환한다")
     void updateApplication_RECEIVED상태에서_본인이수정하면_갱신한다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
-        given(fairMapper.updateApplication(any())).willReturn(1);
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
 
         UpdateFairApplicationRequest request = updateRequest("2026 서울 펫페어(수정)");
-        FairApplicationDetailResponse response = fairService.updateApplication(FAIR_ID, USER_ID, request);
+        FairApplicationDetailResponse response = fairService.updateApplication(FAIR_ID, USER_ID, request, ALL_UPDATE_FIELDS);
 
         assertThat(response.fairId()).isEqualTo(FAIR_ID);
 
         ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
-        verify(fairMapper).updateApplication(captor.capture());
+        verify(fairMapper).updateApplication(captor.capture(), eq(ALL_UPDATE_SET_FIELDS));
         Fair updated = captor.getValue();
         assertThat(updated.getFairId()).isEqualTo(FAIR_ID);
         assertThat(updated.getName()).isEqualTo("2026 서울 펫페어(수정)");
@@ -391,11 +457,11 @@ class FairServiceTest {
     @DisplayName("REJECTED 상태에서 본인이 수정해도 재제출로 처리한다")
     void updateApplication_REJECTED상태에서_본인이수정하면_재제출된다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.REJECTED));
-        given(fairMapper.updateApplication(any())).willReturn(1);
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
 
-        fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("2026 서울 펫페어(재제출)"));
+        fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("2026 서울 펫페어(재제출)"), ALL_UPDATE_FIELDS);
 
-        verify(fairMapper).updateApplication(any());
+        verify(fairMapper).updateApplication(any(), any());
     }
 
     @Test
@@ -404,20 +470,20 @@ class FairServiceTest {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
 
         assertErrorCode(
-                () -> fairService.updateApplication(FAIR_ID, REVIEWER_ID, updateRequest("이름변경")),
+                () -> fairService.updateApplication(FAIR_ID, REVIEWER_ID, updateRequest("이름변경"), ALL_UPDATE_FIELDS),
                 ErrorCode.FAIR_APPLICATION_ACCESS_DENIED
         );
-        verify(fairMapper, never()).updateApplication(any());
+        verify(fairMapper, never()).updateApplication(any(), any());
     }
 
     @Test
     @DisplayName("조건부 UPDATE가 영향 행 0건이면(RECEIVED/REJECTED가 아니면) FAIR_APPLICATION_NOT_EDITABLE를 던진다")
     void updateApplication_수정불가상태면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
-        given(fairMapper.updateApplication(any())).willReturn(0);
+        given(fairMapper.updateApplication(any(), any())).willReturn(0);
 
         assertErrorCode(
-                () -> fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("이름변경")),
+                () -> fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("이름변경"), ALL_UPDATE_FIELDS),
                 ErrorCode.FAIR_APPLICATION_NOT_EDITABLE
         );
     }
@@ -428,7 +494,7 @@ class FairServiceTest {
         given(fairMapper.selectById(FAIR_ID)).willReturn(null);
 
         assertErrorCode(
-                () -> fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("이름변경")),
+                () -> fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("이름변경"), ALL_UPDATE_FIELDS),
                 ErrorCode.FAIR_NOT_FOUND
         );
     }
@@ -437,7 +503,7 @@ class FairServiceTest {
     @DisplayName("requesterId가 없으면 조회하지 않고 INVALID_INPUT_VALUE를 던진다")
     void updateApplication_requesterId없으면_예외를_던진다() {
         assertErrorCode(
-                () -> fairService.updateApplication(FAIR_ID, null, updateRequest("이름변경")),
+                () -> fairService.updateApplication(FAIR_ID, null, updateRequest("이름변경"), ALL_UPDATE_FIELDS),
                 ErrorCode.INVALID_INPUT_VALUE
         );
         verify(fairMapper, never()).selectById(any());
@@ -447,10 +513,93 @@ class FairServiceTest {
     @DisplayName("보낸 필드가 빈 문자열이면 INVALID_INPUT_VALUE를 던진다")
     void updateApplication_필드가공백이면_예외를_던진다() {
         assertErrorCode(
-                () -> fairService.updateApplication(FAIR_ID, USER_ID, updateRequest(" ")),
+                () -> fairService.updateApplication(FAIR_ID, USER_ID, updateRequest(" "), ALL_UPDATE_FIELDS),
                 ErrorCode.INVALID_INPUT_VALUE
         );
         verify(fairMapper, never()).selectById(any());
+    }
+
+    @Test
+    @DisplayName("필드를 생략하면(요청에 없으면) 기존 값을 유지한다 - setFields가 비어 매퍼로 전달된다")
+    void updateApplication_필드를_생략하면_setFields가_비어있다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
+
+        // 아무 필드도 요청에 없었던 것처럼(name/managerName/managerEmail도 생략) 호출한다.
+        // record 값 자체는 채워져 있어도(테스트 편의상 updateRequest 재사용) presentFields가
+        // 비어 있으면 검증도 갱신도 그 필드들을 건드리지 않는다.
+        fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("아무이름"), Set.of());
+
+        ArgumentCaptor<Set> setFieldsCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(fairMapper).updateApplication(any(), setFieldsCaptor.capture());
+        assertThat(setFieldsCaptor.getValue()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("필드를 명시적으로 비우면(요청에 있고 값이 null) 그 컬럼을 NULL로 지운다")
+    void updateApplication_필드를_명시적으로_비우면_NULL로_지운다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
+
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                "이름", null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null,
+                "김담당", null, "manager@petopia.example"
+        );
+        Set<String> presentFields = Set.of("name", "description", "managerName", "managerEmail");
+
+        fairService.updateApplication(FAIR_ID, USER_ID, request, presentFields);
+
+        ArgumentCaptor<Fair> fairCaptor = ArgumentCaptor.forClass(Fair.class);
+        ArgumentCaptor<Set> setFieldsCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(fairMapper).updateApplication(fairCaptor.capture(), setFieldsCaptor.capture());
+        assertThat(fairCaptor.getValue().getDescription()).isNull();
+        assertThat(setFieldsCaptor.getValue()).contains("description");
+    }
+
+    @Test
+    @DisplayName("필수 필드(name/managerName/managerEmail)를 명시적으로 비우려 하면 INVALID_INPUT_VALUE를 던진다")
+    void updateApplication_필수필드를_명시적으로_비우면_예외를_던진다() {
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null,
+                "김담당", null, "manager@petopia.example"
+        );
+
+        assertErrorCode(
+                () -> fairService.updateApplication(FAIR_ID, USER_ID, request, Set.of("name", "managerName", "managerEmail")),
+                ErrorCode.INVALID_INPUT_VALUE
+        );
+        verify(fairMapper, never()).selectById(any());
+    }
+
+    @Test
+    @DisplayName("posterImageObjectKey를 명시적으로 비우면(null) 포스터 이미지를 삭제한다")
+    void updateApplication_posterImageObjectKey를_비우면_포스터를_삭제한다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
+
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                "이름", null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null,
+                "김담당", null, "manager@petopia.example"
+        );
+        Set<String> presentFields = Set.of("name", "posterImageObjectKey", "managerName", "managerEmail");
+
+        fairService.updateApplication(FAIR_ID, USER_ID, request, presentFields);
+
+        ArgumentCaptor<Fair> fairCaptor = ArgumentCaptor.forClass(Fair.class);
+        ArgumentCaptor<Set> setFieldsCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(fairMapper).updateApplication(fairCaptor.capture(), setFieldsCaptor.capture());
+        assertThat(fairCaptor.getValue().getPosterImageUrl()).isNull();
+        assertThat(setFieldsCaptor.getValue()).contains("posterImageUrl");
+        verify(storageService, never()).confirm(any(), any());
     }
 
     // ===== review =====
@@ -547,14 +696,14 @@ class FairServiceTest {
     // ===== publish =====
 
     @Test
-    @DisplayName("PAYMENT_PENDING 상태의 행사를 공개하면 published_at을 채운다")
+    @DisplayName("PREPARING 상태의 행사를 공개하면 published_at을 채운다")
     void publish_공개가능상태면_publishedAt을_설정한다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PREPARING));
 
         PublishFairResponse response = fairService.publish(FAIR_ID, REVIEWER_ID);
 
         assertThat(response.fairId()).isEqualTo(FAIR_ID);
-        assertThat(response.status()).isEqualTo(FairStatus.PAYMENT_PENDING.name());
+        assertThat(response.status()).isEqualTo(FairStatus.PREPARING.name());
         assertThat(response.publishedAt()).isEqualTo(NOW);
 
         ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
@@ -565,9 +714,18 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("개설비 결제 대기 중(PAYMENT_PENDING)인 행사는 공개할 수 없어 FAIR_NOT_PUBLISHABLE을 던진다")
+    void publish_개설비결제전이면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+
+        assertErrorCode(() -> fairService.publish(FAIR_ID, REVIEWER_ID), ErrorCode.FAIR_NOT_PUBLISHABLE);
+        verify(fairMapper, never()).update(any());
+    }
+
+    @Test
     @DisplayName("이미 공개된 행사를 다시 공개하면 갱신 없이 최초 공개 일시를 그대로 반환한다")
     void publish_이미공개됐으면_멱등하게_기존값을_반환한다() {
-        Fair fair = fairWithStatus(FairStatus.PAYMENT_PENDING);
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
         LocalDateTime firstPublishedAt = NOW.minusDays(1);
         fair.setPublishedAt(firstPublishedAt);
         given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
@@ -590,7 +748,7 @@ class FairServiceTest {
     @Test
     @DisplayName("취소된 행사는 공개할 수 없어 FAIR_NOT_PUBLISHABLE을 던진다")
     void publish_취소됐으면_예외를_던진다() {
-        Fair fair = fairWithStatus(FairStatus.PAYMENT_PENDING);
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
         fair.setCanceledAt(NOW.minusHours(1));
         given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
 
@@ -610,6 +768,53 @@ class FairServiceTest {
     void publish_actorId없으면_예외를_던진다() {
         assertErrorCode(() -> fairService.publish(FAIR_ID, null), ErrorCode.INVALID_INPUT_VALUE);
         verify(fairMapper, never()).selectById(any());
+    }
+
+    // ===== listPublicFairs =====
+
+    @Test
+    @DisplayName("filter가 없으면 조회하지 않고 INVALID_INPUT_VALUE를 던진다")
+    void listPublicFairs_filter없으면_예외를_던진다() {
+        assertErrorCode(() -> fairService.listPublicFairs(null), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).selectPublicFairs(any(), any());
+    }
+
+    @Test
+    @DisplayName("오늘 날짜(timeProvider 기준)와 filter를 그대로 매퍼에 넘기고 결과를 목록 응답으로 매핑한다")
+    void listPublicFairs_오늘날짜와_필터로_조회해서_매핑한다() {
+        Fair fair = fairWithStatus(FairStatus.PREPARING);
+        fair.setCategory("DOG");
+        fair.setPlaceName("코엑스");
+        fair.setPosterImageUrl("https://cdn.petopia.example/poster.jpg");
+        fair.setOperationStartDate(FUTURE_START);
+        fair.setOperationEndDate(FUTURE_END);
+        given(fairMapper.selectPublicFairs(PublicFairListFilter.UPCOMING, NOW.toLocalDate()))
+                .willReturn(List.of(fair));
+
+        List<FairPublicListItemResponse> response = fairService.listPublicFairs(PublicFairListFilter.UPCOMING);
+
+        verify(fairMapper).selectPublicFairs(PublicFairListFilter.UPCOMING, NOW.toLocalDate());
+        assertThat(response).hasSize(1);
+        FairPublicListItemResponse item = response.get(0);
+        assertThat(item.fairId()).isEqualTo(FAIR_ID);
+        assertThat(item.name()).isEqualTo(fair.getName());
+        assertThat(item.category()).isEqualTo("DOG");
+        assertThat(item.posterImageUrl()).isEqualTo("https://cdn.petopia.example/poster.jpg");
+        assertThat(item.placeName()).isEqualTo("코엑스");
+        assertThat(item.operationStartDate()).isEqualTo(FUTURE_START);
+        assertThat(item.operationEndDate()).isEqualTo(FUTURE_END);
+    }
+
+    @Test
+    @DisplayName("PAST 필터로 조회하면 매퍼에 PAST를 그대로 넘긴다")
+    void listPublicFairs_PAST필터로_조회한다() {
+        given(fairMapper.selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate()))
+                .willReturn(List.of());
+
+        List<FairPublicListItemResponse> response = fairService.listPublicFairs(PublicFairListFilter.PAST);
+
+        verify(fairMapper).selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate());
+        assertThat(response).isEmpty();
     }
 
     // ===== fixtures =====
