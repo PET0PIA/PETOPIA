@@ -1,5 +1,9 @@
 package com.ms.petopia.api.settlement.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
@@ -28,6 +32,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 정산 계산·확정·조회 서비스.
@@ -57,6 +62,7 @@ public class SettlementService {
     private final CommissionRateService commissionRateService;
     private final NotificationService notificationService;
     private final RecruitNoticeMapper recruitNoticeMapper;
+    private final AuditLogService auditLogService;
 
     /**
      * 특정 행사·업체의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
@@ -241,6 +247,21 @@ public class SettlementService {
         row.setStatus("CONFIRMED");
         row.setConfirmedByUserId(confirmedByUserId);
         row.setConfirmedAt(now);
+
+        try {
+            auditLogService.record(
+                    confirmedByUserId,
+                    ActorType.ADMIN,
+                    "SUPER_ADMIN",
+                    ActionType.SETTLEMENT_CONFIRM,
+                    TargetType.SETTLEMENT,
+                    settlementId,
+                    Map.of("status", "PENDING"),
+                    Map.of("status", "CONFIRMED")
+            );
+        } catch (Exception e) {
+            log.error("정산 확정 감사 로그 저장 실패. settlementId={}", settlementId, e);
+        }
 
         notifySettlementCompleted(row.getFairId(), row.getSettlementId());
 

@@ -14,6 +14,10 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.auth.service.AdminAccountService;
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -35,6 +39,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -60,6 +65,7 @@ public class FairService {
     private final StorageService storageService;
     private final AdminAccountService adminAccountService;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogService;
 
     /**
      * 행사 신청서를 등록한다. 심사 전 상태이므로 status는 채우지 않고 DDL 기본값(RECEIVED)에
@@ -301,6 +307,19 @@ public class FairService {
                     fairId, fair.getApplicantUserId(), fair.getManagerName(), fair.getManagerEmail(), fair.getManagerPhone()
             );
         }
+
+        auditLogService.record(
+                reviewerId,
+                ActorType.ADMIN,
+                "SUPER_ADMIN",
+                approved ? ActionType.FAIR_APPROVE : ActionType.FAIR_REJECT,
+                TargetType.FAIR,
+                fairId,
+                Map.of("status", "RECEIVED"),
+                approved
+                        ? Map.of("status", "PAYMENT_PENDING", "paymentDueAt", update.getPaymentDueAt())
+                        : Map.of("status", "REJECTED", "rejectReason", update.getRejectReason())
+        );
 
         Long applicantUserId = fair.getApplicantUserId();
         if (approved) {

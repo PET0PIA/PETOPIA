@@ -1,5 +1,6 @@
 package com.ms.petopia.api.settlement.service;
 
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
@@ -55,6 +56,9 @@ class SettlementServiceTest {
 
     @Mock
     private RecruitNoticeMapper recruitNoticeMapper;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     @InjectMocks
     private SettlementService settlementService;

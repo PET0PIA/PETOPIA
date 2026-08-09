@@ -13,6 +13,7 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.auth.service.AdminAccountService;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
@@ -69,6 +70,9 @@ class FairServiceTest {
 
     @Mock
     private NotificationService notificationService;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     @InjectMocks
     private FairService fairService;
