@@ -1,5 +1,9 @@
 package com.ms.petopia.api.payment.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -18,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +45,7 @@ public class PaymentService {
     private final TossPaymentClient tossPaymentClient;
     private final ReservationPaymentContractClient reservationPaymentContractClient;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogService;
 
     /**
      * 결제 ID로 상세 조회한다.
@@ -340,9 +346,36 @@ public class PaymentService {
             notifyReservationDomain(row);
         }
 
+        recordPaymentCompletionAudit(row, userId);
         notifyPaymentCompleted(row);
 
         return PaymentResponse.from(row);
+    }
+
+    private void recordPaymentCompletionAudit(PaymentRow row, Long userId) {
+        try {
+            TargetType targetType = "RESERVATION_DEPOSIT".equals(row.getPaymentType()) && row.getReservationId() != null
+                    ? TargetType.RESERVATION : TargetType.FAIR;
+            Long targetId = targetType == TargetType.RESERVATION ? row.getReservationId() : row.getFairId();
+
+            Map<String, Object> after = new LinkedHashMap<>();
+            after.put("paymentId", row.getPaymentId());
+            after.put("paymentType", row.getPaymentType());
+            after.put("amount", row.getAmount());
+
+            auditLogService.record(
+                    userId,
+                    ActorType.PAYMENT,
+                    "USER",
+                    ActionType.PAYMENT_COMPLETION_RECEIVED,
+                    targetType,
+                    targetId,
+                    null,
+                    after
+            );
+        } catch (Exception e) {
+            log.error("결제 완료 감사 로그 저장 실패. paymentId={}", row.getPaymentId(), e);
+        }
     }
 
     private void notifyPaymentCompleted(PaymentRow row) {

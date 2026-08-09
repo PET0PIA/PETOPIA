@@ -1,6 +1,7 @@
 package com.ms.petopia.api.payment.service;
 
 
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
@@ -64,6 +65,9 @@ class PaymentServiceTest {
 
     @Mock
     private NotificationService notificationService;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     // PaymentService 생성자가 PaymentMapper를 받는 구조여야 동작함
     // (@RequiredArgsConstructor 패턴).

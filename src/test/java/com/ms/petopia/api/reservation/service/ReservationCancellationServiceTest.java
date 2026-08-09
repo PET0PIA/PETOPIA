@@ -1,10 +1,14 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
-import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.mapper.ReservationCancellationMapper;
+import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -74,6 +78,14 @@ class ReservationCancellationServiceTest {
         verify(cancellationMapper).insertCanceledHistory(
                 RESERVATION_ID, "PENDING_PAYMENT", "일정 변경", USER_ID, NOW
         );
+
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+        ArgumentCaptor<SaveNotificationDto.Request> notifCaptor =
+                ArgumentCaptor.forClass(SaveNotificationDto.Request.class);
+        verify(notificationService).save(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
+        assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.RESERVATION_CANCELED);
     }
 
     @Test
