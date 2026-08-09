@@ -56,15 +56,16 @@ class AuditLogControllerTest {
     }
 
     @Test
-    @DisplayName("파라미터 없이 조회해도 200 OK를 반환하고 서비스에 null을 전달한다")
-    void getAuditLogs_파라미터없어도_200_OK() throws Exception {
+    @DisplayName("필터 파라미터가 없으면 서비스가 예외를 던져 400을 반환한다")
+    void getAuditLogs_파라미터없으면_400() throws Exception {
         given(auditLogQueryService.query(null, null, null, null, 0, 20))
-                .willReturn(new AuditLogListResponse(List.of(), 0, 20, 0L, false));
+                .willThrow(new com.ms.petopia.global.exception.CommonException(
+                        com.ms.petopia.global.exception.ErrorCode.INVALID_INPUT_VALUE,
+                        "targetType+targetId, actorUserId, actionType 중 하나는 필수입니다."));
 
         mockMvc.perform(get("/api/admin/audit-logs"))
-                .andExpect(status().isOk());
-
-        verify(auditLogQueryService).query(null, null, null, null, 0, 20);
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("C001"));
     }
 
     @Test

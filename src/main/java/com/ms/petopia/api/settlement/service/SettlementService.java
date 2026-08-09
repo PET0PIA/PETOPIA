@@ -222,6 +222,7 @@ public class SettlementService {
      * @throws CommonException {@link ErrorCode#SETTLEMENT_RECALCULATION_REQUIRED} 재계산이
      *         필요한 상태(needs_recalculation)일 때 — 먼저 {@link #recalculate}를 호출해야 한다
      */
+    @Transactional
     public SettlementResponse confirm(Long settlementId, Long confirmedByUserId) {
         SettlementRow row = settlementMapper.selectById(settlementId);
         if (row == null) {
@@ -248,20 +249,16 @@ public class SettlementService {
         row.setConfirmedByUserId(confirmedByUserId);
         row.setConfirmedAt(now);
 
-        try {
-            auditLogService.record(
-                    confirmedByUserId,
-                    ActorType.ADMIN,
-                    "SUPER_ADMIN",
-                    ActionType.SETTLEMENT_CONFIRM,
-                    TargetType.SETTLEMENT,
-                    settlementId,
-                    Map.of("status", "PENDING"),
-                    Map.of("status", "CONFIRMED")
-            );
-        } catch (Exception e) {
-            log.error("정산 확정 감사 로그 저장 실패. settlementId={}", settlementId, e);
-        }
+        auditLogService.record(
+                confirmedByUserId,
+                ActorType.ADMIN,
+                "SUPER_ADMIN",
+                ActionType.SETTLEMENT_CONFIRM,
+                TargetType.SETTLEMENT,
+                settlementId,
+                Map.of("status", "PENDING"),
+                Map.of("status", "CONFIRMED")
+        );
 
         notifySettlementCompleted(row.getFairId(), row.getSettlementId());
 

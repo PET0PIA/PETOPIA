@@ -116,7 +116,7 @@ public class AuthService {
                         null, null
                 );
             } catch (Exception e) {
-                log.error("LOGIN_FAIL 감사 로그 저장 실패. email={}", request.getEmail(), e);
+                log.error("LOGIN_FAIL 감사 로그 저장 실패", e);
             }
             throw new CommonException(ErrorCode.INVALID_LOGIN);
         }
