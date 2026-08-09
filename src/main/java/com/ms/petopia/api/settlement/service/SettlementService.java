@@ -260,7 +260,7 @@ public class SettlementService {
                     "정산이 확정되었습니다",
                     "행사 정산(ID: " + settlementId + ")이 확정 처리되었습니다.",
                     null,
-                    List.of(DeliveryChannel.IN_APP),
+                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                     null
             ));
         } catch (Exception e) {

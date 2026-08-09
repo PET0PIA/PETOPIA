@@ -213,7 +213,7 @@ public class FairCancelRefundOrchestrationService {
                     "행사가 취소되었습니다",
                     "참가하셨던 행사가 취소되어 환불이 처리되었습니다.",
                     null,
-                    List.of(DeliveryChannel.IN_APP),
+                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                     null
             ));
         } catch (Exception e) {

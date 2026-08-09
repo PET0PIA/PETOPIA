@@ -123,7 +123,7 @@ public class ReservationPaymentCompletionService {
                             "예약이 확정되었습니다",
                             "결제가 완료되어 예약이 확정되었습니다.",
                             null,
-                            List.of(DeliveryChannel.IN_APP),
+                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                             null
                     ));
                 } catch (Exception e) {

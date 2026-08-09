@@ -93,7 +93,7 @@ public class ReservationCancellationService {
                             "예약이 취소되었습니다",
                             "예약이 정상적으로 취소 처리되었습니다.",
                             null,
-                            List.of(DeliveryChannel.IN_APP),
+                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                             null
                     ));
                 } catch (Exception e) {

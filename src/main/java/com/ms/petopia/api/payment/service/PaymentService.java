@@ -353,7 +353,7 @@ public class PaymentService {
                     "결제가 완료되었습니다",
                     row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
                     null,
-                    List.of(DeliveryChannel.IN_APP),
+                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                     null
             ));
         } catch (Exception e) {

@@ -174,7 +174,7 @@ public class FairService {
                             title,
                             body,
                             null,
-                            List.of(DeliveryChannel.IN_APP),
+                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                             null
                     ));
                 } catch (Exception e) {
