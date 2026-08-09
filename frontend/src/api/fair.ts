@@ -1,9 +1,13 @@
 import { apiClient } from "./client";
 
 /**
+ * 이 파일이 호출하는 백엔드 Fair 도메인은 JWT 인증(@AuthenticationPrincipal)으로 전환됐다 -
+ * apiClient가 메모리에 든 액세스 토큰으로 Authorization: Bearer 헤더를 자동으로 붙여주므로,
+ * 이 파일의 함수들은 별도로 헤더를 넘기지 않는다.
+ *
  * TEMP_USER_ID_HEADER / TEMP_APPLICANT_USER_ID는 이 파일 자체는 더 이상 안 쓰지만,
  * audit.ts/commissionRate.ts/notification.ts/settlement.ts가 아직 이 상수를 가져다 쓰고
- * 있어(해당 백엔드 도메인은 JWT로 전환 안 됨) 그대로 export만 유지한다.
+ * 있어(그 백엔드 도메인들은 아직 JWT로 전환 안 됨) 그대로 export만 유지한다.
  * TODO 그 도메인들도 JWT로 전환되면 이 export를 제거한다.
  */
 export const TEMP_USER_ID_HEADER = "X-User-Id";
@@ -75,6 +79,9 @@ export interface FairApplicationDetail {
   reviewedAt: string | null;
   paymentDueAt: string | null;
   createdAt: string;
+  /** 취소 승인 일시(취소 아니면 null). 취소 승인은 status는 그대로 두고 이 필드만 채우므로,
+   * 취소 여부는 status가 아니라 이 필드로 판단해야 한다. */
+  canceledAt: string | null;
 }
 
 // 백엔드 SecurityConfig 기준 SUPER_ADMIN 전용(관리자 검토 화면). 신청자 본인 조회는
@@ -94,6 +101,9 @@ export interface FairApplicationSummary {
   rejectReason: string | null;
   createdAt: string;
   reviewedAt: string | null;
+  /** 취소 승인 일시(취소 아니면 null). status와 별개로 채워지므로, 취소 여부는
+   * 이 필드로 판단해야 한다({@link FairApplicationDetail.canceledAt} 참고). */
+  canceledAt: string | null;
 }
 
 /** 마이페이지 "내 신청 현황" 목록. 로그인한 본인이 낸 신청서만 최신순으로 반환한다. */

@@ -15,6 +15,7 @@ const statusLabels: Record<string, string> = {
   PREPARING: "준비 중",
   IN_PROGRESS: "진행 중",
   ENDED: "종료",
+  CANCELED: "취소됨",
 };
 const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
   RECEIVED: "sun",
@@ -24,7 +25,15 @@ const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
   PREPARING: "leaf",
   IN_PROGRESS: "leaf",
   ENDED: "neutral",
+  CANCELED: "neutral",
 };
+
+// 취소 승인(FairCancelRequestService#review)은 fairs.canceled_at만 채우고 status는 그대로
+// 두므로, 화면에 보여줄 상태는 status 필드가 아니라 canceledAt 유무로 먼저 판단해야 한다
+// (그렇지 않으면 취소된 행사가 계속 "진행 중"/"준비 중"으로 보인다).
+function resolveDisplayStatus(detail: FairApplicationDetail): string {
+  return detail.canceledAt ? "CANCELED" : detail.status;
+}
 
 function formatDateTime(value: string | null) {
   if (!value) return "-";
@@ -61,29 +70,6 @@ export function MyFairApplicationDetailPage() {
   const id = Number(fairId);
   const idValid = Number.isInteger(id) && id > 0;
 
-  const [detail, setDetail] = useState<FairApplicationDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!idValid) return;
-    let alive = true;
-    getMyApplicationDetail(id)
-      .then((res) => {
-        if (alive) setDetail(res);
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        setError(err instanceof ApiError ? err.message : "신청서를 불러오지 못했어요.");
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [id, idValid]);
-
   if (!idValid) {
     return (
       <div className="mx-auto max-w-3xl py-2">
@@ -99,6 +85,35 @@ export function MyFairApplicationDetailPage() {
       </div>
     );
   }
+
+  // id별로 key를 줘서, 다른 신청서 상세로 이동할 때(같은 라우트라 컴포넌트가 재사용됨)
+  // 이전 신청서의 detail/loading/error 상태가 새 요청이 끝날 때까지 잔류하지 않고
+  // 완전히 새로 마운트되게 한다.
+  return <MyFairApplicationDetailContent key={id} id={id} />;
+}
+
+function MyFairApplicationDetailContent({ id }: { id: number }) {
+  const [detail, setDetail] = useState<FairApplicationDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getMyApplicationDetail(id)
+      .then((res) => {
+        if (alive) setDetail(res);
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        setError(err instanceof ApiError ? err.message : "신청서를 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
 
   if (loading) {
     return (
@@ -125,18 +140,26 @@ export function MyFairApplicationDetailPage() {
     );
   }
 
+  const displayStatus = resolveDisplayStatus(detail);
+
   return (
     <div className="mx-auto max-w-3xl py-2">
       <BackLink />
 
       <div className="mt-4 mb-6">
         <div className="mb-2 flex items-center gap-2">
-          <Badge tone={statusTones[detail.status] ?? "neutral"}>
-            {statusLabels[detail.status] ?? detail.status}
+          <Badge tone={statusTones[displayStatus] ?? "neutral"}>
+            {statusLabels[displayStatus] ?? displayStatus}
           </Badge>
         </div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{detail.name}</h1>
       </div>
+
+      {detail.canceledAt && (
+        <div className="surface mb-6 p-4 text-sm text-ink">
+          이 행사는 {formatDateTime(detail.canceledAt)}에 취소가 확정됐어요.
+        </div>
+      )}
 
       {detail.status === "REJECTED" && detail.rejectReason && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -145,7 +168,7 @@ export function MyFairApplicationDetailPage() {
         </div>
       )}
 
-      {detail.status === "PAYMENT_PENDING" && detail.paymentDueAt && (
+      {!detail.canceledAt && detail.status === "PAYMENT_PENDING" && detail.paymentDueAt && (
         <div className="surface mb-6 p-4 text-sm text-ink">
           개설비 결제 기한: {formatDateTime(detail.paymentDueAt)}까지 결제하지 않으면 신청이 만료돼요.
         </div>

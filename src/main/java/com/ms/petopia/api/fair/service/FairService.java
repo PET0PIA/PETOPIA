@@ -379,7 +379,8 @@ public class FairService {
                 fair.getRejectReason(),
                 fair.getReviewedAt(),
                 fair.getPaymentDueAt(),
-                fair.getCreatedAt()
+                fair.getCreatedAt(),
+                fair.getCanceledAt()
         );
     }
 
@@ -409,7 +410,8 @@ public class FairService {
                 fair.getOperationEndDate(),
                 fair.getRejectReason(),
                 fair.getCreatedAt(),
-                fair.getReviewedAt()
+                fair.getReviewedAt(),
+                fair.getCanceledAt()
         );
     }
 

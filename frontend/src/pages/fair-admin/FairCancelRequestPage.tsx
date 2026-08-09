@@ -1,5 +1,5 @@
 import { AlertCircle, Ban, Search } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import { createFairCancelRequest, getFairCancelRequests, type FairCancelRequestItem } from "../../api/fair";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -43,17 +43,22 @@ export function FairCancelRequestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (fairId === null) return;
-    let ignore = false;
-
-    getFairCancelRequests(fairId)
-      .then((data) => { if (!ignore) setRequests(data); })
-      .catch((error) => { if (!ignore) setLoadError(error instanceof ApiError ? error.message : "취소 신청 이력을 불러오지 못했어요."); })
-      .finally(() => { if (!ignore) setLoading(false); });
-
-    return () => { ignore = true; };
-  }, [fairId]);
+  // 폼 제출 때마다 직접 호출한다(useEffect(fairId)에 맡기면, 같은 행사 ID를 다시
+  // 조회할 때 fairId 상태가 바뀌지 않아 effect가 재실행되지 않고 로딩 상태만 true로
+  // 남는 문제가 있었다).
+  async function loadRequests(targetFairId: number) {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await getFairCancelRequests(targetFairId);
+      setRequests(data);
+    } catch (error) {
+      setRequests([]);
+      setLoadError(error instanceof ApiError ? error.message : "취소 신청 이력을 불러오지 못했어요.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function handleLoadFair(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -64,9 +69,8 @@ export function FairCancelRequestPage() {
     }
     setSubmitError(null);
     setReason("");
-    setLoading(true);
-    setLoadError(null);
     setFairId(parsed);
+    void loadRequests(parsed);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

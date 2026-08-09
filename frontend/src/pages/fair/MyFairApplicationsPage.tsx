@@ -18,6 +18,7 @@ const statusLabels: Record<string, string> = {
   PREPARING: "준비 중",
   IN_PROGRESS: "진행 중",
   ENDED: "종료",
+  CANCELED: "취소됨",
 };
 const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
   RECEIVED: "sun",
@@ -27,7 +28,14 @@ const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
   PREPARING: "leaf",
   IN_PROGRESS: "leaf",
   ENDED: "neutral",
+  CANCELED: "neutral",
 };
+
+// 취소 승인은 status는 그대로 두고 canceledAt만 채우므로(FairService.getMyApplications 참고),
+// 목록에 보여줄 상태는 status가 아니라 canceledAt 유무로 먼저 판단해야 한다.
+function resolveDisplayStatus(application: FairApplicationSummary): string {
+  return application.canceledAt ? "CANCELED" : application.status;
+}
 
 function formatPeriod(start: string | null, end: string | null) {
   if (!start) return "-";
@@ -109,8 +117,8 @@ export function MyFairApplicationsPage() {
                 </td>
                 <td className="px-4 py-3 text-muted">{application.createdAt.slice(0, 10)}</td>
                 <td className="px-4 py-3">
-                  <Badge tone={statusTones[application.status] ?? "neutral"}>
-                    {statusLabels[application.status] ?? application.status}
+                  <Badge tone={statusTones[resolveDisplayStatus(application)] ?? "neutral"}>
+                    {statusLabels[resolveDisplayStatus(application)] ?? resolveDisplayStatus(application)}
                   </Badge>
                 </td>
                 <td className="px-4 py-3 text-right">
