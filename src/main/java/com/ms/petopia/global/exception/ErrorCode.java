@@ -23,6 +23,10 @@ public enum ErrorCode {
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "U001", "존재하지 않는 사용자입니다."),
     DUPLICATED_EMAIL(HttpStatus.CONFLICT, "U002", "이미 사용 중인 이메일입니다."),
 
+    // ===== Pet =====
+    PET_NOT_FOUND(HttpStatus.NOT_FOUND, "PT001", "존재하지 않는 반려동물입니다."),
+    PET_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PT002", "본인의 반려동물만 조회·수정할 수 있습니다."),
+
     // ===== Auth =====
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "A001", "인증이 필요합니다."),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "A002", "접근 권한이 없습니다."),

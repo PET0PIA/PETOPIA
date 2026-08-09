@@ -56,6 +56,10 @@ public class SecurityConfig {
                         .hasRole("VENDOR")
                         //로그인한 본인만 비밀번호 변경 가능 - anyRequest().permitAll()보다 먼저 와야 함
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/password/change").authenticated()
+                        //로그인한 본인만 내 프로필 조회/수정 가능
+                        .requestMatchers("/api/users/me").authenticated()
+                        //로그인한 본인만 반려동물 등록/조회/수정/삭제 가능
+                        .requestMatchers("/api/users/me/pets/**").authenticated()
                         //TODO 추후 role 기반 가드 확장
                         .requestMatchers(HttpMethod.POST, "/api/files/presigned-upload").authenticated()
                         //user 권한을 필요
