@@ -1,5 +1,5 @@
 import { CalendarDays, Heart, IdCard, PawPrint, Ticket, User } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageContainer } from "../../components/common/PageContainer";
@@ -20,26 +20,56 @@ export function MyPage() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [petsLoading, setPetsLoading] = useState(true);
+  const [petsError, setPetsError] = useState<string | null>(null);
+  const aliveRef = useRef(true);
 
-  useEffect(() => {
-    let alive = true;
-    Promise.all([getMe(), getMyPets()])
-      .then(([meResult, petsResult]) => {
-        if (!alive) return;
-        setMe(meResult);
-        setPets(petsResult);
+  // 반려동물 목록만 따로 불러온다. loading/error를 리셋하지 않고 요청만 보낸다 - 이펙트
+  // 본문에서 곧바로(동기적으로) setState를 호출하면 안 되기 때문에(react-hooks/set-state-in-effect),
+  // "리셋"은 이펙트가 아니라 재시도 버튼의 이벤트 핸들러(handleRetryPets)에서 한다.
+  const fetchPets = useCallback(() => {
+    getMyPets()
+      .then((result) => {
+        if (aliveRef.current) setPets(result);
       })
       .catch((err: unknown) => {
-        if (!alive) return;
+        if (!aliveRef.current) return;
+        setPetsError(err instanceof ApiError ? err.message : "반려동물 목록을 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (aliveRef.current) setPetsLoading(false);
+      });
+  }, []);
+
+  function handleRetryPets() {
+    setPetsLoading(true);
+    setPetsError(null);
+    fetchPets();
+  }
+
+  useEffect(() => {
+    aliveRef.current = true;
+    // getMe()는 화면 전체(닉네임/이메일 등)를 구성하는 필수 데이터라 실패하면 페이지 전체를
+    // 에러로 처리한다. getMyPets()는 반려동물 섹션만의 데이터라 따로 불러온다 - 하나로 묶으면
+    // (Promise.all) 반려동물 조회만 실패해도 이미 받아온 내 정보까지 화면에 못 띄우게 된다.
+    getMe()
+      .then((result) => {
+        if (aliveRef.current) setMe(result);
+      })
+      .catch((err: unknown) => {
+        if (!aliveRef.current) return;
         setError(err instanceof ApiError ? err.message : "마이페이지를 불러오지 못했어요.");
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (aliveRef.current) setLoading(false);
       });
+
+    fetchPets();
+
     return () => {
-      alive = false;
+      aliveRef.current = false;
     };
-  }, []);
+  }, [fetchPets]);
 
   if (loading) {
     return (
@@ -101,7 +131,19 @@ export function MyPage() {
           description="등록한 반려동물을 관리해요."
           icon={<PawPrint size={20} className="shrink-0 text-primary-strong" aria-hidden="true" />}
         />
-        {pets.length === 0 ? (
+        {petsLoading ? (
+          <p className="py-10 text-center text-sm text-muted">불러오는 중이에요…</p>
+        ) : petsError ? (
+          <div className="surface grid min-h-72 place-items-center p-8 text-center">
+            <div>
+              <h2 className="text-lg font-extrabold">반려동물 목록을 불러오지 못했어요.</h2>
+              <p className="mt-2 max-w-sm text-sm leading-6 text-muted">{petsError}</p>
+              <Button className="mt-5" variant="outline" onClick={handleRetryPets}>
+                다시 시도
+              </Button>
+            </div>
+          </div>
+        ) : pets.length === 0 ? (
           <EmptyState
             title="아직 등록한 반려동물이 없어요."
             description="반려동물을 등록하면 이곳에서 확인할 수 있어요."

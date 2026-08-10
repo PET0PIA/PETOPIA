@@ -3,7 +3,7 @@ import { Button } from "../ui/Button";
 import { ImageUploadField } from "../ui/ImageUploadField";
 import { Input } from "../ui/Input";
 import { Select } from "../ui/Select";
-import { today } from "../../utils/date";
+import { maxBirthDate } from "../../utils/date";
 import { emptyPetForm, toPetRequest, validatePetForm, type PetFormValues } from "./petFormValues";
 import type { PetRequest } from "../../api/pet";
 
@@ -69,7 +69,7 @@ export function PetForm({ initialValues, initialImageUrl, submitLabel, submittin
 
       <div>
         <label htmlFor="pet-birthDate" className="mb-1.5 block text-sm font-bold text-ink">생년월일</label>
-        <Input id="pet-birthDate" type="date" value={form.birthDate} max={today()} onChange={(e) => update("birthDate", e.target.value)} />
+        <Input id="pet-birthDate" type="date" value={form.birthDate} max={maxBirthDate()} onChange={(e) => update("birthDate", e.target.value)} />
       </div>
 
       <div>

@@ -52,8 +52,8 @@ import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDe
 import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
 import { BusinessDetailPage } from "../pages/business/BusinessDetailPage";
 import { RecruitNoticeFormPage } from "../pages/recruit-notice/RecruitNoticeFormPage";
-// TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin을 ProtectedRoute로 감싸기
-// import { ProtectedRoute } from "./ProtectedRoute";
+import { ProtectedRoute } from "./ProtectedRoute";
+// TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
@@ -113,11 +113,13 @@ export function AppRouter() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-          <Route path="/mypage" element={<MyPage />} />
-          <Route path="/mypage/edit" element={<EditProfilePage />} />
-          <Route path="/mypage/password" element={<PasswordChangePage />} />
-          <Route path="/mypage/pets/new" element={<PetFormPage />} />
-          <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/mypage" element={<MyPage />} />
+            <Route path="/mypage/edit" element={<EditProfilePage />} />
+            <Route path="/mypage/password" element={<PasswordChangePage />} />
+            <Route path="/mypage/pets/new" element={<PetFormPage />} />
+            <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
+          </Route>
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
           <Route path="/fairs/upcoming" element={<FairUpcomingPage />} />

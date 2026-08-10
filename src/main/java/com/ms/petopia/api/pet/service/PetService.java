@@ -64,7 +64,7 @@ public class PetService {
                 || request.getBirthDate() != null
                 || request.getGender() != null
                 || request.getIsNeutered() != null
-                || request.getImageObjectKey() != null;
+                || (request.getImageObjectKey() != null && !request.getImageObjectKey().isBlank());
 
         if (hasAnyField) {
             petMapper.updatePet(

@@ -46,11 +46,13 @@ export function PetDetailPage() {
     // 새로 진입) - 그래서 로딩 상태를 여기서 다시 true로 되돌리지 않는다(첫 마운트에는
     // useState(true) 초기값으로 이미 충분하고, effect 안에서 동기적으로 setState를 하면
     // 불필요한 리렌더가 한 번 더 생긴다).
-    Promise.all([getPet(Number(petId)), getMe()])
-      .then(([petResult, meResult]) => {
+    // getPet은 화면에 꼭 있어야 하는 필수 데이터고, getMe는 "보호자" 표시용 부가 정보다.
+    // 두 요청을 Promise.all로 묶으면 getMe만 실패해도(예: 프로필 조회 일시 장애) 화면 전체가
+    // 에러로 막혀서 정작 있는 반려동물 정보/수정/삭제까지 다 못 하게 된다 - 그래서 따로 둔다.
+    getPet(Number(petId))
+      .then((petResult) => {
         if (!alive) return;
         setPet(petResult);
-        setOwnerName(meResult.nickname);
       })
       .catch((err: unknown) => {
         if (!alive) return;
@@ -59,6 +61,15 @@ export function PetDetailPage() {
       .finally(() => {
         if (alive) setLoading(false);
       });
+
+    getMe()
+      .then((me) => {
+        if (alive) setOwnerName(me.nickname);
+      })
+      .catch(() => {
+        if (alive) setOwnerName(null);
+      });
+
     return () => {
       alive = false;
     };

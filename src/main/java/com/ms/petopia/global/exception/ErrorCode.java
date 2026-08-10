@@ -25,7 +25,7 @@ public enum ErrorCode {
 
     // ===== Pet =====
     PET_NOT_FOUND(HttpStatus.NOT_FOUND, "PT001", "존재하지 않는 반려동물입니다."),
-    PET_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PT002", "본인의 반려동물만 조회·수정할 수 있습니다."),
+    PET_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PT002", "본인의 반려동물만 조회·수정·삭제할 수 있습니다."),
 
     // ===== Auth =====
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "A001", "인증이 필요합니다."),
