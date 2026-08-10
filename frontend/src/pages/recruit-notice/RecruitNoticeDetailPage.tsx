@@ -94,7 +94,7 @@ export function RecruitNoticeDetailPage() {
         action={
           user?.role === "EVENT_ADMIN" ? (
             <Link
-              to={`/fairs/${notice.fairId}/recruit-notice/edit`}
+              to={`/fair-admin/recruit-notice/${notice.fairId}`}
               className="inline-flex min-h-11 items-center gap-2 rounded-button border border-line bg-card px-4 text-sm font-bold hover:bg-page"
             >
               <Pencil size={16} />

@@ -11,6 +11,7 @@ import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { ApiError } from "../../api/client";
 import { getRecruitNotice, upsertRecruitNotice, type RecruitNoticeUpsertRequest } from "../../api/recruitNotice";
 import { useAuth } from "../../contexts/AuthContext";
+import { EmptyState } from "../../components/common/EmptyState";
 
 interface FormState {
   title: string;
@@ -51,6 +52,7 @@ export function RecruitNoticeFormPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!fairId) return;
@@ -66,8 +68,12 @@ export function RecruitNoticeFormPage() {
         });
         setExistingImageUrl(notice.imageUrl);
       })
-      .catch(() => {
-        // 아직 공고가 없으면(작성 모드) 빈 폼 그대로 둔다
+      .catch((error) => {
+        if (ignore) return;
+        // 404(V004, 아직 작성된 공고 없음)면 작성 모드로 정상 진행 - 빈 폼 그대로 둔다
+        if (error instanceof ApiError && error.status === 404) return;
+        // 그 외 에러는 기존 공고를 실수로 덮어쓸 수 있으니 화면에 보여주고 폼 자체를 막는다
+        setLoadError(error instanceof ApiError ? error.message : "모집 공고를 불러오지 못했어요.");
       })
       .finally(() => { if (!ignore) setLoading(false); });
 
@@ -107,6 +113,14 @@ export function RecruitNoticeFormPage() {
 
   if (loading) {
     return <PageContainer className="py-10"><p className="text-sm text-muted">불러오는 중...</p></PageContainer>;
+  }
+
+  if (loadError) {
+    return (
+      <PageContainer className="py-10">
+        <EmptyState title="모집 공고 정보를 불러올 수 없어요" description={loadError} />
+      </PageContainer>
+    );
   }
 
   return (

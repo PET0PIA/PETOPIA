@@ -43,9 +43,15 @@ export function BusinessDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!businessId || !user) return;
+    if (!businessId || !user) {
+      setBusiness(null);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
     let ignore = false;
 
+    setLoading(true);
     getBusiness(Number(businessId), user.userId)
       .then((data) => { if (!ignore) setBusiness(data); })
       .catch((error) => {

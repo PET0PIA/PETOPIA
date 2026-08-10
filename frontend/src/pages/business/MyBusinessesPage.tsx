@@ -29,9 +29,15 @@ export function MyBusinessesPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setBusinesses([]);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
     let ignore = false;
 
+    setLoading(true);
     getMyBusinesses(user.userId)
       .then((data) => { if (!ignore) setBusinesses(data); })
       .catch((error) => {
@@ -60,7 +66,11 @@ export function MyBusinessesPage() {
 
       {!loading && loadError && <EmptyState title="목록을 불러올 수 없어요" description={loadError} />}
 
-      {!loading && !loadError && businesses.length === 0 && (
+      {!loading && !user && (
+        <EmptyState title="로그인이 필요해요" description="로그인 후 내 사업자 목록을 확인할 수 있어요." actionTo="/login" actionLabel="로그인하러 가기" />
+      )}
+
+      {!loading && !loadError && user && businesses.length === 0 && (
         <EmptyState title="등록된 사업자가 없어요" description="사업자를 등록하고 부스 참가 신청을 시작해 보세요." actionTo="/businesses/new" actionLabel="사업자 등록하러 가기" />
       )}
 
