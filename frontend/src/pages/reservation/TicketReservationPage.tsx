@@ -186,7 +186,9 @@ export function TicketReservationPage() {
   const remaining = formatRemaining(expiresAt, now);
   // 현재 백엔드 confirmPayment는 만료를 검증하지 않는다. 만료 후 결제하면 결제는 승인되고
   // 예약 통지만 거절당해 돈만 나가므로, 이 가드가 지금은 유일한 방어선이다.
-  const expired = expiresAt !== null && remaining === null;
+  // 단, 파싱 불가한 값은 '만료'가 아니라 잘못된 데이터이므로 결제를 막지 않는다(영구 잠금 방지).
+  const expiresAtMs = expiresAt !== null ? new Date(expiresAt).getTime() : null;
+  const expired = expiresAtMs !== null && !Number.isNaN(expiresAtMs) && expiresAtMs - now <= 0;
 
   function switchType(next: ReservationType) {
     setType(next);
@@ -397,8 +399,8 @@ export function TicketReservationPage() {
           </div>
           {tossReady ? (
             <p className="rounded-button border border-line bg-page p-4 text-sm leading-6 text-muted">
-              <b className="text-ink">결제하기</b>를 누르면 토스페이먼츠 결제창이 열려요. 카드·간편결제 중에서
-              고를 수 있고, 결제를 마치면 이 사이트로 돌아와 예약이 확정돼요.
+              <b className="text-ink">결제하기</b>를 누르면 토스페이먼츠 카드 결제창이 열려요.
+              결제를 마치면 이 사이트로 돌아와 예약이 확정돼요.
             </p>
           ) : (
             <div className="grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-10 text-center text-sm text-muted">
