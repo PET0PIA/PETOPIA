@@ -7,18 +7,24 @@ import type { NavigationItem } from "../../config/navigation";
 import petopiaLogoOriginal from "../../assets/petopia-logo-original.png";
 import { currentUser } from "../../mocks/home";
 import { getUnreadNotificationCount } from "../../api/notification";
+import { useAuth } from "../../contexts/AuthContext";
 import { DropdownMenu } from "../ui/DropdownMenu";
 
 function useUnreadNotificationCount() {
   const [count, setCount] = useState(0);
   const { pathname } = useLocation();
+  const { status } = useAuth();
   useEffect(() => {
+    if (status !== "authenticated") {
+      setCount(0);
+      return;
+    }
     let active = true;
     getUnreadNotificationCount()
       .then((value) => { if (active) setCount(value); })
       .catch(() => { /* 알림 배지는 조회 실패 시 0으로 유지한다. */ });
     return () => { active = false; };
-  }, [pathname]);
+  }, [pathname, status]);
   return count;
 }
 

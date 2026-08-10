@@ -55,6 +55,13 @@ public class SecurityConfig {
                         //참가업체 부스 운영 API(부스 방문 스캔 등). 부스 소유 검증은 서비스 계층에서 한 번 더 한다.
                         .requestMatchers("/api/v1/vendor/**")
                         .hasRole("VENDOR")
+                        // Notification 도메인 - JWT로 전환됨(@AuthenticationPrincipal). 미인증 요청이
+                        // permitAll로 통과하면 userId가 null이 되어 조회/처리가 깨지므로 로그인만 요구한다.
+                        // POST(다른 도메인 이벤트로 알림을 생성)는 사용자 인증 대상이 아니라 여기서 제외한다.
+                        .requestMatchers(HttpMethod.GET, "/api/notifications", "/api/notifications/unread-count")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/notifications/*/read", "/api/notifications/read-all")
+                        .authenticated()
                         //로그인한 본인만 비밀번호 변경 가능 - anyRequest().permitAll()보다 먼저 와야 함
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/password/change").authenticated()
                         //TODO 추후 role 기반 가드 확장

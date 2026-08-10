@@ -1,5 +1,6 @@
 package com.ms.petopia.api.statistics.controller;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
 import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
 import com.ms.petopia.api.statistics.dto.LabelCountDto;
@@ -10,6 +11,8 @@ import com.ms.petopia.api.statistics.dto.VisitStatsDto;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
 import com.ms.petopia.api.statistics.service.VisitStatsExportService;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,9 +25,13 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -43,6 +50,11 @@ class ReservationDashboardControllerTest {
 
     @MockitoBean
     private DashboardEmitterRegistry emitterRegistry;
+
+    // 행사 담당자 검증 가드. 기본(스텁 없음)은 아무것도 던지지 않아 통과되므로,
+    // 거부 시나리오를 검증하는 테스트에서만 개별적으로 willThrow를 스텁한다.
+    @MockitoBean
+    private FairAdminAccessGuard fairAdminAccessGuard;
 
     // SecurityConfig → JwtAuthenticationFilter → JwtTokenProvider 의존성 체인을 끊기 위해 등록
     // anyRequest().permitAll() 설정으로 인증 없이 테스트 요청이 통과된다
@@ -91,6 +103,17 @@ class ReservationDashboardControllerTest {
         mockMvc.perform(get("/api/fairs/1/reservation-dashboard")
                         .param("date", "20260801"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getDashboard_담당행사아니면_403이고_서비스를_호출하지_않는다() throws Exception {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(1L);
+
+        mockMvc.perform(get("/api/fairs/1/reservation-dashboard"))
+                .andExpect(status().isForbidden());
+
+        then(dashboardService).should(never()).getDateSummary(any(), any());
     }
 
     // ── qr-issuance-summary ───────────────────────────────────────────
@@ -216,6 +239,23 @@ class ReservationDashboardControllerTest {
         mockMvc.perform(get("/api/fairs/1/visit-stats"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.avgPetAge").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    // getVisitStats() 자체의 담당자 검증은 ReservationDashboardService 내부에서 이뤄지고
+    // 이 컨트롤러 테스트는 그 서비스를 통째로 mock하므로 여기서는 검증할 수 없다 -
+    // ReservationDashboardServiceTest#getVisitStats_담당행사아니면_예외를_던진다 참고.
+
+    // ── reservation-dashboard/stream(SSE) ───────────────────────────────
+
+    @Test
+    void streamDashboard_담당행사아니면_403이고_emitter를_등록하지_않는다() throws Exception {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(1L);
+
+        mockMvc.perform(get("/api/fairs/1/reservation-dashboard/stream"))
+                .andExpect(status().isForbidden());
+
+        then(emitterRegistry).should(never()).register(any());
     }
 
     // ── 헬퍼 메서드 ──────────────────────────────────────────────────

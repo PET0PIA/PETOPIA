@@ -1,5 +1,6 @@
 package com.ms.petopia.api.statistics.controller;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.statistics.dto.*;
 import com.ms.petopia.api.statistics.service.ReservationDashboardService;
 import com.ms.petopia.api.statistics.service.VisitStatsExportService;
@@ -24,6 +25,7 @@ public class ReservationDashboardController {
     private final ReservationDashboardService dashboardService;
     private final DashboardEmitterRegistry emitterRegistry;
     private final VisitStatsExportService exportService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     @GetMapping("/{fairId}/reservation-dashboard")
     public ResponseEntity<ApiResponse<List<ReservationDateSummaryDto>>> getDashboard(
@@ -31,6 +33,9 @@ public class ReservationDashboardController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ){
+        // getDateSummary()는 SecurityContext 없는 @Async 리스너에서도 재사용돼 그 메서드
+        // 자체엔 가드를 못 넣는다 - HTTP 요청 경로인 여기서 대신 담당자 여부를 확인한다.
+        fairAdminAccessGuard.checkAssigned(fairId);
         List<ReservationDateSummaryDto> result = dashboardService.getDateSummary(fairId, date);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
@@ -68,6 +73,7 @@ public class ReservationDashboardController {
     @GetMapping(value = "/{fairId}/reservation-dashboard/stream",
                 produces = MediaType.TEXT_EVENT_STREAM_VALUE) // 브라우저가 EventSource로 인식하는 MIME타입
     public SseEmitter streamDashboard(@PathVariable Long fairId){
+        fairAdminAccessGuard.checkAssigned(fairId);
         SseEmitter emitter = emitterRegistry.register(fairId);
 
         // 연결 직후 현재 현황을 즉시 전송
