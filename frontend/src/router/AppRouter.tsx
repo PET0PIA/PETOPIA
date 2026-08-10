@@ -42,15 +42,18 @@ import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
 import { AdminLoginPage } from "../pages/auth/AdminLoginPage";
+import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
+import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
+import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
+import { BusinessDetailPage } from "../pages/business/BusinessDetailPage";
+import { RecruitNoticeFormPage } from "../pages/recruit-notice/RecruitNoticeFormPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin을 ProtectedRoute로 감싸기
 // import { ProtectedRoute } from "./ProtectedRoute";
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
   "/businesses": "행사별 참여 기업",
-  "/businesses/new": "사업자 등록 신청",
   "/businesses/status": "사업자 등록 현황",
-  "/businesses/me": "내 사업자 목록",
   "/participations/new": "참여 부스 신청",
   "/participations/me": "참가 신청 현황",
   "/booths/me": "내 부스 관리",
@@ -113,6 +116,10 @@ export function AppRouter() {
           <Route path="/tickets" element={<TicketFairListPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           <Route path="/booths/scan" element={<BoothVisitScanPage />} />
+          <Route path="/businesses/new" element={<BusinessRegisterPage />} />
+          <Route path="/businesses/me" element={<MyBusinessesPage />} />
+          <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
+          <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
           ))}
@@ -130,6 +137,7 @@ export function AppRouter() {
           <Route path="statistics" element={<VisitStatisticsPage />} />
           <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
           <Route path="cancellation" element={<FairCancelRequestPage />} />
+          <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
           {fairAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
           ))}

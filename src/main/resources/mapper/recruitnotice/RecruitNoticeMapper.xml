@@ -66,6 +66,13 @@
         SELECT bs.booth_slot_id AS boothSlotsId,
             bs.slot_number AS slotNumber,
             bs.price AS price,
+            bs.pos_x AS posX,
+            bs.pos_y AS posY,
+            bs.width AS width,
+            bs.height AS height,
+            h.hall_id AS hallId,
+            h.name AS hallName,
+            h.floor_plan_image_url AS floorPlanImageUrl,
             CASE (
                 SELECT a.status
                 FROM application_slot aps
