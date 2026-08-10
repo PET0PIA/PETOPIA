@@ -101,7 +101,7 @@ class FairTransitionServiceTest {
     // ===== expireDuePayments =====
 
     @Test
-    @DisplayName("결제 기한이 지난 PAYMENT_PENDING 행사를 EXPIRED로 바꾸고 갱신 건수를 반환한다")
+    @DisplayName("결제 기한이 지난 PAYMENT_PENDING 행사를 EXPIRED로 바꾸고 갱신 건수를 반환하며 감사로그를 남긴다")
     void expireDuePayments_기한초과행사를_만료한다() {
         given(timeProvider.now()).willReturn(NOW);
         given(transitionMapper.selectPaymentExpiringForUpdate(NOW, 200)).willReturn(List.of(row(1L)));
@@ -111,22 +111,28 @@ class FairTransitionServiceTest {
 
         assertThat(expired).isEqualTo(1);
         verify(transitionMapper).expireFair(1L, NOW);
+        verify(auditLogService).record(
+                isNull(), eq(ActorType.SYSTEM), eq("SYSTEM"),
+                eq(ActionType.FAIR_EXPIRE), eq(TargetType.FAIR), eq(1L),
+                isNull(), eq(Map.of("status", "EXPIRED", "expiredAt", NOW))
+        );
     }
 
     @Test
-    @DisplayName("조회 이후 이미 다른 트랜잭션이 상태를 바꿨으면(갱신 0건) 카운트에 넣지 않는다")
+    @DisplayName("조회 이후 이미 다른 트랜잭션이 상태를 바꿨으면(갱신 0건) 카운트에 넣지 않고 감사로그도 남기지 않는다")
     void expireDuePayments_동시성으로_이미바뀐행사는_세지않는다() {
         given(timeProvider.now()).willReturn(NOW);
         given(transitionMapper.selectPaymentExpiringForUpdate(NOW, 200)).willReturn(List.of(row(1L)));
         given(transitionMapper.expireFair(1L, NOW)).willReturn(0);
 
         assertThat(transitionService.expireDuePayments(200)).isZero();
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     // ===== startDueFairs =====
 
     @Test
-    @DisplayName("운영 시작일이 된 PREPARING 행사를 IN_PROGRESS로 바꾼다")
+    @DisplayName("운영 시작일이 된 PREPARING 행사를 IN_PROGRESS로 바꾸고 감사로그를 남긴다")
     void startDueFairs_시작일이된행사를_진행중으로바꾼다() {
         given(timeProvider.now()).willReturn(NOW);
         given(transitionMapper.selectPreparingToStartForUpdate(TODAY, 200)).willReturn(List.of(row(2L)));
@@ -134,12 +140,28 @@ class FairTransitionServiceTest {
 
         assertThat(transitionService.startDueFairs(200)).isEqualTo(1);
         verify(transitionMapper).startFair(2L, NOW);
+        verify(auditLogService).record(
+                isNull(), eq(ActorType.SYSTEM), eq("SYSTEM"),
+                eq(ActionType.FAIR_START), eq(TargetType.FAIR), eq(2L),
+                isNull(), eq(Map.of("status", "IN_PROGRESS", "startedAt", NOW))
+        );
+    }
+
+    @Test
+    @DisplayName("조회 이후 이미 다른 트랜잭션이 상태를 바꿨으면(갱신 0건) 감사로그를 남기지 않는다")
+    void startDueFairs_동시성으로_이미바뀐행사는_감사로그를_남기지않는다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(transitionMapper.selectPreparingToStartForUpdate(TODAY, 200)).willReturn(List.of(row(2L)));
+        given(transitionMapper.startFair(2L, NOW)).willReturn(0);
+
+        assertThat(transitionService.startDueFairs(200)).isZero();
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     // ===== endDueFairs =====
 
     @Test
-    @DisplayName("운영 종료일이 지난 IN_PROGRESS 행사를 ENDED로 바꾼다")
+    @DisplayName("운영 종료일이 지난 IN_PROGRESS 행사를 ENDED로 바꾸고 감사로그를 남긴다")
     void endDueFairs_종료일이지난행사를_종료한다() {
         given(timeProvider.now()).willReturn(NOW);
         given(transitionMapper.selectInProgressToEndForUpdate(TODAY, 200)).willReturn(List.of(row(3L)));
@@ -147,16 +169,22 @@ class FairTransitionServiceTest {
 
         assertThat(transitionService.endDueFairs(200)).isEqualTo(1);
         verify(transitionMapper).endFair(3L, NOW);
+        verify(auditLogService).record(
+                isNull(), eq(ActorType.SYSTEM), eq("SYSTEM"),
+                eq(ActionType.FAIR_END), eq(TargetType.FAIR), eq(3L),
+                isNull(), eq(Map.of("status", "ENDED", "endedAt", NOW))
+        );
     }
 
     @Test
-    @DisplayName("대상이 없으면 갱신을 호출하지 않고 0을 반환한다")
+    @DisplayName("대상이 없으면 갱신을 호출하지 않고 0을 반환하며 감사로그도 남기지 않는다")
     void endDueFairs_대상없으면_아무것도하지않는다() {
         given(timeProvider.now()).willReturn(NOW);
         given(transitionMapper.selectInProgressToEndForUpdate(TODAY, 200)).willReturn(List.of());
 
         assertThat(transitionService.endDueFairs(200)).isZero();
         verify(transitionMapper, never()).endFair(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     // ===== 공통 검증 =====

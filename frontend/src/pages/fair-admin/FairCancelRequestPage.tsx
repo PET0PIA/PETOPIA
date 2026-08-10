@@ -113,8 +113,9 @@ export function FairCancelRequestPage() {
 
       <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">담당 행사 ID</span>
+          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">담당 행사 ID</label>
           <Input
+            id="fairIdInput"
             type="number"
             min={1}
             value={fairIdInput}
@@ -156,8 +157,9 @@ export function FairCancelRequestPage() {
               <h3 className="mb-4 text-sm font-extrabold text-muted">새 취소 신청</h3>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <span className="mb-1.5 block text-sm font-bold text-ink">취소 사유<span className="ml-1 text-primary-strong">*</span></span>
+                  <label htmlFor="reason" className="mb-1.5 block text-sm font-bold text-ink">취소 사유<span className="ml-1 text-primary-strong">*</span></label>
                   <Textarea
+                    id="reason"
                     value={reason}
                     onChange={(event) => setReason(event.target.value)}
                     placeholder="예: 행사 장소 계약 취소로 더 이상 진행이 불가능해요."

@@ -36,8 +36,6 @@ export function HallManagementPage() {
     if (fairId === null) return;
     let ignore = false;
 
-    setLoading(true);
-    setLoadError(null);
     getHalls(fairId)
       .then((data) => { if (!ignore) setHalls(data); })
       .catch((error) => { if (!ignore) setLoadError(error instanceof ApiError ? error.message : "홀 목록을 불러오지 못했어요."); })
@@ -52,6 +50,10 @@ export function HallManagementPage() {
     if (!Number.isInteger(parsed) || parsed <= 0) {
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
+    }
+    if (parsed !== fairId) {
+      setLoading(true);
+      setLoadError(null);
     }
     setFairId(parsed);
   }
@@ -130,8 +132,9 @@ export function HallManagementPage() {
 
       <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</span>
+          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</label>
           <Input
+            id="fairIdInput"
             type="number"
             min={1}
             value={fairIdInput}
@@ -200,8 +203,9 @@ export function HallManagementPage() {
         <form onSubmit={handleSaveHall} className="space-y-4">
           {formError && <p className="text-sm font-bold text-primary-strong">{formError}</p>}
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">홀 이름<span className="ml-1 text-primary-strong">*</span></span>
+            <label htmlFor="hallName" className="mb-1.5 block text-sm font-bold text-ink">홀 이름<span className="ml-1 text-primary-strong">*</span></label>
             <Input
+              id="hallName"
               value={hallName}
               onChange={(event) => setHallName(event.target.value)}
               placeholder="예: A홀"

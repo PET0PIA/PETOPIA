@@ -56,8 +56,6 @@ export function FairDateManagementPage() {
     if (fairId === null) return;
     let ignore = false;
 
-    setLoading(true);
-    setLoadError(null);
     getFairDates(fairId)
       .then((data) => { if (!ignore) setFairDates(data); })
       .catch((error) => {
@@ -80,6 +78,8 @@ export function FairDateManagementPage() {
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
+    setLoading(true);
+    setLoadError(null);
     if (parsed === fairId) {
       setReloadTick((tick) => tick + 1);
     } else {
@@ -203,8 +203,9 @@ export function FairDateManagementPage() {
 
       <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</span>
+          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</label>
           <Input
+            id="fairIdInput"
             type="number"
             min={1}
             value={fairIdInput}
@@ -286,11 +287,12 @@ export function FairDateManagementPage() {
           )}
 
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">운영 날짜<span className="ml-1 text-primary-strong">*</span></span>
+            <label htmlFor="operationDate" className="mb-1.5 block text-sm font-bold text-ink">운영 날짜<span className="ml-1 text-primary-strong">*</span></label>
             {editingFairDate ? (
               <p className="text-sm text-muted">{form.operationDate} (날짜는 수정할 수 없어요. 바꾸려면 삭제 후 다시 등록해 주세요.)</p>
             ) : (
               <Input
+                id="operationDate"
                 type="date"
                 value={form.operationDate}
                 onChange={(event) => setForm((previous) => ({ ...previous, operationDate: event.target.value }))}
@@ -299,8 +301,9 @@ export function FairDateManagementPage() {
             )}
           </div>
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">정원<span className="ml-1 text-primary-strong">*</span></span>
+            <label htmlFor="capacity" className="mb-1.5 block text-sm font-bold text-ink">정원<span className="ml-1 text-primary-strong">*</span></label>
             <Input
+              id="capacity"
               type="number"
               min={1}
               value={form.capacity}
@@ -311,8 +314,9 @@ export function FairDateManagementPage() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <span className="mb-1.5 block text-sm font-bold text-ink">입장 시작<span className="ml-1 text-primary-strong">*</span></span>
+              <label htmlFor="entryStartTime" className="mb-1.5 block text-sm font-bold text-ink">입장 시작<span className="ml-1 text-primary-strong">*</span></label>
               <Input
+                id="entryStartTime"
                 type="time"
                 value={form.entryStartTime}
                 onChange={(event) => setForm((previous) => ({ ...previous, entryStartTime: event.target.value }))}
@@ -320,8 +324,9 @@ export function FairDateManagementPage() {
               />
             </div>
             <div>
-              <span className="mb-1.5 block text-sm font-bold text-ink">입장 종료<span className="ml-1 text-primary-strong">*</span></span>
+              <label htmlFor="entryEndTime" className="mb-1.5 block text-sm font-bold text-ink">입장 종료<span className="ml-1 text-primary-strong">*</span></label>
               <Input
+                id="entryEndTime"
                 type="time"
                 value={form.entryEndTime}
                 onChange={(event) => setForm((previous) => ({ ...previous, entryEndTime: event.target.value }))}

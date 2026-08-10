@@ -248,8 +248,8 @@ export function FairApplicationReviewPage() {
 
       <form onSubmit={handleLoad} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">검토할 행사(신청서) ID</span>
-          <Input type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
+          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">검토할 행사(신청서) ID</label>
+          <Input id="fairIdInput" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
         </div>
         <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
       </form>
@@ -368,8 +368,8 @@ export function FairApplicationReviewPage() {
       <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} title="신청 반려">
         <form onSubmit={handleReject} className="space-y-4">
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">반려 사유<span className="ml-1 text-primary-strong">*</span></span>
-            <Textarea value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="신청자에게 안내할 반려 사유를 입력해 주세요." required />
+            <label htmlFor="rejectReason" className="mb-1.5 block text-sm font-bold text-ink">반려 사유<span className="ml-1 text-primary-strong">*</span></label>
+            <Textarea id="rejectReason" value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="신청자에게 안내할 반려 사유를 입력해 주세요." required />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setRejectDialogOpen(false)}>취소</Button>
