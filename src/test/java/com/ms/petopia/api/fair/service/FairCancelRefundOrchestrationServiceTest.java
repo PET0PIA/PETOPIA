@@ -9,6 +9,7 @@ import com.ms.petopia.api.refund.dto.RefundReason;
 import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RefundResponse;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -51,6 +52,9 @@ class FairCancelRefundOrchestrationServiceTest {
 
     @Mock
     private FairTimeProvider timeProvider;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private FairCancelRefundOrchestrationService orchestrationService;

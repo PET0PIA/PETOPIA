@@ -79,6 +79,23 @@
          WHERE fair_id = #{fairId}
     </select>
 
+    <!-- 마이페이지 "내 신청 현황" 목록용. 최신 신청이 위로 오도록 created_at 역순 정렬한다. -->
+    <select id="selectByApplicantUserId" resultType="Fair">
+        SELECT fair_id, applicant_user_id, name, description, category, poster_image_url, notice_text,
+               place_name, address, indoor_outdoor,
+               vendor_recruit_start_date, vendor_recruit_end_date,
+               reservation_start_date, reservation_end_date,
+               operation_start_date, operation_end_date,
+               reservation_fee, reservation_cancel_deadline_hours, reservation_change_deadline_hours,
+               manager_name, manager_phone, manager_email,
+               status, reject_reason, reviewed_by, reviewed_at,
+               payment_due_at, public_scheduled_at, published_at, canceled_at,
+               submitted_snapshot, created_at, updated_at
+          FROM fairs
+         WHERE applicant_user_id = #{applicantUserId}
+         ORDER BY created_at DESC
+    </select>
+
     <!--
         null이 아닌 필드만 갱신한다(승인/반려/재제출마다 채우는 필드가 달라서 범용으로 둠).
         updated_at은 호출부 값과 무관하게 항상 NOW()로 덮어쓴다.
@@ -142,44 +159,109 @@
     </update>
 
     <!--
-        신청 내용 필드는 null이 아닌 것만 갱신하는 PATCH 방식이지만, status/reject_reason/
-        reviewed_by/reviewed_at은 이 UPDATE가 실제로 행을 바꿀 때마다 항상 고정값(RECEIVED/
-        NULL/NULL/NULL)으로 되돌린다 - REJECTED에서 수정으로 재제출되면 이전 반려 이력이
-        더 이상 유효하지 않기 때문이다. WHERE의 status IN (...) 조건이 동시성 방어를 겸한다
-        (updateReviewResult와 동일한 이유 - "SELECT로 확인 후 UPDATE"는 그 사이 다른 요청이
-        상태를 바꿔버리는 경합을 못 막는다).
+        내용 필드는 field != null이 아니라 setFields.contains(...)로 갱신 여부를 정한다 - null
+        체크만 쓰면 "필드를 생략함(기존 값 유지)"과 "필드를 명시적으로 비움(NULL로 지움)"을
+        구분할 수 없다. setFields에 있으면 fair에 담긴 값을 그대로 반영한다(그 값이 null이면
+        컬럼도 NULL이 된다).
+
+        status/reject_reason/reviewed_by/reviewed_at은 이 UPDATE가 실제로 행을 바꿀 때마다
+        항상 고정값(RECEIVED/NULL/NULL/NULL)으로 되돌린다 - REJECTED에서 수정으로 재제출되면
+        이전 반려 이력이 더 이상 유효하지 않기 때문이다. WHERE의 status IN (...) 조건이
+        동시성 방어를 겸한다(updateReviewResult와 동일한 이유 - "SELECT로 확인 후 UPDATE"는
+        그 사이 다른 요청이 상태를 바꿔버리는 경합을 못 막는다).
     -->
     <update id="updateApplication">
         UPDATE fairs
         <set>
-            <if test="name != null">name = #{name},</if>
-            <if test="description != null">description = #{description},</if>
-            <if test="category != null">category = #{category},</if>
-            <if test="posterImageUrl != null">poster_image_url = #{posterImageUrl},</if>
-            <if test="noticeText != null">notice_text = #{noticeText},</if>
-            <if test="placeName != null">place_name = #{placeName},</if>
-            <if test="address != null">address = #{address},</if>
-            <if test="indoorOutdoor != null">indoor_outdoor = #{indoorOutdoor},</if>
-            <if test="vendorRecruitStartDate != null">vendor_recruit_start_date = #{vendorRecruitStartDate},</if>
-            <if test="vendorRecruitEndDate != null">vendor_recruit_end_date = #{vendorRecruitEndDate},</if>
-            <if test="reservationStartDate != null">reservation_start_date = #{reservationStartDate},</if>
-            <if test="reservationEndDate != null">reservation_end_date = #{reservationEndDate},</if>
-            <if test="operationStartDate != null">operation_start_date = #{operationStartDate},</if>
-            <if test="operationEndDate != null">operation_end_date = #{operationEndDate},</if>
-            <if test="reservationFee != null">reservation_fee = #{reservationFee},</if>
-            <if test="reservationCancelDeadlineHours != null">reservation_cancel_deadline_hours = #{reservationCancelDeadlineHours},</if>
-            <if test="reservationChangeDeadlineHours != null">reservation_change_deadline_hours = #{reservationChangeDeadlineHours},</if>
-            <if test="managerName != null">manager_name = #{managerName},</if>
-            <if test="managerPhone != null">manager_phone = #{managerPhone},</if>
-            <if test="managerEmail != null">manager_email = #{managerEmail},</if>
+            <if test="setFields.contains('name')">name = #{fair.name},</if>
+            <if test="setFields.contains('description')">description = #{fair.description},</if>
+            <if test="setFields.contains('category')">category = #{fair.category},</if>
+            <if test="setFields.contains('posterImageUrl')">poster_image_url = #{fair.posterImageUrl},</if>
+            <if test="setFields.contains('noticeText')">notice_text = #{fair.noticeText},</if>
+            <if test="setFields.contains('placeName')">place_name = #{fair.placeName},</if>
+            <if test="setFields.contains('address')">address = #{fair.address},</if>
+            <if test="setFields.contains('indoorOutdoor')">indoor_outdoor = #{fair.indoorOutdoor},</if>
+            <if test="setFields.contains('vendorRecruitStartDate')">vendor_recruit_start_date = #{fair.vendorRecruitStartDate},</if>
+            <if test="setFields.contains('vendorRecruitEndDate')">vendor_recruit_end_date = #{fair.vendorRecruitEndDate},</if>
+            <if test="setFields.contains('reservationStartDate')">reservation_start_date = #{fair.reservationStartDate},</if>
+            <if test="setFields.contains('reservationEndDate')">reservation_end_date = #{fair.reservationEndDate},</if>
+            <if test="setFields.contains('operationStartDate')">operation_start_date = #{fair.operationStartDate},</if>
+            <if test="setFields.contains('operationEndDate')">operation_end_date = #{fair.operationEndDate},</if>
+            <if test="setFields.contains('reservationFee')">reservation_fee = #{fair.reservationFee},</if>
+            <if test="setFields.contains('reservationCancelDeadlineHours')">reservation_cancel_deadline_hours = #{fair.reservationCancelDeadlineHours},</if>
+            <if test="setFields.contains('reservationChangeDeadlineHours')">reservation_change_deadline_hours = #{fair.reservationChangeDeadlineHours},</if>
+            <if test="setFields.contains('managerName')">manager_name = #{fair.managerName},</if>
+            <if test="setFields.contains('managerPhone')">manager_phone = #{fair.managerPhone},</if>
+            <if test="setFields.contains('managerEmail')">manager_email = #{fair.managerEmail},</if>
             status = 'RECEIVED',
             reject_reason = NULL,
             reviewed_by = NULL,
             reviewed_at = NULL,
             updated_at = NOW(),
         </set>
-        WHERE fair_id = #{fairId}
+        WHERE fair_id = #{fair.fairId}
           AND status IN ('RECEIVED', 'REJECTED')
     </update>
+
+    <!--
+        canceled_at IS NOT NULL만 걸면 취소된 행사 수가 limit를 넘는 순간
+        canceled_at DESC 정렬로 매번 같은 최신 N개만 뽑혀서, 그보다 오래된 행사의 PENDING
+        결제가 영영 처리되지 못하고 배치 슬롯을 못 받을 수 있다. 그래서 이 결제가 아직 남아있는
+        행사만(EXISTS) 고르고 오래된 순(ASC)으로 처리한다 - 한 행사가 다 정리되면(더 이상
+        PENDING이 없으면) 이 목록에서 자연히 빠지니 다음 실행에서 그 자리를 다른 행사가 채운다.
+    -->
+    <select id="selectCanceledFairIds" resultType="long">
+        SELECT f.fair_id
+          FROM fairs f
+         WHERE f.canceled_at IS NOT NULL
+           AND EXISTS (
+               SELECT 1
+                 FROM payment p
+                WHERE p.fair_id = f.fair_id
+                  AND p.status = 'PENDING'
+                  AND p.payment_type IN ('RESERVATION_DEPOSIT', 'VENDOR_FEE')
+           )
+         ORDER BY f.canceled_at
+         LIMIT #{limit}
+    </select>
+
+    <!--
+        PII/심사 관련 컬럼은 아예 SELECT하지 않는다 - 인증 없이 누구나 호출하는 목록이라
+        FairPublicSummaryResponse와 같은 이유로 노출 자체를 막는다.
+        UPCOMING: operation_end_date가 없거나(일정 미정) today 이상인 것 - 끝났다고 볼 근거가
+        없는 행사는 예정으로 취급한다. PAST: operation_end_date가 있고 today보다 이전인 것.
+    -->
+    <select id="selectPublicFairs" resultType="Fair">
+        SELECT fair_id, name, category, poster_image_url, place_name,
+               operation_start_date, operation_end_date
+          FROM fairs
+         WHERE published_at IS NOT NULL
+           AND canceled_at IS NULL
+        <if test="filter.name() == 'UPCOMING'">
+           AND (operation_end_date IS NULL OR operation_end_date &gt;= #{today})
+         ORDER BY (operation_start_date IS NULL), operation_start_date ASC
+        </if>
+        <if test="filter.name() == 'PAST'">
+           AND operation_end_date IS NOT NULL AND operation_end_date &lt; #{today}
+         ORDER BY operation_end_date DESC
+        </if>
+    </select>
+
+    <!--
+        관리자 심사 큐(FairService#getApplications) 전용. status가 없으면 전체, 있으면 그
+        상태만 걸러 오래된 신청 순으로 반환한다 - RECEIVED만 걸러서 보면 "지금 처리해야 할 것"을
+        보여주는 큐가 되고, 필요하면 상태를 바꿔가며 이력도 훑어볼 수 있다. 관리자 화면 전용이라
+        managerPhone/managerEmail 같은 PII는 목록에 넣지 않는다(FairApplicationSummaryResponse와
+        동일한 이유 - 상세 조회에서만 노출).
+    -->
+    <select id="selectByStatus" resultType="Fair">
+        SELECT fair_id, name, status, operation_start_date, operation_end_date,
+               reject_reason, created_at, reviewed_at, canceled_at
+          FROM fairs
+        <if test="status != null">
+         WHERE status = #{status}
+        </if>
+         ORDER BY created_at ASC
+    </select>
 
 </mapper>

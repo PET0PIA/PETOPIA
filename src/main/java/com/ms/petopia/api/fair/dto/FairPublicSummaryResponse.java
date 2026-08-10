@@ -1,0 +1,29 @@
+package com.ms.petopia.api.fair.dto;
+
+import java.time.LocalDate;
+
+/**
+ * 행사 공개 요약 조회 응답. 로그인 여부와 무관하게 누구나 볼 수 있는 화면(티켓 예매 화면 등)
+ * 전용이다 - {@link FairApplicationDetailResponse}와 달리 managerName/managerPhone/
+ * managerEmail(PII), reviewedAt/rejectReason/paymentDueAt(내부 심사 정보), applicantUserId를
+ * 전부 뺐다.
+ *
+ * <p>공개(publish)되지 않은 행사는 아직 심사·결제 대기 중이라 외부에 노출할 이유가 없어
+ * {@link com.ms.petopia.api.fair.service.FairService#getPublicSummary}가 조회 자체를
+ * 막는다(존재하지 않는 것과 동일하게 404) - 이 응답 자체에는 그 여부를 담지 않는다.
+ */
+public record FairPublicSummaryResponse(
+        Long fairId,
+        String name,
+        String description,
+        String category,
+        String posterImageUrl,
+        String noticeText,
+        String placeName,
+        String address,
+        String indoorOutdoor,
+        LocalDate operationStartDate,
+        LocalDate operationEndDate,
+        String status
+) {
+}

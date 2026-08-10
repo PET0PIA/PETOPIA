@@ -12,7 +12,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -101,20 +105,41 @@ class AuditLogQueryServiceTest {
     // ===== 필터 없음 =====
 
     @Test
-    @DisplayName("필터가 하나도 없으면 mapper를 전혀 호출하지 않고 빈 리스트를 반환한다")
-    void query_필터없으면_빈리스트를_반환한다() {
-        AuditLogListResponse response =
-                auditLogQueryService.query(null, null, null, null, 0, 20);
+    @DisplayName("필터가 하나도 없으면 CommonException(INVALID_INPUT_VALUE)을 던진다")
+    void query_필터없으면_CommonException을_던진다() {
+        assertThatThrownBy(() -> auditLogQueryService.query(null, null, null, null, 0, 20))
+                .isInstanceOf(CommonException.class)
+                .satisfies(ex -> assertThat(((CommonException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
 
-        assertThat(response.items()).isEmpty();
-        assertThat(response.totalElements()).isEqualTo(0L);
-        assertThat(response.hasNext()).isFalse();
         verify(auditLogMapper, never()).selectByTarget(any(), any(), anyLong(), anyInt());
         verify(auditLogMapper, never()).selectByActorUserId(any(), anyLong(), anyInt());
         verify(auditLogMapper, never()).selectByActionType(any(), anyLong(), anyInt());
         verify(auditLogMapper, never()).countByTarget(any(), any());
         verify(auditLogMapper, never()).countByActorUserId(any());
         verify(auditLogMapper, never()).countByActionType(any());
+    }
+
+    // ===== 빈 문자열·공백 정규화 =====
+
+    @Test
+    @DisplayName("targetType이 공백이면 null로 정규화되어 필터 없음 예외를 던진다")
+    void query_targetType이공백이면_null정규화로_예외를_던진다() {
+        assertThatThrownBy(() -> auditLogQueryService.query("  ", 3L, null, null, 0, 20))
+                .isInstanceOf(CommonException.class)
+                .satisfies(ex -> assertThat(((CommonException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        verify(auditLogMapper, never()).selectByTarget(any(), any(), anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("actionType이 빈 문자열이면 null로 정규화되어 필터 없음 예외를 던진다")
+    void query_actionType이빈문자열이면_null정규화로_예외를_던진다() {
+        assertThatThrownBy(() -> auditLogQueryService.query(null, null, null, "", 0, 20))
+                .isInstanceOf(CommonException.class)
+                .satisfies(ex -> assertThat(((CommonException) ex).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_INPUT_VALUE));
+        verify(auditLogMapper, never()).selectByActionType(any(), anyLong(), anyInt());
     }
 
     // ===== 페이지네이션 offset 계산 =====

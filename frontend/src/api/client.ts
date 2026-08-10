@@ -108,6 +108,19 @@ async function request<TResponse>(path: string, init?: RequestInit, isRetry = fa
   return body as TResponse;
 }
 
+/**
+ * 참가업체 도메인(business/application/recruitNotice/booth)의 성공 응답 포맷.
+ * fair/payment 등 다른 도메인은 DTO를 그대로 반환해서 apiClient 레벨에서 일괄
+ * 벗기지 않고, 이 포맷을 쓰는 도메인의 api 모듈에서만 개별적으로 unwrap한다.
+ */
+export interface ApiEnvelope<T> {
+  success: boolean;
+  status: number;
+  code: string;
+  message: string | null;
+  data: T;
+}
+
 export const apiClient = {
   get: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: "GET" }),
   post: <T>(path: string, payload?: unknown, init?: RequestInit) =>

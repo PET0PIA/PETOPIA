@@ -1,5 +1,6 @@
 package com.ms.petopia.api.commisionrate.service;
 
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.dto.CommissionRateResponse;
 import com.ms.petopia.api.commisionrate.dto.CommissionRateRow;
 import com.ms.petopia.api.commisionrate.dto.CommissionRateScope;
@@ -28,6 +29,9 @@ class CommissionRateServiceTest {
 
     @Mock
     private CommissionRateMapper commissionRateMapper;
+
+    @Mock
+    private AuditLogService auditLogService;
 
     @InjectMocks
     private CommissionRateService commissionRateService;

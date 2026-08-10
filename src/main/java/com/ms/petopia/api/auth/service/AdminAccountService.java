@@ -1,5 +1,9 @@
 package com.ms.petopia.api.auth.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.auth.domain.FairAdminAssignment;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.dto.AdminAccountListItemResponse;
@@ -13,11 +17,15 @@ import com.ms.petopia.global.security.TokenHashUtil;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import java.util.Map;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -40,6 +48,7 @@ public class AdminAccountService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final AccountSuspensionStore accountSuspensionStore;
+    private final AuditLogService auditLogService;
 
     //행사 관리자 계정 생성
     @Transactional
@@ -150,6 +159,19 @@ public class AdminAccountService {
             throw new CommonException(ErrorCode.USER_NOT_FOUND);
         }
 
+        if ("INACTIVE".equals(status)) {
+            auditLogService.record(
+                    resolveCurrentUserId(),
+                    ActorType.ADMIN,
+                    "SUPER_ADMIN",
+                    ActionType.ACCOUNT_DEACTIVATE,
+                    TargetType.ACCOUNT,
+                    userId,
+                    Map.of("status", "ACTIVE"),
+                    Map.of("status", "INACTIVE")
+            );
+        }
+
         //DB 커밋이 성공한 뒤에만 Redis denylist에 반영한다
         deferOrRunNow(() -> {
             if (status.equals("INACTIVE")) {
@@ -158,6 +180,16 @@ public class AdminAccountService {
                 accountSuspensionStore.reactivate(userId);
             }
         });
+    }
+
+    private Long resolveCurrentUserId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof Long id) {
+                return id;
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     //현재 진행 중인 @Transactional이 있으면 그 커밋 성공 후로 실행을 미루고 없으면 즉시 실행한다

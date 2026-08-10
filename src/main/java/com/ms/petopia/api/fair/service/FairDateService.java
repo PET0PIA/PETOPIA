@@ -37,10 +37,12 @@ public class FairDateService {
     private final FairDateMapper fairDateMapper;
     private final FairMapper fairMapper;
     private final FairTimeProvider timeProvider;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     @Transactional
     public FairDateResponse create(Long fairId, CreateFairDateRequest request) {
         Fair fair = findFairOrThrow(fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         validateFairEditable(fair);
         validateCreateRequest(fair, request);
 
@@ -65,6 +67,7 @@ public class FairDateService {
     @Transactional(readOnly = true)
     public List<FairDateResponse> getFairDates(Long fairId) {
         findFairOrThrow(fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         return fairDateMapper.selectByFairIdWithStats(fairId).stream()
                 .map(this::toResponse)
                 .toList();
@@ -73,6 +76,7 @@ public class FairDateService {
     @Transactional
     public FairDateResponse update(Long fairId, Long fairDateId, UpdateFairDateRequest request) {
         findFairDateInFair(fairId, fairDateId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         validateFairEditable(findFairOrThrow(fairId));
         validateUpdateRequest(request);
 
@@ -90,6 +94,7 @@ public class FairDateService {
     @Transactional
     public void delete(Long fairId, Long fairDateId) {
         findFairDateInFair(fairId, fairDateId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         validateFairEditable(findFairOrThrow(fairId));
         fairDateMapper.deleteById(fairDateId);
     }
