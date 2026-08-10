@@ -183,32 +183,45 @@ class BusinessControllerTest {
     }
 
     private RequestPostProcessor authenticatedAs(Long userId) {
+
         return request -> {
+
             request.setAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE, userId);
             return request;
+
         };
+
     }
 
     private static final class TestAuthenticationFilter extends OncePerRequestFilter {
 
         @Override
         protected void doFilterInternal(
+
                 HttpServletRequest request,
                 HttpServletResponse response,
                 FilterChain filterChain
+
         ) throws ServletException, IOException {
+
             Long userId = (Long) request.getAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE);
+
             if (userId != null) {
+
                 SecurityContextHolder.getContext().setAuthentication(
                         new UsernamePasswordAuthenticationToken(userId, null, List.of())
                 );
+
             }
+
             try {
                 filterChain.doFilter(request, response);
             } finally {
                 SecurityContextHolder.clearContext();
             }
+
         }
+
     }
 
 }

@@ -139,6 +139,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/cancel-requests").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel-requests/approve").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel-requests/reject").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Booth 도메인 - 로그인만 하면 누구나 접근 가능(본인 소유 부스인지는 서비스 계층에서 검증)
+                        .requestMatchers(HttpMethod.PUT, "/api/booths/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/booths/*/items").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/booth-items/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/booth-items/*").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->

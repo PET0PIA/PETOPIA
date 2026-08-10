@@ -7,15 +7,26 @@ import com.ms.petopia.api.booth.service.BoothService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -29,10 +40,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /*
  * BoothController 통합 테스트. BoothService는 Mock으로 대체하고,
  * standaloneSetup + GlobalExceptionHandler로 실제 라우팅/@Valid 검증/
- * 예외→HTTP 상태코드 매핑까지 확인한다(서비스 단위 테스트로는 못 잡는 부분).
+ * 예외→HTTP 상태코드 매핑까지 확인한다. @AuthenticationPrincipal은 business 도메인과
+ * 동일한 가짜 인증 필터 패턴으로 시뮬레이션한다.
  */
 @ExtendWith(MockitoExtension.class)
 class BoothControllerTest {
+
+    private static final String AUTHENTICATED_USER_ID_ATTRIBUTE = "authenticatedUserId";
 
     @Mock
     private BoothService boothService;
@@ -44,8 +58,15 @@ class BoothControllerTest {
 
         mockMvc = MockMvcBuilders.standaloneSetup(new BoothController(boothService))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+                .addFilters(new TestAuthenticationFilter())
                 .build();
 
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     // GET /api/booths/{boothId} - 정상 조회
@@ -83,7 +104,7 @@ class BoothControllerTest {
                 BoothResponse.builder().boothId(1L).name("수정된 이름").build());
 
         mockMvc.perform(put("/api/booths/1")
-                        .header(BoothTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"수정된 이름\"}"))
                 .andExpect(status().isOk())
@@ -99,7 +120,7 @@ class BoothControllerTest {
                 .given(boothService).updateBooth(eq(2L), eq(1L), any());
 
         mockMvc.perform(put("/api/booths/1")
-                        .header(BoothTemporaryAuthHeaders.USER_ID, 2)
+                        .with(authenticatedAs(2L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"수정 시도\"}"))
                 .andExpect(status().isForbidden())
@@ -115,7 +136,7 @@ class BoothControllerTest {
                 BoothItemResponse.builder().boothItemId(1L).boothId(1L).name("체험팩").type("SAMPLE").build());
 
         mockMvc.perform(post("/api/booths/1/items")
-                        .header(BoothTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"체험팩\",\"type\":\"SAMPLE\"}"))
                 .andExpect(status().isCreated())
@@ -128,7 +149,7 @@ class BoothControllerTest {
     void returns400WhenItemNameBlank() throws Exception {
 
         mockMvc.perform(post("/api/booths/1/items")
-                        .header(BoothTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"\",\"type\":\"SAMPLE\"}"))
                 .andExpect(status().isBadRequest());
@@ -140,7 +161,7 @@ class BoothControllerTest {
     void returns400WhenItemTypeInvalidEnum() throws Exception {
 
         mockMvc.perform(post("/api/booths/1/items")
-                        .header(BoothTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"체험팩\",\"type\":\"FOOD\"}"))
                 .andExpect(status().isBadRequest());
@@ -152,7 +173,7 @@ class BoothControllerTest {
     void deletesItem() throws Exception {
 
         mockMvc.perform(delete("/api/booth-items/1")
-                        .header(BoothTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
@@ -166,7 +187,7 @@ class BoothControllerTest {
                 .given(boothService).deleteItem(eq(1L), eq(999L));
 
         mockMvc.perform(delete("/api/booth-items/999")
-                        .header(BoothTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("V025"));
 
@@ -196,6 +217,47 @@ class BoothControllerTest {
         mockMvc.perform(get("/api/fairs/999/confirmed-booths"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("F004"));
+
+    }
+
+    private RequestPostProcessor authenticatedAs(Long userId) {
+
+        return request -> {
+
+            request.setAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE, userId);
+            return request;
+
+        };
+
+    }
+
+    private static final class TestAuthenticationFilter extends OncePerRequestFilter {
+
+        @Override
+        protected void doFilterInternal(
+
+                HttpServletRequest request,
+                HttpServletResponse response,
+                FilterChain filterChain
+
+        ) throws ServletException, IOException {
+
+            Long userId = (Long) request.getAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE);
+
+            if (userId != null) {
+
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(userId, null, List.of())
+                );
+
+            }
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+
+        }
 
     }
 
