@@ -867,7 +867,6 @@ class ApplicationServiceTest {
         void returnsApplicationsWhenAdminMatches() {
 
             // given: 이 행사의 담당자가 요청자 본인인 상황
-            Long adminUserId = 1L;
             Long fairId = 1L;
 
             List<ApplicationReviewSummaryResponse> applications = List.of(
@@ -882,7 +881,7 @@ class ApplicationServiceTest {
 
             // when
             List<ApplicationReviewSummaryResponse> result =
-                    applicationService.getApplicationsForFair(adminUserId, fairId, null);
+                    applicationService.getApplicationsForFair(fairId, null);
 
             // then
             assertThat(result).hasSize(1);
@@ -895,14 +894,13 @@ class ApplicationServiceTest {
         void passesStatusFilterToMapper() {
 
             // given
-            Long adminUserId = 1L;
             Long fairId = 1L;
             String status = "PENDING_REVIEW";
 
             given(applicationMapper.selectApplicationsByFair(fairId, status)).willReturn(List.of());
 
             // when
-            applicationService.getApplicationsForFair(adminUserId, fairId, status);
+            applicationService.getApplicationsForFair(fairId, status);
 
             // then
             verify(applicationMapper).selectApplicationsByFair(fairId, status);
@@ -913,13 +911,12 @@ class ApplicationServiceTest {
         @DisplayName("담당 행사가 아니면 예외를 던진다")
         void throwsWhenNotAssignedAdmin() {
 
-            Long adminUserId = 1L;
             Long fairId = 1L;
 
             doThrow(new CommonException(ErrorCode.ACCESS_DENIED))
                     .when(fairAdminAccessGuard).checkAssigned(fairId);
 
-            assertThatThrownBy(() -> applicationService.getApplicationsForFair(adminUserId, fairId, null))
+            assertThatThrownBy(() -> applicationService.getApplicationsForFair(fairId, null))
                     .isInstanceOf(CommonException.class);
 
             verify(applicationMapper, never()).selectApplicationsByFair(any(), any());
@@ -949,7 +946,6 @@ class ApplicationServiceTest {
         void notifiesOwnerWhenApproved() {
 
             // given
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
             Long ownerId = 5L;
@@ -962,7 +958,7 @@ class ApplicationServiceTest {
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
 
             // when
-            applicationService.approveApplication(adminUserId, applicationId, null);
+            applicationService.approveApplication(applicationId, null);
             simulateTransactionCommit();
 
             // then: 사업자 소유주(ownerId)에게 VENDOR_APPLICATION_APPROVED 알림이 저장됐는지 확인
@@ -976,7 +972,6 @@ class ApplicationServiceTest {
         void approvalSucceedsEvenWhenNotificationFails() {
 
             // given: 알림 저장 중 예상 못한 예외가 나는 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -991,7 +986,7 @@ class ApplicationServiceTest {
 
             // when
             ApplicationReviewResultResponse result =
-                    applicationService.approveApplication(adminUserId, applicationId, null);
+                    applicationService.approveApplication(applicationId, null);
             simulateTransactionCommit();
 
             // then: 예외가 삼켜지고 승인 결과는 정상 반환돼야 함
@@ -1004,7 +999,6 @@ class ApplicationServiceTest {
         void approvesWithAutoCalculatedFinalPrice() {
 
             // given: request=null(담당자가 finalPrice를 안 보낸 상황), 심사 대기 상태인 신청서
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1017,7 +1011,7 @@ class ApplicationServiceTest {
 
             // when
             ApplicationReviewResultResponse result =
-                    applicationService.approveApplication(adminUserId, applicationId, null);
+                    applicationService.approveApplication(applicationId, null);
 
             // then: 합계값이 그대로 finalPrice로 반영됐는지, 결제 마감일도 채워졌는지 확인
             assertThat(result.getStatus()).isEqualTo("PAYMENT_PENDING");
@@ -1031,7 +1025,6 @@ class ApplicationServiceTest {
         void approvesWithAdminSpecifiedFinalPrice() {
 
             // given: 담당자가 화면에서 미리 본 합계 대신 다른 값(500000)을 직접 입력한 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
             ApplicationApproveRequest request = new ApplicationApproveRequest();
@@ -1044,7 +1037,7 @@ class ApplicationServiceTest {
 
             // when
             ApplicationReviewResultResponse result =
-                    applicationService.approveApplication(adminUserId, applicationId, request);
+                    applicationService.approveApplication(applicationId, request);
 
             // then: 담당자가 지정한 값이 그대로 쓰였는지 + 불필요한 합계 조회 쿼리는 안 불렸는지 확인
             assertThat(result.getFinalPrice()).isEqualTo(500000L);
@@ -1057,13 +1050,12 @@ class ApplicationServiceTest {
         void throwsWhenApplicationNotFound() {
 
             // given: 존재하지 않는 applicationId
-            Long adminUserId = 1L;
             Long applicationId = 999L;
 
             given(applicationMapper.selectById(applicationId)).willReturn(null);
 
             // when & then
-            assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
+            assertThatThrownBy(() -> applicationService.approveApplication(applicationId, null))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("신청을 찾을 수 없습니다");
 
@@ -1077,7 +1069,6 @@ class ApplicationServiceTest {
         void throwsWhenNotAssignedAdmin() {
 
             // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1087,7 +1078,7 @@ class ApplicationServiceTest {
                     .when(fairAdminAccessGuard).checkAssigned(fairId);
 
             // when & then
-            assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
+            assertThatThrownBy(() -> applicationService.approveApplication(applicationId, null))
                     .isInstanceOf(CommonException.class);
 
             // 담당자 확인에서 막혔으니, 실제 승인 처리는 실행되면 안 됨
@@ -1100,7 +1091,6 @@ class ApplicationServiceTest {
         void throwsWhenNotPendingReview() {
 
             // given: 이미 반려된 신청서를 다시 승인하려는 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1108,7 +1098,7 @@ class ApplicationServiceTest {
                     .willReturn(createApplication(applicationId, fairId, Application.Status.REJECTED));
 
             // when & then
-            assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
+            assertThatThrownBy(() -> applicationService.approveApplication(applicationId, null))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("심사 대기 중인 신청서만");
 
@@ -1124,7 +1114,6 @@ class ApplicationServiceTest {
              * given: 조회 시점엔 PENDING_REVIEW였지만(선행 체크 통과),
              * 실제 UPDATE 실행 시점엔 다른 요청이 먼저 처리해버려서 0행 반영된 상황(락 없이 UPDATE 조건으로 방어)
              */
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1134,7 +1123,7 @@ class ApplicationServiceTest {
             given(applicationMapper.updateApplicationApproved(any(), any(), any(), any())).willReturn(0);
 
             // when & then: 선행 체크는 통과했지만, UPDATE의 영향받은 행이 0이라 동일한 예외로 최종 차단됨
-            assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
+            assertThatThrownBy(() -> applicationService.approveApplication(applicationId, null))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("심사 대기 중인 신청서만");
 
@@ -1173,7 +1162,6 @@ class ApplicationServiceTest {
         void notifiesOwnerWhenRejected() {
 
             // given
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
             Long ownerId = 5L;
@@ -1185,7 +1173,7 @@ class ApplicationServiceTest {
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
 
             // when
-            applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("부적합"));
+            applicationService.rejectApplication(applicationId, createRejectRequest("부적합"));
             simulateTransactionCommit();
 
             // then
@@ -1199,7 +1187,6 @@ class ApplicationServiceTest {
         void rejectsSuccessfully() {
 
             // given: 심사 대기 상태인 신청서 + 정상적인 반려 사유
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1213,7 +1200,7 @@ class ApplicationServiceTest {
 
             // when
             ApplicationReviewResultResponse result =
-                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("부적합"));
+                    applicationService.rejectApplication(applicationId, createRejectRequest("부적합"));
 
             // then: 상태와 반려 사유가 응답에 정확히 담겼는지 확인
             assertThat(result.getStatus()).isEqualTo("REJECTED");
@@ -1228,14 +1215,13 @@ class ApplicationServiceTest {
         void throwsWhenApplicationNotFound() {
 
             // given: 존재하지 않는 applicationId
-            Long adminUserId = 1L;
             Long applicationId = 999L;
 
             given(applicationMapper.selectById(applicationId)).willReturn(null);
 
             // when & then
             assertThatThrownBy(() ->
-                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
+                    applicationService.rejectApplication(applicationId, createRejectRequest("사유")))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("신청을 찾을 수 없습니다");
 
@@ -1246,7 +1232,6 @@ class ApplicationServiceTest {
         void throwsWhenNotAssignedAdmin() {
 
             // given: 신청서는 정상 조회되지만, 요청자가 이 행사 담당자가 아닌 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1257,7 +1242,7 @@ class ApplicationServiceTest {
 
             // when & then
             assertThatThrownBy(() ->
-                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
+                    applicationService.rejectApplication(applicationId, createRejectRequest("사유")))
                     .isInstanceOf(CommonException.class);
 
             verify(applicationMapper, never()).updateApplicationRejected(any(), any(), any());
@@ -1269,7 +1254,6 @@ class ApplicationServiceTest {
         void throwsWhenNotPendingReview() {
 
             // given: 이미 승인(PAYMENT_PENDING)된 신청서를 다시 반려하려는 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1278,7 +1262,7 @@ class ApplicationServiceTest {
 
             // when & then
             assertThatThrownBy(() ->
-                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
+                    applicationService.rejectApplication(applicationId, createRejectRequest("사유")))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("심사 대기 중인 신청서만");
 
@@ -1291,7 +1275,6 @@ class ApplicationServiceTest {
         void throwsWhenRejectReasonBlank() {
 
             // given: rejectReason이 공백뿐인 요청 (컨트롤러 @NotBlank 대신 서비스에서 방어)
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1300,7 +1283,7 @@ class ApplicationServiceTest {
 
             // when & then
             assertThatThrownBy(() ->
-                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("  ")))
+                    applicationService.rejectApplication(applicationId, createRejectRequest("  ")))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("반려 사유를 입력해야 합니다");
 
@@ -1313,7 +1296,6 @@ class ApplicationServiceTest {
         void throwsWhenConcurrentRejectionLoses() {
 
             // given: 조회 시점엔 PENDING_REVIEW였지만, UPDATE 시점엔 다른 요청이 먼저 처리해버린 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1323,7 +1305,7 @@ class ApplicationServiceTest {
 
             // when & then
             assertThatThrownBy(() ->
-                    applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
+                    applicationService.rejectApplication(applicationId, createRejectRequest("사유")))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("심사 대기 중인 신청서만");
 
@@ -1340,7 +1322,6 @@ class ApplicationServiceTest {
         void returnsCancelRequestsWhenAdminMatches() {
 
             // given: 이 행사의 담당자가 요청자 본인인 상황
-            Long adminUserId = 1L;
             Long fairId = 1L;
 
             List<ApplicationCancelRequestSummaryResponse> requests = List.of(
@@ -1354,7 +1335,7 @@ class ApplicationServiceTest {
 
             // when
             List<ApplicationCancelRequestSummaryResponse> result =
-                    applicationService.getCancelRequestsForFair(adminUserId, fairId, null);
+                    applicationService.getCancelRequestsForFair(fairId, null);
 
             // then
             assertThat(result).hasSize(1);
@@ -1367,14 +1348,13 @@ class ApplicationServiceTest {
         void passesStatusFilterToMapper() {
 
             // given
-            Long adminUserId = 1L;
             Long fairId = 1L;
             String status = "REQUESTED";
 
             given(applicationMapper.selectCancelRequestsByFair(fairId, status)).willReturn(List.of());
 
             // when
-            applicationService.getCancelRequestsForFair(adminUserId, fairId, status);
+            applicationService.getCancelRequestsForFair(fairId, status);
 
             // then
             verify(applicationMapper).selectCancelRequestsByFair(fairId, status);
@@ -1386,14 +1366,13 @@ class ApplicationServiceTest {
         void throwsWhenNotAssignedAdmin() {
 
             // given: 요청자가 이 행사 담당자가 아닌 상황
-            Long adminUserId = 1L;
             Long fairId = 1L;
 
             doThrow(new CommonException(ErrorCode.ACCESS_DENIED))
                     .when(fairAdminAccessGuard).checkAssigned(fairId);
 
             // when & then
-            assertThatThrownBy(() -> applicationService.getCancelRequestsForFair(adminUserId, fairId, null))
+            assertThatThrownBy(() -> applicationService.getCancelRequestsForFair(fairId, null))
                     .isInstanceOf(CommonException.class);
 
             verify(applicationMapper, never()).selectCancelRequestsByFair(any(), any());
@@ -1946,7 +1925,6 @@ class ApplicationServiceTest {
         void notifiesOwnerWhenCancelRejected() {
 
             // given
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
             Long businessId = 1L;
@@ -1964,7 +1942,7 @@ class ApplicationServiceTest {
             given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, ownerId));
 
             // when
-            applicationService.rejectCancelRequest(adminUserId, applicationId);
+            applicationService.rejectCancelRequest(applicationId);
             simulateTransactionCommit();
 
             // then
@@ -1978,7 +1956,6 @@ class ApplicationServiceTest {
         void rejectsSuccessfully() {
 
             // given: 처리 대기 중인 취소 요청이 있고, 담당자가 반려 처리하는 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -1994,7 +1971,7 @@ class ApplicationServiceTest {
 
             // when
             ApplicationCancelRequestResultResponse result =
-                    applicationService.rejectCancelRequest(adminUserId, applicationId);
+                    applicationService.rejectCancelRequest(applicationId);
 
             // then: 취소 요청만 REJECTED로 바뀌고, application.status는 그대로인지 확인
             assertThat(result.getStatus()).isEqualTo("REJECTED");
@@ -2008,13 +1985,12 @@ class ApplicationServiceTest {
         void throwsWhenApplicationNotFound() {
 
             // given: 존재하지 않는 applicationId
-            Long adminUserId = 1L;
             Long applicationId = 999L;
 
             given(applicationMapper.selectById(applicationId)).willReturn(null);
 
             // when & then
-            assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
+            assertThatThrownBy(() -> applicationService.rejectCancelRequest(applicationId))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("신청을 찾을 수 없습니다");
 
@@ -2025,7 +2001,6 @@ class ApplicationServiceTest {
         void throwsWhenNotAssignedAdmin() {
 
             // given: 신청서는 정상 조회되지만, 요청자가 이 행사 담당자가 아닌 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -2039,7 +2014,7 @@ class ApplicationServiceTest {
                     .when(fairAdminAccessGuard).checkAssigned(fairId);
 
             // when & then
-            assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
+            assertThatThrownBy(() -> applicationService.rejectCancelRequest(applicationId))
                     .isInstanceOf(CommonException.class);
 
             verify(applicationMapper, never()).selectPendingCancelRequest(any());
@@ -2051,7 +2026,6 @@ class ApplicationServiceTest {
         void throwsWhenNoPendingCancelRequest() {
 
             // given: 이미 처리됐거나 아예 요청된 적 없는 신청서
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -2064,7 +2038,7 @@ class ApplicationServiceTest {
             given(applicationMapper.selectPendingCancelRequest(applicationId)).willReturn(null);
 
             // when & then
-            assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
+            assertThatThrownBy(() -> applicationService.rejectCancelRequest(applicationId))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("처리 대기 중인 취소 요청을 찾을 수 없습니다");
 
@@ -2075,7 +2049,6 @@ class ApplicationServiceTest {
         void throwsWhenConcurrentUpdateFails() {
 
             // given: 조회 시점엔 REQUESTED였지만, UPDATE 시점엔 다른 요청이 먼저 처리해버린 상황
-            Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
@@ -2090,7 +2063,7 @@ class ApplicationServiceTest {
             given(applicationMapper.updateCancelRequestRejected(eq(10L), any())).willReturn(0);
 
             // when & then
-            assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
+            assertThatThrownBy(() -> applicationService.rejectCancelRequest(applicationId))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("처리 대기 중인 취소 요청을 찾을 수 없습니다");
 

@@ -74,52 +74,48 @@ public class ApplicationController {
     // 담당 행사의 신청 목록 조회 (행사 담당자용)
     @GetMapping("/fairs/{fairId}/applications")
     public ResponseEntity<ApiResponse<List<ApplicationReviewSummaryResponse>>> getApplicationsForFair(
-            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long fairId,
             @RequestParam(required = false) String status
     ) {
 
         return ResponseEntity.ok(
-                ApiResponse.success(applicationService.getApplicationsForFair(adminUserId, fairId, status)));
+                ApiResponse.success(applicationService.getApplicationsForFair(fairId, status)));
 
     }
 
     // 참가 신청서 승인 (행사 담당자용)
     @PutMapping("/applications/{applicationId}/approve")
     public ResponseEntity<ApiResponse<ApplicationReviewResultResponse>> approveApplication(
-            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long applicationId,
             @Valid @RequestBody(required = false) ApplicationApproveRequest request
     ) {
 
         return ResponseEntity.ok(
-                ApiResponse.success(applicationService.approveApplication(adminUserId, applicationId, request)));
+                ApiResponse.success(applicationService.approveApplication(applicationId, request)));
 
     }
 
     // 참가 신청서 반려 (행사 담당자용)
     @PutMapping("/applications/{applicationId}/reject")
     public ResponseEntity<ApiResponse<ApplicationReviewResultResponse>> rejectApplication(
-            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long applicationId,
             @Valid @RequestBody ApplicationRejectRequest request
     ) {
 
         return ResponseEntity.ok(
-                ApiResponse.success(applicationService.rejectApplication(adminUserId, applicationId, request)));
+                ApiResponse.success(applicationService.rejectApplication(applicationId, request)));
 
     }
 
     // 담당 행사의 취소 요청 목록 조회 (행사 담당자용)
     @GetMapping("/fairs/{fairId}/cancel-requests")
     public ResponseEntity<ApiResponse<List<ApplicationCancelRequestSummaryResponse>>> getCancelRequestsForFair(
-            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long fairId,
             @RequestParam(required = false) String status
     ) {
 
         return ResponseEntity.ok(
-                ApiResponse.success(applicationService.getCancelRequestsForFair(adminUserId, fairId, status)));
+                ApiResponse.success(applicationService.getCancelRequestsForFair(fairId, status)));
 
     }
 
@@ -153,12 +149,11 @@ public class ApplicationController {
     // 참가 취소 요청 반려 (행사 담당자용)
     @PutMapping("/applications/{applicationId}/cancel-requests/reject")
     public ResponseEntity<ApiResponse<ApplicationCancelRequestResultResponse>> rejectCancelRequest(
-            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long applicationId
     ) {
 
         return ResponseEntity.ok(
-                ApiResponse.success(applicationService.rejectCancelRequest(adminUserId, applicationId)));
+                ApiResponse.success(applicationService.rejectCancelRequest(applicationId)));
 
     }
 

@@ -358,7 +358,7 @@ public class ApplicationService {
     }
 
     // 담당 행사의 신청 목록 조회 (행사 담당자용)
-    public List<ApplicationReviewSummaryResponse> getApplicationsForFair(Long adminUserId, Long fairId, String status) {
+    public List<ApplicationReviewSummaryResponse> getApplicationsForFair(Long fairId, String status) {
 
         // 이 행사의 담당자가 요청자 본인인지 확인
         fairAdminAccessGuard.checkAssigned(fairId);
@@ -368,7 +368,7 @@ public class ApplicationService {
     }
 
     // 담당 행사의 취소 요청 목록 조회 (행사 담당자용)
-    public List<ApplicationCancelRequestSummaryResponse> getCancelRequestsForFair(Long adminUserId, Long fairId, String status) {
+    public List<ApplicationCancelRequestSummaryResponse> getCancelRequestsForFair(Long fairId, String status) {
 
         // 이 행사의 담당자가 요청자 본인인지 확인
         fairAdminAccessGuard.checkAssigned(fairId);
@@ -379,7 +379,7 @@ public class ApplicationService {
 
     // 참가 신청서 승인 (행사 담당자용)
     @Transactional
-    public ApplicationReviewResultResponse approveApplication(Long adminUserId, Long applicationId, ApplicationApproveRequest request) {
+    public ApplicationReviewResultResponse approveApplication(Long applicationId, ApplicationApproveRequest request) {
 
         // 신청 존재 확인
         Application application = applicationMapper.selectById(applicationId);
@@ -433,7 +433,7 @@ public class ApplicationService {
 
     // 참가 신청서 반려 (행사 담당자용)
     @Transactional
-    public ApplicationReviewResultResponse rejectApplication(Long adminUserId, Long applicationId, ApplicationRejectRequest request) {
+    public ApplicationReviewResultResponse rejectApplication(Long applicationId, ApplicationRejectRequest request) {
 
         // 신청 존재 확인
         Application application = applicationMapper.selectById(applicationId);
@@ -686,7 +686,7 @@ public class ApplicationService {
 
     // 참가 취소 요청 반려 (행사 담당자용) — application.status는 그대로 유지
     @Transactional
-    public ApplicationCancelRequestResultResponse rejectCancelRequest(Long adminUserId, Long applicationId) {
+    public ApplicationCancelRequestResultResponse rejectCancelRequest(Long applicationId) {
 
         // 신청 존재 확인
         Application application = applicationMapper.selectById(applicationId);

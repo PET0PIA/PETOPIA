@@ -163,7 +163,7 @@ class ApplicationControllerTest {
     @Test
     void getsApplicationsForFair() throws Exception {
 
-        given(applicationService.getApplicationsForFair(eq(1L), eq(1L), isNull())).willReturn(
+        given(applicationService.getApplicationsForFair(eq(1L), isNull())).willReturn(
                 List.of(ApplicationReviewSummaryResponse.builder().applicationId(1L).businessName("멍냥사료").status("PENDING_REVIEW").build()));
 
         mockMvc.perform(get("/api/fairs/1/applications")
@@ -178,7 +178,7 @@ class ApplicationControllerTest {
     void returns403WhenNotFairAdminOnList() throws Exception {
 
         willThrow(new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED))
-                .given(applicationService).getApplicationsForFair(eq(2L), eq(1L), isNull());
+                .given(applicationService).getApplicationsForFair(eq(1L), isNull());
 
         mockMvc.perform(get("/api/fairs/1/applications")
                         .with(authenticatedAs(2L)))
@@ -191,7 +191,7 @@ class ApplicationControllerTest {
     @Test
     void approvesApplication() throws Exception {
 
-        given(applicationService.approveApplication(eq(1L), eq(1L), any())).willReturn(
+        given(applicationService.approveApplication(eq(1L), any())).willReturn(
                 ApplicationReviewResultResponse.builder().applicationId(1L).status("PAYMENT_PENDING").finalPrice(100000L).build());
 
         mockMvc.perform(put("/api/applications/1/approve")
@@ -206,7 +206,7 @@ class ApplicationControllerTest {
     void returns409WhenNotPendingReview() throws Exception {
 
         willThrow(new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW))
-                .given(applicationService).approveApplication(eq(1L), eq(1L), any());
+                .given(applicationService).approveApplication(eq(1L), any());
 
         mockMvc.perform(put("/api/applications/1/approve")
                         .with(authenticatedAs(1L)))
@@ -219,7 +219,7 @@ class ApplicationControllerTest {
     @Test
     void rejectsApplication() throws Exception {
 
-        given(applicationService.rejectApplication(eq(1L), eq(1L), any())).willReturn(
+        given(applicationService.rejectApplication(eq(1L), any())).willReturn(
                 ApplicationReviewResultResponse.builder().applicationId(1L).status("REJECTED").rejectReason("서류 미비").build());
 
         mockMvc.perform(put("/api/applications/1/reject")
@@ -236,7 +236,7 @@ class ApplicationControllerTest {
     void returns400WhenRejectReasonMissing() throws Exception {
 
         willThrow(new CommonException(ErrorCode.APPLICATION_REJECT_REASON_REQUIRED))
-                .given(applicationService).rejectApplication(eq(1L), eq(1L), any());
+                .given(applicationService).rejectApplication(eq(1L), any());
 
         mockMvc.perform(put("/api/applications/1/reject")
                         .with(authenticatedAs(1L))
@@ -251,7 +251,7 @@ class ApplicationControllerTest {
     @Test
     void getsCancelRequestsForFair() throws Exception {
 
-        given(applicationService.getCancelRequestsForFair(eq(1L), eq(1L), isNull())).willReturn(
+        given(applicationService.getCancelRequestsForFair(eq(1L), isNull())).willReturn(
                 List.of(ApplicationCancelRequestSummaryResponse.builder().cancelRequestId(1L).applicationId(1L).status("REQUESTED").build()));
 
         mockMvc.perform(get("/api/fairs/1/cancel-requests")
@@ -324,7 +324,7 @@ class ApplicationControllerTest {
     @Test
     void rejectsCancelRequest() throws Exception {
 
-        given(applicationService.rejectCancelRequest(1L, 1L)).willReturn(
+        given(applicationService.rejectCancelRequest(1L)).willReturn(
                 ApplicationCancelRequestResultResponse.builder()
                         .cancelRequestId(1L).applicationId(1L).status("REJECTED")
                         .applicationStatus("CONFIRMED").boothDeleted(false).build());
