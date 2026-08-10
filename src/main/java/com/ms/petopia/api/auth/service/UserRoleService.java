@@ -32,7 +32,7 @@ public class UserRoleService {
             throw new CommonException(ErrorCode.USER_NOT_FOUND);
         }
         auditLogService.record(
-                null, ActorType.SYSTEM, null,
+                null, ActorType.SYSTEM, "SYSTEM",
                 ActionType.ROLE_CHANGE, TargetType.ACCOUNT, userId,
                 Map.of("role", "USER"), Map.of("role", "VENDOR")
         );
@@ -46,7 +46,7 @@ public class UserRoleService {
             throw new CommonException(ErrorCode.USER_NOT_FOUND);
         }
         auditLogService.record(
-                null, ActorType.SYSTEM, null,
+                null, ActorType.SYSTEM, "SYSTEM",
                 ActionType.ROLE_CHANGE, TargetType.ACCOUNT, userId,
                 Map.of("role", "VENDOR"), Map.of("role", "USER")
         );
