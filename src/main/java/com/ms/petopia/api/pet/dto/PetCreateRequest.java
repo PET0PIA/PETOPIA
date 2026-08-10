@@ -23,7 +23,7 @@ public class PetCreateRequest {
     @Size(max = 20, message = "종은 최대 20자까지 입력할 수 있습니다.")
     private String species;
 
-    @Size(max = 50, message = "품종은 최대 20자까지 입력할 수 있습니다.")
+    @Size(max = 50, message = "품종은 최대 50자까지 입력할 수 있습니다.")
     private String breed;
 
     @Past(message = "생년월일은 오늘 이전이어야 합니다.")
