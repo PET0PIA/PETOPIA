@@ -6,7 +6,7 @@ import { apiClient } from "./client";
  * 이 파일의 함수들은 별도로 헤더를 넘기지 않는다.
  *
  * TEMP_USER_ID_HEADER / TEMP_APPLICANT_USER_ID는 이 파일 자체는 더 이상 안 쓰지만,
- * audit.ts/commissionRate.ts/notification.ts/settlement.ts가 아직 이 상수를 가져다 쓰고
+ * commissionRate.ts/settlement.ts/payment.ts가 아직 이 상수를 가져다 쓰고
  * 있어(그 백엔드 도메인들은 아직 JWT로 전환 안 됨) 그대로 export만 유지한다.
  * TODO 그 도메인들도 JWT로 전환되면 이 export를 제거한다.
  */
