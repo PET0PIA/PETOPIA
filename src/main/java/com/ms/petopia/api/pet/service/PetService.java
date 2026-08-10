@@ -7,6 +7,8 @@ import com.ms.petopia.api.pet.dto.PetUpdateRequest;
 import com.ms.petopia.api.pet.mapper.PetMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,7 @@ import java.util.List;
 public class PetService {
 
     private final PetMapper petMapper;
+    private final StorageService storageService;
 
     //반려동물 목록 확인
     public List<PetResponse> getMyPets(Long userId) {
@@ -42,7 +45,7 @@ public class PetService {
                 .birthDate(request.getBirthDate())
                 .gender(request.getGender())
                 .isNeutered(request.getIsNeutered())
-                .imageUrl(request.getImageUrl())
+                .imageUrl(resolveImageUrl(request.getImageObjectKey()))
                 .build();
         petMapper.insertPet(pet);
         //insert 후의 pet 객체엔 created_at이 없다(DB DEFAULT CURRENT_TIMESTAMP를 애플리케이션이
@@ -61,7 +64,7 @@ public class PetService {
                 || request.getBirthDate() != null
                 || request.getGender() != null
                 || request.getIsNeutered() != null
-                || request.getImageUrl() != null;
+                || request.getImageObjectKey() != null;
 
         if (hasAnyField) {
             petMapper.updatePet(
@@ -72,7 +75,7 @@ public class PetService {
                     request.getBirthDate(),
                     request.getGender(),
                     request.getIsNeutered(),
-                    request.getImageUrl()
+                    resolveImageUrl(request.getImageObjectKey())
             );
         }
 
@@ -83,6 +86,19 @@ public class PetService {
     public void deletePet(Long userId, Long petId) {
         getOwnedPet(userId, petId); //존재 + 소유권 확인
         petMapper.deletePetById(petId);
+    }
+
+    /*
+     * presigned 업로드로 받은 임시 객체 키를 확정(tmp -> uploads)하고 공개 URL로 바꾼다.
+     * 키가 없으면(이미지를 안 바꾸는 경우) null을 그대로 반환한다 - 부분 업데이트에서
+     * null은 "이 필드는 갱신 안 함"을 뜻하므로 자연스럽게 기존 이미지가 유지된다.
+     */
+    private String resolveImageUrl(String temporaryObjectKey) {
+        if (temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
+            return null;
+        }
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
+        return storageService.toPublicUrl(confirmedKey);
     }
 
     //존재 여부와 소유권을 함께 확인. 없으면 404, 남의 것이면 403

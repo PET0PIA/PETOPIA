@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { setAccessToken } from "../api/client";
+import { refreshAccessTokenOnce, setAccessToken } from "../api/client";
 import {
   adminLogin as adminLoginRequest,
   completeOAuthSignup as completeOAuthSignupRequest,
@@ -7,7 +7,6 @@ import {
   exchangeOAuthLogin,
   login as loginRequest,
   logout as logoutRequest,
-  refreshAccessToken,
   type AccessTokenPayload,
   type EmailLoginRequest,
   type OAuthSignupCompleteRequest,
@@ -35,10 +34,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 새로고침하면 메모리에 들고 있던 accessToken은 사라진다. httpOnly로 남아있는
     // refreshToken 쿠키로 재발급을 한 번 시도해서 로그인 상태를 복구한다(silent refresh).
     // 쿠키가 없거나 만료됐으면 그냥 비로그인 상태로 확정한다.
+    // client.ts의 refreshAccessTokenOnce()를 같이 써서, 이 시점에 다른 컴포넌트의 API
+    // 요청이 401을 맞고 자기 나름대로 재발급을 시도하더라도 실제 네트워크 요청은 하나로
+    // 합쳐지게 한다(안 그러면 Rotation 방식인 Refresh Token을 두 번 동시에 쓰려다 하나가 실패한다).
     let cancelled = false;
     (async () => {
       try {
-        const accessToken = await refreshAccessToken();
+        const accessToken = await refreshAccessTokenOnce();
         if (cancelled) return;
         setAccessToken(accessToken);
         setUser(decodeAccessToken(accessToken));

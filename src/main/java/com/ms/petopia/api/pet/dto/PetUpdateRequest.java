@@ -1,7 +1,7 @@
 package com.ms.petopia.api.pet.dto;
 
+import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,7 +24,7 @@ public class PetUpdateRequest {
     @Size(max = 50, message = "품종은 최대 50자까지 입력할 수 있습니다.")
     private String breed;
 
-    @PastOrPresent(message = "생년월일은 오늘 이전이어야 합니다.")
+    @Past(message = "생년월일은 오늘 이전이어야 합니다.")
     private LocalDate birthDate;
 
     @Pattern(regexp = "^(MALE|FEMALE)$", message = "성별은 MALE 또는 FEMALE만 가능합니다.")
@@ -32,6 +32,6 @@ public class PetUpdateRequest {
 
     private Boolean isNeutered;
 
-    @Size(max = 500, message = "이미지 URL은 최대 500자까지 입력할 수 있습니다.")
-    private String imageUrl;
+    /** presigned-upload로 받은 임시 객체 키. null이면(새로 첨부 안 함) 기존 이미지를 그대로 둔다. */
+    private String imageObjectKey;
 }

@@ -34,6 +34,11 @@ import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
 import { AdminLoginPage } from "../pages/auth/AdminLoginPage";
+import { MyPage } from "../pages/mypage/MyPage";
+import { EditProfilePage } from "../pages/mypage/EditProfilePage";
+import { PasswordChangePage } from "../pages/mypage/PasswordChangePage";
+import { PetFormPage } from "../pages/mypage/PetFormPage";
+import { PetDetailPage } from "../pages/mypage/PetDetailPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin을 ProtectedRoute로 감싸기
 // import { ProtectedRoute } from "./ProtectedRoute";
 
@@ -50,7 +55,6 @@ const publicPages: Record<string, string> = {
   "/participations/new": "참여 부스 신청",
   "/participations/me": "참가 신청 현황",
   "/booths/me": "내 부스 관리",
-  "/mypage": "마이페이지",
   "/about": "서비스 소개",
   "/terms": "이용약관",
   "/privacy": "개인정보 처리방침",
@@ -97,6 +101,11 @@ export function AppRouter() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+          <Route path="/mypage" element={<MyPage />} />
+          <Route path="/mypage/edit" element={<EditProfilePage />} />
+          <Route path="/mypage/password" element={<PasswordChangePage />} />
+          <Route path="/mypage/pets/new" element={<PetFormPage />} />
+          <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />

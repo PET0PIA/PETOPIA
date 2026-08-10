@@ -116,6 +116,11 @@ export function resetPassword(token: string, newPassword: string): Promise<void>
   return apiClient.post<void>("/api/auth/password/reset", { token, newPassword });
 }
 
+/** 로그인 상태에서 비밀번호 변경(마이페이지). 현재 비밀번호가 틀리면 401(INVALID_PASSWORD). */
+export function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return apiClient.patch<void>("/api/auth/password/change", { currentPassword, newPassword });
+}
+
 // --- 소셜 로그인 ---
 
 export type OAuthProvider = "google" | "naver";

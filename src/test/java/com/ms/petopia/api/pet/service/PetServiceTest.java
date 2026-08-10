@@ -7,6 +7,8 @@ import com.ms.petopia.api.pet.dto.PetUpdateRequest;
 import com.ms.petopia.api.pet.mapper.PetMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +38,8 @@ class PetServiceTest {
 
     @Mock
     private PetMapper petMapper;
+    @Mock
+    private StorageService storageService;
     @InjectMocks
     private PetService petService;
 
@@ -101,6 +105,42 @@ class PetServiceTest {
         assertThat(captor.getValue().getUserId()).isEqualTo(USER_ID);
         assertThat(captor.getValue().getName()).isEqualTo("초코");
         assertThat(result.petId()).isEqualTo(PET_ID);
+    }
+
+    @Test
+    void createPet_이미지objectKey가있으면_확정후공개URL을저장한다() {
+        PetCreateRequest request = new PetCreateRequest();
+        request.setName("초코");
+        request.setSpecies("DOG");
+        request.setImageObjectKey("tmp/abc.jpg");
+
+        given(storageService.confirm("tmp/abc.jpg", UploadPolicy.IMAGE)).willReturn("uploads/abc.jpg");
+        given(storageService.toPublicUrl("uploads/abc.jpg")).willReturn("https://cdn.petopia.com/uploads/abc.jpg");
+        given(petMapper.insertPet(any(Pet.class))).willAnswer(invocation -> {
+            Pet argument = invocation.getArgument(0);
+            argument.setPetId(PET_ID);
+            return 1;
+        });
+        given(petMapper.selectPetById(PET_ID)).willReturn(pet(USER_ID));
+
+        petService.createPet(USER_ID, request);
+
+        ArgumentCaptor<Pet> captor = ArgumentCaptor.forClass(Pet.class);
+        verify(petMapper).insertPet(captor.capture());
+        assertThat(captor.getValue().getImageUrl()).isEqualTo("https://cdn.petopia.com/uploads/abc.jpg");
+    }
+
+    @Test
+    void updatePet_이미지objectKey가있으면_확정후공개URL로갱신한다() {
+        PetUpdateRequest request = new PetUpdateRequest();
+        request.setImageObjectKey("tmp/new.jpg");
+        given(petMapper.selectPetById(PET_ID)).willReturn(pet(USER_ID));
+        given(storageService.confirm("tmp/new.jpg", UploadPolicy.IMAGE)).willReturn("uploads/new.jpg");
+        given(storageService.toPublicUrl("uploads/new.jpg")).willReturn("https://cdn.petopia.com/uploads/new.jpg");
+
+        petService.updatePet(USER_ID, PET_ID, request);
+
+        verify(petMapper).updatePet(eq(PET_ID), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq("https://cdn.petopia.com/uploads/new.jpg"));
     }
 
     @Test

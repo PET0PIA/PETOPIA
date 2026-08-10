@@ -1,6 +1,6 @@
 package com.ms.petopia.api.user.dto;
 
-import jakarta.validation.constraints.PastOrPresent;
+import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -18,7 +18,7 @@ public class UserUpdateRequest {
     @Size(min = 1, max = 50, message = "닉네임은 1~50자여야 합니다.")
     private String nickname;
 
-    @PastOrPresent(message = "생년월일은 오늘 이전이어야 합니다.")
+    @Past(message = "생년월일은 오늘 이전이어야 합니다.")
     private LocalDate birthDate;
 
     @Pattern(regexp = "^01[0-9]-?\\d{3,4}-?\\d{4}$", message = "휴대폰 번호 형식이 올바르지 않습니다. (예: 01012345678 또는 010-1234-5678)")
