@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import { TEMP_USER_ID_HEADER, TEMP_APPLICANT_USER_ID } from "./fair";
+
 
 export type NotificationType =
   | "FAIR_APPLICATION_APPROVED"
@@ -36,10 +36,6 @@ export interface NotificationListResponse {
   hasNext: boolean;
 }
 
-function authHeader(userId: number = TEMP_APPLICANT_USER_ID) {
-  return { [TEMP_USER_ID_HEADER]: String(userId) };
-}
-
 /**
  * NotificationController는 다른 컨트롤러와 달리 응답을 ApiResponse<T>({success, status, code, data})로
  * 한 번 더 감싸서 내려준다. apiClient는 이 래핑을 모르므로 여기서 data만 꺼내 돌려준다.
@@ -51,30 +47,20 @@ async function unwrap<T>(promise: Promise<ApiEnvelope<T>>): Promise<T> {
   return envelope.data;
 }
 
-export function getMyNotifications(page = 0, size = 20, userId?: number) {
+export function getMyNotifications(page = 0, size = 20) {
   return unwrap(
-    apiClient.get<ApiEnvelope<NotificationListResponse>>(`/api/notifications?page=${page}&size=${size}`, {
-      headers: authHeader(userId),
-    }),
+    apiClient.get<ApiEnvelope<NotificationListResponse>>(`/api/notifications?page=${page}&size=${size}`),
   );
 }
 
-export function getUnreadNotificationCount(userId?: number) {
-  return unwrap(
-    apiClient.get<ApiEnvelope<number>>("/api/notifications/unread-count", {
-      headers: authHeader(userId),
-    }),
-  );
+export function getUnreadNotificationCount() {
+  return unwrap(apiClient.get<ApiEnvelope<number>>("/api/notifications/unread-count"));
 }
 
-export function markNotificationAsRead(notificationId: number, userId?: number) {
-  return apiClient.put<void>(`/api/notifications/${notificationId}/read`, undefined, {
-    headers: authHeader(userId),
-  });
+export function markNotificationAsRead(notificationId: number) {
+  return apiClient.put<void>(`/api/notifications/${notificationId}/read`);
 }
 
-export function markAllNotificationsAsRead(userId?: number) {
-  return apiClient.put<void>("/api/notifications/read-all", undefined, {
-    headers: authHeader(userId),
-  });
+export function markAllNotificationsAsRead() {
+  return apiClient.put<void>("/api/notifications/read-all");
 }

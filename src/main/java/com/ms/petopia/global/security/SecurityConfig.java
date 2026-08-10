@@ -48,9 +48,10 @@ public class SecurityConfig {
                         ).authenticated()
                         .requestMatchers("/api/v1/admin/fairs/**")
                         .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        // TODO 인증 도메인 완성 후 SUPER_ADMIN 권한 검증(JWT)으로 되돌린다.
-                        // 지금은 다른 관리자 API들과 동일하게 X-User-Id 임시 헤더 방식(permitAll)을 쓴다 -
-                        // AuditLogController 등 /api/admin/** 하위 컨트롤러가 이미 이 전제로 작성돼 있다.
+                        // 시스템 전체를 가로지르는 관리자 API(감사 로그, 전체 대시보드) - SUPER_ADMIN 전용.
+                        // AuditLogController, AdminDashboardController가 여기 해당한다.
+                        .requestMatchers("/api/admin/**")
+                        .hasRole("SUPER_ADMIN")
                         //참가업체 부스 운영 API(부스 방문 스캔 등). 부스 소유 검증은 서비스 계층에서 한 번 더 한다.
                         .requestMatchers("/api/v1/vendor/**")
                         .hasRole("VENDOR")
@@ -95,6 +96,18 @@ public class SecurityConfig {
                         // 한 번 더 확인한다.
                         .requestMatchers("/api/fairs/*/halls/**").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers("/api/fairs/*/fair-dates/**").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Statistics 도메인 - 행사 하나에 대한 예약/방문 통계 대시보드(ReservationDashboardController).
+                        // halls/fair-dates와 같은 이유로 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 접근.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/fairs/*/reservation-dashboard",
+                                "/api/fairs/*/reservation-dashboard/stream",
+                                "/api/fairs/*/qr-issuance-summary",
+                                "/api/fairs/*/hourly-entry-trend",
+                                "/api/fairs/*/booth-visit-stats",
+                                "/api/fairs/*/booth-visit-pattern",
+                                "/api/fairs/*/visit-stats",
+                                "/api/fairs/*/visit-stats/export"
+                        ).hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // FairPaymentContractController(/internal/api/v1/**)는 사용자 JWT가 아니라
                         // 도메인 간 내부 호출자 헤더(X-Internal-Caller)로 별도 인증하므로 여기서 다루지 않는다.
                         .anyRequest().permitAll())
