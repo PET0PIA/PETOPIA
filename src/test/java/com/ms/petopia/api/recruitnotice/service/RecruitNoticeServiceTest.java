@@ -189,8 +189,11 @@ class RecruitNoticeServiceTest {
                     .given(fairAdminAccessGuard).checkAssigned(fairId);
 
             assertThatThrownBy(() -> recruitNoticeService.upsertNotice(fairId, request))
-                    .isInstanceOf(CommonException.class);
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("담당하는 행사가 아닙니다");
 
+            // checkAssigned가 실제로 호출됐는지, 그 예외 때문에 막힌 게 맞는지 확인
+            verify(fairAdminAccessGuard).checkAssigned(fairId);
             verify(recruitNoticeMapper, never()).upsertNotice(any(RecruitNotice.class));
 
         }
