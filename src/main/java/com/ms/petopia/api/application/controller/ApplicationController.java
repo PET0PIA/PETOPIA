@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,7 +35,7 @@ public class ApplicationController {
     // 참가 신청서 제출
     @PostMapping("/fairs/{fairId}/applications")
     public ResponseEntity<ApiResponse<ApplicationResponse>> submitApplication(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @AuthenticationPrincipal Long ownerId,
             @PathVariable Long fairId,
             @Valid @RequestBody ApplicationSubmitRequest request
     ) {
@@ -49,7 +50,7 @@ public class ApplicationController {
     // 내 신청 현황 목록 조회
     @GetMapping("/applications")
     public ResponseEntity<ApiResponse<List<ApplicationSummaryResponse>>> getMyApplications(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @AuthenticationPrincipal Long ownerId,
             @RequestParam(required = false) Long businessId
     ) {
 
@@ -61,7 +62,7 @@ public class ApplicationController {
     // 신청 상세 조회 (사업자 본인 또는 담당 행사 관리자 조회 가능)
     @GetMapping("/applications/{applicationId}")
     public ResponseEntity<ApiResponse<ApplicationDetailResponse>> getApplicationDetail(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @PathVariable Long applicationId
     ) {
 
@@ -71,10 +72,9 @@ public class ApplicationController {
     }
 
     // 담당 행사의 신청 목록 조회 (행사 담당자용)
-    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @GetMapping("/fairs/{fairId}/applications")
     public ResponseEntity<ApiResponse<List<ApplicationReviewSummaryResponse>>> getApplicationsForFair(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long fairId,
             @RequestParam(required = false) String status
     ) {
@@ -85,10 +85,9 @@ public class ApplicationController {
     }
 
     // 참가 신청서 승인 (행사 담당자용)
-    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @PutMapping("/applications/{applicationId}/approve")
     public ResponseEntity<ApiResponse<ApplicationReviewResultResponse>> approveApplication(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long applicationId,
             @Valid @RequestBody(required = false) ApplicationApproveRequest request
     ) {
@@ -99,10 +98,9 @@ public class ApplicationController {
     }
 
     // 참가 신청서 반려 (행사 담당자용)
-    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @PutMapping("/applications/{applicationId}/reject")
     public ResponseEntity<ApiResponse<ApplicationReviewResultResponse>> rejectApplication(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long applicationId,
             @Valid @RequestBody ApplicationRejectRequest request
     ) {
@@ -113,10 +111,9 @@ public class ApplicationController {
     }
 
     // 담당 행사의 취소 요청 목록 조회 (행사 담당자용)
-    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @GetMapping("/fairs/{fairId}/cancel-requests")
     public ResponseEntity<ApiResponse<List<ApplicationCancelRequestSummaryResponse>>> getCancelRequestsForFair(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long fairId,
             @RequestParam(required = false) String status
     ) {
@@ -129,7 +126,7 @@ public class ApplicationController {
     // 참가 취소 요청 제출
     @PostMapping("/applications/{applicationId}/cancel-requests")
     public ResponseEntity<ApiResponse<Void>> submitCancelRequest(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @AuthenticationPrincipal Long ownerId,
             @PathVariable Long applicationId,
             @Valid @RequestBody ApplicationCancelRequestSubmitRequest request
     ) {
@@ -142,10 +139,9 @@ public class ApplicationController {
     }
 
     // 참가 취소 요청 승인 (행사 담당자용)
-    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @PutMapping("/applications/{applicationId}/cancel-requests/approve")
     public ResponseEntity<ApiResponse<ApplicationCancelRequestResultResponse>> approveCancelRequest(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long applicationId
     ) {
 
@@ -157,7 +153,7 @@ public class ApplicationController {
     // 참가 취소 요청 반려 (행사 담당자용)
     @PutMapping("/applications/{applicationId}/cancel-requests/reject")
     public ResponseEntity<ApiResponse<ApplicationCancelRequestResultResponse>> rejectCancelRequest(
-            @RequestHeader(ApplicationTemporaryAuthHeaders.USER_ID) Long adminUserId,
+            @AuthenticationPrincipal Long adminUserId,
             @PathVariable Long applicationId
     ) {
 

@@ -126,6 +126,19 @@ public class SecurityConfig {
                         // RecruitNotice 도메인 - 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN. 담당 fair인지는
                         // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
                         .requestMatchers(HttpMethod.PUT, "/api/fairs/*/recruit-notice").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Application 도메인 - 신청/취소요청 제출·조회는 로그인만 필요(본인 소유 여부는 서비스 계층에서 검증)
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/applications").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/applications").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/applications/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/applications/*/cancel-requests").authenticated()
+                        // Application 도메인 - 행사 담당자 전용(EVENT_ADMIN/SUPER_ADMIN). 담당 fair인지는
+                        // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/applications").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/approve").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/reject").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/cancel-requests").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel-requests/approve").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel-requests/reject").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->

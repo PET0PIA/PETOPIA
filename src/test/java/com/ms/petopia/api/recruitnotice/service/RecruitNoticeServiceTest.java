@@ -162,7 +162,6 @@ class RecruitNoticeServiceTest {
 
             // given: 이 fairId에 대해 fair_admin_assignments가 아예 없는 상황(null 리턴)
             Long fairId = 999L;
-            Long writerId = 1L;
 
             RecruitNoticeRequest request = createRequest("담당자 없는 행사 공고 시도");
 

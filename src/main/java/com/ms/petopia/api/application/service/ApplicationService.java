@@ -12,6 +12,7 @@ import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.api.fair.service.BoothSlotService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -56,6 +57,7 @@ public class ApplicationService {
     private final NotificationService notificationService;
     private final BoothMapper boothMapper;
     private final BoothSlotService boothSlotService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -359,7 +361,7 @@ public class ApplicationService {
     public List<ApplicationReviewSummaryResponse> getApplicationsForFair(Long adminUserId, Long fairId, String status) {
 
         // 이 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
 
         return applicationMapper.selectApplicationsByFair(fairId, status);
 
@@ -369,7 +371,7 @@ public class ApplicationService {
     public List<ApplicationCancelRequestSummaryResponse> getCancelRequestsForFair(Long adminUserId, Long fairId, String status) {
 
         // 이 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
 
         return applicationMapper.selectCancelRequestsByFair(fairId, status);
 
@@ -387,7 +389,7 @@ public class ApplicationService {
         }
 
         // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, application.getFairId());
+        fairAdminAccessGuard.checkAssigned(application.getFairId());
 
         // 심사 대기 상태인지 확인 (이미 승인/반려된 신청서는 재처리 불가)
         if(application.getStatus() != Application.Status.PENDING_REVIEW) {
@@ -441,7 +443,7 @@ public class ApplicationService {
         }
 
         // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, application.getFairId());
+        fairAdminAccessGuard.checkAssigned(application.getFairId());
 
         // 심사 대기 상태인지 확인
         if(application.getStatus() != Application.Status.PENDING_REVIEW) {
@@ -483,23 +485,6 @@ public class ApplicationService {
                 .rejectReason(request.getRejectReason())
                 .reviewedAt(reviewedAt)
                 .build();
-
-    }
-
-    // 담당자 권한 확인 공용 헬퍼
-    private void verifyFairAdmin(Long adminUserId, Long fairId) {
-
-        Long fairAdminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
-
-        // 담당자가 아예 배정 안 된 행사인 경우
-        if(fairAdminUserId == null) {
-            throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "담당자가 배정되지 않은 행사입니다.");
-        }
-
-        // 담당자는 있지만 요청자 본인이 아닌 경우
-        if(!fairAdminUserId.equals(adminUserId)) {
-            throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "본인이 담당하는 행사가 아닙니다.");
-        }
 
     }
 
@@ -587,7 +572,7 @@ public class ApplicationService {
         }
 
         // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, application.getFairId());
+        fairAdminAccessGuard.checkAssigned(application.getFairId());
 
         // 처리 대기 중인 취소 요청 존재 확인
         ApplicationCancelRequest cancelRequest = applicationMapper.selectPendingCancelRequest(applicationId);
@@ -711,7 +696,7 @@ public class ApplicationService {
         }
 
         // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, application.getFairId());
+        fairAdminAccessGuard.checkAssigned(application.getFairId());
 
         // 처리 대기 중인 취소 요청 존재 확인
         ApplicationCancelRequest cancelRequest = applicationMapper.selectPendingCancelRequest(applicationId);

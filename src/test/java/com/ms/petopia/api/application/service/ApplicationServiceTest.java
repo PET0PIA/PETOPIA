@@ -13,6 +13,7 @@ import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.api.fair.service.BoothSlotService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
@@ -23,6 +24,7 @@ import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -85,6 +87,9 @@ class ApplicationServiceTest {
 
     @Mock
     private BoothSlotService boothSlotService;
+
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
 
     @InjectMocks
     private ApplicationService applicationService;
@@ -873,7 +878,6 @@ class ApplicationServiceTest {
                             .build()
             );
 
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectApplicationsByFair(fairId, null)).willReturn(applications);
 
             // when
@@ -895,7 +899,6 @@ class ApplicationServiceTest {
             Long fairId = 1L;
             String status = "PENDING_REVIEW";
 
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectApplicationsByFair(fairId, status)).willReturn(List.of());
 
             // when
@@ -907,39 +910,17 @@ class ApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("담당자가 배정되지 않은 행사면 예외를 던진다")
-        void throwsWhenNoAdminAssigned() {
-
-            // given: fair_admin_assignments에 담당자 자체가 없는 상황
-            Long adminUserId = 1L;
-            Long fairId = 999L;
-
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(null);
-
-            // when & then
-            assertThatThrownBy(() -> applicationService.getApplicationsForFair(adminUserId, fairId, null))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("담당자가 배정되지 않은 행사입니다");
-
-            // 담당자 확인에서 막혔으니, 목록 조회 쿼리는 실행되면 안 됨
-            verify(applicationMapper, never()).selectApplicationsByFair(any(), any());
-
-        }
-
-        @Test
-        @DisplayName("본인이 담당하는 행사가 아니면 예외를 던진다")
+        @DisplayName("담당 행사가 아니면 예외를 던진다")
         void throwsWhenNotAssignedAdmin() {
 
-            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
             Long adminUserId = 1L;
             Long fairId = 1L;
 
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+            doThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                    .when(fairAdminAccessGuard).checkAssigned(fairId);
 
-            // when & then
             assertThatThrownBy(() -> applicationService.getApplicationsForFair(adminUserId, fairId, null))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+                    .isInstanceOf(CommonException.class);
 
             verify(applicationMapper, never()).selectApplicationsByFair(any(), any());
 
@@ -975,7 +956,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
             given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(900000L), any(), any()))
                     .willReturn(1);
@@ -1002,7 +982,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
             given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(900000L), any(), any()))
                     .willReturn(1);
@@ -1031,7 +1010,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             // 슬롯 가격 합계(실제 SUM 쿼리 결과라고 가정) - 이 매퍼 값 자체가 900000이라고 스텁
             given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
             given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(900000L), any(), any()))
@@ -1061,7 +1039,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(500000L), any(), any()))
                     .willReturn(1);
 
@@ -1091,7 +1068,7 @@ class ApplicationServiceTest {
                     .hasMessageContaining("신청을 찾을 수 없습니다");
 
             // 신청 자체가 없으니, 담당자 확인 단계까지 가면 안 됨
-            verify(recruitNoticeMapper, never()).selectAdminUserIdByFairId(any());
+            verify(fairAdminAccessGuard, never()).checkAssigned(any());
 
         }
 
@@ -1106,12 +1083,12 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+            doThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                    .when(fairAdminAccessGuard).checkAssigned(fairId);
 
             // when & then
             assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+                    .isInstanceOf(CommonException.class);
 
             // 담당자 확인에서 막혔으니, 실제 승인 처리는 실행되면 안 됨
             verify(applicationMapper, never()).updateApplicationApproved(any(), any(), any(), any());
@@ -1129,7 +1106,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.REJECTED));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
 
             // when & then
             assertThatThrownBy(() -> applicationService.approveApplication(adminUserId, applicationId, null))
@@ -1154,7 +1130,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
             given(applicationMapper.updateApplicationApproved(any(), any(), any(), any())).willReturn(0);
 
@@ -1205,7 +1180,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.updateApplicationRejected(eq(applicationId), eq("부적합"), any()))
                     .willReturn(1);
             given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
@@ -1231,7 +1205,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.updateApplicationRejected(eq(applicationId), eq("부적합"), any()))
                     .willReturn(1);
             given(applicationMapper.selectSlotHallRefsByApplicationId(applicationId)).willReturn(List.of(
@@ -1269,23 +1242,23 @@ class ApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("담당자가 아니면 예외를 던진다")
+        @DisplayName("담당 행사가 아니면 예외를 던진다")
         void throwsWhenNotAssignedAdmin() {
 
-            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            // given: 신청서는 정상 조회되지만, 요청자가 이 행사 담당자가 아닌 상황
             Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+            doThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                    .when(fairAdminAccessGuard).checkAssigned(fairId);
 
             // when & then
             assertThatThrownBy(() ->
                     applicationService.rejectApplication(adminUserId, applicationId, createRejectRequest("사유")))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+                    .isInstanceOf(CommonException.class);
 
             verify(applicationMapper, never()).updateApplicationRejected(any(), any(), any());
 
@@ -1302,7 +1275,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PAYMENT_PENDING));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
 
             // when & then
             assertThatThrownBy(() ->
@@ -1325,7 +1297,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
 
             // when & then
             assertThatThrownBy(() ->
@@ -1348,7 +1319,6 @@ class ApplicationServiceTest {
 
             given(applicationMapper.selectById(applicationId))
                     .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.updateApplicationRejected(any(), any(), any())).willReturn(0);
 
             // when & then
@@ -1380,7 +1350,6 @@ class ApplicationServiceTest {
                             .build()
             );
 
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectCancelRequestsByFair(fairId, null)).willReturn(requests);
 
             // when
@@ -1402,7 +1371,6 @@ class ApplicationServiceTest {
             Long fairId = 1L;
             String status = "REQUESTED";
 
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectCancelRequestsByFair(fairId, status)).willReturn(List.of());
 
             // when
@@ -1414,39 +1382,19 @@ class ApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("담당자가 배정되지 않은 행사면 예외를 던진다")
-        void throwsWhenNoAdminAssigned() {
-
-            // given: fair_admin_assignments에 담당자 자체가 없는 상황
-            Long adminUserId = 1L;
-            Long fairId = 999L;
-
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(null);
-
-            // when & then
-            assertThatThrownBy(() -> applicationService.getCancelRequestsForFair(adminUserId, fairId, null))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("담당자가 배정되지 않은 행사입니다");
-
-            // 담당자 확인에서 막혔으니, 목록 조회 쿼리는 실행되면 안 됨
-            verify(applicationMapper, never()).selectCancelRequestsByFair(any(), any());
-
-        }
-
-        @Test
-        @DisplayName("본인이 담당하는 행사가 아니면 예외를 던진다")
+        @DisplayName("담당 행사가 아니면 예외를 던진다")
         void throwsWhenNotAssignedAdmin() {
 
-            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            // given: 요청자가 이 행사 담당자가 아닌 상황
             Long adminUserId = 1L;
             Long fairId = 1L;
 
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+            doThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                    .when(fairAdminAccessGuard).checkAssigned(fairId);
 
             // when & then
             assertThatThrownBy(() -> applicationService.getCancelRequestsForFair(adminUserId, fairId, null))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+                    .isInstanceOf(CommonException.class);
 
             verify(applicationMapper, never()).selectCancelRequestsByFair(any(), any());
 
@@ -1699,7 +1647,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
@@ -1732,7 +1679,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
@@ -1772,7 +1718,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
@@ -1804,7 +1749,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
@@ -1837,7 +1781,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
@@ -1872,10 +1815,10 @@ class ApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("담당자가 아니면 예외를 던진다")
+        @DisplayName("담당 행사가 아니면 예외를 던진다")
         void throwsWhenNotAssignedAdmin() {
 
-            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            // given: 신청서는 정상 조회되지만, 요청자가 이 행사 담당자가 아닌 상황
             Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
@@ -1886,12 +1829,12 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+            doThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                    .when(fairAdminAccessGuard).checkAssigned(fairId);
 
             // when & then
             assertThatThrownBy(() -> applicationService.approveCancelRequest(adminUserId, applicationId))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+                    .isInstanceOf(CommonException.class);
 
             // 담당자 확인에서 막혔으니, 취소 요청 조회까지는 안 감
             verify(applicationMapper, never()).selectPendingCancelRequest(any());
@@ -1913,7 +1856,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId)).willReturn(null);
 
             // when & then
@@ -1938,7 +1880,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(0);
@@ -1969,7 +1910,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestApproved(eq(10L), any())).willReturn(1);
@@ -2018,7 +1958,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestRejected(eq(10L), any())).willReturn(1);
@@ -2049,7 +1988,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestRejected(eq(10L), any())).willReturn(1);
@@ -2083,10 +2021,10 @@ class ApplicationServiceTest {
         }
 
         @Test
-        @DisplayName("담당자가 아니면 예외를 던진다")
+        @DisplayName("담당 행사가 아니면 예외를 던진다")
         void throwsWhenNotAssignedAdmin() {
 
-            // given: 이 행사의 실제 담당자는 2L인데, 요청자는 1L
+            // given: 신청서는 정상 조회되지만, 요청자가 이 행사 담당자가 아닌 상황
             Long adminUserId = 1L;
             Long applicationId = 1L;
             Long fairId = 1L;
@@ -2097,12 +2035,12 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(2L);
+            doThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                    .when(fairAdminAccessGuard).checkAssigned(fairId);
 
             // when & then
             assertThatThrownBy(() -> applicationService.rejectCancelRequest(adminUserId, applicationId))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+                    .isInstanceOf(CommonException.class);
 
             verify(applicationMapper, never()).selectPendingCancelRequest(any());
 
@@ -2123,7 +2061,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId)).willReturn(null);
 
             // when & then
@@ -2148,7 +2085,6 @@ class ApplicationServiceTest {
                     .build();
 
             given(applicationMapper.selectById(applicationId)).willReturn(application);
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(adminUserId);
             given(applicationMapper.selectPendingCancelRequest(applicationId))
                     .willReturn(createCancelRequest(10L, applicationId));
             given(applicationMapper.updateCancelRequestRejected(eq(10L), any())).willReturn(0);

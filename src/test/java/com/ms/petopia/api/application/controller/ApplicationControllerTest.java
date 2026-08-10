@@ -5,15 +5,26 @@ import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -29,9 +40,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * ApplicationController 통합 테스트. ApplicationService는 Mock으로 대체하고,
  * standaloneSetup + GlobalExceptionHandler로 실제 라우팅/@Valid 검증/
  * 예외→HTTP 상태코드 매핑까지 확인한다. 11개 엔드포인트 각각 성공 1건 + 대표 실패 케이스만 다룬다.
+ * @AuthenticationPrincipal은 business 도메인(BusinessControllerTest)과 동일한 가짜 인증 필터
+ * 패턴으로 시뮬레이션한다.
  */
 @ExtendWith(MockitoExtension.class)
 class ApplicationControllerTest {
+
+    private static final String AUTHENTICATED_USER_ID_ATTRIBUTE = "authenticatedUserId";
 
     @Mock
     private ApplicationService applicationService;
@@ -43,8 +58,15 @@ class ApplicationControllerTest {
 
         mockMvc = MockMvcBuilders.standaloneSetup(new ApplicationController(applicationService))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+                .addFilters(new TestAuthenticationFilter())
                 .build();
 
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     private static final String SUBMIT_BODY =
@@ -73,7 +95,7 @@ class ApplicationControllerTest {
                 ApplicationResponse.builder().applicationId(1L).fairId(1L).status("PENDING_REVIEW").build());
 
         mockMvc.perform(post("/api/fairs/1/applications")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(SUBMIT_BODY))
                 .andExpect(status().isCreated())
@@ -86,7 +108,7 @@ class ApplicationControllerTest {
     void returns400WhenPurposeBlank() throws Exception {
 
         mockMvc.perform(post("/api/fairs/1/applications")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"businessId\":1,\"boothSlotIds\":[1],\"purpose\":\"\","
                                 + "\"itemsDesc\":\"사료\",\"managerName\":\"김담당\",\"managerPhone\":\"010-1234-5678\","
@@ -103,7 +125,7 @@ class ApplicationControllerTest {
                 List.of(ApplicationSummaryResponse.builder().applicationId(1L).fairName("가을 펫페어").status("CONFIRMED").build()));
 
         mockMvc.perform(get("/api/applications")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].fairName").value("가을 펫페어"));
 
@@ -117,7 +139,7 @@ class ApplicationControllerTest {
                 ApplicationDetailResponse.builder().applicationId(1L).status("CONFIRMED").build());
 
         mockMvc.perform(get("/api/applications/1")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.applicationId").value(1));
 
@@ -131,7 +153,7 @@ class ApplicationControllerTest {
                 .given(applicationService).getApplicationDetail(1L, 999L);
 
         mockMvc.perform(get("/api/applications/999")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("V012"));
 
@@ -145,7 +167,7 @@ class ApplicationControllerTest {
                 List.of(ApplicationReviewSummaryResponse.builder().applicationId(1L).businessName("멍냥사료").status("PENDING_REVIEW").build()));
 
         mockMvc.perform(get("/api/fairs/1/applications")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].businessName").value("멍냥사료"));
 
@@ -159,7 +181,7 @@ class ApplicationControllerTest {
                 .given(applicationService).getApplicationsForFair(eq(2L), eq(1L), isNull());
 
         mockMvc.perform(get("/api/fairs/1/applications")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 2))
+                        .with(authenticatedAs(2L)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("V014"));
 
@@ -173,7 +195,7 @@ class ApplicationControllerTest {
                 ApplicationReviewResultResponse.builder().applicationId(1L).status("PAYMENT_PENDING").finalPrice(100000L).build());
 
         mockMvc.perform(put("/api/applications/1/approve")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("PAYMENT_PENDING"));
 
@@ -187,7 +209,7 @@ class ApplicationControllerTest {
                 .given(applicationService).approveApplication(eq(1L), eq(1L), any());
 
         mockMvc.perform(put("/api/applications/1/approve")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("V015"));
 
@@ -201,7 +223,7 @@ class ApplicationControllerTest {
                 ApplicationReviewResultResponse.builder().applicationId(1L).status("REJECTED").rejectReason("서류 미비").build());
 
         mockMvc.perform(put("/api/applications/1/reject")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"rejectReason\":\"서류 미비\"}"))
                 .andExpect(status().isOk())
@@ -217,7 +239,7 @@ class ApplicationControllerTest {
                 .given(applicationService).rejectApplication(eq(1L), eq(1L), any());
 
         mockMvc.perform(put("/api/applications/1/reject")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
@@ -233,7 +255,7 @@ class ApplicationControllerTest {
                 List.of(ApplicationCancelRequestSummaryResponse.builder().cancelRequestId(1L).applicationId(1L).status("REQUESTED").build()));
 
         mockMvc.perform(get("/api/fairs/1/cancel-requests")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].status").value("REQUESTED"));
 
@@ -244,7 +266,7 @@ class ApplicationControllerTest {
     void submitsCancelRequest() throws Exception {
 
         mockMvc.perform(post("/api/applications/1/cancel-requests")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"일정 변경으로 인한 취소\"}"))
                 .andExpect(status().isCreated())
@@ -260,7 +282,7 @@ class ApplicationControllerTest {
                 .given(applicationService).submitCancelRequest(eq(1L), eq(1L), any());
 
         mockMvc.perform(post("/api/applications/1/cancel-requests")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1)
+                        .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"일정 변경으로 인한 취소\"}"))
                 .andExpect(status().isConflict())
@@ -278,7 +300,7 @@ class ApplicationControllerTest {
                         .applicationStatus("CANCELED").boothDeleted(true).build());
 
         mockMvc.perform(put("/api/applications/1/cancel-requests/approve")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.boothDeleted").value(true));
 
@@ -292,7 +314,7 @@ class ApplicationControllerTest {
                 .given(applicationService).approveCancelRequest(1L, 999L);
 
         mockMvc.perform(put("/api/applications/999/cancel-requests/approve")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("V020"));
 
@@ -308,10 +330,50 @@ class ApplicationControllerTest {
                         .applicationStatus("CONFIRMED").boothDeleted(false).build());
 
         mockMvc.perform(put("/api/applications/1/cancel-requests/reject")
-                        .header(ApplicationTemporaryAuthHeaders.USER_ID, 1))
+                        .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.boothDeleted").value(false));
 
+    }
+
+    private RequestPostProcessor authenticatedAs(Long userId) {
+
+        return request -> {
+
+            request.setAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE, userId);
+            return request;
+
+        };
+
+    }
+
+    private static final class TestAuthenticationFilter extends OncePerRequestFilter {
+
+        @Override
+        protected void doFilterInternal(
+
+                HttpServletRequest request,
+                HttpServletResponse response,
+                FilterChain filterChain
+
+        ) throws ServletException, IOException {
+
+            Long userId = (Long) request.getAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE);
+
+            if (userId != null) {
+
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(userId, null, List.of())
+
+                );
+
+            }
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        }
     }
 
 }
