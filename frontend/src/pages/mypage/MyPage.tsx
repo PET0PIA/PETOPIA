@@ -1,4 +1,4 @@
-import { CalendarDays, IdCard, Ticket } from "lucide-react";
+import { CalendarDays, Heart, IdCard, PawPrint, Ticket, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -61,39 +61,46 @@ export function MyPage() {
     <PageContainer className="py-10">
       <PageHeader eyebrow="마이페이지" title={`${me.nickname}님, 반가워요!`} description={me.email} />
 
-      <Card className="mb-8 p-8">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-          <dl className="flex flex-wrap gap-8 text-sm">
-            <div>
-              <dt className="font-bold text-muted">닉네임</dt>
-              <dd className="mt-0.5 text-ink">{me.nickname}</dd>
+      <section className="mb-8">
+        <SectionHeader title="내 정보" icon={<User size={20} className="shrink-0 text-primary-strong" aria-hidden="true" />} />
+        <Card className="p-8">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <dl className="flex flex-wrap gap-8 text-sm">
+              <div>
+                <dt className="font-bold text-muted">닉네임</dt>
+                <dd className="mt-0.5 text-ink">{me.nickname}</dd>
+              </div>
+              <div>
+                <dt className="font-bold text-muted">생년월일</dt>
+                <dd className="mt-0.5 text-ink">{me.birthDate}</dd>
+              </div>
+              <div>
+                <dt className="font-bold text-muted">휴대폰 번호</dt>
+                <dd className="mt-0.5 text-ink">{me.phone}</dd>
+              </div>
+              <div>
+                <dt className="font-bold text-muted">주소</dt>
+                <dd className="mt-0.5 text-ink">{me.address}</dd>
+              </div>
+            </dl>
+            <div className="flex shrink-0 gap-2">
+              <Link to="/mypage/password">
+                <Button variant="outline">비밀번호 변경</Button>
+              </Link>
+              <Link to="/mypage/edit">
+                <Button variant="outline">내 정보 수정</Button>
+              </Link>
             </div>
-            <div>
-              <dt className="font-bold text-muted">생년월일</dt>
-              <dd className="mt-0.5 text-ink">{me.birthDate}</dd>
-            </div>
-            <div>
-              <dt className="font-bold text-muted">휴대폰 번호</dt>
-              <dd className="mt-0.5 text-ink">{me.phone}</dd>
-            </div>
-            <div>
-              <dt className="font-bold text-muted">주소</dt>
-              <dd className="mt-0.5 text-ink">{me.address}</dd>
-            </div>
-          </dl>
-          <div className="flex shrink-0 gap-2">
-            <Link to="/mypage/password">
-              <Button variant="outline">비밀번호 변경</Button>
-            </Link>
-            <Link to="/mypage/edit">
-              <Button variant="outline">내 정보 수정</Button>
-            </Link>
           </div>
-        </div>
-      </Card>
+        </Card>
+      </section>
 
       <section className="mb-8">
-        <SectionHeader title="내 반려동물" description="등록한 반려동물을 관리해요." />
+        <SectionHeader
+          title="내 반려동물"
+          description="등록한 반려동물을 관리해요."
+          icon={<PawPrint size={20} className="shrink-0 text-primary-strong" aria-hidden="true" />}
+        />
         {pets.length === 0 ? (
           <EmptyState
             title="아직 등록한 반려동물이 없어요."
@@ -116,7 +123,8 @@ export function MyPage() {
                 {pets.map((pet) => (
                   <tr key={pet.petId} className="border-b border-line last:border-0 hover:bg-page">
                     <td className="px-8 py-4">
-                      <Link to={`/mypage/pets/${pet.petId}`} className="font-bold text-ink hover:underline">
+                      <Link to={`/mypage/pets/${pet.petId}`} className="inline-flex items-center gap-1.5 font-bold text-ink hover:underline">
+                        <Heart size={14} className="shrink-0 fill-primary-strong text-primary-strong" aria-hidden="true" />
                         {pet.name}
                       </Link>
                     </td>
