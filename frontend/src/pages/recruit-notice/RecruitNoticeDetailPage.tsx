@@ -55,15 +55,22 @@ export function RecruitNoticeDetailPage() {
   const [notice, setNotice] = useState<RecruitNotice | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     if (!fairId) return;
     let ignore = false;
 
+    setNotFound(false);
+    setLoadError(null);
     getRecruitNotice(Number(fairId))
       .then((data) => { if (!ignore) setNotice(data); })
       .catch((error) => {
         if (ignore) return;
+        if (error instanceof ApiError && error.status === 404) {
+          setNotFound(true);
+          return;
+        }
         setLoadError(error instanceof ApiError ? error.message : "모집 공고를 불러오지 못했어요.");
       })
       .finally(() => { if (!ignore) setLoading(false); });
@@ -73,6 +80,20 @@ export function RecruitNoticeDetailPage() {
 
   if (loading) {
     return <PageContainer className="py-10"><p className="text-sm text-muted">불러오는 중...</p></PageContainer>;
+  }
+
+  if (notFound) {
+    const canCreate = user?.role === "EVENT_ADMIN" || user?.role === "SUPER_ADMIN";
+    return (
+      <PageContainer className="py-10">
+        <EmptyState
+          title="아직 등록된 모집 공고가 없어요"
+          description={canCreate ? "담당 행사라면 아래에서 공고를 작성할 수 있어요." : "모집 공고가 등록되면 이곳에서 확인할 수 있어요."}
+          actionTo={canCreate ? `/fair-admin/recruit-notice/${fairId}` : undefined}
+          actionLabel="모집 공고 작성하기"
+        />
+      </PageContainer>
+    );
   }
 
   if (loadError || !notice) {
@@ -92,7 +113,7 @@ export function RecruitNoticeDetailPage() {
         title={notice.title}
         description={notice.closed ? "모집이 마감된 공고예요." : "아래 부스 슬롯 현황을 확인하고 신청해 주세요."}
         action={
-          user?.role === "EVENT_ADMIN" ? (
+          (user?.role === "EVENT_ADMIN" || user?.role === "SUPER_ADMIN") ? (
             <Link
               to={`/fair-admin/recruit-notice/${notice.fairId}`}
               className="inline-flex min-h-11 items-center gap-2 rounded-button border border-line bg-card px-4 text-sm font-bold hover:bg-page"

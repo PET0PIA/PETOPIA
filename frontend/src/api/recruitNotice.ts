@@ -46,8 +46,6 @@ export interface RecruitNoticeUpsertResult {
   updatedAt: string;
 }
 
-const TEMP_USER_ID_HEADER = "X-User-Id";
-
 // 백엔드가 ApiResponse<T>로 감싸서 응답하므로(fair 도메인과 달리 DTO를 바로 안 줌) data만 꺼내서 돌려준다.
 // 모집 공고 상세 + 부스슬롯 현황 조회
 export async function getRecruitNotice(fairId: number): Promise<RecruitNotice> {
@@ -56,9 +54,7 @@ export async function getRecruitNotice(fairId: number): Promise<RecruitNotice> {
 }
 
 // 모집 공고 작성/수정 (행사 담당자용)
-export async function upsertRecruitNotice(fairId: number, payload: RecruitNoticeUpsertRequest, writerId: number): Promise<RecruitNoticeUpsertResult> {
-  const response = await apiClient.put<ApiEnvelope<RecruitNoticeUpsertResult>>(`/api/fairs/${fairId}/recruit-notice`, payload, {
-    headers: { [TEMP_USER_ID_HEADER]: String(writerId) },
-  });
+export async function upsertRecruitNotice(fairId: number, payload: RecruitNoticeUpsertRequest): Promise<RecruitNoticeUpsertResult> {
+  const response = await apiClient.put<ApiEnvelope<RecruitNoticeUpsertResult>>(`/api/fairs/${fairId}/recruit-notice`, payload);
   return response.data;
 }

@@ -99,6 +99,9 @@ public class SecurityConfig {
                         // 도메인 간 내부 호출자 헤더(X-Internal-Caller)로 별도 인증하므로 여기서 다루지 않는다.
                         // Business 도메인 - 로그인만 하면 누구나(등록 시 USER->VENDOR 승격은 서비스 계층에서 처리)
                         .requestMatchers("/api/businesses", "/api/businesses/*").authenticated()
+                        // RecruitNotice 도메인 - 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN. 담당 fair인지는
+                        // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.PUT, "/api/fairs/*/recruit-notice").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->

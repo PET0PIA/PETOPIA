@@ -1,6 +1,6 @@
-import { AlertCircle, Send } from "lucide-react";
+import { AlertCircle, ArrowLeft, Search, Send } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
@@ -39,33 +39,45 @@ function toIsoDateTime(value: string): string {
 }
 
 export function RecruitNoticeFormPage() {
-  const { fairId } = useParams<{ fairId: string }>();
+  const { fairId: fairIdParam } = useParams<{ fairId: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // 사이드바(운영 메뉴)에서 fairId 없이 들어온 경우에만 쓰는 수동 입력 - 다른 fair-admin 페이지와
+  // 동일한 임시 패턴(TODO: 관리자 세션에 담당 행사가 연결되면 이 입력을 없앤다).
+  const [fairIdInput, setFairIdInput] = useState("");
+  const [manualFairId, setManualFairId] = useState<number | null>(null);
+
+  const fairId = fairIdParam ?? (manualFairId !== null ? String(manualFairId) : undefined);
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
   const [imageObjectKey, setImageObjectKey] = useState<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(fairIdParam));
 
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadedForm, setLoadedForm] = useState<FormState>(initialForm);
 
   useEffect(() => {
     if (!fairId) return;
     let ignore = false;
 
+    setLoading(true);
+    setLoadError(null);
     getRecruitNotice(Number(fairId))
       .then((notice) => {
         if (ignore) return;
-        setForm({
+        const loaded = {
           title: notice.title,
           content: notice.content,
           recruitDeadline: notice.recruitDeadline.slice(0, 16),
-        });
+        };
+        setForm(loaded);
+        setLoadedForm(loaded);
         setExistingImageUrl(notice.imageUrl);
       })
       .catch((error) => {
@@ -79,6 +91,20 @@ export function RecruitNoticeFormPage() {
 
     return () => { ignore = true; };
   }, [fairId]);
+
+  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Number(fairIdInput);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+    setLoadError(null);
+    setForm(initialForm);
+    setLoadedForm(initialForm);
+    setExistingImageUrl(null);
+    setManualFairId(parsed);
+  }
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -102,13 +128,38 @@ export function RecruitNoticeFormPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await upsertRecruitNotice(Number(fairId), payload, user.userId);
+      await upsertRecruitNotice(Number(fairId), payload);
       navigate(`/fairs/${fairId}/recruit-notice`);
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : "모집 공고를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  const isDirty =
+    form.title !== loadedForm.title ||
+    form.content !== loadedForm.content ||
+    form.recruitDeadline !== loadedForm.recruitDeadline ||
+    imageObjectKey !== null;
+
+  // 사이드바로 들어와서 아직 행사 ID를 안 넣은 상태 - 입력 폼만 보여준다
+  if (!fairIdParam && manualFairId === null) {
+    return (
+      <PageContainer className="py-10">
+        <PageHeader eyebrow="행사 관리자" title="참가업체 모집 공고 작성/수정" description="관리할 행사 ID를 입력해 주세요." />
+        <Card className="p-6">
+          <form onSubmit={handleLoadFair} className="flex items-end gap-3">
+            <div className="flex-1">
+              {label("행사 ID", true)}
+              <Input value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" required />
+            </div>
+            <Button type="submit"><Search size={16} />불러오기</Button>
+          </form>
+          {loadError && <p className="mt-3 text-sm text-primary-strong">{loadError}</p>}
+        </Card>
+      </PageContainer>
+    );
   }
 
   if (loading) {
@@ -123,8 +174,12 @@ export function RecruitNoticeFormPage() {
     );
   }
 
+  
   return (
     <PageContainer className="py-10">
+      <Link to={`/fairs/${fairId}/recruit-notice`} className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-ink">
+        <ArrowLeft size={16} />공고로 돌아가기
+      </Link>
       <PageHeader
         eyebrow="행사 관리자"
         title="참가업체 모집 공고 작성/수정"
@@ -167,7 +222,7 @@ export function RecruitNoticeFormPage() {
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={submitting || imageUploading}>
+          <Button type="submit" disabled={submitting || imageUploading || !user || !isDirty}>
             <Send size={16} />
             {submitting ? "저장 중..." : "저장"}
           </Button>

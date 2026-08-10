@@ -1,5 +1,6 @@
 package com.ms.petopia.api.recruitnotice.service;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.dto.request.RecruitNoticeRequest;
@@ -23,33 +24,24 @@ public class RecruitNoticeService {
 
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final StorageService storageService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     // 모집 공고 작성/수정
-    public RecruitNoticeUpsertResponse upsertNotice(Long fairId, Long writerId, RecruitNoticeRequest request) {
+    public RecruitNoticeUpsertResponse upsertNotice(Long fairId, RecruitNoticeRequest request) {
 
-        // 해당 행사의 담당자가 작성하는게 맞는지 확인
+        fairAdminAccessGuard.checkAssigned(fairId);
+
+        // 모집 공고에 기록할 작성자 = 현재 이 행사의 담당자(SUPER_ADMIN이 대신 수정해도 담당자 이름으로 저장됨)
         Long fairAdminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
 
-        // 해당 행사 또는 해당 행사의 담당자가 없을 경우(방어 코드)
+        // 해당 행사에 담당자가 없을 경우(방어 코드)
         if (fairAdminUserId == null) {
             throw new CommonException(ErrorCode.RECRUIT_NOTICE_ACCESS_DENIED, "담당자가 배정되지 않은 행사입니다.");
         }
 
-        // 모집 공고 작성자가 해당 행사의 담당자가 아닐 경우
-        if (!fairAdminUserId.equals(writerId)) {
-            throw new CommonException(ErrorCode.RECRUIT_NOTICE_ACCESS_DENIED, "본인이 담당하는 행사가 아닙니다.");
-        }
-
-        // 기존 공고 있는지 확인 + 작성자 검증
-        RecruitNotice existing = recruitNoticeMapper.selectByFairId(fairId);
-
-        if(existing != null && !existing.getWriterId().equals(writerId)) {
-            throw new CommonException(ErrorCode.RECRUIT_NOTICE_ACCESS_DENIED, "본인이 작성한 공고만 수정할 수 있습니다.");
-        }
-
         RecruitNotice notice = RecruitNotice.builder()
                 .fairId(fairId)
-                .writerId(writerId)
+                .writerId(fairAdminUserId)
                 .title(request.getTitle())
                 .content(request.getContent())
                 .imageUrl(resolveImageUrl(request.getImageObjectKey()))
@@ -111,10 +103,13 @@ public class RecruitNoticeService {
      * 키가 없으면(이미지를 첨부하지 않았으면) null을 그대로 반환한다.
      */
     private String resolveImageUrl(String temporaryObjectKey) {
+
         if (temporaryObjectKey == null || temporaryObjectKey.isBlank()) {
             return null;
         }
+
         String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
+
         return storageService.toPublicUrl(confirmedKey);
     }
 
