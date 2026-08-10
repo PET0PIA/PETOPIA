@@ -20,6 +20,7 @@ import { ReservationStatusPage } from "../pages/fair-admin/ReservationStatusPage
 import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
 import { FairCancelRequestPage } from "../pages/fair-admin/FairCancelRequestPage";
+import { AdminAccountsPage } from "../pages/admin/AdminAccountsPage";
 import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
@@ -87,7 +88,8 @@ const superAdminFallbackNavigation = superAdminNavigation.filter(
     item.path !== "/admin/payments/list" &&
     item.path !== "/admin/refunds" &&
     item.path !== "/admin/settlements" &&
-    item.path !== "/admin/cancellations"
+    item.path !== "/admin/cancellations" &&
+    item.path !== "/admin/accounts"
 );
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
@@ -165,6 +167,7 @@ export function AppRouter() {
           <Route path="refunds" element={<RefundPage />} />
           <Route path="settlements" element={<SettlementPage />} />
           <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
+          <Route path="accounts" element={<AdminAccountsPage />} />
           {superAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
           ))}
