@@ -4,8 +4,8 @@ import com.ms.petopia.api.notification.dto.NotificationListResponse;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationQueryService;
 import com.ms.petopia.api.notification.service.NotificationService;
-import com.ms.petopia.api.reservation.controller.TemporaryAuthHeaders;
 import com.ms.petopia.global.response.ApiResponse;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -30,7 +30,7 @@ public class NotificationController {
 
     @GetMapping("/notifications")
     public ResponseEntity<ApiResponse<NotificationListResponse>> getMyNotifications(
-            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
@@ -40,7 +40,7 @@ public class NotificationController {
 
     @PutMapping("/notifications/{notificationId}/read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(
-            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @PathVariable Long notificationId
     ){
         notificationService.markAsRead(notificationId, userId);
@@ -49,7 +49,7 @@ public class NotificationController {
 
     @PutMapping("/notifications/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(
-            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ){
         notificationService.markAllAsRead(userId);
         return ResponseEntity.ok(ApiResponse.success(null));
@@ -57,7 +57,7 @@ public class NotificationController {
 
     @GetMapping("/notifications/unread-count")
     public ResponseEntity<ApiResponse<Integer>> getUnreadCount(
-            @RequestHeader(TemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ){
         return ResponseEntity.ok(
                 ApiResponse.success(notificationQueryService.getUnreadCount(userId))

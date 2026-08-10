@@ -1,5 +1,6 @@
 package com.ms.petopia.api.auth.service;
 
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.auth.domain.FairAdminAssignment;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.dto.AdminAccountListItemResponse;
@@ -59,6 +60,8 @@ class AdminAccountServiceTest {
     private RefreshTokenStore refreshTokenStore;
     @Mock
     private AccountSuspensionStore accountSuspensionStore;
+    @Mock
+    private AuditLogService auditLogService;
     @InjectMocks
     private AdminAccountService adminAccountService;
 

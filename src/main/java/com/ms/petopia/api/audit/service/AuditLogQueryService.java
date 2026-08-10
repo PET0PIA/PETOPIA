@@ -25,6 +25,9 @@ public class AuditLogQueryService {
             int page,
             int size
     ){
+        targetType = (targetType != null && !targetType.isBlank()) ? targetType.strip() : null;
+        actionType = (actionType != null && !actionType.isBlank()) ? actionType.strip() : null;
+
         long offset = (long) page * size;
         List<AuditLogRow> items;
         long total;

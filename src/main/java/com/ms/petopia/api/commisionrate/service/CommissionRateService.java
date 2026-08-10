@@ -1,5 +1,9 @@
 package com.ms.petopia.api.commisionrate.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.dto.CommissionRateResponse;
 import com.ms.petopia.api.commisionrate.dto.CommissionRateRow;
 import com.ms.petopia.api.commisionrate.dto.CommissionRateScope;
@@ -12,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 수수료율(전역 기본값 + 행사별 override) 조회·설정.
@@ -28,6 +34,7 @@ public class CommissionRateService {
     private static final BigDecimal BOOTSTRAP_DEFAULT_RATE = new BigDecimal("0.0500");
 
     private final CommissionRateMapper commissionRateMapper;
+    private final AuditLogService auditLogService;
 
     /** SettlementService.calculate()가 정산 생성 시 스냅샷으로 저장할 "지금 적용될" 요율. */
     public BigDecimal resolveEffectiveRate(Long fairId) {
@@ -78,6 +85,23 @@ public class CommissionRateService {
         row.setUpdatedAt(LocalDateTime.now());
 
         commissionRateMapper.insert(row);
+
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("scope", scope.name());
+        if (fairId != null) after.put("fairId", fairId);
+        after.put("rate", rate);
+
+        auditLogService.record(
+                updatedByUserId,
+                ActorType.ADMIN,
+                "SUPER_ADMIN",
+                ActionType.COMMISSION_RATE_UPDATE,
+                TargetType.COMMISSION_RATE,
+                row.getCommissionRateId(),
+                null,
+                after
+        );
+
         return CommissionRateResponse.from(row);
     }
 }
