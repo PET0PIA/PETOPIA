@@ -113,6 +113,7 @@ class ReservationDashboardControllerTest {
         mockMvc.perform(get("/api/fairs/1/reservation-dashboard"))
                 .andExpect(status().isForbidden());
 
+        then(fairAdminAccessGuard).should().checkAssigned(1L);
         then(dashboardService).should(never()).getDateSummary(any(), any());
     }
 
@@ -255,6 +256,7 @@ class ReservationDashboardControllerTest {
         mockMvc.perform(get("/api/fairs/1/reservation-dashboard/stream"))
                 .andExpect(status().isForbidden());
 
+        then(fairAdminAccessGuard).should().checkAssigned(1L);
         then(emitterRegistry).should(never()).register(any());
     }
 

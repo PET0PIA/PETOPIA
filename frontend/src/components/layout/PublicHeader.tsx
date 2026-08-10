@@ -22,7 +22,7 @@ function useUnreadNotificationCount() {
     let active = true;
     getUnreadNotificationCount()
       .then((value) => { if (active) setCount(value); })
-      .catch(() => { /* 알림 배지는 조회 실패 시 0으로 유지한다. */ });
+      .catch(() => { if (active) setCount(0); /* 알림 배지는 조회 실패 시 0으로 유지한다. */ });
     return () => { active = false; };
   }, [pathname, status]);
   return count;
