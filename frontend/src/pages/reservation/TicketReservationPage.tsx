@@ -1,4 +1,4 @@
-import { CalendarDays, CreditCard, MapPin, QrCode } from "lucide-react";
+import { CalendarDays, Clock, CreditCard, MapPin, QrCode } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -9,13 +9,17 @@ import { QrCanvas } from "../../components/ui/QrCanvas";
 import { useConfirm } from "../../components/ui/useConfirm";
 import { ApiError } from "../../api/client";
 import { getFairPublicSummary, type FairPublicSummary } from "../../api/fair";
+import { createReservationDepositPayment } from "../../api/payment";
 import {
+  ADVANCE_TERMS_VERSION,
   createAdvanceReservation,
   createOnsiteReservation,
   getReservationAvailability,
   ONSITE_TERMS_VERSION,
   type ReservationAvailability,
 } from "../../api/reservation";
+import { useAuth } from "../../contexts/AuthContext";
+import { isTossConfigured, requestReservationPayment } from "../../payments/toss";
 
 type ReservationType = "ADVANCE" | "ONSITE";
 type Phase = "form" | "payment" | "done";
@@ -26,13 +30,33 @@ interface DoneInfo {
   entryQrToken: string | null;
 }
 interface PaymentInfo {
+  /** 결제 대상 예약. 결제 생성 API가 이 ID로 원장 금액을 조회한다. */
+  reservationId: number;
   visitDate: string;
   typeLabel: string;
+  /** 화면에 보여준 예약금이 아니라 예약 생성 응답의 서버 계산값. */
   amount: number;
+  /** 결제 제한시각(ISO). 지나면 서버 배치가 예약을 만료시킨다. */
+  paymentExpiresAt: string | null;
 }
 
 function formatTime(time: string) {
   return time.slice(0, 5);
+}
+
+/**
+ * 결제 제한시각까지 남은 시간을 "m:ss"로 만든다. 제한시각이 없거나 이미 지났으면 null.
+ *
+ * 백엔드는 LocalDateTime을 오프셋 없이("2026-08-09T12:34:56") 내려주는데, 서버·DB·컨테이너가
+ * 전부 Asia/Seoul로 고정돼 있어(Dockerfile / docker-compose의 TZ) 브라우저 로컬 시각으로
+ * 파싱해도 어긋나지 않는다.
+ */
+function formatRemaining(expiresAt: string | null, now: number): string | null {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - now;
+  if (Number.isNaN(diff) || diff <= 0) return null;
+  const totalSeconds = Math.floor(diff / 1000);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
 }
 
 // 운영 시작~종료일을 "2026-09-18 ~ 09-20" 형태로 다듬는다.
@@ -50,6 +74,9 @@ export function TicketReservationPage() {
   // 경로 파라미터가 양의 정수가 아니면(예: /tickets/abc) NaN을 API URL에 싣지 않는다.
   const idValid = Number.isInteger(id) && id > 0;
   const { confirm, confirmDialog } = useConfirm();
+  // 결제 API는 아직 JWT가 아니라 X-User-Id 헤더로 결제자를 식별한다. JWT의 sub를 디코딩한
+  // 값이라 결제 API가 JWT로 넘어가기 전에도 정확하다.
+  const { user } = useAuth();
 
   const [availability, setAvailability] = useState<ReservationAvailability | null>(null);
   const [fair, setFair] = useState<FairPublicSummary | null>(null);
@@ -66,6 +93,17 @@ export function TicketReservationPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [doneInfo, setDoneInfo] = useState<DoneInfo | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // 카운트다운은 결제 단계에서만 돌린다 - 폼/완료 화면에서 1초마다 리렌더할 이유가 없다.
+  useEffect(() => {
+    if (phase !== "payment") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [phase]);
 
   useEffect(() => {
     if (!idValid) return; // 잘못된 경로 파라미터면 요청하지 않는다
@@ -141,6 +179,17 @@ export function TicketReservationPage() {
   const canProceedAdvance = selectedDate !== null && (!isPaid || agreed) && !submitting;
   const canProceedOnsite = onsiteAgreed && !submitting;
 
+  // 클라이언트 키가 안 들어와 있으면 결제 버튼 대신 안내를 띄운다 - 키 누락을 런타임 에러가
+  // 아니라 UI로 드러내려는 목적이다.
+  const tossReady = isTossConfigured();
+  const expiresAt = paymentInfo?.paymentExpiresAt ?? null;
+  const remaining = formatRemaining(expiresAt, now);
+  // 현재 백엔드 confirmPayment는 만료를 검증하지 않는다. 만료 후 결제하면 결제는 승인되고
+  // 예약 통지만 거절당해 돈만 나가므로, 이 가드가 지금은 유일한 방어선이다.
+  // 단, 파싱 불가한 값은 '만료'가 아니라 잘못된 데이터이므로 결제를 막지 않는다(영구 잠금 방지).
+  const expiresAtMs = expiresAt !== null ? new Date(expiresAt).getTime() : null;
+  const expired = expiresAtMs !== null && !Number.isNaN(expiresAtMs) && expiresAtMs - now <= 0;
+
   function switchType(next: ReservationType) {
     setType(next);
     setAgreed(false);
@@ -154,25 +203,38 @@ export function TicketReservationPage() {
       title: isPaid ? "유료 예약을 진행할까요?" : "예약할까요?",
       description: `${fairName} · ${advanceVisitDate} 방문으로 사전예약해요. ${
         isPaid
-          ? `결제 금액은 ${price.toLocaleString()}원이에요. 결제 기능은 준비 중이라 지금은 예약을 완료할 수 없어요.`
+          ? `결제 금액은 ${price.toLocaleString()}원이에요. 예약을 잡아둔 뒤 10분 안에 결제를 마쳐야 확정돼요.`
           : "무료 예약이에요."
       }`,
       confirmLabel: isPaid ? "다음" : "예약하기",
     });
     if (!proceed) return;
 
-    // 유료는 결제 단계로(결제위젯은 결제 도메인 연동 예정 — 아직 생성하지 않는다).
-    if (isPaid) {
-      setPaymentInfo({ visitDate: advanceVisitDate, typeLabel: "사전예약", amount: price });
-      setPhase("payment");
-      return;
-    }
-
-    // 무료: 서버가 한 트랜잭션에서 CONFIRMED + QR까지 끝낸다.
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const created = await createAdvanceReservation(id, { visitDate: advanceVisitDate });
+      // 유료도 예약을 먼저 만든다 - 결제 생성 API가 reservationId로 원장 금액을 조회하므로
+      // 예약이 없으면 결제를 시작할 수 없다. 유료는 약관 동의가 필수다(R006).
+      const created = await createAdvanceReservation(id, {
+        visitDate: advanceVisitDate,
+        ...(isPaid ? { reservationTermsAgreed: true, reservationTermsVersion: ADVANCE_TERMS_VERSION } : {}),
+      });
+
+      if (created.paymentRequired) {
+        setPaymentInfo({
+          reservationId: created.reservationId,
+          visitDate: advanceVisitDate,
+          typeLabel: "사전예약",
+          amount: created.amount,
+          paymentExpiresAt: created.paymentExpiresAt,
+        });
+        setPayError(null);
+        setNow(Date.now()); // 카운트다운 첫 프레임이 옛날 값으로 그려지지 않게 맞춰둔다
+        setPhase("payment");
+        return;
+      }
+
+      // 무료: 서버가 한 트랜잭션에서 CONFIRMED + QR까지 끝낸다.
       setDoneInfo({ visitDate: advanceVisitDate, typeLabel: "사전예약", entryQrToken: created.entryQrToken });
       setPhase("done");
     } catch (err) {
@@ -198,8 +260,17 @@ export function TicketReservationPage() {
         reservationTermsAgreed: true,
         reservationTermsVersion: ONSITE_TERMS_VERSION,
       });
-      if (created.reservationStatus === "PENDING_PAYMENT") {
-        setPaymentInfo({ visitDate: created.visitDate, typeLabel: "현장예매", amount: created.amount });
+      if (created.paymentRequired) {
+        // 현장예매는 이미 예약을 만들고 있었으므로 결제 단계로 넘길 값만 채운다.
+        setPaymentInfo({
+          reservationId: created.reservationId,
+          visitDate: created.visitDate,
+          typeLabel: "현장예매",
+          amount: created.amount,
+          paymentExpiresAt: created.paymentExpiresAt,
+        });
+        setPayError(null);
+        setNow(Date.now());
         setPhase("payment");
       } else {
         setDoneInfo({ visitDate: created.visitDate, typeLabel: "현장예매", entryQrToken: created.entryQrToken });
@@ -210,6 +281,37 @@ export function TicketReservationPage() {
       setSubmitError(err instanceof ApiError ? err.message : "현장예매에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  /**
+   * 결제 생성 → 토스 결제창. 정상 흐름이면 결제창이 뜨고 그 뒤 /payments/success 로
+   * 리다이렉트되므로, 이 함수가 끝까지 진행되면 페이지는 곧 사라진다.
+   */
+  async function handlePay() {
+    if (!paymentInfo || paying || expired) return;
+    if (!user) {
+      setPayError("로그인이 풀렸어요. 다시 로그인한 뒤 내 예약 목록에서 결제를 이어가 주세요.");
+      return;
+    }
+
+    setPayError(null);
+    setPaying(true);
+    try {
+      const created = await createReservationDepositPayment(paymentInfo.reservationId, user.userId);
+      await requestReservationPayment({
+        paymentId: created.paymentId,
+        reservationId: paymentInfo.reservationId,
+        // 서버가 만든 orderId·amount를 가공 없이 넘긴다 - 다르면 토스가 승인을 거절한다.
+        orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
+        amount: created.amount,
+        orderName: `${fairName} 예약금`,
+      });
+      // 리다이렉트가 시작됐으므로 paying을 되돌리지 않는다(버튼이 다시 눌리면 안 된다).
+    } catch (err) {
+      // 결제창을 사용자가 닫은 경우도 여기로 온다.
+      setPayError(err instanceof ApiError ? err.message : "결제를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      setPaying(false);
     }
   }
 
@@ -253,14 +355,14 @@ export function TicketReservationPage() {
     );
   }
 
-  // 결제 단계 (유료만) — 실제 결제위젯은 결제 도메인 연동 예정
+  // 결제 단계 (유료만). 여기 도달한 시점에 예약은 이미 PENDING_PAYMENT로 만들어져 있다.
   if (phase === "payment" && paymentInfo) {
     return (
       <div className="mx-auto max-w-3xl py-2">
         <PageHeader
           eyebrow="결제"
-          title="결제 준비 중"
-          description="유료 예약의 결제 기능은 아직 준비 중이에요. 준비되면 이 화면에서 결제를 완료할 수 있어요."
+          title="예약금 결제"
+          description="결제를 마쳐야 예약이 확정돼요. 제한시각까지 결제하지 않으면 예약이 자동으로 만료돼요."
         />
 
         <Card className="mb-4 p-5">
@@ -275,23 +377,56 @@ export function TicketReservationPage() {
           </div>
         </Card>
 
+        {expiresAt && (
+          <Card className="mb-4 flex items-center gap-2 p-4 text-sm">
+            <Clock size={16} className="shrink-0 text-muted" />
+            {expired ? (
+              <span className="font-bold text-primary-strong">
+                결제 제한시각이 지났어요. 이 예약은 곧 만료되니 다시 예매해 주세요.
+              </span>
+            ) : (
+              <span className="text-muted">
+                결제 제한시각까지 <b className="text-ink">{remaining}</b> 남았어요.
+              </span>
+            )}
+          </Card>
+        )}
+
         <Card className="mb-6 p-6">
           <div className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
             <CreditCard size={16} />
             결제 수단
           </div>
-          {/* 결제위젯 자리 — 결제 도메인 연동 예정. 유료 예약 생성·결제는 그때 함께 붙인다. */}
-          <div className="grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-10 text-center text-sm text-muted">
-            <p className="font-bold text-ink">결제 기능 준비 중</p>
-            <p>지금은 결제를 완료할 수 없어요. 곧 지원할 예정이에요.</p>
-          </div>
+          {tossReady ? (
+            <p className="rounded-button border border-line bg-page p-4 text-sm leading-6 text-muted">
+              <b className="text-ink">결제하기</b>를 누르면 토스페이먼츠 카드 결제창이 열려요.
+              결제를 마치면 이 사이트로 돌아와 예약이 확정돼요.
+            </p>
+          ) : (
+            <div className="grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-10 text-center text-sm text-muted">
+              <p className="font-bold text-ink">결제 설정이 없어요</p>
+              <p>결제 클라이언트 키가 주입되지 않았어요. 관리자에게 문의해 주세요.</p>
+            </div>
+          )}
         </Card>
 
-        <div className="flex justify-between">
-          <Button variant="outline" onClick={() => setPhase("form")}>
-            뒤로
+        {payError && <p className="mb-4 text-sm font-bold text-primary-strong">{payError}</p>}
+
+        <div className="flex items-center justify-between gap-3">
+          <Link
+            to="/reservations/me"
+            className="inline-flex min-h-11 items-center rounded-button border border-line bg-card px-4 text-sm font-bold hover:bg-page"
+          >
+            나중에 결제하기
+          </Link>
+          <Button disabled={!tossReady || expired || paying} onClick={handlePay}>
+            {paying ? "결제창을 여는 중…" : "결제하기"}
           </Button>
         </div>
+        {/* 결제 실패·이탈 시 예약은 건드리지 않는다 - 제한시각까지는 그대로 두고 안내만 한다. */}
+        <p className="mt-3 text-xs leading-5 text-muted">
+          결제하지 않고 나가도 예약은 제한시각까지 결제 대기 상태로 남아 있어요. 내 예약 목록에서 확인할 수 있어요.
+        </p>
       </div>
     );
   }
@@ -410,7 +545,7 @@ export function TicketReservationPage() {
 
           {isPaid && (
             <p className="mb-4 text-sm text-muted">
-              ※ 유료 예약 결제는 준비 중이라 지금은 예약을 완료할 수 없어요. 무료 예약만 바로 확정돼요.
+              ※ 다음 화면에서 결제를 마쳐야 예약이 확정돼요. 예약을 잡아둔 뒤 10분 안에 결제해 주세요.
             </p>
           )}
 
@@ -418,7 +553,7 @@ export function TicketReservationPage() {
 
           <div className="flex justify-end">
             <Button disabled={!canProceedAdvance} onClick={handleAdvance}>
-              {submitting ? "예약 중…" : isPaid ? "다음" : "예약 완료하기"}
+              {submitting ? "예약 중…" : isPaid ? "결제하러 가기" : "예약 완료하기"}
             </Button>
           </div>
         </>

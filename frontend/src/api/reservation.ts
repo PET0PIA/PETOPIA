@@ -116,6 +116,15 @@ export function getEntryQr(reservationId: number) {
 
 // ── 사전예약(2단계): 예매 가능 날짜 조회 + 생성 ─────────────────────────────
 
+/**
+ * 유료 사전예약의 약관 버전.
+ *
+ * 백엔드(ReservationService.validateTerms)는 버전 문자열이 비어있지만 않으면 통과시키고
+ * 그대로 원장에 기록한다 — 즉 어떤 값을 보냈는지가 그대로 증적으로 남는다.
+ * 화면의 동의 문구가 바뀌면 이 상수도 같이 올린다.
+ */
+export const ADVANCE_TERMS_VERSION = "advance-paid-v1";
+
 /** 예매 가능 운영일 한 건. 백엔드 ReservationAvailabilityDateResponse에 맞춘다. */
 export interface ReservationAvailabilityDate {
   /** YYYY-MM-DD */

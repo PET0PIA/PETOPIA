@@ -27,6 +27,7 @@ import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestRev
 import { PaymentDetailPage } from "../pages/payment/PaymentDetailPage";
 import { PaymentCreatePage } from "../pages/payment/PaymentCreatePage";
 import { PaymentListPage } from "../pages/payment/PaymentListPage";
+import { PaymentFailPage, PaymentSuccessPage } from "../pages/payment/PaymentResultPage";
 import { RefundPage } from "../pages/payment/RefundPage";
 import { AuditLogPage } from "../pages/admin/AuditLogPage";
 import { SettlementPage } from "../pages/admin/SettlementPage";
@@ -129,6 +130,9 @@ export function AppRouter() {
           <Route path="/fairs/past" element={<FairPastPage />} />
           <Route path="/tickets" element={<TicketFairListPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
+          {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}
+          <Route path="/payments/success" element={<PaymentSuccessPage />} />
+          <Route path="/payments/fail" element={<PaymentFailPage />} />
           <Route path="/booths/scan" element={<BoothVisitScanPage />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
           <Route path="/businesses/me" element={<MyBusinessesPage />} />
