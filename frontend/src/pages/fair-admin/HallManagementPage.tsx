@@ -22,6 +22,10 @@ export function HallManagementPage() {
   const [halls, setHalls] = useState<Hall[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // fairId가 이전과 같은 값이면 useState 갱신이 리렌더를 안 일으켜서 아래 조회 effect가
+  // 다시 안 돈다. "불러오기"를 다시 눌렀을 때(같은 행사 ID라도) 최신 상태를 다시 받아오도록
+  // 이 값을 강제로 바꿔 effect를 재실행시킨다(FairDateManagementPage와 동일한 패턴).
+  const [reloadTick, setReloadTick] = useState(0);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingHall, setEditingHall] = useState<Hall | null>(null);
@@ -42,7 +46,7 @@ export function HallManagementPage() {
       .finally(() => { if (!ignore) setLoading(false); });
 
     return () => { ignore = true; };
-  }, [fairId]);
+  }, [fairId, reloadTick]);
 
   function handleLoadFair(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -51,11 +55,13 @@ export function HallManagementPage() {
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
-    if (parsed !== fairId) {
-      setLoading(true);
-      setLoadError(null);
+    setLoading(true);
+    setLoadError(null);
+    if (parsed === fairId) {
+      setReloadTick((tick) => tick + 1);
+    } else {
+      setFairId(parsed);
     }
-    setFairId(parsed);
   }
 
   function openCreateDialog() {

@@ -187,6 +187,17 @@ class FairTransitionServiceTest {
         verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
+    @Test
+    @DisplayName("조회 이후 이미 다른 트랜잭션이 상태를 바꿨으면(갱신 0건) 감사로그를 남기지 않는다")
+    void endDueFairs_동시성으로_이미바뀐행사는_감사로그를_남기지않는다() {
+        given(timeProvider.now()).willReturn(NOW);
+        given(transitionMapper.selectInProgressToEndForUpdate(TODAY, 200)).willReturn(List.of(row(3L)));
+        given(transitionMapper.endFair(3L, NOW)).willReturn(0);
+
+        assertThat(transitionService.endDueFairs(200)).isZero();
+        verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
     // ===== 공통 검증 =====
 
     @Test
