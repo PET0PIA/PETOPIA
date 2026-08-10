@@ -18,16 +18,15 @@ public class RecruitNoticeController {
     private final RecruitNoticeService recruitNoticeService;
 
     // 모집 공고 작성/수정
-    // TODO: 인증 붙으면 @PreAuthorize("hasRole('EVENT_ADMIN')") 추가
     @PutMapping("/recruit-notice")
     public ResponseEntity<ApiResponse<RecruitNoticeUpsertResponse>> upsertNotice(
             @PathVariable Long fairId,
-            @RequestHeader(RecruitNoticeTemporaryAuthHeaders.USER_ID) Long writerId,
             @Valid @RequestBody RecruitNoticeRequest request
     ) {
 
-        return ResponseEntity.ok(
-                ApiResponse.success(recruitNoticeService.upsertNotice(fairId, writerId, request)));
+        RecruitNoticeUpsertResponse response = recruitNoticeService.upsertNotice(fairId, request);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
 
     }
 

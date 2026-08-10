@@ -82,7 +82,7 @@ export function BusinessRegisterPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await registerBusiness(toRequest(form), user.userId);
+      const response = await registerBusiness(toRequest(form));
       // 등록 성공 시 바로 상세 페이지로 이동해서 진위확인 결과를 보여준다.
       navigate(`/businesses/${response.businessId}`, { state: { justRegistered: true } });
     } catch (error) {

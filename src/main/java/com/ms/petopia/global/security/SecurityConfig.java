@@ -121,6 +121,29 @@ public class SecurityConfig {
                         ).hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // FairPaymentContractController(/internal/api/v1/**)는 사용자 JWT가 아니라
                         // 도메인 간 내부 호출자 헤더(X-Internal-Caller)로 별도 인증하므로 여기서 다루지 않는다.
+                        // Business 도메인 - 로그인만 하면 누구나(등록 시 USER->VENDOR 승격은 서비스 계층에서 처리)
+                        .requestMatchers("/api/businesses", "/api/businesses/*").authenticated()
+                        // RecruitNotice 도메인 - 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN. 담당 fair인지는
+                        // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.PUT, "/api/fairs/*/recruit-notice").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Application 도메인 - 신청/취소요청 제출·조회는 로그인만 필요(본인 소유 여부는 서비스 계층에서 검증)
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/applications").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/applications").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/applications/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/applications/*/cancel-requests").authenticated()
+                        // Application 도메인 - 행사 담당자 전용(EVENT_ADMIN/SUPER_ADMIN). 담당 fair인지는
+                        // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/applications").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/approve").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/reject").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/cancel-requests").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel-requests/approve").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel-requests/reject").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Booth 도메인 - 로그인만 하면 누구나 접근 가능(본인 소유 부스인지는 서비스 계층에서 검증)
+                        .requestMatchers(HttpMethod.PUT, "/api/booths/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/booths/*/items").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/booth-items/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/booth-items/*").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->

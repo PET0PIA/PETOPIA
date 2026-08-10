@@ -1,6 +1,6 @@
-import { CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -9,6 +9,7 @@ import { Card } from "../../components/ui/Card";
 import { ApiError } from "../../api/client";
 import { getBusiness, type Business, type BusinessVerifyStatus } from "../../api/business";
 import { useAuth } from "../../contexts/AuthContext";
+
 
 const verifyStatusLabels: Record<BusinessVerifyStatus, string> = {
   PENDING: "확인 대기",
@@ -52,7 +53,7 @@ export function BusinessDetailPage() {
     let ignore = false;
 
     setLoading(true);
-    getBusiness(Number(businessId), user.userId)
+    getBusiness(Number(businessId))
       .then((data) => { if (!ignore) setBusiness(data); })
       .catch((error) => {
         if (ignore) return;
@@ -77,6 +78,9 @@ export function BusinessDetailPage() {
 
   return (
     <PageContainer className="py-10">
+      <Link to="/businesses/me" className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-ink">
+        <ArrowLeft size={16} />사업자 목록으로
+      </Link>
       <PageHeader eyebrow="참여 업체" title={business.name} description="국세청 진위확인 결과와 등록 정보예요." />
 
       {justRegistered && (

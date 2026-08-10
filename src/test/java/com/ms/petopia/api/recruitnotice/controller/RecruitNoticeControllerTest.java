@@ -52,7 +52,7 @@ class RecruitNoticeControllerTest {
     @Test
     void upsertsRecruitNotice() throws Exception {
 
-        given(recruitNoticeService.upsertNotice(eq(1L), eq(1L), any())).willReturn(
+        given(recruitNoticeService.upsertNotice(eq(1L), any())).willReturn(
                 RecruitNoticeUpsertResponse.builder()
                         .recruitNoticeId(1L)
                         .fairId(1L)
@@ -61,7 +61,6 @@ class RecruitNoticeControllerTest {
                         .build());
 
         mockMvc.perform(put("/api/fairs/1/recruit-notice")
-                        .header(RecruitNoticeTemporaryAuthHeaders.USER_ID, 1)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"펫페어 참가업체 모집\",\"content\":\"신청 받습니다\",\"recruitDeadline\":\"2026-09-01T00:00:00\"}"))
                 .andExpect(status().isOk())
@@ -74,7 +73,6 @@ class RecruitNoticeControllerTest {
     void returns400WhenTitleBlank() throws Exception {
 
         mockMvc.perform(put("/api/fairs/1/recruit-notice")
-                        .header(RecruitNoticeTemporaryAuthHeaders.USER_ID, 1)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"\",\"content\":\"신청 받습니다\",\"recruitDeadline\":\"2026-09-01T00:00:00\"}"))
                 .andExpect(status().isBadRequest());
@@ -86,7 +84,6 @@ class RecruitNoticeControllerTest {
     void returns400WhenRecruitDeadlineMissing() throws Exception {
 
         mockMvc.perform(put("/api/fairs/1/recruit-notice")
-                        .header(RecruitNoticeTemporaryAuthHeaders.USER_ID, 1)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"펫페어 참가업체 모집\",\"content\":\"신청 받습니다\"}"))
                 .andExpect(status().isBadRequest());
@@ -98,10 +95,9 @@ class RecruitNoticeControllerTest {
     void returns403WhenNotNoticeOwner() throws Exception {
 
         willThrow(new CommonException(ErrorCode.RECRUIT_NOTICE_ACCESS_DENIED))
-                .given(recruitNoticeService).upsertNotice(eq(1L), eq(2L), any());
+                .given(recruitNoticeService).upsertNotice(eq(1L), any());
 
         mockMvc.perform(put("/api/fairs/1/recruit-notice")
-                        .header(RecruitNoticeTemporaryAuthHeaders.USER_ID, 2)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"펫페어 참가업체 모집\",\"content\":\"신청 받습니다\",\"recruitDeadline\":\"2026-09-01T00:00:00\"}"))
                 .andExpect(status().isForbidden())

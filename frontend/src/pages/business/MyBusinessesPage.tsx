@@ -38,7 +38,7 @@ export function MyBusinessesPage() {
     let ignore = false;
 
     setLoading(true);
-    getMyBusinesses(user.userId)
+    getMyBusinesses()
       .then((data) => { if (!ignore) setBusinesses(data); })
       .catch((error) => {
         if (ignore) return;

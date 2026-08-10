@@ -76,6 +76,7 @@ const fairAdminImplementedPaths = [
   "/fair-admin/reservations",
   "/fair-admin/statistics",
   "/fair-admin/cancellation",
+  "/fair-admin/recruit-notice",
 ];
 const fairAdminFallbackNavigation = fairAdminNavigation.filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
 const superAdminFallbackNavigation = superAdminNavigation.filter(
@@ -150,6 +151,7 @@ export function AppRouter() {
           <Route path="statistics" element={<VisitStatisticsPage />} />
           <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
           <Route path="cancellation" element={<FairCancelRequestPage />} />
+          <Route path="recruit-notice" element={<RecruitNoticeFormPage />} />
           <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
           {fairAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />

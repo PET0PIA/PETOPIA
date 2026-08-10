@@ -1,5 +1,6 @@
 package com.ms.petopia.api.recruitnotice.service;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.dto.request.RecruitNoticeRequest;
@@ -8,6 +9,7 @@ import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeResponse;
 import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeUpsertResponse;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +30,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.any;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
+import static org.mockito.BDDMockito.willThrow;
 
 /*
  * RecruitNoticeService 단위 테스트.
@@ -41,6 +44,8 @@ class RecruitNoticeServiceTest {
 
     @Mock
     private StorageService storageService;
+
+    @Mock private FairAdminAccessGuard fairAdminAccessGuard;
 
     @InjectMocks
     private RecruitNoticeService recruitNoticeService;
@@ -109,10 +114,10 @@ class RecruitNoticeServiceTest {
                     "멍냥페스타 참가업체 모집", null);
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
-            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null, savedNotice);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(savedNotice);
 
             // when
-            RecruitNoticeUpsertResponse result = recruitNoticeService.upsertNotice(fairId, writerId, request);
+            RecruitNoticeUpsertResponse result = recruitNoticeService.upsertNotice(fairId, request);
 
             // then: 새로 만들어진 공고 정보가 응답에 정확히 담겼는지 확인
             assertThat(result.getRecruitNoticeId()).isEqualTo(1L);
@@ -127,21 +132,19 @@ class RecruitNoticeServiceTest {
         @DisplayName("담당 EVENT_ADMIN이고 본인이 작성한 기존 공고면 수정한다")
         void updatesNoticeWhenOwnerMatches() {
 
-            // given: 요청자(1L)가 담당자이면서, 기존 공고도 본인이 쓴 상황
+            // given: 요청자(1L)가 담당자인 상황
             Long fairId = 1L;
             Long writerId = 1L;
 
             RecruitNoticeRequest request = createRequest("수정된 제목");
-            RecruitNotice existing = createNotice(1L, fairId, writerId,
-                    "원래 제목", null);
             RecruitNotice updated = createNotice(1L, fairId, writerId,
                     "수정된 제목", LocalDateTime.of(2026, 8, 3, 15, 0));
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
-            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(existing, updated);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(updated);
 
             // when
-            RecruitNoticeUpsertResponse result = recruitNoticeService.upsertNotice(fairId, writerId, request);
+            RecruitNoticeUpsertResponse result = recruitNoticeService.upsertNotice(fairId, request);
 
             // then: 같은 PK(1L)를 유지한 채로 제목이 바뀌고, updatedAt이 채워졌는지 확인
             assertThat(result.getRecruitNoticeId()).isEqualTo(1L);
@@ -159,14 +162,13 @@ class RecruitNoticeServiceTest {
 
             // given: 이 fairId에 대해 fair_admin_assignments가 아예 없는 상황(null 리턴)
             Long fairId = 999L;
-            Long writerId = 1L;
 
             RecruitNoticeRequest request = createRequest("담당자 없는 행사 공고 시도");
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(null);
 
             // when & then
-            assertThatThrownBy(() -> recruitNoticeService.upsertNotice(fairId, writerId, request))
+            assertThatThrownBy(() -> recruitNoticeService.upsertNotice(fairId, request))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("담당자가 배정되지 않은 행사입니다");
 
@@ -180,48 +182,20 @@ class RecruitNoticeServiceTest {
         @DisplayName("담당 EVENT_ADMIN이 아니면 예외를 던진다")
         void throwsWhenNotFairAdmin() {
 
-            // given: 이 행사의 진짜 담당자는 1L인데, 요청자는 2L
             Long fairId = 1L;
-            Long actualAdminId = 1L;
-            Long requesterId = 2L;
-
             RecruitNoticeRequest request = createRequest("남의 행사에 공고 작성 시도");
 
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(actualAdminId);
+            willThrow(new CommonException(ErrorCode.ACCESS_DENIED, "담당하는 행사가 아닙니다."))
+                    .given(fairAdminAccessGuard).checkAssigned(fairId);
 
-            // when & then
-            assertThatThrownBy(() -> recruitNoticeService.upsertNotice(fairId, requesterId, request))
+            assertThatThrownBy(() -> recruitNoticeService.upsertNotice(fairId, request))
                     .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인이 담당하는 행사가 아닙니다");
+                    .hasMessageContaining("담당하는 행사가 아닙니다");
 
-            verify(recruitNoticeMapper, never()).selectByFairId(any());
+            // checkAssigned가 실제로 호출됐는지, 그 예외 때문에 막힌 게 맞는지 확인
+            verify(fairAdminAccessGuard).checkAssigned(fairId);
             verify(recruitNoticeMapper, never()).upsertNotice(any(RecruitNotice.class));
 
-        }
-
-        @Test
-        @DisplayName("담당 EVENT_ADMIN이지만 다른 사람이 쓴 기존 공고면 예외를 던진다")
-        void throwsWhenNotOwner() {
-
-            /*
-             * given: 요청자(2L)가 현재 이 행사의 담당자로 배정돼있지만,
-             * 기존 공고는 예전 담당자(1L)가 쓴 상황(담당자가 바뀐 케이스)
-             */
-            Long fairId = 1L;
-            Long currentAdminId = 2L;
-
-            RecruitNoticeRequest request = createRequest("이전 담당자의 공고 수정 시도");
-            RecruitNotice existing = createNotice(1L, fairId, 1L, "원래 제목", null);
-
-            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(currentAdminId);
-            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(existing);
-
-            // when & then
-            assertThatThrownBy(() -> recruitNoticeService.upsertNotice(fairId, currentAdminId, request))
-                    .isInstanceOf(CommonException.class)
-                    .hasMessageContaining("본인이 작성한 공고만");
-
-            verify(recruitNoticeMapper, never()).upsertNotice(any(RecruitNotice.class));
         }
 
         @Test
@@ -237,13 +211,13 @@ class RecruitNoticeServiceTest {
                     "검증용 제목", null);
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
-            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null, savedNotice);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(savedNotice);
 
             // ArgumentCaptor: "Service가 Mock한테 뭘 넘겼는지" 우리가 훔쳐봄 (Service가 보낸 값을 확인)
             ArgumentCaptor<RecruitNotice> captor = ArgumentCaptor.forClass(RecruitNotice.class);
 
             // when
-            recruitNoticeService.upsertNotice(fairId, writerId, request);
+            recruitNoticeService.upsertNotice(fairId, request);
 
             // then: upsertNotice가 호출됐는지 확인하면서, 그때 넘어온 값을 캡처해라
             verify(recruitNoticeMapper).upsertNotice(captor.capture());
@@ -269,7 +243,7 @@ class RecruitNoticeServiceTest {
                     "이미지 변환 검증용 제목", null);
 
             given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
-            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(null, savedNotice);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(savedNotice);
 
             // 스토리지 확정 흐름 스텁
             given(storageService.confirm("tmp/image/notice-1.jpg", UploadPolicy.IMAGE))
@@ -280,7 +254,7 @@ class RecruitNoticeServiceTest {
             ArgumentCaptor<RecruitNotice> captor = ArgumentCaptor.forClass(RecruitNotice.class);
 
             // when
-            recruitNoticeService.upsertNotice(fairId, writerId, request);
+            recruitNoticeService.upsertNotice(fairId, request);
 
             // then: Mapper에 넘어간 imageUrl이 confirm/toPublicUrl을 거친 최종 공개 URL인지 확인
             verify(recruitNoticeMapper).upsertNotice(captor.capture());
