@@ -3,10 +3,11 @@ package com.ms.petopia.api.payment.service;
 
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
-import com.ms.petopia.api.payment.dto.OpeningFeePaymentRequest;
+import com.ms.petopia.api.payment.dto.FairOpeningFeePaymentContext;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.PaymentRow;
@@ -64,6 +65,11 @@ class PaymentServiceTest {
     // payReservationDeposit(컨텍스트 조회)와 confirmPayment(완료 통지) 양쪽 테스트에서 씀.
     @Mock
     private ReservationPaymentContractClient reservationPaymentContractClient;
+
+    // 행사 도메인 내부 계약 API를 실제로 호출하지 않도록 가짜로 대체.
+    // payFairOpeningFee(컨텍스트 조회)에서 씀.
+    @Mock
+    private FairOpeningFeePaymentContractClient fairOpeningFeePaymentContractClient;
 
     @Mock
     private NotificationService notificationService;
@@ -312,11 +318,14 @@ class PaymentServiceTest {
     @Test
     @DisplayName("행사개설비 결제를 요청하면 결제가 생성된다")
     void payFairOpeningFee_결제생성_성공() {
-        // Arrange: fair 테이블을 안 보니까, 프론트가 금액을 실어서 보낸 상황 흉내
-        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
+        // Arrange: 행사 도메인 내부 계약이 승인 시 확정된 금액을 내려주는 상황 흉내
+        FairOpeningFeePaymentContext context = new FairOpeningFeePaymentContext(
+                10L, 500000L, LocalDateTime.now().plusDays(3)
+        );
+        given(fairOpeningFeePaymentContractClient.getPaymentContext(10L)).willReturn(context);
 
         // Act
-        PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L, request);
+        PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L);
 
         // Assert: 참가비·예약금과 동일하게 PENDING/TOSS로 생성되고, fairId만 채워지고
         // businessId·reservationId·applicationId는 전부 null인지
@@ -338,11 +347,14 @@ class PaymentServiceTest {
     @DisplayName("이미 결제된 행사에 다시 개설비 결제를 요청하면 예외를 던진다")
     void payFairOpeningFee_중복결제_예외를던진다() {
         // Arrange: idempotencyKey UNIQUE 제약 위반(=이미 결제된 행사)을 흉내냄
-        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
+        FairOpeningFeePaymentContext context = new FairOpeningFeePaymentContext(
+                10L, 500000L, LocalDateTime.now().plusDays(3)
+        );
+        given(fairOpeningFeePaymentContractClient.getPaymentContext(10L)).willReturn(context);
         willThrow(new DuplicateKeyException("idempotency key violation"))
                 .given(paymentMapper).insert(any(PaymentRow.class));
 
-        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 3L, request))
+        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 3L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
@@ -458,6 +470,11 @@ class PaymentServiceTest {
     @Test
     @DisplayName("이전 시도가 FAILED로 남은 개설비 결제를 다시 요청하면 그 행을 PENDING으로 재사용한다")
     void payFairOpeningFee_FAILED재시도_기존행을PENDING으로재사용한다() {
+        FairOpeningFeePaymentContext context = new FairOpeningFeePaymentContext(
+                10L, 500000L, LocalDateTime.now().plusDays(3)
+        );
+        given(fairOpeningFeePaymentContractClient.getPaymentContext(10L)).willReturn(context);
+
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(3L);
         failedRow.setStatus("FAILED");
@@ -465,9 +482,7 @@ class PaymentServiceTest {
         given(paymentMapper.selectByIdempotencyKey("FAIR_OPENING_FEE_10")).willReturn(failedRow);
         given(paymentMapper.resetFailedToPending(eq(3L), eq(500000L), any())).willReturn(1);
 
-        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
-
-        PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L, request);
+        PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L);
 
         assertThat(result.paymentId()).isEqualTo(3L);
         assertThat(result.status()).isEqualTo("PENDING");
@@ -477,15 +492,18 @@ class PaymentServiceTest {
     @Test
     @DisplayName("다른 사용자가 남의 FAILED 개설비 결제를 재시도하면 예외를 던진다")
     void payFairOpeningFee_FAILED재시도_결제자아님_예외를던진다() {
+        FairOpeningFeePaymentContext context = new FairOpeningFeePaymentContext(
+                10L, 500000L, LocalDateTime.now().plusDays(3)
+        );
+        given(fairOpeningFeePaymentContractClient.getPaymentContext(10L)).willReturn(context);
+
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(3L);
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(3L);
         given(paymentMapper.selectByIdempotencyKey("FAIR_OPENING_FEE_10")).willReturn(failedRow);
 
-        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
-
-        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 999L, request))
+        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 999L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);

@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
  * @param publishedAt 공개(예약 오픈) 일시(미공개면 null). {@link com.ms.petopia.api.fair.service.FairService#publish}로만
  *                    채워지고 status와는 독립적이다 - 관리자 검토 화면이 "공개하기" 버튼을 보여줄지
  *                    판단하는 데 쓴다.
+ * @param openingFeeAmount 승인 시 확정된 개설비 금액(원). 승인 전이거나 반려면 null.
  */
 public record FairApplicationDetailResponse(
         Long fairId,
@@ -42,6 +43,7 @@ public record FairApplicationDetailResponse(
         String status,
         String rejectReason,
         LocalDateTime reviewedAt,
+        Long openingFeeAmount,
         LocalDateTime paymentDueAt,
         LocalDateTime createdAt,
         LocalDateTime canceledAt,
