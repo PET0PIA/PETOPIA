@@ -22,6 +22,7 @@ import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
@@ -370,7 +371,7 @@ public class PaymentService {
         if ("VENDOR_FEE".equals(row.getPaymentType())) {
             try {
                 applicationService.confirmVendorPayment(row.getApplicationId(), row.getPaymentId(), row.getAmount());
-            } catch (CommonException e) {
+            } catch (CommonException | DataAccessException e) {
                 // 카드 승인은 이미 끝나 결제는 COMPLETED로 확정됐으므로 여기서 예외를 던져
                 // 결제 응답을 실패로 되돌리지 않는다. 대신 결제와 신청서 상태가 어긋난
                 // 상황이니 자동으로 환불을 시도해서 복구한다.
