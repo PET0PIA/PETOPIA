@@ -73,6 +73,55 @@ public class RefundService {
      */
     @Transactional
     public RefundResponse refund(Long paymentId, Long actingUserId, RefundRequest request) {
+        return create(lockRefundablePayment(paymentId), actingUserId, request);
+    }
+
+    /**
+     * 환불을 만들되, 이미 환불된 결제면 예외 대신 기존 환불을 그대로 반환한다.
+     * 결제 행을 잠근 뒤에 판단하므로 "재사용 또는 신규 생성"이 원자적이다.
+     *
+     * <p><b>왜 필요한가</b>: 호출자가 {@link #findByPaymentId}로 먼저 확인하고 {@link #refund}를
+     * 부르는 방식은 두 호출 사이에 창이 있다. 그 사이 행사 취소 일괄환불
+     * ({@code FairCancelRefundOrchestrationService})이 같은 결제의 환불을 커밋하면 INSERT가
+     * UK_REFUND_PAYMENT에 걸려 {@link ErrorCode#REFUND_ALREADY_PROCESSED}가 되고, 호출자
+     * 트랜잭션(예: 예약 취소)까지 통째로 롤백된다 — 사용자 입장에선 "환불은 이미 됐는데 예약은
+     * 취소가 안 되는" 상태다. 확인과 생성을 같은 잠금 구간 안으로 넣어서 그 창을 없앤다.
+     *
+     * <p>{@link #refund}와 달리 REFUND_ALREADY_PROCESSED를 던지지 않는다. 반대로 {@link #refund}는
+     * 의미를 그대로 남겨둔다 — 행사 취소 일괄환불이 이 에러코드를 재시도 불가(terminal) 판정에
+     * 쓰고 있어서({@code FairCancelRefundOrchestrationService}의 TERMINAL_ERROR_CODES), 여기서
+     * 재사용으로 바꾸면 그쪽 작업행 상태 전이(FAILED → COMPLETED)까지 함께 달라진다.
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 대상 결제가 없을 때
+     * @throws CommonException {@link ErrorCode#REFUND_TARGET_NOT_REFUNDABLE} 결제가 COMPLETED가
+     *         아니거나, 이미 확정된 정산에 포함된 결제일 때
+     */
+    @Transactional
+    public RefundResponse refundOrReuse(Long paymentId, Long actingUserId, RefundRequest request) {
+        PaymentRow payment = paymentMapper.selectByIdForUpdate(paymentId);
+        if (payment == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+
+        // 결제 행을 잠근 뒤 잠금 읽기로 확인한다. 비잠금 읽기는 REPEATABLE READ 스냅샷 때문에
+        // 방금 커밋된 환불을 못 볼 수 있다(RefundMapper.selectByPaymentIdForUpdate 참고).
+        RefundRow existing = refundMapper.selectByPaymentIdForUpdate(paymentId);
+        if (existing != null) {
+            // 조인 없이 읽어와서 reservationId가 비어 있다 — 이미 잠가서 들고 있는 결제 행에서 채운다.
+            existing.setReservationId(payment.getReservationId());
+            log.info("이미 환불된 결제라 기존 환불을 재사용한다. paymentId={}, refundId={}, actingUserId={}",
+                    paymentId, existing.getRefundId(), actingUserId);
+            return RefundResponse.from(existing);
+        }
+
+        if (!COMPLETED.equals(payment.getStatus())) {
+            throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE);
+        }
+        return create(payment, actingUserId, request);
+    }
+
+    /** 환불 대상 결제를 잠그고 환불 가능한 상태인지 확인한다. */
+    private PaymentRow lockRefundablePayment(Long paymentId) {
         // FOR UPDATE로 잠근다 — SettlementService.calculate()의 selectCompletedVendorFeePayments도
         // 같은 결제 행을 잠그기 때문에, 둘 중 하나가 끝날 때까지 나머지가 대기하게 된다(위 클래스
         // 문서 "동시성" 참고). selectById가 아니라 이 잠금 조회를 써야 경쟁 조건이 막힌다.
@@ -83,6 +132,12 @@ public class RefundService {
         if (!COMPLETED.equals(payment.getStatus())) {
             throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE);
         }
+        return payment;
+    }
+
+    /** 잠긴 결제 행을 받아 정산 표시를 남기고 환불 한 건을 만든다. 호출 전에 결제 잠금이 필요하다. */
+    private RefundResponse create(PaymentRow payment, Long actingUserId, RefundRequest request) {
+        Long paymentId = payment.getPaymentId();
         // 이 결제가 정산에 포함돼 있으면(PENDING일 때만) "재계산 필요" 표시를 원자적으로 남기고
         // 환불을 허용한다 — 정산 담당자가 SettlementService.recalculate로 나중에 금액을 바로잡는
         // 걸 전제로 한다. markNeedsRecalculation의 WHERE status='PENDING' 조건이

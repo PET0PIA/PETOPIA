@@ -50,7 +50,11 @@
                #{reservationId}
              , 'RESERVATION_CANCELED'
              , JSON_OBJECT('status', #{previousStatus})
-             , JSON_OBJECT('status', 'CANCELED')
+             , JSON_OBJECT(
+                    'status', 'CANCELED',
+                    'refundId', #{refundId},
+                    'refundAmount', #{refundAmount}
+               )
              , #{changedBy}
              , 'USER'
              , FALSE

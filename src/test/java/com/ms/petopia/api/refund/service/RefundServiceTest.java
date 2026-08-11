@@ -252,4 +252,112 @@ class RefundServiceTest {
 
         assertThat(refundService.findByPaymentId(1L)).isNull();
     }
+
+    // ── refundOrReuse: 결제 행을 잠근 뒤 "재사용 또는 신규 생성"을 원자적으로 판단한다 ──────────
+
+    @Test
+    @DisplayName("환불 이력이 없으면 refundOrReuse도 새 환불을 만든다")
+    void refundOrReuse_환불이력없음_새환불생성() {
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(refundMapper.selectByPaymentIdForUpdate(1L)).willReturn(null);
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
+
+        RefundResponse result = refundService.refundOrReuse(1L, 99L, USER_CANCEL_REQUEST);
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(result.refundAmount()).isEqualTo(50000L);
+        verify(refundMapper).insert(any(RefundRow.class));
+    }
+
+    /**
+     * 이 테스트가 지키는 것: 행사 취소 일괄환불이 먼저 커밋해버린 상황에서도
+     * REFUND_ALREADY_PROCESSED가 아니라 기존 환불이 그대로 반환돼야 한다.
+     * 예외가 나면 호출자(예약 취소) 트랜잭션까지 롤백돼 "환불은 됐는데 예약은 CONFIRMED"가 된다.
+     */
+    @Test
+    @DisplayName("행사 일괄환불이 먼저 커밋해도 refundOrReuse는 예외 대신 기존 환불을 재사용한다")
+    void refundOrReuse_일괄환불이선행_기존환불재사용() {
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(reservationDepositPaymentRow());
+        // 결제 행을 잠근 뒤의 잠금 읽기라, 그 사이 커밋된 일괄환불(FAIR_CANCEL_USER)이 보인다.
+        given(refundMapper.selectByPaymentIdForUpdate(1L)).willReturn(
+                existingRefundRow(RefundReason.FAIR_CANCEL_USER, RequestedByDomain.FAIR));
+
+        RefundResponse result = refundService.refundOrReuse(1L, 99L, USER_CANCEL_REQUEST);
+
+        assertThat(result.refundId()).isEqualTo(777L);
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        // 먼저 만들어진 환불의 사유가 유지된다 — 나중 요청의 USER_CANCEL로 덮어쓰지 않는다.
+        assertThat(result.refundReason()).isEqualTo("FAIR_CANCEL_USER");
+        // 조인 없이 읽어온 행이지만 잠가둔 결제에서 reservationId를 채워주므로 예약 도메인이 바로 쓴다.
+        assertThat(result.reservationId()).isEqualTo(30L);
+
+        // 두 번 환불하지 않고, 정산 재계산 표시도 다시 건드리지 않는다.
+        verify(refundMapper, never()).insert(any(RefundRow.class));
+        verify(settlementMapper, never()).markNeedsRecalculation(any());
+        verify(notificationService, never()).save(any(SaveNotificationDto.Request.class));
+    }
+
+    @Test
+    @DisplayName("refundOrReuse는 기존 환불 확인을 잠금 읽기로 한다(비잠금 조회는 스냅샷 때문에 못 씀)")
+    void refundOrReuse_기존환불확인은잠금읽기로한다() {
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(refundMapper.selectByPaymentIdForUpdate(1L)).willReturn(null);
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
+
+        refundService.refundOrReuse(1L, 99L, USER_CANCEL_REQUEST);
+
+        verify(refundMapper).selectByPaymentIdForUpdate(1L);
+        verify(refundMapper, never()).selectByPaymentId(any());
+    }
+
+    @Test
+    @DisplayName("환불 이력이 없고 결제가 완료 상태도 아니면 refundOrReuse도 거부한다")
+    void refundOrReuse_환불이력없고결제완료아님_예외를던진다() {
+        PaymentRow pending = completedPaymentRow();
+        pending.setStatus("PENDING");
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(pending);
+        given(refundMapper.selectByPaymentIdForUpdate(1L)).willReturn(null);
+
+        assertThatThrownBy(() -> refundService.refundOrReuse(1L, 99L, USER_CANCEL_REQUEST))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE);
+
+        verify(refundMapper, never()).insert(any(RefundRow.class));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 결제면 refundOrReuse도 예외를 던진다")
+    void refundOrReuse_결제없음_예외를던진다() {
+        given(paymentMapper.selectByIdForUpdate(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> refundService.refundOrReuse(999L, 99L, USER_CANCEL_REQUEST))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+    }
+
+    /** 예약금 결제 한 건. 환불 응답에 reservationId가 실리는지 볼 때 쓴다. */
+    private PaymentRow reservationDepositPaymentRow() {
+        PaymentRow row = completedPaymentRow();
+        row.setPaymentType("RESERVATION_DEPOSIT");
+        row.setReservationId(30L);
+        row.setAmount(10000L);
+        return row;
+    }
+
+    /** 다른 트랜잭션이 이미 만들어 커밋한 환불 행(잠금 읽기로 보이는 상태). */
+    private RefundRow existingRefundRow(RefundReason reason, RequestedByDomain domain) {
+        RefundRow row = new RefundRow();
+        row.setRefundId(777L);
+        row.setPaymentId(1L);
+        row.setRefundReason(reason.name());
+        row.setRequestedByDomain(domain.name());
+        row.setRefundAmount(10000L);
+        row.setStatus("COMPLETED");
+        row.setRequestedAt(LocalDateTime.now());
+        row.setProcessedAt(LocalDateTime.now());
+        // 조인 없는 잠금 조회라 reservationId는 비어 있다(RefundService가 결제 행에서 채운다).
+        return row;
+    }
 }

@@ -152,7 +152,9 @@ class ReservationHttpControllerTest {
     @Test
     void cancelsReservationUsingAuthenticatedUser() throws Exception {
         given(cancellationService.cancel(any(), any(), any())).willReturn(
-                new CancelReservationResponse(30L, "CANCELED", LocalDateTime.of(2026, 8, 1, 9, 0))
+                new CancelReservationResponse(
+                        30L, "CANCELED", LocalDateTime.of(2026, 8, 1, 9, 0), false, null, null, null
+                )
         );
 
         mockMvc.perform(patch("/api/v1/reservations/30/cancel")
@@ -160,9 +162,30 @@ class ReservationHttpControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"일정 변경\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.reservationStatus").value("CANCELED"));
+                .andExpect(jsonPath("$.reservationStatus").value("CANCELED"))
+                .andExpect(jsonPath("$.refunded").value(false));
 
         verify(cancellationService).cancel(eq(30L), eq(20L), any());
+    }
+
+    @Test
+    void exposesRefundResultWhenPaidReservationIsCanceled() throws Exception {
+        given(cancellationService.cancel(any(), any(), any())).willReturn(
+                new CancelReservationResponse(
+                        30L, "CANCELED", LocalDateTime.of(2026, 8, 1, 9, 0), true, 77L, 10_000L, "COMPLETED"
+                )
+        );
+
+        mockMvc.perform(patch("/api/v1/reservations/30/cancel")
+                        .with(authenticatedAs(20L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"일정 변경\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reservationStatus").value("CANCELED"))
+                .andExpect(jsonPath("$.refunded").value(true))
+                .andExpect(jsonPath("$.refundId").value(77))
+                .andExpect(jsonPath("$.refundAmount").value(10000))
+                .andExpect(jsonPath("$.refundStatus").value("COMPLETED"));
     }
 
     @Test
