@@ -40,6 +40,8 @@ class PasswordServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private MailService mailService;
+    @Mock
+    private LoginAttemptStore loginAttemptStore;
     @InjectMocks
     private PasswordService passwordService;
 
@@ -208,10 +210,12 @@ class PasswordServiceTest {
         given(authMapper.selectUserTokenByHash(anyString(), eq("PASSWORD_RESET"))).willReturn(token);
         given(authMapper.markUserTokenUsed(TOKEN_ID)).willReturn(1);
         given(passwordEncoder.encode("newPassword1!")).willReturn("new-hashed");
+        given(authMapper.selectUserById(USER_ID)).willReturn(user());
 
         passwordService.resetPassword("raw-token", "newPassword1!");
 
         verify(authMapper).updateUserPassword(USER_ID, "new-hashed");
+        verify(loginAttemptStore).reset(EMAIL);
     }
 
     private User user() {

@@ -13,6 +13,16 @@ import { apiClient } from "./client";
 export const TEMP_USER_ID_HEADER = "X-User-Id";
 export const TEMP_APPLICANT_USER_ID = 1;
 
+export interface AssignedFairSummary {
+  fairId: number;
+  name: string;
+}
+
+/** EVENT_ADMIN 전용 — 자신에게 배정된 행사 목록(fairId + 행사명). */
+export function getAssignedFairs() {
+  return apiClient.get<AssignedFairSummary[]>("/api/fairs/mine-assigned");
+}
+
 export type FairCategory = "DOG" | "CAT" | "ETC";
 export type IndoorOutdoor = "INDOOR" | "OUTDOOR";
 

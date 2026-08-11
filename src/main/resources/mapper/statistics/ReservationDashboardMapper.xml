@@ -135,7 +135,7 @@
             ON bs.booth_slot_id = aslot.booth_slot_id
          WHERE bv.fair_id = #{fairId}
          GROUP BY b.booth_id, bs.slot_number, b.name
-         ORDER BY unique_visitor_count DESC
+         ORDER BY unique_visitor_count DESC, total_scan_count DESC, b.booth_id ASC
     </select>
 
     <!-- ─────────────────────────────────────────────────── -->
