@@ -1,5 +1,9 @@
 package com.ms.petopia.api.auth.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.dto.EmailCheckResponse;
 import com.ms.petopia.api.auth.dto.EmailLoginRequest;
@@ -11,6 +15,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.TokenHashUtil;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -19,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -28,6 +34,7 @@ public class AuthService {
     private final EmailVerificationService emailVerificationService;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
+    private final AuditLogService auditLogService;
     private final LoginAttemptStore loginAttemptStore;
 
     //회원가입
@@ -103,8 +110,20 @@ public class AuthService {
         User user = authMapper.selectUserByEmail(request.getEmail());
 
         //아이디/비밀번호 검사
-        if(user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())){
-            loginAttemptStore.recordFailure(request.getEmail());
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            try {
+                auditLogService.record(
+                        user != null ? user.getUserId() : null,
+                        ActorType.USER,
+                        user != null ? user.getRole() : null,
+                        ActionType.LOGIN_FAIL,
+                        TargetType.ACCOUNT,
+                        user != null ? user.getUserId() : null,
+                        null, null
+                );
+            } catch (Exception e) {
+                log.error("LOGIN_FAIL 감사 로그 저장 실패", e);
+            }
             throw new CommonException(ErrorCode.INVALID_LOGIN);
         }
 

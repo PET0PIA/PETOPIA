@@ -29,10 +29,10 @@ import java.util.Map;
  * 도메인)이 아직 없어도 이 도메인 혼자 만들 수 있다는 실용적 이유로 폴링을 선택했다 -
  * 나중에 결제 도메인이 콜백을 만들면 그쪽으로 옮기고 이 폴링은 안전망으로만 남겨도 된다.
  *
- * <p>개설비 결제 완료 전이({@code completeDuePayments})만 감사 로그를 남긴다 - audit 도메인의
- * {@code ActionType}에 {@code PAYMENT_COMPLETION_RECEIVED}가 이미 있어 그대로 쓴다. 나머지
- * 세 전이(만료/시작/종료)는 대응하는 {@code ActionType} 값이 없어 이번 범위에서 제외했다 -
- * 필요해지면 audit 도메인과 새 값 추가를 먼저 확인해야 한다.
+ * <p>네 전이 모두 감사 로그를 남긴다. 개설비 결제 완료는 audit 도메인에 이미 있던
+ * {@code PAYMENT_COMPLETION_RECEIVED}를 그대로 쓰고, 나머지 세 전이(만료/시작/종료)는
+ * audit 도메인에 {@code FAIR_EXPIRE}/{@code FAIR_START}/{@code FAIR_END} 값을 새로
+ * 추가해 쓴다(2026-08-10, audit 도메인 담당자 확인 후 추가).
  *
  * <p>네 조회 쿼리 모두 {@code canceled_at IS NOT NULL}인 행사는 제외한다 - 취소된 행사를
  * 계속 자동전이시켜 봐야 의미가 없고, status만 계속 바뀌면 관리자 화면에서 취소된 행사가
@@ -60,6 +60,17 @@ public class FairTransitionService {
         for (FairTransitionRow row : rows) {
             if (transitionMapper.expireFair(row.getFairId(), now) == 1) {
                 expired++;
+                // userId는 null(사람 행위자가 없는 배치) - completeDuePayments와 동일한 이유.
+                auditLogService.record(
+                        null,
+                        ActorType.SYSTEM,
+                        "SYSTEM",
+                        ActionType.FAIR_EXPIRE,
+                        TargetType.FAIR,
+                        row.getFairId(),
+                        null,
+                        Map.of("status", "EXPIRED", "expiredAt", now)
+                );
             }
         }
         return expired;
@@ -79,6 +90,16 @@ public class FairTransitionService {
         for (FairTransitionRow row : rows) {
             if (transitionMapper.startFair(row.getFairId(), now) == 1) {
                 started++;
+                auditLogService.record(
+                        null,
+                        ActorType.SYSTEM,
+                        "SYSTEM",
+                        ActionType.FAIR_START,
+                        TargetType.FAIR,
+                        row.getFairId(),
+                        null,
+                        Map.of("status", "IN_PROGRESS", "startedAt", now)
+                );
             }
         }
         return started;
@@ -98,6 +119,16 @@ public class FairTransitionService {
         for (FairTransitionRow row : rows) {
             if (transitionMapper.endFair(row.getFairId(), now) == 1) {
                 ended++;
+                auditLogService.record(
+                        null,
+                        ActorType.SYSTEM,
+                        "SYSTEM",
+                        ActionType.FAIR_END,
+                        TargetType.FAIR,
+                        row.getFairId(),
+                        null,
+                        Map.of("status", "ENDED", "endedAt", now)
+                );
             }
         }
         return ended;

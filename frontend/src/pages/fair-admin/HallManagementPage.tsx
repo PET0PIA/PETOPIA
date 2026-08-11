@@ -22,6 +22,10 @@ export function HallManagementPage() {
   const [halls, setHalls] = useState<Hall[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // fairId가 이전과 같은 값이면 useState 갱신이 리렌더를 안 일으켜서 아래 조회 effect가
+  // 다시 안 돈다. "불러오기"를 다시 눌렀을 때(같은 행사 ID라도) 최신 상태를 다시 받아오도록
+  // 이 값을 강제로 바꿔 effect를 재실행시킨다(FairDateManagementPage와 동일한 패턴).
+  const [reloadTick, setReloadTick] = useState(0);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingHall, setEditingHall] = useState<Hall | null>(null);
@@ -36,15 +40,13 @@ export function HallManagementPage() {
     if (fairId === null) return;
     let ignore = false;
 
-    setLoading(true);
-    setLoadError(null);
     getHalls(fairId)
       .then((data) => { if (!ignore) setHalls(data); })
       .catch((error) => { if (!ignore) setLoadError(error instanceof ApiError ? error.message : "홀 목록을 불러오지 못했어요."); })
       .finally(() => { if (!ignore) setLoading(false); });
 
     return () => { ignore = true; };
-  }, [fairId]);
+  }, [fairId, reloadTick]);
 
   function handleLoadFair(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,7 +55,13 @@ export function HallManagementPage() {
       setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
-    setFairId(parsed);
+    setLoading(true);
+    setLoadError(null);
+    if (parsed === fairId) {
+      setReloadTick((tick) => tick + 1);
+    } else {
+      setFairId(parsed);
+    }
   }
 
   function openCreateDialog() {
@@ -130,8 +138,9 @@ export function HallManagementPage() {
 
       <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
         <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</span>
+          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</label>
           <Input
+            id="fairIdInput"
             type="number"
             min={1}
             value={fairIdInput}
@@ -200,8 +209,9 @@ export function HallManagementPage() {
         <form onSubmit={handleSaveHall} className="space-y-4">
           {formError && <p className="text-sm font-bold text-primary-strong">{formError}</p>}
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">홀 이름<span className="ml-1 text-primary-strong">*</span></span>
+            <label htmlFor="hallName" className="mb-1.5 block text-sm font-bold text-ink">홀 이름<span className="ml-1 text-primary-strong">*</span></label>
             <Input
+              id="hallName"
               value={hallName}
               onChange={(event) => setHallName(event.target.value)}
               placeholder="예: A홀"

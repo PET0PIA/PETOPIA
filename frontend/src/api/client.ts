@@ -50,10 +50,16 @@ export function setRefreshHandler(handler: RefreshHandler | null) {
   refreshHandler = handler;
 }
 
-/** 여러 요청이 동시에 401을 받아도 재발급 요청은 한 번만 나가도록 Promise를 공유한다. */
+/**
+ * 여러 요청이 동시에 401을 받아도 재발급 요청은 한 번만 나가도록 Promise를 공유한다.
+ * AuthProvider의 마운트 시 silent refresh도 이 함수를 같이 써야 한다 - 그렇지 않으면
+ * 새로고침 직후 "AuthProvider의 복구 요청"과 "이 401 재시도 로직의 복구 요청"이 각자
+ * refreshAccessToken()을 따로 호출해서 Refresh Token(Rotation 방식)을 두 번 동시에
+ * 소모하려 들고, 늦게 도착한 쪽이 이미 회전된(무효화된) 토큰으로 실패한다.
+ */
 let refreshPromise: Promise<string> | null = null;
 
-function refreshAccessTokenOnce(): Promise<string> {
+export function refreshAccessTokenOnce(): Promise<string> {
   if (!refreshHandler) return Promise.reject(new Error("refresh handler가 등록되지 않았어요."));
   if (!refreshPromise) {
     refreshPromise = refreshHandler().finally(() => {
@@ -100,6 +106,19 @@ async function request<TResponse>(path: string, init?: RequestInit, isRetry = fa
   }
 
   return body as TResponse;
+}
+
+/**
+ * 참가업체 도메인(business/application/recruitNotice/booth)의 성공 응답 포맷.
+ * fair/payment 등 다른 도메인은 DTO를 그대로 반환해서 apiClient 레벨에서 일괄
+ * 벗기지 않고, 이 포맷을 쓰는 도메인의 api 모듈에서만 개별적으로 unwrap한다.
+ */
+export interface ApiEnvelope<T> {
+  success: boolean;
+  status: number;
+  code: string;
+  message: string | null;
+  data: T;
 }
 
 export const apiClient = {

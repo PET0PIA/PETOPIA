@@ -19,6 +19,7 @@ public class FairCancelRefundJob {
     private static final int TARGET_BATCH_SIZE = 200;
 
     private final FairCancelRefundOrchestrationService orchestrationService;
+    private final FairCancelPendingPaymentService pendingPaymentService;
 
     @Scheduled(fixedDelayString = "${petopia.fair.cancel-refund-check-interval-ms:300000}")
     public void run() {
@@ -30,6 +31,13 @@ public class FairCancelRefundJob {
         int completed = orchestrationService.processPendingTargets(TARGET_BATCH_SIZE);
         if (completed > 0) {
             log.info("행사 취소 환불을 처리했습니다. count={}", completed);
+        }
+
+        // COMPLETED 결제 환불(위)과 별개로, 아직 결제 전(PENDING)인 예약금/참가비도 취소된
+        // 행사라면 함께 정리한다 - FairCancelPendingPaymentService 참고.
+        int canceledPending = pendingPaymentService.cancelPendingPayments(FAIR_BATCH_SIZE);
+        if (canceledPending > 0) {
+            log.info("취소된 행사의 PENDING 결제를 취소했습니다. count={}", canceledPending);
         }
     }
 }

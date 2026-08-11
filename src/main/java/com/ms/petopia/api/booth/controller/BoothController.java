@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,7 +36,7 @@ public class BoothController {
     // 부스 프로필 수정 (본인 소유만)
     @PutMapping("/booths/{boothId}")
     public ResponseEntity<ApiResponse<BoothResponse>> updateBooth(
-            @RequestHeader(BoothTemporaryAuthHeaders.USER_ID) Long callerId,
+            @AuthenticationPrincipal Long callerId,
             @PathVariable Long boothId,
             @Valid @RequestBody BoothUpdateRequest request
     ) {
@@ -48,7 +49,7 @@ public class BoothController {
     // 판매상품·이벤트 등록 (본인 소유 부스만)
     @PostMapping("/booths/{boothId}/items")
     public ResponseEntity<ApiResponse<BoothItemResponse>> addItem(
-            @RequestHeader(BoothTemporaryAuthHeaders.USER_ID) Long callerId,
+            @AuthenticationPrincipal Long callerId,
             @PathVariable Long boothId,
             @Valid @RequestBody BoothItemCreateRequest request
     ) {
@@ -63,7 +64,7 @@ public class BoothController {
     // 판매상품·이벤트 수정 (본인 소유 부스만)
     @PutMapping("/booth-items/{boothItemId}")
     public ResponseEntity<ApiResponse<BoothItemResponse>> updateItem(
-            @RequestHeader(BoothTemporaryAuthHeaders.USER_ID) Long callerId,
+            @AuthenticationPrincipal Long callerId,
             @PathVariable Long boothItemId,
             @Valid @RequestBody BoothItemUpdateRequest request
     ) {
@@ -76,7 +77,7 @@ public class BoothController {
     // 판매상품·이벤트 삭제 (본인 소유 부스만)
     @DeleteMapping("/booth-items/{boothItemId}")
     public ResponseEntity<ApiResponse<Void>> deleteItem(
-            @RequestHeader(BoothTemporaryAuthHeaders.USER_ID) Long callerId,
+            @AuthenticationPrincipal Long callerId,
             @PathVariable Long boothItemId
     ) {
 

@@ -55,4 +55,19 @@
           AND status = 'PENDING'
     </update>
 
+    <!--
+        관리자 큐 전용 - fairs와 조인해 fairName까지 함께 담는다(FairCancelRequestQueueRow).
+        status가 없으면 전체, 있으면 그 상태만 걸러 오래된 신청 순으로 반환한다.
+    -->
+    <select id="selectQueue" resultType="FairCancelRequestQueueRow">
+        SELECT fcr.fair_cancel_request_id, fcr.fair_id, f.name AS fair_name,
+               fcr.requested_by, fcr.reason, fcr.status, fcr.created_at
+          FROM fair_cancel_requests fcr
+          JOIN fairs f ON f.fair_id = fcr.fair_id
+        <if test="status != null">
+         WHERE fcr.status = #{status}
+        </if>
+         ORDER BY fcr.created_at ASC
+    </select>
+
 </mapper>

@@ -10,6 +10,9 @@ public enum ActionType {
     FAIR_APPROVE,
     FAIR_REJECT,
     FAIR_CANCEL_APPROVE,
+    FAIR_EXPIRE,
+    FAIR_START,
+    FAIR_END,
 
     //재무
     PAYMENT_COMPLETION_RECEIVED,

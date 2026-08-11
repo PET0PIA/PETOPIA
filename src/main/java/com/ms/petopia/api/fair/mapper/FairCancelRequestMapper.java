@@ -1,6 +1,8 @@
 package com.ms.petopia.api.fair.mapper;
 
 import com.ms.petopia.api.fair.dto.FairCancelRequest;
+import com.ms.petopia.api.fair.dto.FairCancelRequestQueueRow;
+import com.ms.petopia.api.fair.dto.FairCancelRequestStatus;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -37,4 +39,12 @@ public interface FairCancelRequestMapper {
      * 던진다.
      */
     int update(FairCancelRequest fairCancelRequest);
+
+    /**
+     * 관리자 취소 신청 큐 조회({@code FairCancelRequestService#getQueue} 전용). fairs와 조인해
+     * fairName까지 함께 담는다 - 특정 행사에 갇히지 않고 전체를 가로질러 훑어보는 목록이라
+     * fairId만으로는 어느 행사인지 알기 어렵다. {@code status}가 없으면 전체, 있으면 그
+     * 상태만 걸러 오래된 신청 순으로 반환한다({@link FairMapper#selectByStatus}와 동일한 이유).
+     */
+    List<FairCancelRequestQueueRow> selectQueue(@Param("status") FairCancelRequestStatus status);
 }

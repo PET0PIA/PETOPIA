@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,7 +23,7 @@ public class BusinessController {
     // 사업자 등록 및 진위 확인
     @PostMapping
     public ResponseEntity<ApiResponse<BusinessResponse>> register(
-            @RequestHeader(BusinessTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @AuthenticationPrincipal Long ownerId,
             @Valid @RequestBody BusinessRegisterRequest request
     ) {
 
@@ -36,7 +37,7 @@ public class BusinessController {
     // 내 사업자 목록 조회
     @GetMapping
     public ResponseEntity<ApiResponse<List<BusinessResponse>>> getMyBusinesses(
-            @RequestHeader(BusinessTemporaryAuthHeaders.USER_ID) Long ownerId
+            @AuthenticationPrincipal Long ownerId
     ) {
 
         return ResponseEntity.ok(
@@ -47,7 +48,7 @@ public class BusinessController {
     // 사업자 상세 조회 (진위 확인 상태 포함)
     @GetMapping("/{businessId}")
     public ResponseEntity<ApiResponse<BusinessResponse>> getBusiness(
-            @RequestHeader(BusinessTemporaryAuthHeaders.USER_ID) Long ownerId,
+            @AuthenticationPrincipal Long ownerId,
             @PathVariable Long businessId
     ) {
 

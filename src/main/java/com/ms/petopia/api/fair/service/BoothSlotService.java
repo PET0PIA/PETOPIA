@@ -35,6 +35,7 @@ public class BoothSlotService {
     private final BoothSlotMapper boothSlotMapper;
     private final HallMapper hallMapper;
     private final FairTimeProvider timeProvider;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     /**
      * 특정 홀의 부스 슬롯 목록을 조회한다. 부스 배치 편집 화면이 초기 상태를 불러올 때 쓴다.
@@ -43,6 +44,7 @@ public class BoothSlotService {
     @Transactional(readOnly = true)
     public BoothLayoutResponse getBoothSlots(Long fairId, Long hallId) {
         Hall hall = findHallOrThrow(fairId, hallId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         List<BoothSlotResponse> slots = boothSlotMapper.selectByHallId(hallId).stream().map(this::toResponse).toList();
         return new BoothLayoutResponse(slots, hall.getBoothLayoutVersion());
     }
@@ -66,6 +68,7 @@ public class BoothSlotService {
     @Transactional
     public BoothLayoutResponse bulkSave(Long fairId, Long hallId, BulkSaveBoothSlotsRequest request) {
         findHallOrThrow(fairId, hallId);
+        fairAdminAccessGuard.checkAssigned(fairId);
         List<BoothSlotItem> items = validateAndGetItems(request);
 
         long newVersion = bumpVersionOrThrow(hallId, request.expectedVersion());

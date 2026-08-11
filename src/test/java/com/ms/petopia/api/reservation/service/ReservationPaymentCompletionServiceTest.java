@@ -1,12 +1,20 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.dto.PaymentConfirmationReservationRow;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletedCommand;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletionResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentReceiptRow;
 import com.ms.petopia.api.reservation.mapper.ReservationPaymentConfirmationMapper;
+import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,6 +36,7 @@ import static org.mockito.Mockito.verify;
 class ReservationPaymentCompletionServiceTest {
 
     private static final Long FAIR_ID = 100L;
+    private static final Long USER_ID = 42L;
     private static final LocalDateTime PAID_AT = LocalDateTime.of(2026, 8, 1, 10, 5);
     private static final LocalDateTime RECEIVED_AT = LocalDateTime.of(2026, 8, 1, 10, 5, 1);
     private static final ReservationPaymentCompletedCommand COMMAND =
@@ -41,8 +50,20 @@ class ReservationPaymentCompletionServiceTest {
     private ReservationTimeProvider timeProvider;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private NotificationService notificationService;
     @InjectMocks
     private ReservationPaymentCompletionService service;
+
+    @BeforeEach
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
 
     @Test
     void confirmsPendingReservationAndIssuesQr() {
@@ -58,6 +79,14 @@ class ReservationPaymentCompletionServiceTest {
         assertThat(response.entryQrToken()).isEqualTo("qr-token");
         verify(mapper).insertReceipt(COMMAND, RECEIVED_AT);
         verify(mapper).insertConfirmedHistory(10L, 20L, 15_000L, RECEIVED_AT);
+
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+        ArgumentCaptor<SaveNotificationDto.Request> notifCaptor =
+                ArgumentCaptor.forClass(SaveNotificationDto.Request.class);
+        verify(notificationService).save(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
+        assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.RESERVATION_CONFIRMED);
     }
 
     @Test
@@ -137,6 +166,7 @@ class ReservationPaymentCompletionServiceTest {
         PaymentConfirmationReservationRow row = new PaymentConfirmationReservationRow();
         row.setReservationId(10L);
         row.setFairId(FAIR_ID);
+        row.setUserId(USER_ID);
         row.setStatus("PENDING_PAYMENT");
         row.setReservationAmount(amount);
         row.setPaymentExpiresAt(PAID_AT.plusMinutes(5));

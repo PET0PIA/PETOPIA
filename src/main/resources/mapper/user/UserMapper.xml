@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.user.mapper.UserMapper">
+
+    <select id="selectUserById" resultType="User">
+        SELECT user_id
+             , email
+             , password_hash
+             , nickname
+             , birth_date
+             , phone
+             , gender
+             , address
+             , agreed_terms
+             , agreed_privacy
+             , role
+             , status
+             , email_verified
+             , created_at
+             , updated_at
+          FROM users
+         WHERE user_id = #{userId}
+    </select>
+
+    <!-- 보낸 필드만 SET에 들어간다. 전부 null이면(아무 필드도 안 보내면) SET절이 비어서 안 되니
+         컨트롤러/서비스 단에서 최소 한 필드는 있게 막아야 함 -->
+    <update id="updateUserProfile">
+        UPDATE users
+        <set>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="birthDate != null">birth_date = #{birthDate},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="gender != null">gender = #{gender},</if>
+            <if test="address != null">address = #{address},</if>
+            updated_at = CURRENT_TIMESTAMP
+        </set>
+        WHERE user_id = #{userId}
+    </update>
+
+</mapper>

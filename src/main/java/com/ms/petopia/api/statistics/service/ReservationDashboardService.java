@@ -1,5 +1,6 @@
 package com.ms.petopia.api.statistics.service;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.statistics.dto.*;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
 import com.ms.petopia.api.statistics.mapper.ReservationDashboardMapper;
@@ -23,7 +24,14 @@ import java.util.List;
 public class ReservationDashboardService {
     private final ReservationDashboardMapper dashboardMapper;
     private final DashboardEmitterRegistry emitterRegistry;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
+    /**
+     * SecurityConfig는 EVENT_ADMIN/SUPER_ADMIN role인 것까지만 걸러주고 "이 행사" 담당자인지는
+     * 못 가리므로 여기서 한 번 더 확인한다({@link FairAdminAccessGuard} 참고). 단, 이 메서드는
+     * {@link #onReservationStatusChanged}(SecurityContext 없는 @Async 리스너)에서도 재사용되므로
+     * 여기엔 가드를 넣지 않고, HTTP 요청 경로인 컨트롤러에서 별도로 checkAssigned를 호출한다.
+     */
     @Transactional(readOnly = true)
     public List<ReservationDateSummaryDto> getDateSummary(Long fairId, LocalDate date) {
         return dashboardMapper.selectDateSummaryList(fairId, date);
@@ -31,21 +39,25 @@ public class ReservationDashboardService {
 
     @Transactional(readOnly = true)
     public List<QrIssuanceSummaryDto> getQrIssuanceSummary(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
         return dashboardMapper.selectQrIssuanceSummary(fairId);
     }
 
     @Transactional(readOnly = true)
     public List<HourlyEntryTrendDto> getHourlyEntryTrend(Long fairId, LocalDate date) {
+        fairAdminAccessGuard.checkAssigned(fairId);
         return dashboardMapper.selectHourlyEntryTrend(fairId, date);
     }
 
     @Transactional(readOnly = true)
     public List<BoothVisitStatDto> getBoothVisitStats(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
         return dashboardMapper.selectBoothVisitStats(fairId);
     }
 
     @Transactional(readOnly = true)
     public List<LabelCountDto> getBoothVisitPatternDistribution(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
         return dashboardMapper.selectBoothVisitPatternDistribution(fairId);
     }
 
@@ -73,6 +85,7 @@ public class ReservationDashboardService {
 
     @Transactional(readOnly = true)
     public VisitStatsDto getVisitStats(Long fairId){
+        fairAdminAccessGuard.checkAssigned(fairId);
         int totalVisitors = dashboardMapper.selectTotalVisitors(fairId);
         int totalConfirmed = dashboardMapper.selectTotalConfirmedReservations(fairId);
 

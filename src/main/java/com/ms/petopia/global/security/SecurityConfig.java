@@ -48,19 +48,102 @@ public class SecurityConfig {
                         ).authenticated()
                         .requestMatchers("/api/v1/admin/fairs/**")
                         .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        // TODO 인증 도메인 완성 후 SUPER_ADMIN 권한 검증(JWT)으로 되돌린다.
-                        // 지금은 다른 관리자 API들과 동일하게 X-User-Id 임시 헤더 방식(permitAll)을 쓴다 -
-                        // AuditLogController 등 /api/admin/** 하위 컨트롤러가 이미 이 전제로 작성돼 있다.
+                        // 시스템 전체를 가로지르는 관리자 API(감사 로그, 전체 대시보드) - SUPER_ADMIN 전용.
+                        // AuditLogController, AdminDashboardController가 여기 해당한다.
+                        .requestMatchers("/api/admin/**")
+                        .hasRole("SUPER_ADMIN")
                         //참가업체 부스 운영 API(부스 방문 스캔 등). 부스 소유 검증은 서비스 계층에서 한 번 더 한다.
                         .requestMatchers("/api/v1/vendor/**")
                         .hasRole("VENDOR")
+                        // Notification 도메인 - JWT로 전환됨(@AuthenticationPrincipal). 미인증 요청이
+                        // permitAll로 통과하면 userId가 null이 되어 조회/처리가 깨지므로 로그인만 요구한다.
+                        // POST(다른 도메인 이벤트로 알림을 생성)는 사용자 인증 대상이 아니라 여기서 제외한다.
+                        .requestMatchers(HttpMethod.GET, "/api/notifications", "/api/notifications/unread-count")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/notifications/*/read", "/api/notifications/read-all")
+                        .authenticated()
                         //로그인한 본인만 비밀번호 변경 가능 - anyRequest().permitAll()보다 먼저 와야 함
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/password/change").authenticated()
+                        //로그인한 본인만 내 프로필 조회/수정 가능
+                        .requestMatchers("/api/users/me").authenticated()
+                        //로그인한 본인만 반려동물 등록/조회/수정/삭제 가능
+                        .requestMatchers("/api/users/me/pets/**").authenticated()
                         //TODO 추후 role 기반 가드 확장
                         .requestMatchers(HttpMethod.POST, "/api/files/presigned-upload").authenticated()
                         //user 권한을 필요
                         //.requestMatchers("/user").hasAuthority("ROLE_USER")
                         //TODO 추후 구현
+                        // Fair 도메인 - 신청자 API(로그인만 필요, 본인 신청 여부는 서비스 계층에서 검증)
+                        .requestMatchers(HttpMethod.POST, "/api/fairs").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/mine", "/api/fairs/*/mine").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*").authenticated()
+                        // Fair 도메인 - 공개된 행사 요약 조회는 인증 없이 허용(티켓 예매 화면 등).
+                        // "/api/fairs/*"(SUPER_ADMIN 전용, 아래)와 세그먼트 수가 달라 원래도 안 겹치지만
+                        // (Ant *는 세그먼트 하나만 매치), 의도를 명시하려고 따로 적어둔다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/public").permitAll()
+                        // Fair 도메인 - 공개 행사 목록(지난/예정 행사) 조회도 인증 없이 허용.
+                        // "/api/fairs/*"(SUPER_ADMIN 전용, 바로 아래)와 세그먼트 패턴이 겹쳐서
+                        // ("/api/fairs/public"도 "/api/fairs/*"에 매치됨) 반드시 그 규칙보다 먼저 와야 한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/public").permitAll()
+                        // Fair 도메인 - SUPER_ADMIN 전용(신청서 심사 큐/상세 조회, 심사, 공개, 취소 신청 검토).
+                        // "/api/fairs"(세그먼트 없음)는 "/api/fairs/*"에 안 걸려서 따로 적어야 한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/review", "/api/fairs/*/publish").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/fair-cancel-requests/*/review").hasRole("SUPER_ADMIN")
+                        // Fair 도메인 - 취소 신청 큐(전체 행사를 가로질러 조회, fairId 없이 접근).
+                        // "/api/fairs/*/fair-cancel-requests"와 경로 자체가 다르므로(prefix가
+                        // "/api/fairs"가 아니라 "/api/fair-cancel-requests") 서로 안 겹친다.
+                        .requestMatchers(HttpMethod.GET, "/api/fair-cancel-requests").hasRole("SUPER_ADMIN")
+                        // Fair 도메인 - 행사 관리자(EVENT_ADMIN)가 자기 행사의 취소를 신청/이력 조회.
+                        // role만으로는 "그 행사 담당자인지"까지 못 가린다(다른 행사 EVENT_ADMIN이
+                        // 남의 행사 취소를 신청하거나 이력을 볼 수 있음) - FairAdminAccessGuard가
+                        // 서비스 계층에서 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/fair-cancel-requests").hasRole("EVENT_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/fair-cancel-requests").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Fair 도메인 - 홀/부스 슬롯/운영일 관리(그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN).
+                        // "/api/fairs/*/halls/**"가 BoothSlotController 경로(.../halls/{hallId}/booth-slots)도
+                        // 함께 덮는다. 담당 fair인지(소유자 검증)는 FairAdminAccessGuard가 서비스 계층에서
+                        // 한 번 더 확인한다.
+                        .requestMatchers("/api/fairs/*/halls/**").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/api/fairs/*/fair-dates/**").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Statistics 도메인 - 행사 하나에 대한 예약/방문 통계 대시보드(ReservationDashboardController).
+                        // halls/fair-dates와 같은 이유로 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 접근.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/fairs/*/reservation-dashboard",
+                                "/api/fairs/*/reservation-dashboard/stream",
+                                "/api/fairs/*/qr-issuance-summary",
+                                "/api/fairs/*/hourly-entry-trend",
+                                "/api/fairs/*/booth-visit-stats",
+                                "/api/fairs/*/booth-visit-pattern",
+                                "/api/fairs/*/visit-stats",
+                                "/api/fairs/*/visit-stats/export"
+                        ).hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // FairPaymentContractController(/internal/api/v1/**)는 사용자 JWT가 아니라
+                        // 도메인 간 내부 호출자 헤더(X-Internal-Caller)로 별도 인증하므로 여기서 다루지 않는다.
+                        // Business 도메인 - 로그인만 하면 누구나(등록 시 USER->VENDOR 승격은 서비스 계층에서 처리)
+                        .requestMatchers("/api/businesses", "/api/businesses/*").authenticated()
+                        // RecruitNotice 도메인 - 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN. 담당 fair인지는
+                        // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.PUT, "/api/fairs/*/recruit-notice").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Application 도메인 - 신청/취소요청 제출·조회는 로그인만 필요(본인 소유 여부는 서비스 계층에서 검증)
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/applications").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/applications").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/applications/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/applications/*/cancel-requests").authenticated()
+                        // Application 도메인 - 행사 담당자 전용(EVENT_ADMIN/SUPER_ADMIN). 담당 fair인지는
+                        // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/applications").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/approve").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/reject").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/cancel-requests").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel-requests/approve").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/applications/*/cancel-requests/reject").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Booth 도메인 - 로그인만 하면 누구나 접근 가능(본인 소유 부스인지는 서비스 계층에서 검증)
+                        .requestMatchers(HttpMethod.PUT, "/api/booths/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/booths/*/items").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/booth-items/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/booth-items/*").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->
