@@ -88,7 +88,12 @@
             biz.name AS businessName,
             bs.slot_number AS slotNumber,
             bs.pos_x AS posX,
-            bs.pos_y AS posY
+            bs.pos_y AS posY,
+            bs.width AS width,
+            bs.height AS height,
+            h.hall_id AS hallId,
+            h.name AS hallName,
+            h.floor_plan_image_url AS floorPlanImageUrl
         FROM booth bt
         JOIN business biz ON biz.business_id = bt.business_id
         JOIN application_slot aps ON aps.application_id = bt.application_id

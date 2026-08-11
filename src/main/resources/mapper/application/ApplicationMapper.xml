@@ -30,6 +30,9 @@
             bs.width AS width,
             bs.height AS height,
             bs.price AS price,
+            h.hall_id AS hallId,
+            h.name AS hallName,
+            h.floor_plan_image_url AS floorPlanImageUrl,
             EXISTS (
                 SELECT 1
                 FROM application_slot aps

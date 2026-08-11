@@ -1,6 +1,7 @@
 package com.ms.petopia.api.payment.service;
 
 
+import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
@@ -15,6 +16,7 @@ import com.ms.petopia.api.payment.dto.TossPaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -68,6 +70,12 @@ class PaymentServiceTest {
 
     @Mock
     private AuditLogService auditLogService;
+
+    @Mock
+    private ApplicationService applicationService;
+
+    @Mock
+    private RefundService refundService;
 
     // PaymentService 생성자가 PaymentMapper를 받는 구조여야 동작함
     // (@RequiredArgsConstructor 패턴).
