@@ -29,6 +29,7 @@ public class PasswordService {
 
     private final AuthMapper authMapper;
     private final PasswordEncoder passwordEncoder;
+    private final LoginAttemptStore loginAttemptStore;
 
     //비밀번호 변경(마이페이지용)
     @Transactional
@@ -108,6 +109,10 @@ public class PasswordService {
 
         String newToken = passwordEncoder.encode(newPassword);
         authMapper.updateUserPassword(userToken.getUserId(), newToken);
+
+        //로그인 실패 잠금도 같이 풀어준다
+        User user = authMapper.selectUserById(userToken.getUserId());
+        loginAttemptStore.reset(user.getEmail());
     }
 
 
