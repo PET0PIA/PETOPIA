@@ -6,6 +6,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -44,8 +45,11 @@ public class FairOpeningFeePaymentContractClient {
 
     /**
      * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 행사가 존재하지 않거나
-     *         개설비 결제 가능한 상태가 아닐 때(행사 도메인이 4xx로 거부한 경우 전부 이걸로 통일 -
-     *         {@link ReservationPaymentContractClient#getPaymentContext}와 동일한 처리 방식)
+     *         개설비 결제 가능한 상태가 아닐 때(행사 도메인이 4xx로 거부한 경우)
+     * @throws CommonException {@link ErrorCode#PAYMENT_GATEWAY_UNAVAILABLE} 행사 도메인이 5xx를
+     *         반환했거나(그쪽 장애) 연결 자체가 안 됐을 때(타임아웃 포함) - 4xx 업무 거부와 달리
+     *         이건 우리 쪽 문제가 아니라서 "결제 불가"(409)가 아니라 "일시적으로 이용 불가"(503)로
+     *         구분한다
      */
     public FairOpeningFeePaymentContext getPaymentContext(Long fairId) {
         try {
@@ -54,7 +58,12 @@ public class FairOpeningFeePaymentContractClient {
                     .retrieve()
                     .body(FairOpeningFeePaymentContext.class);
         } catch (RestClientResponseException e) {
-            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE, e);
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE, e);
+            }
+            throw new CommonException(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE, e);
+        } catch (ResourceAccessException e) {
+            throw new CommonException(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE, e);
         }
     }
 }
