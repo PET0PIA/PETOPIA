@@ -23,4 +23,12 @@
         )
     </select>
 
+    <select id="selectByAdminUserId" resultType="com.ms.petopia.api.fair.dto.AssignedFairSummary">
+        SELECT f.fair_id AS fairId, f.name
+        FROM fair_admin_assignments a
+        JOIN fairs f ON f.fair_id = a.fair_id
+        WHERE a.admin_user_id = #{adminUserId}
+        ORDER BY f.fair_id DESC
+    </select>
+
 </mapper>

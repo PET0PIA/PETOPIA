@@ -85,6 +85,9 @@ public class SecurityConfig {
                         // "/api/fairs/*"(SUPER_ADMIN 전용, 바로 아래)와 세그먼트 패턴이 겹쳐서
                         // ("/api/fairs/public"도 "/api/fairs/*"에 매치됨) 반드시 그 규칙보다 먼저 와야 한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/public").permitAll()
+                        // Fair 도메인 - EVENT_ADMIN 전용: 자신에게 배정된 행사 목록.
+                        // "/api/fairs/*"(SUPER_ADMIN 전용, 바로 아래)와 패턴이 겹치므로 먼저 와야 한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/mine-assigned").hasRole("EVENT_ADMIN")
                         // Fair 도메인 - SUPER_ADMIN 전용(신청서 심사 큐/상세 조회, 심사, 공개, 취소 신청 검토).
                         // "/api/fairs"(세그먼트 없음)는 "/api/fairs/*"에 안 걸려서 따로 적어야 한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs").hasRole("SUPER_ADMIN")

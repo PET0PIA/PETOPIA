@@ -69,6 +69,8 @@ public class Fair {
     private LocalDateTime reviewedAt;
 
     // ===== 결제/공개/취소 =====
+    /** 승인 시 관리자가 정한 개설비 금액(원). 승인 전에는 null */
+    private Long openingFeeAmount;
     /** 개설비 결제 기한. 초과 시 EXPIRED */
     private LocalDateTime paymentDueAt;
     private LocalDateTime publicScheduledAt;

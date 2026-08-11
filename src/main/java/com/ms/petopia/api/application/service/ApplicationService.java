@@ -735,6 +735,25 @@ public class ApplicationService {
     }
 
     /*
+     * 결제 도메인이 Toss 승인을 부르기 전에 먼저 이 메서드로 신청 상태를 확인한다.
+     * 이미 취소/반려된 신청이면 카드 승인 자체를 시도하지 않고 여기서 막는다
+     * (confirmVendorPayment와 동일한 상태 체크를 승인 전 시점에도 한 번 더 하는 것).
+     */
+    public void assertPayable(Long applicationId) {
+
+        Application application = applicationMapper.selectById(applicationId);
+
+        if (application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        if (application.getStatus() != Application.Status.PAYMENT_PENDING) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
+        }
+
+    }
+
+    /*
      * 결제 도메인이 참가비(VENDOR_FEE) 결제 완료를 통지하면 신청 상태를 CONFIRMED로 전환한다.
      * 결제 도메인이 PaymentService.confirmPayment()에서 직접 이 메서드를 호출한다.
      */
@@ -794,7 +813,9 @@ public class ApplicationService {
      * (RefundService.notifyRefundCompleted와 동일한 이유).
      */
     private void notifyApplicationEvent(Long recipientUserId, NotificationType type, String title, String body) {
+
         try {
+
             notificationService.save(new SaveNotificationDto.Request(
                     recipientUserId,
                     RecipientType.VENDOR,
@@ -805,18 +826,22 @@ public class ApplicationService {
                     List.of(DeliveryChannel.IN_APP),
                     null
             ));
+
         } catch (Exception e) {
             log.error("참가 신청 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
         }
+
     }
 
     private void notifyApplicationEventAfterCommit(Long recipientUserId, NotificationType type, String title, String body) {
+
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 notifyApplicationEvent(recipientUserId, type, title, body);
             }
         });
+
     }
 
 }

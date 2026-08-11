@@ -1,8 +1,11 @@
 package com.ms.petopia.api.auth.mapper;
 
 import com.ms.petopia.api.auth.domain.FairAdminAssignment;
+import com.ms.petopia.api.fair.dto.AssignedFairSummary;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 @Mapper
 public interface FairAdminAssignmentMapper {
@@ -15,4 +18,7 @@ public interface FairAdminAssignmentMapper {
      * 검증할 때 쓴다({@code FairAdminAccessGuard} 참고).
      */
     boolean existsByAdminUserIdAndFairId(@Param("adminUserId") Long adminUserId, @Param("fairId") Long fairId);
+
+    /** 이 adminUserId에게 배정된 행사 목록(fairId + name)을 최신 행사 순으로 반환한다. */
+    List<AssignedFairSummary> selectByAdminUserId(@Param("adminUserId") Long adminUserId);
 }

@@ -1,5 +1,7 @@
 package com.ms.petopia.api.fair.controller;
 
+import com.ms.petopia.api.auth.mapper.FairAdminAssignmentMapper;
+import com.ms.petopia.api.fair.dto.AssignedFairSummary;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
@@ -45,6 +47,7 @@ import java.util.Map;
 public class FairController {
 
     private final FairService fairService;
+    private final FairAdminAssignmentMapper fairAdminAssignmentMapper;
 
     @PostMapping
     public ResponseEntity<CreateFairApplicationResponse> createApplication(
@@ -53,6 +56,14 @@ public class FairController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(fairService.createApplication(userId, request));
+    }
+
+    // SecurityConfig에서 EVENT_ADMIN role만 이 엔드포인트에 도달할 수 있게 막는다.
+    @GetMapping("/mine-assigned")
+    public List<AssignedFairSummary> getAssignedFairs(
+            @AuthenticationPrincipal Long adminUserId
+    ) {
+        return fairAdminAssignmentMapper.selectByAdminUserId(adminUserId);
     }
 
     @GetMapping("/mine")

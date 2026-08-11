@@ -1,5 +1,5 @@
-import { AlertCircle, Radio, Search } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { AlertCircle, Radio } from "lucide-react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../../api/client";
 import {
   getQrIssuanceSummary,
@@ -8,11 +8,11 @@ import {
   type QrIssuanceSummary,
   type ReservationDateSummary,
 } from "../../api/statistics";
+import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
 import { Table } from "../../components/ui/Table";
+import { useFairSelector } from "../../hooks/useFairSelector";
 
 function formatTime(time: string) {
   return time.slice(0, 5);
@@ -26,16 +26,13 @@ function entryRate(row: ReservationDateSummary): string {
 }
 
 export function ReservationStatusPage() {
-  // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [fairId, setFairId] = useState<number | null>(null);
+  const { fairId, setFairId, selectableFairs } = useFairSelector();
 
   const [summary, setSummary] = useState<ReservationDateSummary[]>([]);
   const [qrSummary, setQrSummary] = useState<QrIssuanceSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
-  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     if (fairId === null) return;
@@ -59,7 +56,7 @@ export function ReservationStatusPage() {
       .finally(() => { if (!ignore) setLoading(false); });
 
     return () => { ignore = true; };
-  }, [fairId, reloadTick]);
+  }, [fairId]);
 
   // 결제완료·취소·QR 스캔 등 예약 상태가 바뀔 때마다 서버가 최신 요약을 밀어준다.
   useEffect(() => {
@@ -76,20 +73,6 @@ export function ReservationStatusPage() {
     };
   }, [fairId]);
 
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-    if (parsed === fairId) {
-      setReloadTick((tick) => tick + 1);
-    } else {
-      setFairId(parsed);
-    }
-  }
-
   return (
     <div className="mx-auto max-w-6xl py-2">
       <PageHeader
@@ -98,19 +81,20 @@ export function ReservationStatusPage() {
         description="운영일마다 예약 상태별 건수와 QR 발급 현황을 확인해요. 예약 상태가 바뀌면 화면이 실시간으로 갱신돼요."
       />
 
-      <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="reservation-fair-id" className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</label>
-          <Input id="reservation-fair-id" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
-        </div>
-        <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
-        {fairId !== null && (
+      <FairSelectorBar
+        selectableFairs={selectableFairs}
+        fairId={fairId}
+        onFairIdChange={(id) => setFairId(id)}
+      />
+
+      {fairId !== null && (
+        <div className="mb-6 flex justify-end">
           <span className={`inline-flex min-h-11 items-center gap-1.5 rounded-button px-3 text-xs font-bold ${liveConnected ? "bg-leaf-soft text-ink" : "bg-page text-muted"}`}>
             <Radio size={13} className={liveConnected ? "animate-pulse" : undefined} />
             {liveConnected ? "실시간 연동 중" : "실시간 연결 대기 중"}
           </span>
-        )}
-      </form>
+        </div>
+      )}
 
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -119,8 +103,8 @@ export function ReservationStatusPage() {
         </div>
       )}
 
-      {fairId === null && (
-        <EmptyState title="행사 ID를 먼저 입력해 주세요." description="담당 행사의 ID를 입력하고 불러오기를 누르면 운영일별 예약 현황이 표시돼요." />
+      {fairId === null && selectableFairs.length > 0 && (
+        <EmptyState title="행사를 선택해 주세요." description="위 드롭다운에서 행사를 고르면 운영일별 예약 현황이 표시돼요." />
       )}
 
       {fairId !== null && loading && (
