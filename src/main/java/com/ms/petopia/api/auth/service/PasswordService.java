@@ -13,6 +13,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 
@@ -112,9 +114,25 @@ public class PasswordService {
         String newToken = passwordEncoder.encode(newPassword);
         authMapper.updateUserPassword(userToken.getUserId(), newToken);
 
+        //DB 커밋이 실제로 끝난 뒤에만 Redis 잠금을 풀도록 after-commit 콜백으로 예약
+        User user = authMapper.selectUserById(userToken.getUserId());
+        String email = user.getEmail();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    resetLoginAttempt(email);
+                }
+            });
+        } else {
+            resetLoginAttempt(email);
+        }
+    }
+
+    //비밀번호 재설정 성공 시 로그인 실패 카운트를 리셋. Redis 장애로 실패해도 삼키고 로그만 남긴다
+    private void resetLoginAttempt(String email) {
         try {
-            User user = authMapper.selectUserById(userToken.getUserId());
-            loginAttemptStore.reset(user.getEmail());
+            loginAttemptStore.reset(email);
         } catch (Exception e) {
             log.error("비밀번호 재설정 후 로그인 실패 카운트 리셋 실패", e);
         }
