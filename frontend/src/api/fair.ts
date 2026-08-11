@@ -87,6 +87,8 @@ export interface FairApplicationDetail {
   status: string;
   rejectReason: string | null;
   reviewedAt: string | null;
+  /** 승인 시 확정된 개설비 금액(원). 승인 전이거나 반려면 null. */
+  openingFeeAmount: number | null;
   paymentDueAt: string | null;
   createdAt: string;
   /** 취소 승인 일시(취소 아니면 null). 취소 승인은 status는 그대로 두고 이 필드만 채우므로,
@@ -231,6 +233,8 @@ export type FairReviewDecision = "APPROVE" | "REJECT";
 
 export interface ReviewFairApplicationRequest {
   decision: FairReviewDecision;
+  /** decision이 APPROVE일 때만 필수(개설비 금액, 원). */
+  openingFeeAmount?: number;
   rejectReason?: string;
 }
 
@@ -238,6 +242,7 @@ export interface ReviewFairApplicationResponse {
   fairId: number;
   status: string;
   reviewedAt: string;
+  openingFeeAmount: number | null;
   paymentDueAt: string | null;
   rejectReason: string | null;
 }

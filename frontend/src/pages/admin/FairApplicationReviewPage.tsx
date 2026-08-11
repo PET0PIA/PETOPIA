@@ -67,6 +67,9 @@ export function FairApplicationReviewPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [openingFeeAmountInput, setOpeningFeeAmountInput] = useState("");
+
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [reviewError, setReviewError] = useState<string | null>(null);
@@ -143,13 +146,52 @@ export function FairApplicationReviewPage() {
     void loadDetail(parsed);
   }
 
-  async function handleApprove() {
+  function openApproveDialog() {
+    setReviewError(null);
+    setOpeningFeeAmountInput("");
+    setApproveDialogOpen(true);
+  }
+
+  function openRejectDialog() {
+    setReviewError(null);
+    setRejectReason("");
+    setRejectDialogOpen(true);
+  }
+
+  // 승인은 되돌릴 수 없는 부수효과(관리자 계정 발급, 안내 메일)를 동반하므로, 금액을 입력받은
+  // 뒤 곧바로 API를 부르지 않고 "정말 승인할까요?" 확인 모달을 한 번 더 거친다 - 잘못 눌러도
+  // 취소할 기회를 준다.
+  async function handleApproveSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     if (!detail) return;
+    const amount = Number(openingFeeAmountInput);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      setReviewError("개설비 금액을 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+
+    const proceed = await confirm({
+      title: "행사를 승인할까요?",
+      description: `개설비 ${amount.toLocaleString("ko-KR")}원으로 승인해요. 승인하면 관리자 계정이 발급되고 신청자에게 결제 안내 메일이 발송돼요.`,
+      confirmLabel: "승인",
+      danger: false,
+    });
+    if (!proceed) return;
+
     setReviewing(true);
     setReviewError(null);
     try {
-      const result = await reviewFairApplication(detail.fairId, { decision: "APPROVE" });
-      setDetail({ ...detail, status: result.status, reviewedAt: result.reviewedAt, paymentDueAt: result.paymentDueAt, rejectReason: result.rejectReason });
+      const result = await reviewFairApplication(detail.fairId, { decision: "APPROVE", openingFeeAmount: amount });
+      setDetail({
+        ...detail,
+        status: result.status,
+        reviewedAt: result.reviewedAt,
+        openingFeeAmount: result.openingFeeAmount,
+        paymentDueAt: result.paymentDueAt,
+        rejectReason: result.rejectReason,
+      });
+      setApproveDialogOpen(false);
+      setOpeningFeeAmountInput("");
       void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
@@ -166,11 +208,25 @@ export function FairApplicationReviewPage() {
       return;
     }
 
+    const proceed = await confirm({
+      title: "신청을 반려할까요?",
+      description: "반려하면 신청자에게 반려 사유가 담긴 안내 메일이 발송돼요.",
+      confirmLabel: "반려",
+    });
+    if (!proceed) return;
+
     setReviewing(true);
     setReviewError(null);
     try {
       const result = await reviewFairApplication(detail.fairId, { decision: "REJECT", rejectReason: rejectReason.trim() });
-      setDetail({ ...detail, status: result.status, reviewedAt: result.reviewedAt, paymentDueAt: result.paymentDueAt, rejectReason: result.rejectReason });
+      setDetail({
+        ...detail,
+        status: result.status,
+        reviewedAt: result.reviewedAt,
+        openingFeeAmount: result.openingFeeAmount,
+        paymentDueAt: result.paymentDueAt,
+        rejectReason: result.rejectReason,
+      });
       setRejectDialogOpen(false);
       setRejectReason("");
       void loadQueue();
@@ -277,6 +333,7 @@ export function FairApplicationReviewPage() {
               </div>
               <p className="text-sm text-muted">신청서 #{detail.fairId} · 신청자 #{detail.applicantUserId}</p>
               {detail.rejectReason && <p className="mt-2 text-sm text-primary-strong">반려 사유: {detail.rejectReason}</p>}
+              {detail.openingFeeAmount !== null && <p className="mt-2 text-sm text-muted">개설비: {detail.openingFeeAmount.toLocaleString("ko-KR")}원</p>}
               {detail.paymentDueAt && <p className="mt-2 text-sm text-muted">개설비 결제 기한: {formatDateTime(detail.paymentDueAt)}</p>}
               {detail.publishedAt ? (
                 <p className="mt-2 flex items-center gap-1.5 text-sm font-bold text-ink">
@@ -290,8 +347,8 @@ export function FairApplicationReviewPage() {
             <div className="flex shrink-0 gap-2">
               {isPendingReview && (
                 <>
-                  <Button variant="outline" onClick={() => setRejectDialogOpen(true)} disabled={reviewing}><X size={16} />반려</Button>
-                  <Button onClick={handleApprove} disabled={reviewing}><Check size={16} />{reviewing ? "처리 중..." : "승인"}</Button>
+                  <Button variant="outline" onClick={openRejectDialog} disabled={reviewing}><X size={16} />반려</Button>
+                  <Button onClick={openApproveDialog} disabled={reviewing}><Check size={16} />승인</Button>
                 </>
               )}
               {canPublish && (
@@ -365,12 +422,35 @@ export function FairApplicationReviewPage() {
         </div>
       )}
 
+      <Dialog open={approveDialogOpen} onClose={() => setApproveDialogOpen(false)} title="신청 승인">
+        <form onSubmit={handleApproveSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="openingFeeAmountInput" className="mb-1.5 block text-sm font-bold text-ink">개설비 금액(원)<span className="ml-1 text-primary-strong">*</span></label>
+            <Input
+              id="openingFeeAmountInput"
+              type="number"
+              min={1}
+              value={openingFeeAmountInput}
+              onChange={(event) => setOpeningFeeAmountInput(event.target.value)}
+              placeholder="예: 500000"
+              required
+            />
+          </div>
+          {reviewError && <p className="text-sm font-bold text-primary-strong">{reviewError}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setApproveDialogOpen(false)}>취소</Button>
+            <Button type="submit" disabled={reviewing}>{reviewing ? "처리 중..." : "승인"}</Button>
+          </div>
+        </form>
+      </Dialog>
+
       <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} title="신청 반려">
         <form onSubmit={handleReject} className="space-y-4">
           <div>
             <label htmlFor="rejectReason" className="mb-1.5 block text-sm font-bold text-ink">반려 사유<span className="ml-1 text-primary-strong">*</span></label>
             <Textarea id="rejectReason" value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="신청자에게 안내할 반려 사유를 입력해 주세요." required />
           </div>
+          {reviewError && <p className="text-sm font-bold text-primary-strong">{reviewError}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setRejectDialogOpen(false)}>취소</Button>
             <Button type="submit" disabled={reviewing}>{reviewing ? "처리 중..." : "반려 확정"}</Button>

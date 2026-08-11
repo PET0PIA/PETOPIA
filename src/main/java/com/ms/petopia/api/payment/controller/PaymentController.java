@@ -1,7 +1,6 @@
 package com.ms.petopia.api.payment.controller;
 
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
-import com.ms.petopia.api.payment.dto.OpeningFeePaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
@@ -85,16 +84,16 @@ public class PaymentController {
                 .body(paymentService.payReservationDeposit(reservationId, userId));
     }
 
-    // 행사개설비 결제 생성. fair 테이블은 조회하지 않고, 요청 바디로 받은 금액을
-    // 그대로 신뢰해서 PENDING 상태 결제 건을 만든다(승인은 참가비와 동일하게 별도 confirm 호출).
+    // 행사개설비 결제 생성. 예약금과 동일하게 요청 바디가 없다 - 금액은 행사 도메인의 내부
+    // 계약(FairOpeningFeePaymentContractClient)에서 승인 시 확정된 값을 조회해 쓴다
+    // (승인은 참가비와 동일하게 별도 confirm 호출).
     @PostMapping("/fairs/{fairId}/opening-payment")
     public ResponseEntity<PaymentResponse> payFairOpeningFee(
             @PathVariable Long fairId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
-            @Valid @RequestBody OpeningFeePaymentRequest request
+            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(paymentService.payFairOpeningFee(fairId, userId, request));
+                .body(paymentService.payFairOpeningFee(fairId, userId));
     }
 
     // 조건별 결제 목록(관리자용). fairId·businessId·paymentType·status 전부 선택적 필터.
