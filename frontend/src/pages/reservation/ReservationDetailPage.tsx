@@ -51,6 +51,26 @@ function formatDateTime(value: string | null) {
   return value ? value.replace("T", " ").slice(0, 16) : "-";
 }
 
+/**
+ * 취소 실패 응답을 사용자 문구로 바꾼다.
+ *
+ * R021(결제 진행 중)은 잠시 후 재시도하면 풀리는 일시적 상태라 재시도 안내를 붙인다 —
+ * 서버 메시지 그대로 두면 영구 실패처럼 읽힌다. R020은 원장이 안 맞는 상황이라 사용자가
+ * 혼자 해결할 수 없어 문의로 안내한다. 나머지(R019 마감, R013 상태)는 서버 메시지가 이미
+ * 구체적이라 그대로 보여준다.
+ */
+function cancelErrorMessage(err: unknown) {
+  if (!(err instanceof ApiError)) return "예약 취소에 실패했어요.";
+  switch (err.code) {
+    case "R021":
+      return "결제가 진행 중이라 지금은 취소할 수 없어요. 잠시 후 다시 시도해 주세요.";
+    case "R020":
+      return "환불할 결제 내역을 찾을 수 없어 취소를 진행하지 못했어요. 고객센터에 문의해 주세요.";
+    default:
+      return err.message;
+  }
+}
+
 function BackLink() {
   return (
     <Link
@@ -84,8 +104,10 @@ export function ReservationDetailPage() {
   const [qrToken, setQrToken] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
 
-  // 취소 실패(R019/R013 등) 메시지.
+  // 취소 실패(R019/R013/R020/R021 등) 메시지.
   const [actionError, setActionError] = useState<string | null>(null);
+  // 취소 성공 안내. 유료 예약이면 환불 금액까지 알려준다.
+  const [cancelNotice, setCancelNotice] = useState<string | null>(null);
 
   // 방문일 변경 다이얼로그.
   const [dateDialogOpen, setDateDialogOpen] = useState(false);
@@ -179,9 +201,9 @@ export function ReservationDetailPage() {
     );
   }
 
-  // 케밥 노출은 서버가 계산한 플래그를 그대로 쓴다.
-  // (유료 확정 취소 불가·유형/상태 규칙이 여기 반영돼 있음. 12시간 마감은 플래그에 없어
-  //  실제 변경·취소 호출 시 R018/R019로 최종 검증된다.)
+  // 케밥 노출은 서버가 계산한 플래그를 그대로 쓴다(유형·상태 규칙이 여기 반영돼 있음).
+  // 유료 확정 예약도 취소 가능하다 — 서버가 예약금을 전액 환불하고 CANCELED로 넘긴다.
+  // 12시간 마감은 플래그에 없어서, 실제 변경·취소 호출 시 R018/R019로 최종 검증된다.
   const target = reservation; // 아래 콜백에서 non-null로 쓰기 위한 지역 별칭
 
   const openChangeDialog = () => {
@@ -226,13 +248,20 @@ export function ReservationDetailPage() {
   };
 
   const handleCancel = async () => {
+    // 돈이 걸린 취소는 환불 금액을 확인 창에서 먼저 알려준다. 결제 전(PENDING_PAYMENT) 예약은
+    // 아직 받은 돈이 없어 환불이 아니라 결제 취소라, 유료여도 환불 문구를 넣지 않는다.
+    const refundExpected = target.amount > 0 && target.reservationStatus === "CONFIRMED";
     const proceed = await confirm({
       title: "예약을 취소할까요?",
-      description: `${target.fairName} (${target.visitDate}) 예약을 취소해요. 취소하면 되돌릴 수 없어요.`,
+      description: refundExpected
+        ? `${target.fairName} (${target.visitDate}) 예약을 취소해요.\n`
+          + `예약금 ${target.amount.toLocaleString()}원은 전액 환불돼요. 취소하면 되돌릴 수 없어요.`
+        : `${target.fairName} (${target.visitDate}) 예약을 취소해요. 취소하면 되돌릴 수 없어요.`,
       confirmLabel: "예약 취소",
     });
     if (!proceed) return;
     setActionError(null);
+    setCancelNotice(null);
     try {
       const res = await cancelReservation(id);
       setReservation((previous) =>
@@ -247,9 +276,14 @@ export function ReservationDetailPage() {
           : previous,
       );
       setQrToken(null);
+      setCancelNotice(
+        res.refunded && res.refundAmount !== null
+          ? `예약이 취소되고 예약금 ${res.refundAmount.toLocaleString()}원의 환불이 접수됐어요. `
+            + "카드사에 따라 영업일 기준 3~5일 이내 반영돼요."
+          : "예약이 취소됐어요.",
+      );
     } catch (err) {
-      // R019 취소 마감 / R013 취소 불가 상태
-      setActionError(err instanceof ApiError ? err.message : "예약 취소에 실패했어요.");
+      setActionError(cancelErrorMessage(err));
     }
   };
 
@@ -280,7 +314,17 @@ export function ReservationDetailPage() {
         {menuItems.length > 0 && <DropdownMenu label="관리" items={menuItems} />}
       </div>
 
-      {actionError && <p className="mb-4 text-sm font-bold text-primary-strong">{actionError}</p>}
+      {actionError && (
+        <p role="alert" className="mb-4 text-sm font-bold text-primary-strong">
+          {actionError}
+        </p>
+      )}
+
+      {cancelNotice && (
+        <p role="status" className="mb-4 rounded-card bg-leaf-soft px-4 py-3 text-sm font-bold text-ink">
+          {cancelNotice}
+        </p>
+      )}
 
       {/* 입장 QR */}
       <Card className="mb-4 p-6">
