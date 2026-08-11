@@ -95,8 +95,10 @@ public class ReservationQueryService {
         // 케밥 노출용 대략 판단. 정확한 마감(12시간 전·취소 마감)은 각 변경/취소 API가 최종 검증한다.
         // 입장 종료된 예약은 화면에서 비활성 처리하므로 두 액션 모두 !ended를 전제로 한다.
         boolean canChangeVisitDate = !ended && ADVANCE.equals(type) && CONFIRMED.equals(status);
+        // 유료 확정 예약도 취소 가능하다 — 취소 API가 예약금을 전액 환불하고 CANCELED로 전환한다
+        // (ReservationCancellationService 참고). 그래서 금액으로 가리지 않는다.
         boolean canCancel = !ended && (PENDING_PAYMENT.equals(status)
-                || (ADVANCE.equals(type) && CONFIRMED.equals(status) && row.getAmount() == 0));
+                || (ADVANCE.equals(type) && CONFIRMED.equals(status)));
         return new ReservationDetailResponse(
                 row.getReservationId(),
                 row.getReservationNo(),
