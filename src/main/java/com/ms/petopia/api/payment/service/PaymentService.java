@@ -1,5 +1,6 @@
 package com.ms.petopia.api.payment.service;
 
+import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
@@ -13,6 +14,10 @@ import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.*;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.refund.dto.RefundReason;
+import com.ms.petopia.api.refund.dto.RefundRequest;
+import com.ms.petopia.api.refund.dto.RequestedByDomain;
+import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +51,13 @@ public class PaymentService {
     private final ReservationPaymentContractClient reservationPaymentContractClient;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
+    private final ApplicationService applicationService;
+    private final RefundService refundService;
+
+    // RefundService.refund()의 actingUserId는 원래 "누가 환불을 처리했는지" 기록하는 값인데,
+    // 여기서는 사람이 아니라 시스템(이 메서드)이 자동으로 트리거하는 환불이라 실제 유저 ID가 없다.
+    // "시스템이 처리했다"는 의미의 더미 값으로 0L을 쓴다.
+    private static final Long SYSTEM_ACTOR_USER_ID = 0L;
 
     /**
      * 결제 ID로 상세 조회한다.
@@ -308,6 +320,13 @@ public class PaymentService {
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
         }
 
+        // 카드 승인을 시도하기 전에 신청서가 여전히 결제 가능한 상태(PAYMENT_PENDING)인지
+        // 먼저 확인한다. 이미 취소된 신청이면 여기서 막아서 불필요한 선점(PROCESSING)과
+        // 카드 승인 자체를 방지한다.
+        if ("VENDOR_FEE".equals(row.getPaymentType())) {
+            applicationService.assertPayable(row.getApplicationId());
+        }
+
         // 토스를 부르기 전에 먼저 선점한다. 동시에 두 요청이 여기 도달해도 이 UPDATE는
         // 원자적이라 딱 하나만 1을 받는다 — 선점 실패(0)면 토스 호출 자체를 안 하고 끝낸다.
         int claimed = paymentMapper.markProcessing(paymentId, LocalDateTime.now());
@@ -344,6 +363,28 @@ public class PaymentService {
 
         if ("RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
             notifyReservationDomain(row);
+        }
+
+        // 참가비 결제 완료를 참가업체 도메인에 통지해 신청 상태를 PAYMENT_PENDING -> CONFIRMED로
+        // 전환시키고 부스를 자동 생성시킨다.
+        if ("VENDOR_FEE".equals(row.getPaymentType())) {
+            try {
+                applicationService.confirmVendorPayment(row.getApplicationId(), row.getPaymentId(), row.getAmount());
+            } catch (CommonException e) {
+                // 카드 승인은 이미 끝나 결제는 COMPLETED로 확정됐으므로 여기서 예외를 던져
+                // 결제 응답을 실패로 되돌리지 않는다. 대신 결제와 신청서 상태가 어긋난
+                // 상황이니 자동으로 환불을 시도해서 복구한다.
+                log.error("참가비 결제 완료 통지 실패 — 신청서 상태 불일치. paymentId={}, applicationId={}",
+                        row.getPaymentId(), row.getApplicationId(), e);
+                try {
+                    refundService.refund(row.getPaymentId(), SYSTEM_ACTOR_USER_ID,
+                            new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.PAYMENT_ADMIN));
+                } catch (Exception refundEx) {
+                    // 환불까지 실패하면(정산 CONFIRMED 포함 등) 더는 자동으로 복구할 방법이
+                    // 없어 로그만 남긴다 — 운영자가 결제·신청 상태를 보고 수동으로 맞춰야 한다.
+                    log.error("자동 환불도 실패 — 수동 확인 필요. paymentId={}", row.getPaymentId(), refundEx);
+                }
+            }
         }
 
         recordPaymentCompletionAudit(row, userId);
