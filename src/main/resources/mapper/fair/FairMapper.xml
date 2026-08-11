@@ -73,7 +73,7 @@
                reservation_fee, reservation_cancel_deadline_hours, reservation_change_deadline_hours,
                manager_name, manager_phone, manager_email,
                status, reject_reason, reviewed_by, reviewed_at,
-               payment_due_at, public_scheduled_at, published_at, canceled_at,
+               opening_fee_amount, payment_due_at, public_scheduled_at, published_at, canceled_at,
                submitted_snapshot, created_at, updated_at
           FROM fairs
          WHERE fair_id = #{fairId}
@@ -89,7 +89,7 @@
                reservation_fee, reservation_cancel_deadline_hours, reservation_change_deadline_hours,
                manager_name, manager_phone, manager_email,
                status, reject_reason, reviewed_by, reviewed_at,
-               payment_due_at, public_scheduled_at, published_at, canceled_at,
+               opening_fee_amount, payment_due_at, public_scheduled_at, published_at, canceled_at,
                submitted_snapshot, created_at, updated_at
           FROM fairs
          WHERE applicant_user_id = #{applicantUserId}
@@ -128,6 +128,7 @@
             <if test="rejectReason != null">reject_reason = #{rejectReason},</if>
             <if test="reviewedBy != null">reviewed_by = #{reviewedBy},</if>
             <if test="reviewedAt != null">reviewed_at = #{reviewedAt},</if>
+            <if test="openingFeeAmount != null">opening_fee_amount = #{openingFeeAmount},</if>
             <if test="paymentDueAt != null">payment_due_at = #{paymentDueAt},</if>
             <if test="publicScheduledAt != null">public_scheduled_at = #{publicScheduledAt},</if>
             <if test="publishedAt != null">published_at = #{publishedAt},</if>
@@ -151,6 +152,7 @@
             <if test="rejectReason != null">reject_reason = #{rejectReason},</if>
             <if test="reviewedBy != null">reviewed_by = #{reviewedBy},</if>
             <if test="reviewedAt != null">reviewed_at = #{reviewedAt},</if>
+            <if test="openingFeeAmount != null">opening_fee_amount = #{openingFeeAmount},</if>
             <if test="paymentDueAt != null">payment_due_at = #{paymentDueAt},</if>
             updated_at = NOW(),
         </set>
