@@ -8,12 +8,15 @@ import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.mapper.RefundMapper;
+import com.ms.petopia.api.settlement.client.FairContractClient;
+import com.ms.petopia.api.settlement.dto.FairCancellationStatus;
 import com.ms.petopia.api.settlement.dto.SettlementItemRow;
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import com.ms.petopia.api.settlement.dto.SettlementRow;
 import com.ms.petopia.api.settlement.mapper.SettlementMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,9 +33,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -60,8 +65,31 @@ class SettlementServiceTest {
     @Mock
     private AuditLogService auditLogService;
 
+    @Mock
+    private FairContractClient fairContractClient;
+
     @InjectMocks
     private SettlementService settlementService;
+
+    /**
+     * calculate/confirm 테스트 대부분은 취소 여부 자체를 검증 대상으로 삼지 않으므로,
+     * "취소 안 됨"을 기본값으로 깔아둔다 — 취소 케이스를 검증하는 테스트만 이 스텁을
+     * 별도로 덮어쓴다. lenient인 이유는 이 스텁을 실제로 안 쓰는 테스트(예외를 먼저
+     * 던지고 끝나는 경우)에서 UnnecessaryStubbingException이 나지 않게 하기 위함.
+     */
+    @BeforeEach
+    void stubFairNotCanceledByDefault() {
+        lenient().when(fairContractClient.getCancellationStatus(anyLong()))
+                .thenReturn(notCanceledStatus(10L));
+    }
+
+    private FairCancellationStatus notCanceledStatus(Long fairId) {
+        return new FairCancellationStatus(fairId, false, null);
+    }
+
+    private FairCancellationStatus canceledStatus(Long fairId) {
+        return new FairCancellationStatus(fairId, true, LocalDateTime.of(2026, 8, 1, 0, 0));
+    }
 
     private PaymentRow vendorFeePayment(Long paymentId, long amount) {
         PaymentRow row = new PaymentRow();
@@ -170,6 +198,20 @@ class SettlementServiceTest {
                 .isEqualTo(ErrorCode.SETTLEMENT_ALREADY_EXISTS);
     }
 
+    @Test
+    @DisplayName("취소된 행사는 정산을 계산할 수 없다")
+    void calculate_취소된행사_예외를던진다() {
+        given(fairContractClient.getCancellationStatus(10L)).willReturn(canceledStatus(10L));
+
+        assertThatThrownBy(() -> settlementService.calculate(10L, 20L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_FAIR_CANCELED);
+
+        verify(settlementMapper, never()).selectByFairAndBusiness(any(), any());
+        verify(settlementMapper, never()).insert(any(SettlementRow.class));
+    }
+
     private SettlementRow pendingSettlementRow() {
         SettlementRow row = new SettlementRow();
         row.setSettlementId(1L);
@@ -249,6 +291,21 @@ class SettlementServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);
+    }
+
+    @Test
+    @DisplayName("취소된 행사의 정산은 확정할 수 없다")
+    void confirm_취소된행사_예외를던진다() {
+        // Arrange: 정산 자체는 PENDING으로 정상이지만, 그 사이 행사가 취소된 상황
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+        given(fairContractClient.getCancellationStatus(10L)).willReturn(canceledStatus(10L));
+
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_FAIR_CANCELED);
+
+        verify(settlementMapper, never()).confirm(any(), any(), any(), any());
     }
 
     @Test
