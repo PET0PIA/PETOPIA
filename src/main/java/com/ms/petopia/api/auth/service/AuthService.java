@@ -124,6 +124,7 @@ public class AuthService {
             } catch (Exception e) {
                 log.error("LOGIN_FAIL 감사 로그 저장 실패", e);
             }
+            loginAttemptStore.recordFailure(request.getEmail());
             throw new CommonException(ErrorCode.INVALID_LOGIN);
         }
 

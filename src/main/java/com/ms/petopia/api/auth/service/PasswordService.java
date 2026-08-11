@@ -7,6 +7,7 @@ import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.TokenHashUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PasswordService {
@@ -110,9 +112,12 @@ public class PasswordService {
         String newToken = passwordEncoder.encode(newPassword);
         authMapper.updateUserPassword(userToken.getUserId(), newToken);
 
-        //로그인 실패 잠금도 같이 풀어준다
-        User user = authMapper.selectUserById(userToken.getUserId());
-        loginAttemptStore.reset(user.getEmail());
+        try {
+            User user = authMapper.selectUserById(userToken.getUserId());
+            loginAttemptStore.reset(user.getEmail());
+        } catch (Exception e) {
+            log.error("비밀번호 재설정 후 로그인 실패 카운트 리셋 실패", e);
+        }
     }
 
 

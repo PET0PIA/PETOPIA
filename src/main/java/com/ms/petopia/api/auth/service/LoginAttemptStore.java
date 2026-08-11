@@ -29,11 +29,14 @@ public class LoginAttemptStore {
     }
 
     //로그인 실패 시 호출 — 카운트 +1, 처음 생기는 키면 TTL도 설정
+    //setIfAbsent로 키 생성 + TTL 설정을 한 번에 원자적으로 처리
     public void recordFailure(String email) {
-        Long count = stringRedisTemplate.opsForValue().increment(key(email));
-        if (count != null && count == 1L) {
-            stringRedisTemplate.expire(key(email), WINDOW);
+        String key = key(email);
+        Boolean created = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", WINDOW);
+        if (Boolean.TRUE.equals(created)) {
+            return;
         }
+        stringRedisTemplate.opsForValue().increment(key);
     }
 
     //로그인 성공 시 호출 — 카운트 리셋
