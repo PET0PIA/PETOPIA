@@ -5,5 +5,5 @@ function NoticeRow({ hidden = false }: { hidden?: boolean }) {
 }
 
 export function HomeNoticeMarquee() {
-  return <div className="overflow-hidden bg-ink py-3" aria-label="공지 안내"><div className="flex w-max animate-[marquee_40s_linear_infinite]"><NoticeRow /><NoticeRow hidden /></div></div>;
+  return <div className="overflow-hidden bg-ink py-3" aria-label="공지 안내"><div className="flex w-max animate-[marquee_40s_linear_infinite] hover:[animation-play-state:paused] motion-reduce:animate-none"><NoticeRow /><NoticeRow hidden /></div></div>;
 }

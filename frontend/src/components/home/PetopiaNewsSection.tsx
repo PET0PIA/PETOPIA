@@ -13,7 +13,7 @@ export function PetopiaNewsSection() {
       <SectionHeader title="PETOPIA 소식" description="공지와 이벤트를 확인하세요" centered />
       <div className="mb-5 flex flex-wrap justify-center gap-2">
         {FILTERS.map((filter) => (
-          <button key={filter} type="button" onClick={() => setActive(filter)} className={`rounded-pill px-3 py-1.5 text-sm font-medium transition ${active === filter ? "bg-primary text-white" : "bg-surface-alt text-muted hover:bg-line"}`}>
+          <button key={filter} type="button" onClick={() => setActive(filter)} aria-pressed={active === filter} className={`rounded-pill px-3 py-1.5 text-sm font-medium transition ${active === filter ? "bg-primary text-white" : "bg-surface-alt text-muted hover:bg-line"}`}>
             {filter}
           </button>
         ))}
