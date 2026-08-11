@@ -69,10 +69,15 @@ function validate(form: FormState, selectedSlotIds: number[]): string[] {
   if (selectedSlotIds.length === 0) errors.push("부스 슬롯을 1개 이상 선택해 주세요.");
   if (selectedSlotIds.length > MAX_SLOTS) errors.push(`부스 슬롯은 최대 ${MAX_SLOTS}개까지 선택할 수 있어요.`);
   if (form.purpose.trim() === "") errors.push("참가 목적을 입력해 주세요.");
+  else if (form.purpose.length > 200) errors.push("참가 목적은 200자 이하로 입력해 주세요.");
   if (form.itemsDesc.trim() === "") errors.push("판매·전시 품목을 입력해 주세요.");
+  else if (form.itemsDesc.length > 500) errors.push("판매·전시 품목은 500자 이하로 입력해 주세요.");
   if (form.managerName.trim() === "") errors.push("신청 담당자명을 입력해 주세요.");
+  else if (form.managerName.length > 50) errors.push("신청 담당자명은 50자 이하로 입력해 주세요.");
   if (form.managerPhone.trim() === "") errors.push("신청 담당자 연락처를 입력해 주세요.");
+  else if (form.managerPhone.length > 20) errors.push("신청 담당자 연락처는 20자 이하로 입력해 주세요.");
   if (form.managerEmail.trim() === "") errors.push("신청 담당자 이메일을 입력해 주세요.");
+  else if (form.managerEmail.length > 100) errors.push("신청 담당자 이메일은 100자 이하로 입력해 주세요.");
   if (!form.agreedTerms) errors.push("이용약관에 동의해야 신청할 수 있어요.");
   return errors;
 }
@@ -294,11 +299,11 @@ export function ApplicationSubmitPage() {
           <Card className="space-y-5 p-6">
             <div>
               {label("purpose", "참가 목적", true)}
-              <Textarea id="purpose" value={form.purpose} onChange={(event) => update("purpose", event.target.value)} placeholder="이 행사에 참가하려는 목적을 입력해 주세요." />
+              <Textarea id="purpose" value={form.purpose} onChange={(event) => update("purpose", event.target.value)} placeholder="이 행사에 참가하려는 목적을 입력해 주세요." maxLength={200} />
             </div>
             <div>
               {label("itemsDesc", "판매·전시 품목", true)}
-              <Textarea id="itemsDesc" value={form.itemsDesc} onChange={(event) => update("itemsDesc", event.target.value)} placeholder="부스에서 판매하거나 전시할 품목을 입력해 주세요." />
+              <Textarea id="itemsDesc" value={form.itemsDesc} onChange={(event) => update("itemsDesc", event.target.value)} placeholder="부스에서 판매하거나 전시할 품목을 입력해 주세요." maxLength={500} />
             </div>
             <AttachmentUploadField
               label="첨부파일 (선택)"
@@ -314,15 +319,15 @@ export function ApplicationSubmitPage() {
             <div className="grid gap-5 sm:grid-cols-3">
               <div>
                 {label("managerName", "담당자 이름", true)}
-                <Input id="managerName" value={form.managerName} onChange={(event) => update("managerName", event.target.value)} required />
+                <Input id="managerName" value={form.managerName} onChange={(event) => update("managerName", event.target.value)} maxLength={50} required />
               </div>
               <div>
                 {label("managerPhone", "담당자 연락처", true)}
-                <Input id="managerPhone" value={form.managerPhone} onChange={(event) => update("managerPhone", event.target.value)} placeholder="010-0000-0000" required />
+                <Input id="managerPhone" value={form.managerPhone} onChange={(event) => update("managerPhone", event.target.value)} placeholder="010-0000-0000" maxLength={20} required />
               </div>
               <div>
                 {label("managerEmail", "담당자 이메일", true)}
-                <Input id="managerEmail" type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} required />
+                <Input id="managerEmail" type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} maxLength={100} required />
               </div>
             </div>
           </Card>
