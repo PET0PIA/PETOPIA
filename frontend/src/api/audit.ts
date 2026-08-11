@@ -1,5 +1,4 @@
 import { apiClient } from "./client";
-import { TEMP_USER_ID_HEADER, TEMP_APPLICANT_USER_ID } from "./fair";
 
 export type ActorType = "USER" | "ADMIN" | "SYSTEM" | "PAYMENT";
 export type TargetType = "ACCOUNT" | "FAIR" | "RESERVATION" | "SETTLEMENT" | "COMMISSION_RATE";
@@ -48,7 +47,7 @@ export interface AuditLogQuery {
  * 백엔드가 targetType+targetId / actorUserId / actionType 중 하나만 단일로 받으므로
  * 여기서도 채워진 조건 하나만 쿼리스트링에 실어 보낸다.
  */
-export function getAuditLogs(query: AuditLogQuery, requesterId: number = TEMP_APPLICANT_USER_ID) {
+export function getAuditLogs(query: AuditLogQuery) {
   const params = new URLSearchParams();
   if (query.targetType && query.targetId !== undefined) {
     params.set("targetType", query.targetType);
@@ -61,7 +60,5 @@ export function getAuditLogs(query: AuditLogQuery, requesterId: number = TEMP_AP
   params.set("page", String(query.page ?? 0));
   params.set("size", String(query.size ?? 20));
 
-  return apiClient.get<AuditLogListResponse>(`/api/admin/audit-logs?${params.toString()}`, {
-    headers: { [TEMP_USER_ID_HEADER]: String(requesterId) },
-  });
+  return apiClient.get<AuditLogListResponse>(`/api/admin/audit-logs?${params.toString()}`);
 }

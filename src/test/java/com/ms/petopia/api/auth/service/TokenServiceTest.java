@@ -80,6 +80,23 @@ class TokenServiceTest {
     }
 
     @Test
+    void refresh_정지된계정이면_ACCOUNT_INACTIVE를던지고_새토큰을발급하지않는다() {
+        String hash = TokenHashUtil.sha256(RAW_REFRESH_TOKEN);
+        given(refreshTokenStore.consumeUserId(hash)).willReturn(USER_ID);
+        given(authMapper.selectUserById(USER_ID)).willReturn(inactiveUser());
+
+        assertThatThrownBy(() -> tokenService.refresh(RAW_REFRESH_TOKEN))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.ACCOUNT_INACTIVE);
+
+        //기존 토큰은 consumeUserId 시점에 이미 지워졌고, 정지 계정이라 새 토큰도 발급되지 않아야 함
+        verify(jwtTokenProvider, never()).generateAccessToken(any(), any());
+        verify(jwtTokenProvider, never()).generateRefreshToken(any());
+        verify(refreshTokenStore, never()).save(any(), any(), any());
+    }
+
+    @Test
     void logout_토큰을해시해서revoke한다() {
         String hash = TokenHashUtil.sha256(RAW_REFRESH_TOKEN);
 
@@ -92,6 +109,15 @@ class TokenServiceTest {
         return User.builder()
                 .userId(USER_ID)
                 .role("USER")
+                .status("ACTIVE")
+                .build();
+    }
+
+    private User inactiveUser() {
+        return User.builder()
+                .userId(USER_ID)
+                .role("USER")
+                .status("INACTIVE")
                 .build();
     }
 }

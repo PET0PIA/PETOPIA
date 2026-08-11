@@ -93,7 +93,7 @@ export function BoothLayoutEditPage() {
   const [boothLayoutVersion, setBoothLayoutVersion] = useState<number | null>(null);
   const [drafts, setDrafts] = useState<DraftSlot[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -107,8 +107,6 @@ export function BoothLayoutEditPage() {
     if (!paramsValid) return;
     let ignore = false;
 
-    setLoading(true);
-    setLoadError(null);
     Promise.all([getHalls(fairId), getBoothSlots(fairId, hallId)])
       .then(([halls, layout]) => {
         if (ignore) return;
@@ -238,6 +236,8 @@ export function BoothLayoutEditPage() {
   async function handleReset() {
     if (dirty && !(await confirm({ description: "저장하지 않은 변경사항을 모두 되돌릴까요?", confirmLabel: "되돌리기" }))) return;
     setFormError(null);
+    setLoading(true);
+    setLoadError(null);
     setReloadTick((tick) => tick + 1);
   }
 
@@ -433,8 +433,9 @@ export function BoothLayoutEditPage() {
                 </div>
 
                 <div>
-                  <span className="mb-1.5 block text-sm font-bold text-ink">부스 번호<span className="ml-1 text-primary-strong">*</span></span>
+                  <label htmlFor="slotNumber" className="mb-1.5 block text-sm font-bold text-ink">부스 번호<span className="ml-1 text-primary-strong">*</span></label>
                   <Input
+                    id="slotNumber"
                     value={selected.slotNumber}
                     onChange={(event) => updateDraft(selected.key, { slotNumber: event.target.value })}
                     placeholder="예: A-01"
@@ -443,8 +444,9 @@ export function BoothLayoutEditPage() {
                 </div>
 
                 <div>
-                  <span className="mb-1.5 block text-sm font-bold text-ink">가격(원)<span className="ml-1 text-primary-strong">*</span></span>
+                  <label htmlFor="slotPrice" className="mb-1.5 block text-sm font-bold text-ink">가격(원)<span className="ml-1 text-primary-strong">*</span></label>
                   <Input
+                    id="slotPrice"
                     type="number"
                     min={0}
                     step={1000}
@@ -455,8 +457,9 @@ export function BoothLayoutEditPage() {
                 </div>
 
                 <div>
-                  <span className="mb-1.5 block text-sm font-bold text-ink">메모</span>
+                  <label htmlFor="slotMemo" className="mb-1.5 block text-sm font-bold text-ink">메모</label>
                   <Textarea
+                    id="slotMemo"
                     value={selected.memo}
                     onChange={(event) => updateDraft(selected.key, { memo: event.target.value })}
                     placeholder="전기 사용 가능, 코너 자리 등"

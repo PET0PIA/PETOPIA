@@ -3,8 +3,11 @@ package com.ms.petopia.api.audit.service;
 import com.ms.petopia.api.audit.dto.AuditLogListResponse;
 import com.ms.petopia.api.audit.dto.AuditLogRow;
 import com.ms.petopia.api.audit.mapper.AuditLogMapper;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -13,6 +16,7 @@ import java.util.List;
 public class AuditLogQueryService {
     private final AuditLogMapper auditLogMapper;
 
+    @Transactional(readOnly = true)
     public AuditLogListResponse query(
             String targetType,
             Long targetId,
@@ -21,6 +25,9 @@ public class AuditLogQueryService {
             int page,
             int size
     ){
+        targetType = (targetType != null && !targetType.isBlank()) ? targetType.strip() : null;
+        actionType = (actionType != null && !actionType.isBlank()) ? actionType.strip() : null;
+
         long offset = (long) page * size;
         List<AuditLogRow> items;
         long total;
@@ -35,8 +42,7 @@ public class AuditLogQueryService {
             items = auditLogMapper.selectByActionType(actionType, offset, size);
             total = auditLogMapper.countByActionType(actionType);
         } else {
-            items = List.of();
-            total = 0;
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE, "targetType+targetId, actorUserId, actionType 중 하나는 필수입니다.");
         }
         boolean hasNext = offset + items.size() < total;
         return new AuditLogListResponse(items, page, size, total, hasNext);

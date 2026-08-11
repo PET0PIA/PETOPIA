@@ -1,17 +1,18 @@
 package com.ms.petopia.api.application.service;
 
-import com.ms.petopia.api.application.domain.Application;
-import com.ms.petopia.api.application.domain.ApplicationCancelRequest;
-import com.ms.petopia.api.application.domain.ApplicationForm;
-import com.ms.petopia.api.application.domain.ApplicationSlot;
+import com.ms.petopia.api.application.domain.*;
 import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
 import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
+import com.ms.petopia.api.booth.domain.Booth;
+import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.fair.service.BoothSlotService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -54,6 +55,9 @@ public class ApplicationService {
     private final StorageService storageService;
     private final RefundService refundService;
     private final NotificationService notificationService;
+    private final BoothMapper boothMapper;
+    private final BoothSlotService boothSlotService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -77,6 +81,9 @@ public class ApplicationService {
         Application application = saveApplication(fairId, request);
         ApplicationForm form = saveApplicationForm(application.getApplicationId(), request);
         saveApplicationSlots(application.getApplicationId(), request.getBoothSlotIds(), slotsById);
+
+        // 슬롯 잠그기
+        lockSlots(application.getApplicationId());
 
         // 재조회 후 응답 조립
         Application saved = applicationMapper.selectById(application.getApplicationId());
@@ -351,20 +358,20 @@ public class ApplicationService {
     }
 
     // 담당 행사의 신청 목록 조회 (행사 담당자용)
-    public List<ApplicationReviewSummaryResponse> getApplicationsForFair(Long adminUserId, Long fairId, String status) {
+    public List<ApplicationReviewSummaryResponse> getApplicationsForFair(Long fairId, String status) {
 
         // 이 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
 
         return applicationMapper.selectApplicationsByFair(fairId, status);
 
     }
 
     // 담당 행사의 취소 요청 목록 조회 (행사 담당자용)
-    public List<ApplicationCancelRequestSummaryResponse> getCancelRequestsForFair(Long adminUserId, Long fairId, String status) {
+    public List<ApplicationCancelRequestSummaryResponse> getCancelRequestsForFair(Long fairId, String status) {
 
         // 이 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, fairId);
+        fairAdminAccessGuard.checkAssigned(fairId);
 
         return applicationMapper.selectCancelRequestsByFair(fairId, status);
 
@@ -372,7 +379,7 @@ public class ApplicationService {
 
     // 참가 신청서 승인 (행사 담당자용)
     @Transactional
-    public ApplicationReviewResultResponse approveApplication(Long adminUserId, Long applicationId, ApplicationApproveRequest request) {
+    public ApplicationReviewResultResponse approveApplication(Long applicationId, ApplicationApproveRequest request) {
 
         // 신청 존재 확인
         Application application = applicationMapper.selectById(applicationId);
@@ -382,7 +389,7 @@ public class ApplicationService {
         }
 
         // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, application.getFairId());
+        fairAdminAccessGuard.checkAssigned(application.getFairId());
 
         // 심사 대기 상태인지 확인 (이미 승인/반려된 신청서는 재처리 불가)
         if(application.getStatus() != Application.Status.PENDING_REVIEW) {
@@ -426,7 +433,7 @@ public class ApplicationService {
 
     // 참가 신청서 반려 (행사 담당자용)
     @Transactional
-    public ApplicationReviewResultResponse rejectApplication(Long adminUserId, Long applicationId, ApplicationRejectRequest request) {
+    public ApplicationReviewResultResponse rejectApplication(Long applicationId, ApplicationRejectRequest request) {
 
         // 신청 존재 확인
         Application application = applicationMapper.selectById(applicationId);
@@ -436,7 +443,7 @@ public class ApplicationService {
         }
 
         // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, application.getFairId());
+        fairAdminAccessGuard.checkAssigned(application.getFairId());
 
         // 심사 대기 상태인지 확인
         if(application.getStatus() != Application.Status.PENDING_REVIEW) {
@@ -460,6 +467,9 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW);
         }
 
+        // 슬롯 잠금 풀기
+        unlockSlots(applicationId);
+
         // 알림
         Business business = businessMapper.selectById(application.getBusinessId());
 
@@ -478,19 +488,20 @@ public class ApplicationService {
 
     }
 
-    // 담당자 권한 확인 공용 헬퍼
-    private void verifyFairAdmin(Long adminUserId, Long fairId) {
+    // 신청이 선택한 슬롯 전부를 fair 도메인에 잠금 요청한다(제출 시점부터 배치 편집기에서 못 건드리게)
+    private void lockSlots(Long applicationId) {
 
-        Long fairAdminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
-
-        // 담당자가 아예 배정 안 된 행사인 경우
-        if(fairAdminUserId == null) {
-            throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "담당자가 배정되지 않은 행사입니다.");
+        for (BoothSlotHallRef ref : applicationMapper.selectSlotHallRefsByApplicationId(applicationId)) {
+            boothSlotService.lockBoothSlot(ref.getHallId(), ref.getBoothSlotId());
         }
 
-        // 담당자는 있지만 요청자 본인이 아닌 경우
-        if(!fairAdminUserId.equals(adminUserId)) {
-            throw new CommonException(ErrorCode.APPLICATION_ACCESS_DENIED, "본인이 담당하는 행사가 아닙니다.");
+    }
+
+    // 신청이 더 이상 슬롯을 점유하지 않게 됐을 때(반려·취소) fair 도메인에 잠금 해제를 요청한다
+    private void unlockSlots(Long applicationId) {
+
+        for (BoothSlotHallRef ref : applicationMapper.selectSlotHallRefsByApplicationId(applicationId)) {
+            boothSlotService.unlockBoothSlot(ref.getHallId(), ref.getBoothSlotId());
         }
 
     }
@@ -561,7 +572,7 @@ public class ApplicationService {
         }
 
         // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, application.getFairId());
+        fairAdminAccessGuard.checkAssigned(application.getFairId());
 
         // 처리 대기 중인 취소 요청 존재 확인
         ApplicationCancelRequest cancelRequest = applicationMapper.selectPendingCancelRequest(applicationId);
@@ -584,6 +595,19 @@ public class ApplicationService {
 
         if(applicationUpdated == 0) {
             throw new CommonException(ErrorCode.APPLICATION_NOT_CANCELABLE);
+        }
+
+        // 슬롯 잠금 풀기
+        unlockSlots(applicationId);
+
+        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
+        boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
+
+        if(wasConfirmed) {
+
+            boothMapper.deleteBoothItemsByApplicationId(applicationId);
+            boothMapper.deleteBoothByApplicationId(applicationId);
+
         }
 
         // 결제가 있었다면(CONFIRMED 상태였던 경우) 환불 처리. PAYMENT_PENDING 상태에서 취소된 경우 결제가 없어 null.
@@ -609,6 +633,7 @@ public class ApplicationService {
                 .status(ApplicationCancelRequest.Status.APPROVED.name())
                 .applicationStatus(Application.Status.CANCELED.name())
                 .decidedAt(decidedAt)
+                .boothDeleted(wasConfirmed)
                 .build();
         
     }
@@ -624,6 +649,14 @@ public class ApplicationService {
     @Transactional
     public boolean cancelApplicationForCanceledFair(Long applicationId) {
 
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            return false;
+        }
+
+        boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
+
         // 락 순서를 approveCancelRequest와 통일(취소요청 행 먼저)해서 교착상태 방지
         applicationMapper.lockPendingCancelRequestIfExists(applicationId);
 
@@ -631,6 +664,17 @@ public class ApplicationService {
 
         if(updated == 0) {
             return false; // 0이면 이미 다른 경로로 처리됨(동시성) - 배치 카운트에서 제외
+        }
+
+        // 슬롯 잠금 풀기
+        unlockSlots(applicationId);
+
+        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
+        if(wasConfirmed) {
+
+            boothMapper.deleteBoothItemsByApplicationId(applicationId);
+            boothMapper.deleteBoothByApplicationId(applicationId);
+
         }
 
         // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
@@ -642,7 +686,7 @@ public class ApplicationService {
 
     // 참가 취소 요청 반려 (행사 담당자용) — application.status는 그대로 유지
     @Transactional
-    public ApplicationCancelRequestResultResponse rejectCancelRequest(Long adminUserId, Long applicationId) {
+    public ApplicationCancelRequestResultResponse rejectCancelRequest(Long applicationId) {
 
         // 신청 존재 확인
         Application application = applicationMapper.selectById(applicationId);
@@ -652,7 +696,7 @@ public class ApplicationService {
         }
 
         // 이 신청이 속한 행사의 담당자가 요청자 본인인지 확인
-        verifyFairAdmin(adminUserId, application.getFairId());
+        fairAdminAccessGuard.checkAssigned(application.getFairId());
 
         // 처리 대기 중인 취소 요청 존재 확인
         ApplicationCancelRequest cancelRequest = applicationMapper.selectPendingCancelRequest(applicationId);
@@ -685,7 +729,27 @@ public class ApplicationService {
                 .status(ApplicationCancelRequest.Status.REJECTED.name())
                 .applicationStatus(application.getStatus().name())
                 .decidedAt(decidedAt)
+                .boothDeleted(false)
                 .build();
+
+    }
+
+    /*
+     * 결제 도메인이 Toss 승인을 부르기 전에 먼저 이 메서드로 신청 상태를 확인한다.
+     * 이미 취소/반려된 신청이면 카드 승인 자체를 시도하지 않고 여기서 막는다
+     * (confirmVendorPayment와 동일한 상태 체크를 승인 전 시점에도 한 번 더 하는 것).
+     */
+    public void assertPayable(Long applicationId) {
+
+        Application application = applicationMapper.selectById(applicationId);
+
+        if (application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        if (application.getStatus() != Application.Status.PAYMENT_PENDING) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
+        }
 
     }
 
@@ -732,6 +796,15 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
         }
 
+        // 결제 완료로 확정됐으니 부스 프로필을 자동 생성한다.
+        Booth booth = Booth.builder()
+                .applicationId(applicationId)
+                .businessId(application.getBusinessId())
+                .confirmedAt(LocalDateTime.now())
+                .build();
+
+        boothMapper.insertBooth(booth);
+
     }
 
     /*
@@ -740,7 +813,9 @@ public class ApplicationService {
      * (RefundService.notifyRefundCompleted와 동일한 이유).
      */
     private void notifyApplicationEvent(Long recipientUserId, NotificationType type, String title, String body) {
+
         try {
+
             notificationService.save(new SaveNotificationDto.Request(
                     recipientUserId,
                     RecipientType.VENDOR,
@@ -751,18 +826,22 @@ public class ApplicationService {
                     List.of(DeliveryChannel.IN_APP),
                     null
             ));
+
         } catch (Exception e) {
             log.error("참가 신청 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
         }
+
     }
 
     private void notifyApplicationEventAfterCommit(Long recipientUserId, NotificationType type, String title, String body) {
+
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 notifyApplicationEvent(recipientUserId, type, title, body);
             }
         });
+
     }
 
 }

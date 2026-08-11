@@ -6,6 +6,7 @@ import {
   createFairOpeningPayment,
   createReservationDepositPayment,
   createVendorFeePayment,
+  TEMP_PAYER_USER_ID,
   type PaymentDetail,
 } from "../../api/payment";
 import { Badge } from "../../components/ui/Badge";
@@ -134,7 +135,8 @@ function ConfirmSection() {
     setSubmitting(true);
     setError(null);
     try {
-      const confirmed = await confirmPayment(parsedPaymentId, paymentKey.trim());
+      // 관리자 테스트 도구라 로그인 사용자가 아니라 임시 결제자 ID로 호출한다.
+      const confirmed = await confirmPayment(parsedPaymentId, paymentKey.trim(), TEMP_PAYER_USER_ID);
       setResult(confirmed);
     } catch (err) {
       setResult(null);
@@ -176,7 +178,8 @@ function ConfirmSection() {
   );
 }
 
-// 예약금 결제. 예약이 "정원 임시선점" 상태여야 하고, 모의결제라 성공하면 바로 COMPLETED로 온다.
+// 예약금 결제. 참가비와 마찬가지로 PENDING + orderId로 응답이 오고, 실제 완료는
+// 위 "결제 승인 확정" 섹션(토스 confirm)까지 이어져야 한다.
 function ReservationDepositSection() {
   const [reservationId, setReservationId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -194,7 +197,8 @@ function ReservationDepositSection() {
     setSubmitting(true);
     setError(null);
     try {
-      const created = await createReservationDepositPayment(parsed);
+      // 관리자 테스트 도구라 로그인 사용자가 아니라 임시 결제자 ID로 호출한다.
+      const created = await createReservationDepositPayment(parsed, TEMP_PAYER_USER_ID);
       setResult(created);
     } catch (err) {
       setResult(null);
@@ -206,7 +210,7 @@ function ReservationDepositSection() {
 
   return (
     <section className="mb-10">
-      <SectionHeader title="예약금 결제 생성" description="예약이 정원 임시선점 상태이고 예약금이 0원보다 커야 해요. 모의결제라 성공 시 바로 완료 처리돼요." />
+      <SectionHeader title="예약금 결제 생성" description="예약이 결제대기 상태이고 예약금이 0원보다 커야 해요. 성공하면 PENDING 상태로 생성되고, 실제 완료는 위 승인 확정까지 필요해요." />
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
@@ -230,10 +234,10 @@ function ReservationDepositSection() {
   );
 }
 
-// 행사개설비 결제. fair 상태 검증 없이 요청 금액을 그대로 신뢰한다(모의결제, 즉시 COMPLETED).
+// 행사개설비 결제. 금액은 서버가 승인 시 확정된 fairs.opening_fee_amount를 그대로 쓴다
+// (더 이상 요청으로 금액을 받지 않음).
 function FairOpeningFeeSection() {
   const [fairId, setFairId] = useState("");
-  const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PaymentDetail | null>(null);
@@ -241,16 +245,15 @@ function FairOpeningFeeSection() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedFairId = Number(fairId);
-    const parsedAmount = Number(amount);
-    if (!Number.isInteger(parsedFairId) || parsedFairId <= 0 || !Number.isInteger(parsedAmount) || parsedAmount <= 0) {
-      setError("행사 ID와 금액 모두 1 이상의 숫자로 입력해 주세요.");
+    if (!Number.isInteger(parsedFairId) || parsedFairId <= 0) {
+      setError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
 
     setSubmitting(true);
     setError(null);
     try {
-      const created = await createFairOpeningPayment(parsedFairId, parsedAmount);
+      const created = await createFairOpeningPayment(parsedFairId);
       setResult(created);
     } catch (err) {
       setResult(null);
@@ -262,16 +265,12 @@ function FairOpeningFeeSection() {
 
   return (
     <section>
-      <SectionHeader title="행사개설비 결제 생성" description="fair 상태는 검증하지 않고 요청 금액을 그대로 써요. 완료 후 행사 상태 전이는 이번 구현 범위 밖이라 별도로 반영되지 않아요." />
+      <SectionHeader title="행사개설비 결제 생성" description="금액은 승인 시 확정된 값을 서버가 그대로 써요(개설비 결제 대기 상태의 행사만 가능). 완료 후 행사 상태 전이는 이번 구현 범위 밖이라 별도로 반영되지 않아요." />
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-3 sm:items-end">
           <div>
             <label htmlFor="of-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
             <Input id="of-fair-id" className="input-no-spinner" type="number" min={1} value={fairId} onChange={(event) => setFairId(event.target.value)} placeholder="예: test1" />
-          </div>
-          <div>
-            <label htmlFor="of-amount" className="mb-1.5 block text-sm font-bold text-ink">금액</label>
-            <Input id="of-amount" type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="예: 500000" />
           </div>
           <div>
             <Button type="submit" disabled={submitting}>

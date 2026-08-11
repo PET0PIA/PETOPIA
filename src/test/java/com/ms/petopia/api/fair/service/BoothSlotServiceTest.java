@@ -52,6 +52,9 @@ class BoothSlotServiceTest {
     @Mock
     private FairTimeProvider timeProvider;
 
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     @InjectMocks
     private BoothSlotService boothSlotService;
 
@@ -318,6 +321,97 @@ class BoothSlotServiceTest {
     @DisplayName("다른 행사 소속 홀을 조회하면 HALL_NOT_FOUND를 던진다")
     void getBoothSlots_다른행사소속홀이면_예외를_던진다() {
         assertErrorCode(() -> boothSlotService.getBoothSlots(OTHER_FAIR_ID, HALL_ID), ErrorCode.HALL_NOT_FOUND);
+    }
+
+    // ===== 잠금 =====
+
+    @Test
+    @DisplayName("잠기지 않은 슬롯을 잠그면 locked_at을 채운다")
+    void lockBoothSlot_잠기지않았으면_locked_at을_채운다() {
+        given(boothSlotMapper.selectById(SLOT_ID)).willReturn(existingSlot(null));
+
+        boothSlotService.lockBoothSlot(HALL_ID, SLOT_ID);
+
+        ArgumentCaptor<BoothSlot> captor = ArgumentCaptor.forClass(BoothSlot.class);
+        verify(boothSlotMapper).update(captor.capture());
+        assertThat(captor.getValue().getBoothSlotId()).isEqualTo(SLOT_ID);
+        assertThat(captor.getValue().getLockedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("이미 잠긴 슬롯을 다시 잠그면 아무것도 갱신하지 않는다(멱등)")
+    void lockBoothSlot_이미잠겼으면_갱신하지않는다() {
+        given(boothSlotMapper.selectById(SLOT_ID)).willReturn(existingSlot(NOW.minusHours(1)));
+
+        boothSlotService.lockBoothSlot(HALL_ID, SLOT_ID);
+
+        verify(boothSlotMapper, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("다른 홀 소속 슬롯을 잠그려 하면 BOOTH_SLOT_NOT_FOUND를 던진다")
+    void lockBoothSlot_다른홀소속이면_예외를_던진다() {
+        BoothSlot slot = existingSlot(null);
+        slot.setHallId(999L);
+        given(boothSlotMapper.selectById(SLOT_ID)).willReturn(slot);
+
+        assertErrorCode(() -> boothSlotService.lockBoothSlot(HALL_ID, SLOT_ID), ErrorCode.BOOTH_SLOT_NOT_FOUND);
+        verify(boothSlotMapper, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 슬롯을 잠그려 하면 BOOTH_SLOT_NOT_FOUND를 던진다")
+    void lockBoothSlot_존재하지않으면_예외를_던진다() {
+        given(boothSlotMapper.selectById(SLOT_ID)).willReturn(null);
+
+        assertErrorCode(() -> boothSlotService.lockBoothSlot(HALL_ID, SLOT_ID), ErrorCode.BOOTH_SLOT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("hallId나 boothSlotId가 없으면 INVALID_INPUT_VALUE를 던진다")
+    void lockBoothSlot_입력값없으면_예외를_던진다() {
+        assertErrorCode(() -> boothSlotService.lockBoothSlot(null, SLOT_ID), ErrorCode.INVALID_INPUT_VALUE);
+        assertErrorCode(() -> boothSlotService.lockBoothSlot(HALL_ID, null), ErrorCode.INVALID_INPUT_VALUE);
+        verify(boothSlotMapper, never()).selectById(any());
+    }
+
+    @Test
+    @DisplayName("잠긴 슬롯을 해제하면 locked_at을 NULL로 되돌린다")
+    void unlockBoothSlot_잠겨있으면_locked_at을_지운다() {
+        given(boothSlotMapper.selectById(SLOT_ID)).willReturn(existingSlot(NOW.minusHours(1)));
+
+        boothSlotService.unlockBoothSlot(HALL_ID, SLOT_ID);
+
+        verify(boothSlotMapper).clearLock(SLOT_ID, NOW);
+    }
+
+    @Test
+    @DisplayName("이미 풀려있는 슬롯을 다시 해제하면 아무것도 갱신하지 않는다(멱등)")
+    void unlockBoothSlot_이미풀려있으면_갱신하지않는다() {
+        given(boothSlotMapper.selectById(SLOT_ID)).willReturn(existingSlot(null));
+
+        boothSlotService.unlockBoothSlot(HALL_ID, SLOT_ID);
+
+        verify(boothSlotMapper, never()).clearLock(any(), any());
+    }
+
+    @Test
+    @DisplayName("다른 홀 소속 슬롯을 해제하려 하면 BOOTH_SLOT_NOT_FOUND를 던진다")
+    void unlockBoothSlot_다른홀소속이면_예외를_던진다() {
+        BoothSlot slot = existingSlot(NOW.minusHours(1));
+        slot.setHallId(999L);
+        given(boothSlotMapper.selectById(SLOT_ID)).willReturn(slot);
+
+        assertErrorCode(() -> boothSlotService.unlockBoothSlot(HALL_ID, SLOT_ID), ErrorCode.BOOTH_SLOT_NOT_FOUND);
+        verify(boothSlotMapper, never()).clearLock(any(), any());
+    }
+
+    @Test
+    @DisplayName("hallId나 boothSlotId가 없으면 INVALID_INPUT_VALUE를 던진다")
+    void unlockBoothSlot_입력값없으면_예외를_던진다() {
+        assertErrorCode(() -> boothSlotService.unlockBoothSlot(null, SLOT_ID), ErrorCode.INVALID_INPUT_VALUE);
+        assertErrorCode(() -> boothSlotService.unlockBoothSlot(HALL_ID, null), ErrorCode.INVALID_INPUT_VALUE);
+        verify(boothSlotMapper, never()).selectById(any());
     }
 
     // ===== fixtures =====

@@ -1,7 +1,6 @@
 package com.ms.petopia.api.payment.controller;
 
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
-import com.ms.petopia.api.payment.dto.OpeningFeePaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
@@ -263,7 +262,7 @@ class PaymentControllerTest {
 
     @Test
     void createsFairOpeningFeePayment() throws Exception {
-        given(paymentService.payFairOpeningFee(eq(10L), eq(3L), any(OpeningFeePaymentRequest.class))).willReturn(
+        given(paymentService.payFairOpeningFee(eq(10L), eq(3L))).willReturn(
                 new PaymentResponse(
                         3L, "PAYMENT_3", "FAIR_OPENING_FEE", 500000L, "PENDING", "TOSS",
                         null,
@@ -273,53 +272,23 @@ class PaymentControllerTest {
         );
 
         mockMvc.perform(post("/api/fairs/10/opening-payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":500000}"))
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.paymentType").value("FAIR_OPENING_FEE"))
                 .andExpect(jsonPath("$.fairId").value(10));
 
-        verify(paymentService).payFairOpeningFee(eq(10L), eq(3L), any(OpeningFeePaymentRequest.class));
+        verify(paymentService).payFairOpeningFee(eq(10L), eq(3L));
     }
 
     @Test
     void returns409WhenFairOpeningFeeAlreadyPaid() throws Exception {
         willThrow(new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE))
-                .given(paymentService).payFairOpeningFee(eq(10L), eq(3L), any(OpeningFeePaymentRequest.class));
+                .given(paymentService).payFairOpeningFee(eq(10L), eq(3L));
 
         mockMvc.perform(post("/api/fairs/10/opening-payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":500000}"))
+                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("P002"));
-    }
-
-    @Test
-    void returns400WhenOpeningFeeAmountMissing() throws Exception {
-        // @NotNull 검증 — 서비스까지 안 가고 컨트롤러 바인딩 단계에서 걸러져야 함
-        mockMvc.perform(post("/api/fairs/10/opening-payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void returns400WhenOpeningFeeAmountIsZeroOrNegative() throws Exception {
-        // @Positive 검증(CodeRabbit 리뷰 지적, PR #62) — 0원/음수 결제 요청은 서비스까지 안 감
-        mockMvc.perform(post("/api/fairs/10/opening-payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":0}"))
-                .andExpect(status().isBadRequest());
-
-        mockMvc.perform(post("/api/fairs/10/opening-payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"amount\":-1000}"))
-                .andExpect(status().isBadRequest());
     }
 
     @Test

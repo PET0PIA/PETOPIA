@@ -1,20 +1,38 @@
 package com.ms.petopia.api.payment.service;
 
+import com.ms.petopia.api.application.service.ApplicationService;
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.*;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.refund.dto.RefundReason;
+import com.ms.petopia.api.refund.dto.RefundRequest;
+import com.ms.petopia.api.refund.dto.RequestedByDomain;
+import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
@@ -33,6 +51,16 @@ public class PaymentService {
     private final PaymentMapper paymentMapper;
     private final TossPaymentClient tossPaymentClient;
     private final ReservationPaymentContractClient reservationPaymentContractClient;
+    private final FairOpeningFeePaymentContractClient fairOpeningFeePaymentContractClient;
+    private final NotificationService notificationService;
+    private final AuditLogService auditLogService;
+    private final ApplicationService applicationService;
+    private final RefundService refundService;
+
+    // RefundService.refund()의 actingUserId는 원래 "누가 환불을 처리했는지" 기록하는 값인데,
+    // 여기서는 사람이 아니라 시스템(이 메서드)이 자동으로 트리거하는 환불이라 실제 유저 ID가 없다.
+    // "시스템이 처리했다"는 의미의 더미 값으로 0L을 쓴다.
+    private static final Long SYSTEM_ACTOR_USER_ID = 0L;
 
     /**
      * 결제 ID로 상세 조회한다.
@@ -140,9 +168,12 @@ public class PaymentService {
     }
 
     /**
-     * 행사개설비 결제를 생성한다. 참가비와 동일 구조로 fair 테이블은 조회하지 않으므로(애그리거트
-     * 간 ID 참조 원칙 유지) 금액은 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
-     * fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
+     * 행사개설비 결제를 생성한다. 예약금과 동일하게 클라이언트가 금액을 보내지 않는다 - 행사
+     * 도메인의 내부 계약({@link FairOpeningFeePaymentContractClient})을 호출해 승인 시 확정된
+     * 금액을 받아온다. fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
+     *
+     * <p>결제자가 이 행사의 담당자인지 검증하지는 않는다 - 지금은 인증된 사용자면 누구나
+     * 개설비를 결제할 수 있다(추후 별도 작업으로 보강 예정, 예약금의 payerUserId 대조와 다름).
      *
      * <p>결제 완료 후 행사 상태를 "준비중"으로 전이하는 건 이 메서드 책임이 아니다 — 행사 도메인이
      * 결제 완료를 어떻게 감지할지(폴링/이벤트 발행) 아직 미정이라 API 명세서에 "미확정"으로
@@ -151,16 +182,19 @@ public class PaymentService {
      * <p>동일 행사에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
      * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
      *
-     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사일 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사이거나,
+     *         존재하지 않거나 개설비를 결제할 수 없는 상태의 행사일 때
      */
     @Transactional
-    public PaymentResponse payFairOpeningFee(Long fairId, Long userId, OpeningFeePaymentRequest request) {
+    public PaymentResponse payFairOpeningFee(Long fairId, Long userId) {
+        FairOpeningFeePaymentContext context = fairOpeningFeePaymentContractClient.getPaymentContext(fairId);
+
         String idempotencyKey = "FAIR_OPENING_FEE_" + fairId;
-        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
+        PaymentRow row = createOrRetryPayment(idempotencyKey, context.amount(), userId, () -> {
             LocalDateTime now = LocalDateTime.now();
             PaymentRow newRow = new PaymentRow();
             newRow.setPaymentType("FAIR_OPENING_FEE");
-            newRow.setAmount(request.amount());
+            newRow.setAmount(context.amount());
             newRow.setStatus("PENDING");
             newRow.setMethod("TOSS");
             newRow.setIdempotencyKey(idempotencyKey);
@@ -295,6 +329,13 @@ public class PaymentService {
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
         }
 
+        // 카드 승인을 시도하기 전에 신청서가 여전히 결제 가능한 상태(PAYMENT_PENDING)인지
+        // 먼저 확인한다. 이미 취소된 신청이면 여기서 막아서 불필요한 선점(PROCESSING)과
+        // 카드 승인 자체를 방지한다.
+        if ("VENDOR_FEE".equals(row.getPaymentType())) {
+            applicationService.assertPayable(row.getApplicationId());
+        }
+
         // 토스를 부르기 전에 먼저 선점한다. 동시에 두 요청이 여기 도달해도 이 UPDATE는
         // 원자적이라 딱 하나만 1을 받는다 — 선점 실패(0)면 토스 호출 자체를 안 하고 끝낸다.
         int claimed = paymentMapper.markProcessing(paymentId, LocalDateTime.now());
@@ -333,20 +374,96 @@ public class PaymentService {
             notifyReservationDomain(row);
         }
 
+        // 참가비 결제 완료를 참가업체 도메인에 통지해 신청 상태를 PAYMENT_PENDING -> CONFIRMED로
+        // 전환시키고 부스를 자동 생성시킨다.
+        if ("VENDOR_FEE".equals(row.getPaymentType())) {
+            try {
+                applicationService.confirmVendorPayment(row.getApplicationId(), row.getPaymentId(), row.getAmount());
+            } catch (CommonException | DataAccessException e) {
+                // 카드 승인은 이미 끝나 결제는 COMPLETED로 확정됐으므로 여기서 예외를 던져
+                // 결제 응답을 실패로 되돌리지 않는다. 대신 결제와 신청서 상태가 어긋난
+                // 상황이니 자동으로 환불을 시도해서 복구한다.
+                log.error("참가비 결제 완료 통지 실패 — 신청서 상태 불일치. paymentId={}, applicationId={}",
+                        row.getPaymentId(), row.getApplicationId(), e);
+                try {
+                    refundService.refund(row.getPaymentId(), SYSTEM_ACTOR_USER_ID,
+                            new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.PAYMENT_ADMIN));
+                } catch (Exception refundEx) {
+                    // 환불까지 실패하면(정산 CONFIRMED 포함 등) 더는 자동으로 복구할 방법이
+                    // 없어 로그만 남긴다 — 운영자가 결제·신청 상태를 보고 수동으로 맞춰야 한다.
+                    log.error("자동 환불도 실패 — 수동 확인 필요. paymentId={}", row.getPaymentId(), refundEx);
+                }
+            }
+        }
+
+        recordPaymentCompletionAudit(row, userId);
+        notifyPaymentCompleted(row);
+
         return PaymentResponse.from(row);
     }
 
+    private void recordPaymentCompletionAudit(PaymentRow row, Long userId) {
+        try {
+            TargetType targetType = "RESERVATION_DEPOSIT".equals(row.getPaymentType()) && row.getReservationId() != null
+                    ? TargetType.RESERVATION : TargetType.FAIR;
+            Long targetId = targetType == TargetType.RESERVATION ? row.getReservationId() : row.getFairId();
+
+            Map<String, Object> after = new LinkedHashMap<>();
+            after.put("paymentId", row.getPaymentId());
+            after.put("paymentType", row.getPaymentType());
+            after.put("amount", row.getAmount());
+
+            auditLogService.record(
+                    userId,
+                    ActorType.PAYMENT,
+                    "USER",
+                    ActionType.PAYMENT_COMPLETION_RECEIVED,
+                    targetType,
+                    targetId,
+                    null,
+                    after
+            );
+        } catch (Exception e) {
+            log.error("결제 완료 감사 로그 저장 실패. paymentId={}", row.getPaymentId(), e);
+        }
+    }
+
+    private void notifyPaymentCompleted(PaymentRow row) {
+        try {
+            notificationService.save(new SaveNotificationDto.Request(
+                    row.getPayerUserId(),
+                    RecipientType.USER,
+                    NotificationType.PAYMENT_COMPLETED,
+                    "결제가 완료되었습니다",
+                    row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
+                    null,
+                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                    null
+            ));
+        } catch (Exception e) {
+            log.error("결제 완료 알림 저장 실패. paymentId={}, userId={}",
+                    row.getPaymentId(), row.getPayerUserId(), e);
+        }
+    }
+
     /**
-     * 취소/만료 계약 API를 부를 수 있는 호출 도메인이 각각 어떤 결제유형을 다뤄야 하는지 매핑.
-     * {@code PaymentInternalAuthHeaders}의 캐스터 값과 1:1 대응 — 예약 도메인이 참가비 결제를,
-     * 참가업체 도메인이 예약금 결제를 잘못(또는 악의적으로) 건드리는 걸 막는다(CodeRabbit 리뷰
-     * 지적, PR #71 — 캐스터 검증만 있고 그 캐스터가 실제로 그 결제의 소유 도메인인지는 안 봤음).
-     * 인증 도메인 완성 전까지는 여전히 헤더값을 그대로 신뢰하는 한계는 남아있다(TODO).
+     * 취소/만료 계약 API를 부를 수 있는 호출 도메인이 각각 어떤 결제유형(들)을 다룰 수 있는지
+     * 매핑. {@code PaymentInternalAuthHeaders}의 캐스터 값과 대응 — 예약 도메인이 참가비 결제를,
+     * 참가업체 도메인이 예약금 결제를 잘못(또는 악의적으로) 건드리는 걸 막는다.
+     *
+     * <p>FAIR는 예외적으로 세 유형을 전부 다룰 수 있다 - 행사가 취소되면 그 행사에 딸린
+     * 예약금/참가비 PENDING 결제까지 Fair 도메인이 한 번에 정리한다. 이미 완료된 결제를
+     * 환불하는 {@link com.ms.petopia.api.fair.service.FairCancelRefundOrchestrationService}와
+     * 같은 방향(Fair 도메인이 취소된 행사의 결제 뒷정리를 전담) - reservation/vendor
+     * application 도메인이 각자 fairs.canceled_at을 감지해서 반응하는 로직을 따로 만들지
+     * 않아도 되게 하려는 목적이다.
+     *
+     * <p>인증 도메인 완성 전까지는 여전히 헤더값을 그대로 신뢰하는 한계는 남아있다(TODO).
      */
-    private static final Map<String, String> CALLER_PAYMENT_TYPES = Map.of(
-            "RESERVATION", "RESERVATION_DEPOSIT",
-            "FAIR", "FAIR_OPENING_FEE",
-            "VENDOR_APPLICATION", "VENDOR_FEE"
+    private static final Map<String, Set<String>> CALLER_PAYMENT_TYPES = Map.of(
+            "RESERVATION", Set.of("RESERVATION_DEPOSIT"),
+            "FAIR", Set.of("FAIR_OPENING_FEE", "RESERVATION_DEPOSIT", "VENDOR_FEE"),
+            "VENDOR_APPLICATION", Set.of("VENDOR_FEE")
     );
 
     /**
@@ -356,7 +473,9 @@ public class PaymentService {
      * 처리한다(FAILED처럼 재사용하지 않음).
      *
      * @param callerDomain 호출 도메인(RESERVATION/FAIR/VENDOR_APPLICATION) — 그 결제의
-     *                     paymentType과 안 맞으면 남의 결제를 건드리는 셈이라 거부한다.
+     *                     paymentType이 이 도메인이 다룰 수 있는 유형에 없으면 남의 결제를
+     *                     건드리는 셈이라 거부한다(FAIR는 예외적으로 세 유형 다 허용 -
+     *                     {@link #CALLER_PAYMENT_TYPES} 참고).
      * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 존재하지 않는 결제 ID일 때
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 호출 도메인이 그 결제의 소유
      *         도메인이 아닐 때
@@ -382,8 +501,11 @@ public class PaymentService {
         if (row == null) {
             throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
         }
-        String expectedType = CALLER_PAYMENT_TYPES.get(callerDomain);
-        if (expectedType != null && !expectedType.equals(row.getPaymentType())) {
+        // callerDomain이 CALLER_PAYMENT_TYPES에 등록 안 된 값(오타·미등록 호출자)이면
+        // allowedTypes가 null이 되는데, 이걸 "제한 없음"으로 잘못 취급하면 등록 안 된 호출자가
+        // 모든 결제유형을 건드릴 수 있게 열려버린다 - null도 명시적으로 거부한다.
+        Set<String> allowedTypes = CALLER_PAYMENT_TYPES.get(callerDomain);
+        if (allowedTypes == null || !allowedTypes.contains(row.getPaymentType())) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
         if (!"PENDING".equals(row.getStatus())) {

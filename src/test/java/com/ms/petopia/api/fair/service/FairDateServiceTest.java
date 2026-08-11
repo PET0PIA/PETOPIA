@@ -53,6 +53,9 @@ class FairDateServiceTest {
     @Mock
     private FairTimeProvider timeProvider;
 
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     @InjectMocks
     private FairDateService fairDateService;
 

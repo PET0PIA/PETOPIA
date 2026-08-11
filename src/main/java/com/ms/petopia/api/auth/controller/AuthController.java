@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,10 @@ import java.time.Duration;
 public class AuthController {
 
     private final AuthService authService;
+
+    // 로컬(http)은 false, 운영(https)은 true - application-{profile}.yaml의 cookie.secure 참고
+    @Value("${cookie.secure}")
+    private boolean cookieSecure;
 
     //회원가입
     @PostMapping("/signup")
@@ -58,7 +63,7 @@ public class AuthController {
         //쿠키로 refreshToken 저장
         ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", tokenPair.refreshToken())
                 .httpOnly(true)
-                .secure(true)
+                .secure(cookieSecure)
                 .sameSite("Strict")
                 .path("/")
                 .maxAge(Duration.ofDays(14))

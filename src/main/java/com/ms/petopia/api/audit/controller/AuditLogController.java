@@ -17,7 +17,6 @@ public class AuditLogController {
 
     @GetMapping
     public AuditLogListResponse getAuditLogs(
-        @RequestHeader("X-User-Id") Long requesterId, // 임시 인증
         @RequestParam(required = false) String targetType,
         @RequestParam(required = false) Long targetId,
         @RequestParam(required = false) Long actorUserId,
@@ -25,7 +24,6 @@ public class AuditLogController {
         @RequestParam(defaultValue = "0") @Min(0) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size
     ){
-        // TODO 인증 도메인 완성 후 SUPER_ADMIN 권한 검증 추가
         return auditLogQueryService.query(targetType, targetId, actorUserId, actionType, page, size);
     }
 }

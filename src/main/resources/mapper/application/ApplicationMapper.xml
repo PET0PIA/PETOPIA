@@ -30,6 +30,9 @@
             bs.width AS width,
             bs.height AS height,
             bs.price AS price,
+            h.hall_id AS hallId,
+            h.name AS hallName,
+            h.floor_plan_image_url AS floorPlanImageUrl,
             EXISTS (
                 SELECT 1
                 FROM application_slot aps
@@ -332,6 +335,18 @@
         SELECT cancel_request_id FROM application_cancel_request
         WHERE application_id = #{applicationId} AND status = 'REQUESTED'
         FOR UPDATE
+    </select>
+
+    <!--
+         신청이 선택한 슬롯들의 boothSlotId+hallId.
+         fair 도메인 BoothSlotService.lockBoothSlot/unlockBoothSlot
+         호출에 필요한 hallId를 얻기 위함
+    -->
+    <select id="selectSlotHallRefsByApplicationId" resultType="com.ms.petopia.api.application.domain.BoothSlotHallRef">
+        SELECT aps.booth_slot_id AS boothSlotId, bs.hall_id AS hallId
+        FROM application_slot aps
+        JOIN booth_slots bs ON bs.booth_slot_id = aps.booth_slot_id
+        WHERE aps.application_id = #{applicationId}
     </select>
 
 </mapper>

@@ -9,12 +9,20 @@ import com.ms.petopia.api.refund.dto.RefundResponse;
 import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.service.RefundService;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
 import com.ms.petopia.api.reservation.mapper.ReservationCancellationMapper;
+import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -57,8 +65,20 @@ class ReservationCancellationServiceTest {
     private PaymentService paymentService;
     @Mock
     private RefundService refundService;
+    @Mock
+    private NotificationService notificationService;
     @InjectMocks
     private ReservationCancellationService service;
+
+    @BeforeEach
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
 
     @Test
     void cancelsPaymentPendingReservationImmediately() {
@@ -79,6 +99,14 @@ class ReservationCancellationServiceTest {
         verify(cancellationMapper).insertCanceledHistory(
                 RESERVATION_ID, "PENDING_PAYMENT", "일정 변경", USER_ID, null, null, NOW
         );
+
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+        ArgumentCaptor<SaveNotificationDto.Request> notifCaptor =
+                ArgumentCaptor.forClass(SaveNotificationDto.Request.class);
+        verify(notificationService).save(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
+        assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.RESERVATION_CANCELED);
         verifyNoInteractions(refundService);
     }
 

@@ -1,10 +1,13 @@
 package com.ms.petopia.api.payment.service;
 
 
+import com.ms.petopia.api.application.service.ApplicationService;
+import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
-import com.ms.petopia.api.payment.dto.OpeningFeePaymentRequest;
+import com.ms.petopia.api.payment.dto.FairOpeningFeePaymentContext;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.dto.PaymentRow;
@@ -12,7 +15,9 @@ import com.ms.petopia.api.payment.dto.ReservationPaymentCompletionResult;
 import com.ms.petopia.api.payment.dto.ReservationPaymentContext;
 import com.ms.petopia.api.payment.dto.TossPaymentResponse;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -60,6 +65,23 @@ class PaymentServiceTest {
     // payReservationDeposit(컨텍스트 조회)와 confirmPayment(완료 통지) 양쪽 테스트에서 씀.
     @Mock
     private ReservationPaymentContractClient reservationPaymentContractClient;
+
+    // 행사 도메인 내부 계약 API를 실제로 호출하지 않도록 가짜로 대체.
+    // payFairOpeningFee(컨텍스트 조회)에서 씀.
+    @Mock
+    private FairOpeningFeePaymentContractClient fairOpeningFeePaymentContractClient;
+
+    @Mock
+    private NotificationService notificationService;
+
+    @Mock
+    private AuditLogService auditLogService;
+
+    @Mock
+    private ApplicationService applicationService;
+
+    @Mock
+    private RefundService refundService;
 
     // PaymentService 생성자가 PaymentMapper를 받는 구조여야 동작함
     // (@RequiredArgsConstructor 패턴).
@@ -296,11 +318,14 @@ class PaymentServiceTest {
     @Test
     @DisplayName("행사개설비 결제를 요청하면 결제가 생성된다")
     void payFairOpeningFee_결제생성_성공() {
-        // Arrange: fair 테이블을 안 보니까, 프론트가 금액을 실어서 보낸 상황 흉내
-        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
+        // Arrange: 행사 도메인 내부 계약이 승인 시 확정된 금액을 내려주는 상황 흉내
+        FairOpeningFeePaymentContext context = new FairOpeningFeePaymentContext(
+                10L, 500000L, LocalDateTime.now().plusDays(3)
+        );
+        given(fairOpeningFeePaymentContractClient.getPaymentContext(10L)).willReturn(context);
 
         // Act
-        PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L, request);
+        PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L);
 
         // Assert: 참가비·예약금과 동일하게 PENDING/TOSS로 생성되고, fairId만 채워지고
         // businessId·reservationId·applicationId는 전부 null인지
@@ -322,11 +347,14 @@ class PaymentServiceTest {
     @DisplayName("이미 결제된 행사에 다시 개설비 결제를 요청하면 예외를 던진다")
     void payFairOpeningFee_중복결제_예외를던진다() {
         // Arrange: idempotencyKey UNIQUE 제약 위반(=이미 결제된 행사)을 흉내냄
-        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
+        FairOpeningFeePaymentContext context = new FairOpeningFeePaymentContext(
+                10L, 500000L, LocalDateTime.now().plusDays(3)
+        );
+        given(fairOpeningFeePaymentContractClient.getPaymentContext(10L)).willReturn(context);
         willThrow(new DuplicateKeyException("idempotency key violation"))
                 .given(paymentMapper).insert(any(PaymentRow.class));
 
-        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 3L, request))
+        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 3L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
@@ -442,6 +470,11 @@ class PaymentServiceTest {
     @Test
     @DisplayName("이전 시도가 FAILED로 남은 개설비 결제를 다시 요청하면 그 행을 PENDING으로 재사용한다")
     void payFairOpeningFee_FAILED재시도_기존행을PENDING으로재사용한다() {
+        FairOpeningFeePaymentContext context = new FairOpeningFeePaymentContext(
+                10L, 500000L, LocalDateTime.now().plusDays(3)
+        );
+        given(fairOpeningFeePaymentContractClient.getPaymentContext(10L)).willReturn(context);
+
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(3L);
         failedRow.setStatus("FAILED");
@@ -449,9 +482,7 @@ class PaymentServiceTest {
         given(paymentMapper.selectByIdempotencyKey("FAIR_OPENING_FEE_10")).willReturn(failedRow);
         given(paymentMapper.resetFailedToPending(eq(3L), eq(500000L), any())).willReturn(1);
 
-        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
-
-        PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L, request);
+        PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L);
 
         assertThat(result.paymentId()).isEqualTo(3L);
         assertThat(result.status()).isEqualTo("PENDING");
@@ -461,15 +492,18 @@ class PaymentServiceTest {
     @Test
     @DisplayName("다른 사용자가 남의 FAILED 개설비 결제를 재시도하면 예외를 던진다")
     void payFairOpeningFee_FAILED재시도_결제자아님_예외를던진다() {
+        FairOpeningFeePaymentContext context = new FairOpeningFeePaymentContext(
+                10L, 500000L, LocalDateTime.now().plusDays(3)
+        );
+        given(fairOpeningFeePaymentContractClient.getPaymentContext(10L)).willReturn(context);
+
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(3L);
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(3L);
         given(paymentMapper.selectByIdempotencyKey("FAIR_OPENING_FEE_10")).willReturn(failedRow);
 
-        OpeningFeePaymentRequest request = new OpeningFeePaymentRequest(500000L);
-
-        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 999L, request))
+        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 999L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
@@ -628,11 +662,45 @@ class PaymentServiceTest {
     @Test
     @DisplayName("호출 도메인이 그 결제의 소유 도메인이 아니면 취소를 거부한다")
     void cancelPayment_캐스터불일치_예외를던진다() {
-        // VENDOR_FEE 결제인데 RESERVATION 도메인이 취소하려는 상황(CodeRabbit 리뷰 지적, PR #71 —
-        // 캐스터 값 자체는 허용목록에 있어도 그 결제의 소유 도메인인지는 확인 안 하던 문제)
+        // VENDOR_FEE 결제인데 RESERVATION 도메인이 취소하려는 상황 — 캐스터 값 자체는
+        // 허용목록에 있어도 그 결제의 소유 도메인인지는 확인해야 한다.
         given(paymentMapper.selectById(1L)).willReturn(pendingRow());
 
         assertThatThrownBy(() -> paymentService.cancelPayment(1L, "RESERVATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).markCanceled(any(), any());
+    }
+
+    @Test
+    @DisplayName("FAIR 도메인은 예외적으로 예약금·참가비·개설비 결제를 전부 취소할 수 있다")
+    void cancelPayment_FAIR도메인은_세유형다_취소할수있다() {
+        // 행사가 취소되면 그 행사에 딸린 예약금(RESERVATION_DEPOSIT)/참가비(VENDOR_FEE) PENDING
+        // 결제까지 Fair 도메인이 한 번에 정리한다 - reservation/vendor application 도메인이
+        // 각자 fairs.canceled_at을 감지해서 반응하는 로직을 따로 만들지 않아도 되게 하려는 목적.
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markCanceled(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.cancelPayment(1L, "FAIR").status()).isEqualTo("CANCELED");
+
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+        given(paymentMapper.markCanceled(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.cancelPayment(2L, "FAIR").status()).isEqualTo("CANCELED");
+
+        given(paymentMapper.selectById(3L)).willReturn(pendingOpeningFeeRow());
+        given(paymentMapper.markCanceled(eq(3L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.cancelPayment(3L, "FAIR").status()).isEqualTo("CANCELED");
+    }
+
+    @Test
+    @DisplayName("CALLER_PAYMENT_TYPES에 등록 안 된 호출 도메인은 어떤 결제유형이든 거부한다")
+    void cancelPayment_미등록캐스터는_예외를던진다() {
+        // 오타나 아직 등록 안 된 호출 도메인이 오면 Map.get()이 null을 반환하는데, 이걸
+        // "제한 없음"으로 잘못 취급하면 미등록 호출자가 아무 결제나 건드릴 수 있게 열려버린다.
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(1L, "UNKNOWN_DOMAIN"))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
@@ -693,10 +761,39 @@ class PaymentServiceTest {
     @Test
     @DisplayName("호출 도메인이 그 결제의 소유 도메인이 아니면 만료 처리를 거부한다")
     void expirePayment_캐스터불일치_예외를던진다() {
-        // RESERVATION_DEPOSIT 결제인데 FAIR 도메인이 만료 처리하려는 상황
+        // RESERVATION_DEPOSIT 결제인데 VENDOR_APPLICATION 도메인이 만료 처리하려는 상황
         given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
 
-        assertThatThrownBy(() -> paymentService.expirePayment(2L, "FAIR"))
+        assertThatThrownBy(() -> paymentService.expirePayment(2L, "VENDOR_APPLICATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).markExpired(any(), any());
+    }
+
+    @Test
+    @DisplayName("FAIR 도메인은 예외적으로 예약금·참가비·개설비 결제를 전부 만료 처리할 수 있다")
+    void expirePayment_FAIR도메인은_세유형다_만료처리할수있다() {
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+        given(paymentMapper.markExpired(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.expirePayment(2L, "FAIR").status()).isEqualTo("EXPIRED");
+
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markExpired(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.expirePayment(1L, "FAIR").status()).isEqualTo("EXPIRED");
+
+        given(paymentMapper.selectById(3L)).willReturn(pendingOpeningFeeRow());
+        given(paymentMapper.markExpired(eq(3L), any(LocalDateTime.class))).willReturn(1);
+        assertThat(paymentService.expirePayment(3L, "FAIR").status()).isEqualTo("EXPIRED");
+    }
+
+    @Test
+    @DisplayName("CALLER_PAYMENT_TYPES에 등록 안 된 호출 도메인은 어떤 결제유형이든 만료 처리를 거부한다")
+    void expirePayment_미등록캐스터는_예외를던진다() {
+        given(paymentMapper.selectById(2L)).willReturn(pendingReservationDepositRow());
+
+        assertThatThrownBy(() -> paymentService.expirePayment(2L, "UNKNOWN_DOMAIN"))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
@@ -754,6 +851,20 @@ class PaymentServiceTest {
         row.setPayerUserId(90L);
         row.setFairId(10L);
         row.setReservationId(500L);
+        return row;
+    }
+
+    // PENDING 상태의 개설비 결제 하나를 미리 만들어두는 헬퍼. FAIR 캐스터가 세 유형을
+    // 전부 다룰 수 있는지 검증할 때 pendingRow()/pendingReservationDepositRow()와 함께 쓴다.
+    private PaymentRow pendingOpeningFeeRow() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(3L);
+        row.setPaymentType("FAIR_OPENING_FEE");
+        row.setAmount(100000L);
+        row.setStatus("PENDING");
+        row.setMethod("TOSS");
+        row.setPayerUserId(90L);
+        row.setFairId(10L);
         return row;
     }
 

@@ -1,8 +1,9 @@
-import { AlertCircle, LayoutGrid, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { AlertCircle, LayoutGrid, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { createHall, deleteHall, getHalls, updateHall, type Hall, type HallInput } from "../../api/fair";
+import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
@@ -11,13 +12,11 @@ import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { Input } from "../../components/ui/Input";
 import { Table } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/useConfirm";
+import { useFairSelector } from "../../hooks/useFairSelector";
 
 export function HallManagementPage() {
   const { confirm, confirmDialog } = useConfirm();
-
-  // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [fairId, setFairId] = useState<number | null>(null);
+  const { fairId, setFairId, selectableFairs } = useFairSelector();
 
   const [halls, setHalls] = useState<Hall[]>([]);
   const [loading, setLoading] = useState(false);
@@ -38,6 +37,7 @@ export function HallManagementPage() {
 
     setLoading(true);
     setLoadError(null);
+    setHalls([]);
     getHalls(fairId)
       .then((data) => { if (!ignore) setHalls(data); })
       .catch((error) => { if (!ignore) setLoadError(error instanceof ApiError ? error.message : "홀 목록을 불러오지 못했어요."); })
@@ -45,16 +45,6 @@ export function HallManagementPage() {
 
     return () => { ignore = true; };
   }, [fairId]);
-
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-    setFairId(parsed);
-  }
 
   function openCreateDialog() {
     setEditingHall(null);
@@ -128,19 +118,11 @@ export function HallManagementPage() {
         action={fairId !== null ? <Button onClick={openCreateDialog}><Plus size={16} />홀 추가</Button> : undefined}
       />
 
-      <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</span>
-          <Input
-            type="number"
-            min={1}
-            value={fairIdInput}
-            onChange={(event) => setFairIdInput(event.target.value)}
-            placeholder="예: 1"
-          />
-        </div>
-        <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
-      </form>
+      <FairSelectorBar
+        selectableFairs={selectableFairs}
+        fairId={fairId}
+        onFairIdChange={(id) => setFairId(id)}
+      />
 
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -149,19 +131,19 @@ export function HallManagementPage() {
         </div>
       )}
 
-      {fairId === null && (
-        <EmptyState title="행사 ID를 먼저 입력해 주세요." description="관리할 행사의 ID를 입력하고 불러오기를 누르면 홀 목록이 표시돼요." />
+      {fairId === null && selectableFairs.length > 0 && (
+        <EmptyState title="행사를 선택해 주세요." description="위 드롭다운에서 행사를 고르면 홀 목록이 표시돼요." />
       )}
 
       {fairId !== null && loading && (
         <div className="surface grid min-h-40 place-items-center text-sm text-muted">홀 목록을 불러오는 중이에요...</div>
       )}
 
-      {fairId !== null && !loading && halls.length === 0 && !loadError && (
+      {fairId !== null && !loading && !loadError && halls.length === 0 && (
         <EmptyState title="등록된 홀이 없어요." description="홀 추가 버튼을 눌러 첫 홀을 등록해 보세요." />
       )}
 
-      {fairId !== null && !loading && halls.length > 0 && (
+      {fairId !== null && !loading && !loadError && halls.length > 0 && (
         <Table>
           <thead>
             <tr className="border-b border-line text-xs font-bold text-muted">
@@ -200,8 +182,9 @@ export function HallManagementPage() {
         <form onSubmit={handleSaveHall} className="space-y-4">
           {formError && <p className="text-sm font-bold text-primary-strong">{formError}</p>}
           <div>
-            <span className="mb-1.5 block text-sm font-bold text-ink">홀 이름<span className="ml-1 text-primary-strong">*</span></span>
+            <label htmlFor="hallName" className="mb-1.5 block text-sm font-bold text-ink">홀 이름<span className="ml-1 text-primary-strong">*</span></label>
             <Input
+              id="hallName"
               value={hallName}
               onChange={(event) => setHallName(event.target.value)}
               placeholder="예: A홀"

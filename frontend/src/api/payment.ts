@@ -1,11 +1,20 @@
 import { apiClient } from "./client";
 
 /**
- * 회원·인증 도메인 연동 전까지 쓰는 임시 사용자 ID다.
+ * 결제 API는 아직 JWT가 아니라 X-User-Id 헤더로 결제자를 식별한다.
  * 백엔드 PaymentTemporaryAuthHeaders와 대응된다.
- * TODO 인증 도메인 완성 후 로그인 사용자 정보로 교체한다.
+ * TODO 인증 도메인 완성 후 JWT로 교체한다.
  */
 export const TEMP_USER_ID_HEADER = "X-User-Id";
+
+/**
+ * 관리자 테스트 도구(PaymentCreatePage) 전용 임시 결제자 ID.
+ *
+ * 실제 사용자 흐름을 타는 함수(createReservationDepositPayment·confirmPayment)에는
+ * 이 값을 기본값으로 두지 않는다 — 백엔드가 X-User-Id와 예약 소유자를 대조하기 때문에
+ * 기본값을 두면 userId 1번이 아닌 사용자가 전부 ACCESS_DENIED로 막힌다.
+ * 임시값을 쓰는 지점이 코드에 드러나도록 호출부에서 명시적으로 넘긴다.
+ */
 export const TEMP_PAYER_USER_ID = 1;
 
 export type PaymentType = "RESERVATION_DEPOSIT" | "VENDOR_FEE" | "FAIR_OPENING_FEE";
@@ -42,8 +51,15 @@ export function getPayment(paymentId: number, userId: number = TEMP_PAYER_USER_I
   });
 }
 
-/** 예약금 결제 생성. 예약이 "정원 임시선점" 상태여야 하고, 즉시 COMPLETED로 처리된다(모의결제). */
-export function createReservationDepositPayment(reservationId: number, userId: number = TEMP_PAYER_USER_ID) {
+/**
+ * 예약금 결제 준비(토스 실연동). 예약이 PENDING_PAYMENT 상태여야 하고, 응답은 PENDING + orderId로 온다.
+ * 금액은 보내지 않는다 — 백엔드가 예약 도메인의 결제 컨텍스트에서 원장 금액을 조회한다.
+ * 실제 결제 완료는 토스 결제창 → confirmPayment까지 이어져야 한다.
+ *
+ * userId는 기본값 없이 필수다. 백엔드가 이 값을 예약 소유자와 대조하므로(ACCESS_DENIED)
+ * 호출부가 로그인 사용자 ID를 반드시 넘겨야 한다.
+ */
+export function createReservationDepositPayment(reservationId: number, userId: number) {
   return apiClient.post<PaymentDetail>(`/api/reservations/${reservationId}/payment`, undefined, {
     headers: { [TEMP_USER_ID_HEADER]: String(userId) },
   });
@@ -63,9 +79,13 @@ export function createVendorFeePayment(
   });
 }
 
-/** 행사개설비 결제 생성. fair 상태 검증 없이 요청 금액을 그대로 신뢰한다(모의결제, 즉시 COMPLETED). */
-export function createFairOpeningPayment(fairId: number, amount: number, userId: number = TEMP_PAYER_USER_ID) {
-  return apiClient.post<PaymentDetail>(`/api/fairs/${fairId}/opening-payment`, { amount }, {
+/**
+ * 행사개설비 결제 생성. 예약금과 동일하게 금액을 보내지 않는다 - 서버가 승인 시 확정된
+ * fairs.opening_fee_amount를 그대로 써서 결제를 만든다(클라이언트가 보낸 금액을 더 이상
+ * 신뢰하지 않음). 실제 결제 완료는 별도로 confirmPayment 호출까지 이어져야 한다.
+ */
+export function createFairOpeningPayment(fairId: number, userId: number = TEMP_PAYER_USER_ID) {
+  return apiClient.post<PaymentDetail>(`/api/fairs/${fairId}/opening-payment`, undefined, {
     headers: { [TEMP_USER_ID_HEADER]: String(userId) },
   });
 }
@@ -73,8 +93,11 @@ export function createFairOpeningPayment(fairId: number, amount: number, userId:
 /**
  * 결제 승인 확정(토스 confirm). PENDING으로 생성된 결제를 토스 결제창 완료 후 받은 paymentKey로
  * 확정시킨다. orderId·amount는 서버가 자체적으로 판단하므로 paymentKey만 보낸다.
+ *
+ * userId는 기본값 없이 필수다 — 백엔드가 결제의 payerUserId와 대조한다(ACCESS_DENIED).
+ * PENDING이 아닌 결제를 다시 확정하려 하면 409로 막히므로, 호출부는 중복 호출을 스스로 막아야 한다.
  */
-export function confirmPayment(paymentId: number, paymentKey: string, userId: number = TEMP_PAYER_USER_ID) {
+export function confirmPayment(paymentId: number, paymentKey: string, userId: number) {
   return apiClient.post<PaymentDetail>(`/api/payments/${paymentId}/confirm`, { paymentKey }, {
     headers: { [TEMP_USER_ID_HEADER]: String(userId) },
   });

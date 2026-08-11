@@ -1,5 +1,7 @@
 package com.ms.petopia.api.notification.service;
 
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.notification.dto.*;
 import com.ms.petopia.api.notification.entity.Notification;
 import com.ms.petopia.api.notification.entity.NotificationDelivery;
@@ -28,6 +30,7 @@ class NotificationServiceTest {
     @Mock NotificationMapper notificationMapper;
     @Mock NotificationDeliveryMapper notificationDeliveryMapper;
     @Mock EmailSenderService emailSenderService;
+    @Mock AuthMapper authMapper;
     @InjectMocks NotificationService notificationService;
 
     @Test
@@ -191,6 +194,70 @@ class NotificationServiceTest {
         verify(emailSenderService, times(1)).send("user@example.com", "결제 완료", "결제가 완료됐습니다.");
         // 이메일 발송 성공 후 SENT 업데이트도 1번
         verify(notificationDeliveryMapper, times(1)).updateStatus(any(), eq(DeliveryStatus.SENT), any(), isNull());
+    }
+
+    @Test
+    @DisplayName("EMAIL 채널이고 recipientContact가 null이면 authMapper로 이메일을 자동 조회해 발송한다")
+    void save_emailChannel_nullContact_autoResolvesEmailFromUser() {
+        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
+                .when(notificationMapper).insert(any());
+        User user = User.builder().email("auto@example.com").build();
+        given(authMapper.selectUserById(1L)).willReturn(user);
+
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
+                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
+                "제목", "내용", null,
+                List.of(DeliveryChannel.EMAIL),
+                null  // recipientContact 없음
+        );
+
+        notificationService.save(request);
+
+        verify(authMapper).selectUserById(1L);
+        verify(emailSenderService).send("auto@example.com", "제목", "내용");
+        ArgumentCaptor<NotificationDelivery> captor = ArgumentCaptor.forClass(NotificationDelivery.class);
+        verify(notificationDeliveryMapper).insert(captor.capture());
+        assertThat(captor.getValue().getRecipientContact()).isEqualTo("auto@example.com");
+    }
+
+    @Test
+    @DisplayName("EMAIL 채널이고 authMapper가 이메일을 반환하지 못하면 EMAIL delivery를 생성하지 않는다")
+    void save_emailChannel_nullContact_userEmailNotFound_skipsEmailDelivery() {
+        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
+                .when(notificationMapper).insert(any());
+        given(authMapper.selectUserById(1L)).willReturn(null);
+
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
+                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
+                "제목", "내용", null,
+                List.of(DeliveryChannel.EMAIL),
+                null
+        );
+
+        notificationService.save(request);
+
+        verify(notificationDeliveryMapper, never()).insert(any());
+        verifyNoInteractions(emailSenderService);
+    }
+
+    @Test
+    @DisplayName("IN_APP + EMAIL 동시 요청 시 이메일 조회 실패하면 IN_APP delivery만 생성된다")
+    void save_inAppAndEmail_emailNotFound_onlyInAppDeliveryCreated() {
+        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
+                .when(notificationMapper).insert(any());
+        given(authMapper.selectUserById(1L)).willReturn(null);
+
+        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
+                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
+                "제목", "내용", null,
+                List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                null
+        );
+
+        notificationService.save(request);
+
+        verify(notificationDeliveryMapper, times(1)).insert(any(NotificationDelivery.class));
+        verifyNoInteractions(emailSenderService);
     }
 
     // ===== markAsRead =====

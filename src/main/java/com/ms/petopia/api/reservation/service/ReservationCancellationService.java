@@ -8,6 +8,11 @@ import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RefundResponse;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.service.RefundService;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
@@ -16,13 +21,17 @@ import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher; // 실시간 통계 확인용
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 /**
  * 관람객 본인의 예약 취소를 처리한다. 예약 상태에 따라 결제 쪽 후처리가 갈린다.
  *
@@ -80,6 +89,7 @@ public class ReservationCancellationService {
     private final PaymentMapper paymentMapper;
     private final PaymentService paymentService;
     private final RefundService refundService;
+    private final NotificationService notificationService;
 
     /** 결제 전 예약, 무료 사전예약, 결제까지 끝난 유료 사전예약(전액 환불)을 취소한다. */
     @Transactional
@@ -208,6 +218,28 @@ public class ReservationCancellationService {
                 userId,
                 new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.RESERVATION)
         );
+        Long notifyUserId = reservation.getUserId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.save(new SaveNotificationDto.Request(
+                            notifyUserId,
+                            RecipientType.USER,
+                            NotificationType.RESERVATION_CANCELED,
+                            "예약이 취소되었습니다",
+                            "예약이 정상적으로 취소 처리되었습니다.",
+                            null,
+                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            null
+                    ));
+                } catch (Exception e) {
+                    log.error("예약 취소 알림 저장 실패. userId={}, reservationId={}", notifyUserId, reservationId, e);
+                }
+            }
+        });
+
+        return new CancelReservationResponse(reservationId, CANCELED, now);
     }
 
     private void validateRequest(Long reservationId, Long userId, CancelReservationRequest request) {

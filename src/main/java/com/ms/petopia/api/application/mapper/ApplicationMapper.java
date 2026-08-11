@@ -1,9 +1,6 @@
 package com.ms.petopia.api.application.mapper;
 
-import com.ms.petopia.api.application.domain.Application;
-import com.ms.petopia.api.application.domain.ApplicationCancelRequest;
-import com.ms.petopia.api.application.domain.ApplicationForm;
-import com.ms.petopia.api.application.domain.ApplicationSlot;
+import com.ms.petopia.api.application.domain.*;
 import com.ms.petopia.api.application.dto.response.*;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -107,7 +104,7 @@ public interface ApplicationMapper {
     int updateApplicationConfirmed(@Param("applicationId") Long applicationId);
 
     // 자동 취소 처리 시, 이 신청서에 처리 대기 중(REQUESTED)인 취소 요청이 있으면 함께 종료 처리 (없으면 0행 반영, 정상 상황 — 멱등)
-    int closeRequestedCancelRequestByApplicationId(@Param("applicationId") Long applicationId,
+    void closeRequestedCancelRequestByApplicationId(@Param("applicationId") Long applicationId,
                                                    @Param("decidedAt") LocalDateTime decidedAt);
 
     /*
@@ -116,5 +113,8 @@ public interface ApplicationMapper {
      * 두 경로가 동시에 같은 신청서를 처리할 때 교착상태가 나지 않게 하는 용도.
      */
     void lockPendingCancelRequestIfExists(@Param("applicationId") Long applicationId);
+
+    // 신청이 선택한 부스슬롯들의 boothSlotId+hallId 조회 (fair 도메인 부스슬롯 잠금/해제 연동용)
+    List<BoothSlotHallRef> selectSlotHallRefsByApplicationId(@Param("applicationId") Long applicationId);
 
 }

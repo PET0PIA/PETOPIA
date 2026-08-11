@@ -1,5 +1,5 @@
 import { Link, Outlet } from "react-router-dom";
 import { PublicHeader } from "../components/layout/PublicHeader";
-import petopiaLogoOriginal from "../assets/petopia-logo-original.png";
+import petopiaLogoOriginal from "../assets/logo/PetopiaLOGO.png";
 
 export function PublicLayout() { return <div className="min-h-screen bg-page"><PublicHeader /><main><Outlet /></main><footer className="mt-20 border-t border-line bg-card"><div className="page-shell flex flex-col gap-5 py-8 text-sm text-muted sm:flex-row sm:items-end sm:justify-between"><div><img src={petopiaLogoOriginal} alt="PETOPIA" className="h-16 w-auto object-contain" /><p className="mt-2">반려동물과 사람이 함께 행복한 순간을 만듭니다.</p></div><div className="flex flex-wrap gap-x-5 gap-y-2"><Link to="/about" className="hover:text-primary-strong">서비스 소개</Link><Link to="/terms" className="hover:text-primary-strong">이용약관</Link><Link to="/privacy" className="hover:text-primary-strong">개인정보 처리방침</Link><Link to="/contact" className="hover:text-primary-strong">문의</Link></div></div><div className="border-t border-line"><div className="page-shell py-4 text-xs text-muted">© 2026 PETOPIA. All rights reserved.</div></div></footer></div>; }

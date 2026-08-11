@@ -4,21 +4,27 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { publicNavigation } from "../../config/navigation";
 import type { BusinessStatus, CurrentUser } from "../../types/domain";
 import type { NavigationItem } from "../../config/navigation";
-import petopiaLogoOriginal from "../../assets/petopia-logo-original.png";
+import petopiaLogoOriginal from "../../assets/logo/PetopiaLOGO.png";
 import { currentUser } from "../../mocks/home";
 import { getUnreadNotificationCount } from "../../api/notification";
+import { useAuth } from "../../contexts/AuthContext";
 import { DropdownMenu } from "../ui/DropdownMenu";
 
 function useUnreadNotificationCount() {
   const [count, setCount] = useState(0);
   const { pathname } = useLocation();
+  const { status } = useAuth();
   useEffect(() => {
+    if (status !== "authenticated") {
+      setCount(0);
+      return;
+    }
     let active = true;
     getUnreadNotificationCount()
       .then((value) => { if (active) setCount(value); })
-      .catch(() => { /* 알림 배지는 조회 실패 시 0으로 유지한다. */ });
+      .catch(() => { if (active) setCount(0); /* 알림 배지는 조회 실패 시 0으로 유지한다. */ });
     return () => { active = false; };
-  }, [pathname]);
+  }, [pathname, status]);
   return count;
 }
 
@@ -27,7 +33,7 @@ function matchesStatus(item: NavigationItem, businessStatus: BusinessStatus) {
 }
 
 function HeaderLogo() {
-  return <Link to="/" className="flex shrink-0 items-center gap-3" aria-label="PETOPIA 홈"><img src={petopiaLogoOriginal} alt="" className="h-14 w-auto object-contain" /><span className="text-2xl font-black tracking-tight text-ink">PETOPIA</span></Link>;
+  return <Link to="/" className="flex shrink-0 items-center gap-3" aria-label="PETOPIA 홈"><img src={petopiaLogoOriginal} alt="" className="h-11 w-auto object-contain" /><span className="text-2xl font-black tracking-tight text-ink">PETOPIA</span></Link>;
 }
 
 function ProfileMenu({ user }: { user: CurrentUser }) {

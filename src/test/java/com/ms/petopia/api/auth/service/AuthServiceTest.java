@@ -1,5 +1,6 @@
 package com.ms.petopia.api.auth.service;
 
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.dto.EmailLoginRequest;
 import com.ms.petopia.api.auth.dto.EmailSignupRequest;
@@ -44,6 +45,10 @@ class AuthServiceTest {
     private JwtTokenProvider jwtTokenProvider;
     @Mock
     private RefreshTokenStore refreshTokenStore;
+    @Mock
+    private AuditLogService auditLogService;
+    @Mock
+    private LoginAttemptStore loginAttemptStore;
     @InjectMocks
     private AuthService authService;
 
@@ -157,6 +162,7 @@ class AuthServiceTest {
                 .isEqualTo(ErrorCode.INVALID_LOGIN);
 
         verify(jwtTokenProvider, never()).generateAccessToken(anyLong(), any());
+        verify(loginAttemptStore).recordFailure(EMAIL);
     }
 
     @Test
@@ -168,6 +174,8 @@ class AuthServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(ex -> ((CommonException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_LOGIN);
+
+        verify(loginAttemptStore).recordFailure(EMAIL);
     }
 
     @Test
@@ -177,6 +185,7 @@ class AuthServiceTest {
                 .email(EMAIL)
                 .passwordHash("hashed")
                 .role("USER")
+                .status("ACTIVE")
                 .emailVerified(false)
                 .build();
         given(authMapper.selectUserByEmail(EMAIL)).willReturn(user);
@@ -196,6 +205,7 @@ class AuthServiceTest {
                 .email(EMAIL)
                 .passwordHash("hashed")
                 .role("USER")
+                .status("ACTIVE")
                 .emailVerified(true)
                 .build();
     }

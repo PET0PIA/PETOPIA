@@ -17,5 +17,6 @@ public class ApplicationCancelRequestResultResponse {
     private String status; // 취소 요청 처리 상태: APPROVED 또는 REJECTED
     private String applicationStatus; // 처리 후 신청 상태 (승인 시 CANCELED, 반려 시 기존 상태 유지)
     private LocalDateTime decidedAt;
+    private Boolean boothDeleted; // 승인 시 이전 상태가 CONFIRMED였다면 true(부스 삭제됨), 아니면 false
 
 }

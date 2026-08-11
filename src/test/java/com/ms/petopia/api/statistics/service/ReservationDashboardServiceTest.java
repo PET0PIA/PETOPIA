@@ -1,5 +1,6 @@
 package com.ms.petopia.api.statistics.service;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
 import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
 import com.ms.petopia.api.statistics.dto.LabelCountDto;
@@ -10,6 +11,8 @@ import com.ms.petopia.api.statistics.dto.VisitStatsDto;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
 import com.ms.petopia.api.statistics.mapper.ReservationDashboardMapper;
 import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,9 +27,11 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,8 +46,18 @@ class ReservationDashboardServiceTest {
     @Mock
     private DashboardEmitterRegistry emitterRegistry;
 
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     @InjectMocks
     private ReservationDashboardService dashboardService;
+
+    private void assertAccessDenied(Runnable action) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
 
     // ── getDateSummary ────────────────────────────────────────────────
 
@@ -181,6 +196,16 @@ class ReservationDashboardServiceTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    @DisplayName("QR 발급 통계 - 담당 행사가 아닌 EVENT_ADMIN이면 ACCESS_DENIED를 던지고 Mapper를 호출하지 않는다")
+    void getQrIssuanceSummary_담당행사아니면_예외를_던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertAccessDenied(() -> dashboardService.getQrIssuanceSummary(FAIR_ID));
+        then(dashboardMapper).should(never()).selectQrIssuanceSummary(any());
+    }
+
     // ── getHourlyEntryTrend ───────────────────────────────────────────
 
     @Test
@@ -228,6 +253,16 @@ class ReservationDashboardServiceTest {
         assertThat(result2.get(0).getEntryHour()).isEqualTo(14);
         then(dashboardMapper).should(times(1)).selectHourlyEntryTrend(FAIR_ID, TARGET_DATE);
         then(dashboardMapper).should(times(1)).selectHourlyEntryTrend(FAIR_ID, date2);
+    }
+
+    @Test
+    @DisplayName("시간대별 입장 추이 - 담당 행사가 아닌 EVENT_ADMIN이면 ACCESS_DENIED를 던지고 Mapper를 호출하지 않는다")
+    void getHourlyEntryTrend_담당행사아니면_예외를_던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertAccessDenied(() -> dashboardService.getHourlyEntryTrend(FAIR_ID, TARGET_DATE));
+        then(dashboardMapper).should(never()).selectHourlyEntryTrend(any(), any());
     }
 
     // ── getBoothVisitStats ────────────────────────────────────────────
@@ -278,6 +313,28 @@ class ReservationDashboardServiceTest {
         assertThat(result.get(0).getUniqueVisitorCount()).isEqualTo(200);
         assertThat(result.get(1).getUniqueVisitorCount()).isEqualTo(150);
         assertThat(result.get(2).getUniqueVisitorCount()).isEqualTo(50);
+    }
+
+    @Test
+    @DisplayName("부스 방문 통계 - 담당 행사가 아닌 EVENT_ADMIN이면 ACCESS_DENIED를 던지고 Mapper를 호출하지 않는다")
+    void getBoothVisitStats_담당행사아니면_예외를_던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertAccessDenied(() -> dashboardService.getBoothVisitStats(FAIR_ID));
+        then(dashboardMapper).should(never()).selectBoothVisitStats(any());
+    }
+
+    // ── getBoothVisitPatternDistribution ────────────────────────────────
+
+    @Test
+    @DisplayName("부스 방문 패턴 분포 - 담당 행사가 아닌 EVENT_ADMIN이면 ACCESS_DENIED를 던지고 Mapper를 호출하지 않는다")
+    void getBoothVisitPatternDistribution_담당행사아니면_예외를_던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertAccessDenied(() -> dashboardService.getBoothVisitPatternDistribution(FAIR_ID));
+        then(dashboardMapper).should(never()).selectBoothVisitPatternDistribution(any());
     }
 
     // ── getVisitStats ─────────────────────────────────────────────────
@@ -364,6 +421,16 @@ class ReservationDashboardServiceTest {
         then(dashboardMapper).should(times(1)).selectPetSpeciesBreakdown(FAIR_ID);
         then(dashboardMapper).should(times(1)).selectPetBreedBreakdown(FAIR_ID);
         then(dashboardMapper).should(times(1)).selectAvgPetAge(FAIR_ID);
+    }
+
+    @Test
+    @DisplayName("방문 통계 - 담당 행사가 아닌 EVENT_ADMIN이면 ACCESS_DENIED를 던지고 Mapper를 호출하지 않는다 (엑셀 내보내기도 이 메서드를 거치므로 함께 차단됨)")
+    void getVisitStats_담당행사아니면_예외를_던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertAccessDenied(() -> dashboardService.getVisitStats(FAIR_ID));
+        then(dashboardMapper).should(never()).selectTotalVisitors(any());
     }
 
     // ── 헬퍼 메서드 ──────────────────────────────────────────────────

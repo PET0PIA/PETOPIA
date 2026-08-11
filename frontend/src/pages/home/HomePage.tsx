@@ -1,9 +1,10 @@
 import { BoothPreviewSection } from "../../components/home/BoothPreviewSection";
 import { HeroSection } from "../../components/home/HeroSection";
-import { MyActivitySection } from "../../components/home/MyActivitySection";
+import { HomeNoticeMarquee } from "../../components/home/HomeNoticeMarquee";
 import { QuickMenuSection } from "../../components/home/QuickMenuSection";
 import { UpcomingFairSection } from "../../components/home/UpcomingFairSection";
-import { UsageGuideSection } from "../../components/home/UsageGuideSection";
+import { FairReviewSection } from "../../components/home/FairReviewSection";
+import { PetopiaNewsSection } from "../../components/home/PetopiaNewsSection";
 import { PageContainer } from "../../components/common/PageContainer";
 
-export function HomePage() { return <PageContainer className="space-y-14 py-7 sm:py-10"><HeroSection /><QuickMenuSection /><UpcomingFairSection /><MyActivitySection /><BoothPreviewSection /><UsageGuideSection /></PageContainer>; }
+export function HomePage() { return <><HeroSection /><HomeNoticeMarquee /><PageContainer className="space-y-14 py-7 sm:py-10"><QuickMenuSection /><UpcomingFairSection /><BoothPreviewSection /><FairReviewSection /><PetopiaNewsSection /></PageContainer></>; }
