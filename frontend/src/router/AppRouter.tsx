@@ -54,6 +54,7 @@ import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDe
 import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
 import { BusinessDetailPage } from "../pages/business/BusinessDetailPage";
 import { RecruitNoticeFormPage } from "../pages/recruit-notice/RecruitNoticeFormPage";
+import { ApplicationSubmitPage } from "../pages/application/ApplicationSubmitPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
@@ -61,7 +62,6 @@ import { ProtectedRoute } from "./ProtectedRoute";
 const publicPages: Record<string, string> = {
   "/businesses": "행사별 참여 기업",
   "/businesses/status": "사업자 등록 현황",
-  "/participations/new": "참여 부스 신청",
   "/participations/me": "참가 신청 현황",
   "/booths/me": "내 부스 관리",
   "/about": "서비스 소개",
@@ -138,6 +138,7 @@ export function AppRouter() {
           <Route path="/businesses/me" element={<MyBusinessesPage />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
+          <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
           ))}
