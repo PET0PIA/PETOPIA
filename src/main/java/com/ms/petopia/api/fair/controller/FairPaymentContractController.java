@@ -1,7 +1,9 @@
 package com.ms.petopia.api.fair.controller;
 
 import com.ms.petopia.api.fair.dto.FairCancellationStatusResponse;
+import com.ms.petopia.api.fair.dto.FairOpeningFeePaymentContextResponse;
 import com.ms.petopia.api.fair.service.FairCancellationStatusService;
+import com.ms.petopia.api.fair.service.FairOpeningFeePaymentContextService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class FairPaymentContractController {
 
     private final FairCancellationStatusService cancellationStatusService;
+    private final FairOpeningFeePaymentContextService openingFeePaymentContextService;
 
     /**
      * 정산/결제 도메인이 정산 계산·확정 직전에 호출한다 - 취소된 행사면 그쪽에서 409로
@@ -33,6 +36,19 @@ public class FairPaymentContractController {
     ) {
         assertTemporaryPaymentCaller(caller);
         return cancellationStatusService.getCancellationStatus(fairId);
+    }
+
+    /**
+     * 결제 도메인이 개설비 결제 생성 직전에 호출한다 - 클라이언트가 보낸 금액을 신뢰하지 않고
+     * 승인 시 확정해 둔 금액을 그대로 내려준다({@link com.ms.petopia.api.fair.service.FairService#review}).
+     */
+    @GetMapping("/fairs/{fairId}/opening-fee-payment-context")
+    public FairOpeningFeePaymentContextResponse getOpeningFeePaymentContext(
+            @PathVariable Long fairId,
+            @RequestHeader(FairTemporaryAuthHeaders.INTERNAL_CALLER) String caller
+    ) {
+        assertTemporaryPaymentCaller(caller);
+        return openingFeePaymentContextService.getPaymentContext(fairId);
     }
 
     private void assertTemporaryPaymentCaller(String caller) {

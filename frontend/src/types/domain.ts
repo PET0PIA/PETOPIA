@@ -26,6 +26,7 @@ export interface BoothPreview {
   category: string;
   fairName: string;
   boothNumber: string;
+  imageUrl: string;
   initials: string;
   accent: "sun" | "leaf" | "primary";
 }

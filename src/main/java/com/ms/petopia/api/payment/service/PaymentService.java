@@ -10,6 +10,7 @@ import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.*;
@@ -50,6 +51,7 @@ public class PaymentService {
     private final PaymentMapper paymentMapper;
     private final TossPaymentClient tossPaymentClient;
     private final ReservationPaymentContractClient reservationPaymentContractClient;
+    private final FairOpeningFeePaymentContractClient fairOpeningFeePaymentContractClient;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
     private final ApplicationService applicationService;
@@ -166,9 +168,12 @@ public class PaymentService {
     }
 
     /**
-     * 행사개설비 결제를 생성한다. 참가비와 동일 구조로 fair 테이블은 조회하지 않으므로(애그리거트
-     * 간 ID 참조 원칙 유지) 금액은 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
-     * fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
+     * 행사개설비 결제를 생성한다. 예약금과 동일하게 클라이언트가 금액을 보내지 않는다 - 행사
+     * 도메인의 내부 계약({@link FairOpeningFeePaymentContractClient})을 호출해 승인 시 확정된
+     * 금액을 받아온다. fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
+     *
+     * <p>결제자가 이 행사의 담당자인지 검증하지는 않는다 - 지금은 인증된 사용자면 누구나
+     * 개설비를 결제할 수 있다(추후 별도 작업으로 보강 예정, 예약금의 payerUserId 대조와 다름).
      *
      * <p>결제 완료 후 행사 상태를 "준비중"으로 전이하는 건 이 메서드 책임이 아니다 — 행사 도메인이
      * 결제 완료를 어떻게 감지할지(폴링/이벤트 발행) 아직 미정이라 API 명세서에 "미확정"으로
@@ -177,16 +182,19 @@ public class PaymentService {
      * <p>동일 행사에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
      * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
      *
-     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사일 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사이거나,
+     *         존재하지 않거나 개설비를 결제할 수 없는 상태의 행사일 때
      */
     @Transactional
-    public PaymentResponse payFairOpeningFee(Long fairId, Long userId, OpeningFeePaymentRequest request) {
+    public PaymentResponse payFairOpeningFee(Long fairId, Long userId) {
+        FairOpeningFeePaymentContext context = fairOpeningFeePaymentContractClient.getPaymentContext(fairId);
+
         String idempotencyKey = "FAIR_OPENING_FEE_" + fairId;
-        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
+        PaymentRow row = createOrRetryPayment(idempotencyKey, context.amount(), userId, () -> {
             LocalDateTime now = LocalDateTime.now();
             PaymentRow newRow = new PaymentRow();
             newRow.setPaymentType("FAIR_OPENING_FEE");
-            newRow.setAmount(request.amount());
+            newRow.setAmount(context.amount());
             newRow.setStatus("PENDING");
             newRow.setMethod("TOSS");
             newRow.setIdempotencyKey(idempotencyKey);

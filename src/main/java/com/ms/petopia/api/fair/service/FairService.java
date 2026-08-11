@@ -519,6 +519,7 @@ public class FairService {
                 fair.getStatus() == null ? null : fair.getStatus().name(),
                 fair.getRejectReason(),
                 fair.getReviewedAt(),
+                fair.getOpeningFeeAmount(),
                 fair.getPaymentDueAt(),
                 fair.getCreatedAt(),
                 fair.getCanceledAt(),
