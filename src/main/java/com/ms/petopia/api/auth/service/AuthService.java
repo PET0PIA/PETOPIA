@@ -35,6 +35,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final AuditLogService auditLogService;
+    private final LoginAttemptStore loginAttemptStore;
 
     //회원가입
     @Transactional
@@ -101,6 +102,11 @@ public class AuthService {
 
     //로그인
     public TokenPair login(EmailLoginRequest request) {
+        //이미 5회 이상 틀린 이메일이면 비밀번호 검사도 하지 않고 차단
+        if (loginAttemptStore.isBlocked(request.getEmail())) {
+            throw new CommonException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS);
+        }
+
         User user = authMapper.selectUserByEmail(request.getEmail());
 
         //아이디/비밀번호 검사
@@ -118,8 +124,12 @@ public class AuthService {
             } catch (Exception e) {
                 log.error("LOGIN_FAIL 감사 로그 저장 실패", e);
             }
+            loginAttemptStore.recordFailure(request.getEmail());
             throw new CommonException(ErrorCode.INVALID_LOGIN);
         }
+
+        //비밀번호가 맞았으니 실패 카운트 리셋
+        loginAttemptStore.reset(request.getEmail());
 
         //정지된 계정인지 확인
         if(user.getStatus().equals("INACTIVE")) {

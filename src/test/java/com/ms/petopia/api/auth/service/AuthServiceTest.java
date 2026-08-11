@@ -47,6 +47,8 @@ class AuthServiceTest {
     private RefreshTokenStore refreshTokenStore;
     @Mock
     private AuditLogService auditLogService;
+    @Mock
+    private LoginAttemptStore loginAttemptStore;
     @InjectMocks
     private AuthService authService;
 
@@ -160,6 +162,7 @@ class AuthServiceTest {
                 .isEqualTo(ErrorCode.INVALID_LOGIN);
 
         verify(jwtTokenProvider, never()).generateAccessToken(anyLong(), any());
+        verify(loginAttemptStore).recordFailure(EMAIL);
     }
 
     @Test
@@ -171,6 +174,8 @@ class AuthServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(ex -> ((CommonException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_LOGIN);
+
+        verify(loginAttemptStore).recordFailure(EMAIL);
     }
 
     @Test
