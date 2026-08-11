@@ -151,8 +151,7 @@ class ReservationCancellationServiceTest {
         given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
         given(timeProvider.now()).willReturn(NOW);
         given(paymentMapper.selectByReservationId(RESERVATION_ID)).willReturn(payment("COMPLETED"));
-        given(refundService.findByPaymentId(PAYMENT_ID)).willReturn(null);
-        given(refundService.refund(eq(PAYMENT_ID), eq(USER_ID), any())).willReturn(refundResponse());
+        given(refundService.refundOrReuse(eq(PAYMENT_ID), eq(USER_ID), any())).willReturn(refundResponse());
         given(cancellationMapper.cancelReservation(
                 RESERVATION_ID, "CONFIRMED", null, USER_ID, NOW
         )).willReturn(1);
@@ -165,7 +164,7 @@ class ReservationCancellationServiceTest {
         assertThat(response.refundAmount()).isEqualTo(10_000L);
         assertThat(response.refundStatus()).isEqualTo("COMPLETED");
 
-        verify(refundService).refund(
+        verify(refundService).refundOrReuse(
                 PAYMENT_ID, USER_ID,
                 new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.RESERVATION)
         );
@@ -174,22 +173,75 @@ class ReservationCancellationServiceTest {
         );
     }
 
+    /**
+     * 잠금 밖에서 findByPaymentId로 미리 걸러내면, 그 조회와 환불 사이에 행사 일괄환불이 커밋되는
+     * 창이 남는다(REFUND_ALREADY_PROCESSED → 취소까지 롤백). 그래서 예약 취소는 사전 조회를 하지
+     * 않고 판단 전체를 refundOrReuse(결제 행 잠금 뒤 처리)에 맡긴다.
+     */
     @Test
-    void reusesExistingRefundInsteadOfRefundingTwice() {
+    void delegatesRefundDecisionToLockedApiWithoutPreCheck() {
         ReservationCancellationContext context = context("CONFIRMED", "ADVANCE", 10_000);
         given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
         given(timeProvider.now()).willReturn(NOW);
         given(paymentMapper.selectByReservationId(RESERVATION_ID)).willReturn(payment("COMPLETED"));
-        given(refundService.findByPaymentId(PAYMENT_ID)).willReturn(refundRow());
+        given(refundService.refundOrReuse(eq(PAYMENT_ID), eq(USER_ID), any())).willReturn(refundResponse());
+        given(cancellationMapper.cancelReservation(
+                RESERVATION_ID, "CONFIRMED", null, USER_ID, NOW
+        )).willReturn(1);
+
+        service.cancel(RESERVATION_ID, USER_ID, null);
+
+        verify(refundService, never()).findByPaymentId(any());
+        verify(refundService, never()).refund(any(), any(), any());
+    }
+
+    /**
+     * 행사 일괄환불이 먼저 커밋한 상태에서 사용자가 취소하는 경우. refundOrReuse가 기존 환불을
+     * 돌려주므로 예약 취소는 정상 완료되고, 응답에는 먼저 만들어진 환불(FAIR_CANCEL_USER)이 실린다.
+     */
+    @Test
+    void completesCancellationWhenFairBatchAlreadyRefundedTheDeposit() {
+        ReservationCancellationContext context = context("CONFIRMED", "ADVANCE", 10_000);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+        given(timeProvider.now()).willReturn(NOW);
+        given(paymentMapper.selectByReservationId(RESERVATION_ID)).willReturn(payment("COMPLETED"));
+        given(refundService.refundOrReuse(eq(PAYMENT_ID), eq(USER_ID), any()))
+                .willReturn(reusedRefundResponse());
         given(cancellationMapper.cancelReservation(
                 RESERVATION_ID, "CONFIRMED", null, USER_ID, NOW
         )).willReturn(1);
 
         CancelReservationResponse response = service.cancel(RESERVATION_ID, USER_ID, null);
 
+        assertThat(response.reservationStatus()).isEqualTo("CANCELED");
         assertThat(response.refunded()).isTrue();
         assertThat(response.refundId()).isEqualTo(REFUND_ID);
-        verify(refundService, never()).refund(any(), any(), any());
+        // 취소 이력에도 재사용된 환불이 그대로 기록된다.
+        verify(cancellationMapper).insertCanceledHistory(
+                RESERVATION_ID, "CONFIRMED", null, USER_ID, REFUND_ID, 10_000L, NOW
+        );
+    }
+
+    /**
+     * 반대로 환불이 끝까지 거부되면(확정 정산에 포함된 결제 등) 예약 취소도 함께 실패해야 한다 —
+     * 돈은 그대로인데 예약만 CANCELED가 되는 상태를 만들지 않는다.
+     */
+    @Test
+    void failsCancellationWhenRefundIsRejected() {
+        ReservationCancellationContext context = context("CONFIRMED", "ADVANCE", 10_000);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+        given(timeProvider.now()).willReturn(NOW);
+        given(paymentMapper.selectByReservationId(RESERVATION_ID)).willReturn(payment("COMPLETED"));
+        given(refundService.refundOrReuse(eq(PAYMENT_ID), eq(USER_ID), any()))
+                .willThrow(new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE));
+
+        assertError(() -> service.cancel(RESERVATION_ID, USER_ID, null),
+                ErrorCode.REFUND_TARGET_NOT_REFUNDABLE);
+
+        verify(cancellationMapper, never()).cancelReservation(any(), any(), any(), any(), any());
+        verify(cancellationMapper, never()).insertCanceledHistory(
+                any(), any(), any(), any(), any(), any(), any()
+        );
     }
 
     @Test
@@ -309,6 +361,14 @@ class ReservationCancellationServiceTest {
 
     private RefundResponse refundResponse() {
         return RefundResponse.from(refundRow());
+    }
+
+    /** 행사 취소 일괄환불이 먼저 만들어둔 환불을 refundOrReuse가 재사용해 돌려준 형태. */
+    private RefundResponse reusedRefundResponse() {
+        RefundRow row = refundRow();
+        row.setRefundReason(RefundReason.FAIR_CANCEL_USER.name());
+        row.setRequestedByDomain(RequestedByDomain.FAIR.name());
+        return RefundResponse.from(row);
     }
 
     private void assertError(Runnable action, ErrorCode errorCode) {

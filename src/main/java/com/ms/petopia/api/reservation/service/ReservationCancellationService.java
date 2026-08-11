@@ -6,7 +6,6 @@ import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.api.refund.dto.RefundReason;
 import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RefundResponse;
-import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
@@ -17,7 +16,6 @@ import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher; // 실시간 통계 확인용
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,12 +47,14 @@ import java.util.List;
  * 이미 커밋된 뒤에 환불을 시작해야 해서 재시도 장치가 필수였다. 실제 토스 결제취소 API가 붙어
  * 환불이 외부 호출을 타게 되면 이 전제가 깨지므로, 그때는 여기도 작업행 방식으로 바꿔야 한다.
  *
- * <p><b>주의</b>: 그래서 {@link RefundService#refund}가 던지는 예외를 잡아서 취소를 계속 진행하면
- * 안 된다 — 같은 트랜잭션에 합류(REQUIRED)한 뒤 예외가 나면 트랜잭션이 rollback-only로 표시돼,
- * 잡고 커밋을 시도해봐야 {@code UnexpectedRollbackException}으로 끝난다. 환불이 거부되면 취소도
- * 같이 실패해서 예약이 CONFIRMED로 남는 게 맞는 동작이다.
+ * <p><b>주의</b>: 그래서 {@link RefundService#refundOrReuse}가 던지는 예외를 잡아서 취소를 계속
+ * 진행하면 안 된다 — 같은 트랜잭션에 합류(REQUIRED)한 뒤 예외가 나면 트랜잭션이 rollback-only로
+ * 표시돼, 잡고 커밋을 시도해봐야 {@code UnexpectedRollbackException}으로 끝난다. 환불이 거부되면
+ * 취소도 같이 실패해서 예약이 CONFIRMED로 남는 게 맞는 동작이다.
+ *
+ * <p>같은 이유로 "이미 환불됐는지"를 여기서 미리 조회해 분기하지 않는다 — 조회와 환불 사이 창에서
+ * 행사 취소 일괄환불이 커밋되면 그대로 롤백된다. 판단은 결제 행을 잠그는 refundOrReuse에 맡긴다.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReservationCancellationService {
@@ -189,27 +189,21 @@ public class ReservationCancellationService {
     /**
      * 결제까지 끝난 예약금을 전액 환불한다.
      *
-     * <p>이미 환불된 결제(행사 취소 일괄환불이 먼저 처리한 경우 등)면 새로 환불하지 않고 기존
-     * 환불을 그대로 재사용한다 — {@link RefundService#refund}를 다시 부르면 UK_REFUND_PAYMENT
-     * 위반으로 REFUND_ALREADY_PROCESSED가 나서, 정작 예약 취소는 영영 못 하게 된다.
+     * <p>{@link RefundService#refund}가 아니라 {@link RefundService#refundOrReuse}를 쓴다.
+     * 이미 환불된 결제(행사 취소 일괄환불이 먼저 처리한 경우)를 여기서 미리 조회해 걸러내는 방식은
+     * 조회와 환불 사이에 창이 남는다 — 그 사이 일괄환불이 커밋하면 REFUND_ALREADY_PROCESSED로
+     * 이 트랜잭션이 통째로 롤백돼 "환불은 됐는데 예약은 CONFIRMED로 남는" 상태가 된다.
+     * refundOrReuse는 결제 행을 잠근 뒤 재사용/생성을 판단하므로 그 창이 없다.
+     *
+     * <p>결제가 COMPLETED인지, 정산에 묶여 환불 불가인지도 같은 잠금 구간 안에서 판단된다
+     * (REFUND_TARGET_NOT_REFUNDABLE). 여기서 미리 검사하면 잠금 없이 읽는 셈이라 부정확하다.
      */
     private RefundResponse refundDeposit(ReservationCancellationContext reservation, Long userId) {
         PaymentRow payment = paymentMapper.selectByReservationId(reservation.getReservationId());
         if (payment == null) {
             throw new CommonException(ErrorCode.RESERVATION_REFUND_PAYMENT_NOT_FOUND);
         }
-
-        RefundRow alreadyRefunded = refundService.findByPaymentId(payment.getPaymentId());
-        if (alreadyRefunded != null) {
-            log.info("이미 환불된 결제라 기존 환불을 재사용한다. reservationId={}, paymentId={}, refundId={}",
-                    reservation.getReservationId(), payment.getPaymentId(), alreadyRefunded.getRefundId());
-            return RefundResponse.from(alreadyRefunded);
-        }
-
-        // 결제가 COMPLETED인지, 정산에 묶여 환불 불가인지는 RefundService가 결제 행을 잠근 뒤
-        // 판단한다(REFUND_TARGET_NOT_REFUNDABLE). 여기서 미리 검사하면 잠금 없이 읽는 셈이라
-        // 중복이면서 부정확하다.
-        return refundService.refund(
+        return refundService.refundOrReuse(
                 payment.getPaymentId(),
                 userId,
                 new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.RESERVATION)
