@@ -140,6 +140,29 @@ public class ReservationCancellationService {
 
         eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
 
+        // 알림은 커밋 뒤에 저장한다 — 취소가 롤백되면 "취소됐다"는 알림만 남는 걸 막는다.
+        // 유료 취소면 RefundService가 REFUND_COMPLETED 알림을 따로 보내므로 여기선 취소 사실만 알린다.
+        Long notifyUserId = reservation.getUserId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.save(new SaveNotificationDto.Request(
+                            notifyUserId,
+                            RecipientType.USER,
+                            NotificationType.RESERVATION_CANCELED,
+                            "예약이 취소되었습니다",
+                            "예약이 정상적으로 취소 처리되었습니다.",
+                            null,
+                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            null
+                    ));
+                } catch (Exception e) {
+                    log.error("예약 취소 알림 저장 실패. userId={}, reservationId={}", notifyUserId, reservationId, e);
+                }
+            }
+        });
+
         if (refund == null) {
             return new CancelReservationResponse(reservationId, CANCELED, now, false, null, null, null);
         }
@@ -218,28 +241,6 @@ public class ReservationCancellationService {
                 userId,
                 new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.RESERVATION)
         );
-        Long notifyUserId = reservation.getUserId();
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                try {
-                    notificationService.save(new SaveNotificationDto.Request(
-                            notifyUserId,
-                            RecipientType.USER,
-                            NotificationType.RESERVATION_CANCELED,
-                            "예약이 취소되었습니다",
-                            "예약이 정상적으로 취소 처리되었습니다.",
-                            null,
-                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
-                            null
-                    ));
-                } catch (Exception e) {
-                    log.error("예약 취소 알림 저장 실패. userId={}, reservationId={}", notifyUserId, reservationId, e);
-                }
-            }
-        });
-
-        return new CancelReservationResponse(reservationId, CANCELED, now);
     }
 
     private void validateRequest(Long reservationId, Long userId, CancelReservationRequest request) {
