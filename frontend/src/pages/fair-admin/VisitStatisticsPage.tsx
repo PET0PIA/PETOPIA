@@ -46,8 +46,9 @@ export function VisitStatisticsPage() {
     setLoadError(null);
   }, [fairIdParam]);
 
-  // 최종 fairId: 경로 파라미터 > 훅(EVENT_ADMIN 자동 선택 / SUPER_ADMIN 수동 선택)
-  const fairId = overrideFairId ?? selectorFairId;
+  // 최종 fairId: 대시보드에서 들어온 경우 경로 파라미터만 신뢰한다(무효면 다른 행사로 새지 않도록
+  // selectorFairId로 대체하지 않는다). 그 외에는 훅(EVENT_ADMIN 자동 선택 / SUPER_ADMIN 수동 선택)을 쓴다.
+  const fairId = fromAdminDashboard ? overrideFairId : selectorFairId;
   function setFairId(id: number) {
     setOverrideFairId(null);
     setSelectorFairId(id);
@@ -174,7 +175,11 @@ export function VisitStatisticsPage() {
         </div>
       )}
 
-      {fairId === null && selectableFairs.length > 0 && (
+      {fromAdminDashboard && fairId === null && (
+        <EmptyState title="잘못된 행사 경로예요." description="전체 운영 대시보드에서 다시 시도해 주세요." />
+      )}
+
+      {!fromAdminDashboard && fairId === null && selectableFairs.length > 0 && (
         <EmptyState title="행사를 선택해 주세요." description="위 드롭다운에서 행사를 고르면 방문 통계가 표시돼요." />
       )}
 

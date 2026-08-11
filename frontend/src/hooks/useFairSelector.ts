@@ -24,6 +24,10 @@ export function useFairSelector(): FairSelectorState {
   const [fairId, setFairId] = useState<number | null>(null);
 
   useEffect(() => {
+    // role이나 계정이 바뀌면 이전 사용자의 목록/선택이 남아있지 않도록 먼저 비운다.
+    setSelectableFairs([]);
+    setFairId(null);
+
     if (!isEventAdmin && !isSuperAdmin) return;
     let ignore = false;
 
@@ -40,7 +44,7 @@ export function useFairSelector(): FairSelectorState {
       .catch(() => {});
 
     return () => { ignore = true; };
-  }, [isEventAdmin, isSuperAdmin]);
+  }, [isEventAdmin, isSuperAdmin, user?.userId]);
 
   return { fairId, setFairId, selectableFairs };
 }

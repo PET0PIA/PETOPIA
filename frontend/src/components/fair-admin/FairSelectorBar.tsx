@@ -31,8 +31,9 @@ export function FairSelectorBar({
 
   return (
     <div className="surface mb-6 p-5">
-      <label className="mb-1.5 block text-sm font-bold text-ink">{label}</label>
+      <label htmlFor="fair-selector-id" className="mb-1.5 block text-sm font-bold text-ink">{label}</label>
       <Select
+        id="fair-selector-id"
         value={fairId ?? selectableFairs[0].fairId}
         onChange={(event) => onFairIdChange(Number(event.target.value))}
       >

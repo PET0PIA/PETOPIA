@@ -37,6 +37,7 @@ export function HallManagementPage() {
 
     setLoading(true);
     setLoadError(null);
+    setHalls([]);
     getHalls(fairId)
       .then((data) => { if (!ignore) setHalls(data); })
       .catch((error) => { if (!ignore) setLoadError(error instanceof ApiError ? error.message : "홀 목록을 불러오지 못했어요."); })
@@ -138,11 +139,11 @@ export function HallManagementPage() {
         <div className="surface grid min-h-40 place-items-center text-sm text-muted">홀 목록을 불러오는 중이에요...</div>
       )}
 
-      {fairId !== null && !loading && halls.length === 0 && !loadError && (
+      {fairId !== null && !loading && !loadError && halls.length === 0 && (
         <EmptyState title="등록된 홀이 없어요." description="홀 추가 버튼을 눌러 첫 홀을 등록해 보세요." />
       )}
 
-      {fairId !== null && !loading && halls.length > 0 && (
+      {fairId !== null && !loading && !loadError && halls.length > 0 && (
         <Table>
           <thead>
             <tr className="border-b border-line text-xs font-bold text-muted">
