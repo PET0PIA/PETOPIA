@@ -1,9 +1,10 @@
-import { AlertCircle, ArrowLeft, Download, Search } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { AlertCircle, ArrowLeft, Download } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getFairDates, type FairDate } from "../../api/fair";
 import { downloadVisitStatsExcel, getBoothVisitStats, getHourlyEntryTrend, getVisitStats, type BoothVisitStat, type HourlyEntryTrend, type VisitStats } from "../../api/statistics";
+import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
 import { BoothVisitRanking } from "../../components/fair-admin/BoothVisitRanking";
 import { DonutChart } from "../../components/fair-admin/DonutChart";
 import { HourlyEntryTrendChart } from "../../components/fair-admin/HourlyEntryTrendChart";
@@ -13,21 +14,13 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
+import { useFairSelector } from "../../hooks/useFairSelector";
 
 const BOOTH_RANKING_PREVIEW_COUNT = 3;
 
-/**
- * 진입 경로에 따라 fairId를 두 가지 방식으로 받을 수 있다.
- * - 박람회 관리자 화면(/fair-admin/statistics?fairId=123): 쿼리스트링
- * - 전체 운영 대시보드에서 행사명을 눌러 들어온 경우(/admin/dashboard/fairs/123): 경로 파라미터
- */
-function resolveInitialFairIdInput(pathParam: string | undefined, searchParams: URLSearchParams): string {
-  return pathParam ?? searchParams.get("fairId") ?? "";
-}
-function resolveInitialFairId(pathParam: string | undefined, searchParams: URLSearchParams): number | null {
-  const parsed = Number(pathParam ?? searchParams.get("fairId"));
+function resolvePathFairId(pathParam: string | undefined): number | null {
+  const parsed = Number(pathParam);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
@@ -35,26 +28,36 @@ export function VisitStatisticsPage() {
   const { fairId: fairIdParam } = useParams<{ fairId: string }>();
   const [searchParams] = useSearchParams();
 
-  // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
-  const [fairIdInput, setFairIdInput] = useState(() => resolveInitialFairIdInput(fairIdParam, searchParams));
-  const [fairId, setFairId] = useState<number | null>(() => resolveInitialFairId(fairIdParam, searchParams));
+  // SUPER_ADMIN이 /admin/dashboard/fairs/:fairId 경로로 들어온 경우 경로 파라미터를 우선 사용한다.
+  const fromAdminDashboard = fairIdParam !== undefined;
 
-  // fairIdParam이 바뀌면(같은 컴포넌트가 유지된 채 다른 행사로 라우팅) state를 동기화한다.
+  const { fairId: selectorFairId, setFairId: setSelectorFairId, selectableFairs } = useFairSelector();
+
+  // 경로 파라미터(SUPER_ADMIN → 대시보드 클릭)나 훅(EVENT_ADMIN 자동 선택)에서 fairId를 결정한다.
+  const [overrideFairId, setOverrideFairId] = useState<number | null>(
+    () => resolvePathFairId(fairIdParam),
+  );
+
+  // fairIdParam이 바뀌면(같은 컴포넌트가 유지된 채 다른 행사로 라우팅) override를 동기화한다.
   useEffect(() => {
-    const newInput = resolveInitialFairIdInput(fairIdParam, searchParams);
-    const newId = resolveInitialFairId(fairIdParam, searchParams);
-    setFairIdInput(newInput);
-    setFairId(newId);
+    const newId = resolvePathFairId(fairIdParam);
+    setOverrideFairId(newId);
     setVisitStats(null);
     setLoadError(null);
-  }, [fairIdParam]); // searchParams 변경은 수동 검색 폼이 담당하므로 제외
+  }, [fairIdParam]);
+
+  // 최종 fairId: 경로 파라미터 > 훅(EVENT_ADMIN 자동 선택 / SUPER_ADMIN 수동 선택)
+  const fairId = overrideFairId ?? selectorFairId;
+  function setFairId(id: number) {
+    setOverrideFairId(null);
+    setSelectorFairId(id);
+  }
 
   const [fairDates, setFairDates] = useState<FairDate[]>([]);
   const [boothStats, setBoothStats] = useState<BoothVisitStat[]>([]);
   const [visitStats, setVisitStats] = useState<VisitStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadTick, setReloadTick] = useState(0);
 
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [hourlyTrend, setHourlyTrend] = useState<HourlyEntryTrend[]>([]);
@@ -90,7 +93,7 @@ export function VisitStatisticsPage() {
       .finally(() => { if (!ignore) setLoading(false); });
 
     return () => { ignore = true; };
-  }, [fairId, reloadTick]);
+  }, [fairId]);
 
   // 시간대별 입장 추이는 운영일 단위 통계라 선택된 날짜가 바뀔 때마다 다시 조회한다.
   useEffect(() => {
@@ -125,23 +128,6 @@ export function VisitStatisticsPage() {
     }
   }
 
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-    setExportError(null);
-    if (parsed === fairId) {
-      setReloadTick((tick) => tick + 1);
-    } else {
-      setFairId(parsed);
-    }
-  }
-
-  const fromAdminDashboard = fairIdParam !== undefined;
-
   return (
     <div className="mx-auto max-w-6xl py-2">
       {fromAdminDashboard && (
@@ -171,13 +157,15 @@ export function VisitStatisticsPage() {
         </div>
       )}
 
-      <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="statistics-fair-id" className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</label>
-          <Input id="statistics-fair-id" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
-        </div>
-        <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
-      </form>
+      {/* SUPER_ADMIN이 경로 파라미터 없이 직접 접근하거나 EVENT_ADMIN인 경우에만 선택 바를 표시한다.
+          SUPER_ADMIN이 대시보드에서 행사명 클릭으로 들어온 경우(fromAdminDashboard)는 이미 fairId가 있어 불필요. */}
+      {!fromAdminDashboard && (
+        <FairSelectorBar
+          selectableFairs={selectableFairs}
+          fairId={fairId}
+          onFairIdChange={(id) => { setExportError(null); setFairId(id); }}
+        />
+      )}
 
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -186,8 +174,8 @@ export function VisitStatisticsPage() {
         </div>
       )}
 
-      {fairId === null && (
-        <EmptyState title="행사 ID를 먼저 입력해 주세요." description="담당 행사의 ID를 입력하고 불러오기를 누르면 방문 통계가 표시돼요." />
+      {fairId === null && selectableFairs.length > 0 && (
+        <EmptyState title="행사를 선택해 주세요." description="위 드롭다운에서 행사를 고르면 방문 통계가 표시돼요." />
       )}
 
       {fairId !== null && loading && (
