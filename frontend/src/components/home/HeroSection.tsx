@@ -17,10 +17,20 @@ export function HeroSection() {
     return () => clearTimeout(timer);
   }, [index, paused]);
 
+  // OS "동작 줄이기" 설정이 도중에 켜지면 자동 전환을 멈춘다. (꺼져도 사용자의 정지 선택은 유지)
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setPaused(true);
+    };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
   const slide = heroSlides[index];
 
   return (
-    <section className="relative overflow-hidden transition-colors duration-500" style={{ backgroundColor: slide.bg }}>
+    <section className="relative overflow-hidden transition-colors duration-500 motion-reduce:transition-none" style={{ backgroundColor: slide.bg }}>
       {/* 배너 아무 곳이나 클릭하면 자동 넘김 정지/재생. 버튼 UI는 안 보이지만 키보드/스크린리더로 조작 가능 */}
       <button type="button" onClick={() => setPaused((value) => !value)} aria-label={paused ? "배너 자동 넘김 재생" : "배너 자동 넘김 일시정지"} className="absolute inset-0 z-0 cursor-default" />
       <div className="page-shell pointer-events-none relative z-10 grid items-center gap-8 pt-10 sm:pt-14 md:grid-cols-[0.75fr_1.25fr]">
