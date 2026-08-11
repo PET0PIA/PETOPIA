@@ -362,6 +362,7 @@ public class FairService {
         update.setReviewedAt(now);
         if (approved) {
             update.setStatus(FairStatus.PAYMENT_PENDING);
+            update.setOpeningFeeAmount(request.openingFeeAmount());
             update.setPaymentDueAt(now.plus(PAYMENT_DUE_PERIOD));
         } else {
             update.setStatus(FairStatus.REJECTED);
@@ -388,7 +389,8 @@ public class FairService {
                 fairId,
                 Map.of("status", "RECEIVED"),
                 approved
-                        ? Map.of("status", "PAYMENT_PENDING", "paymentDueAt", update.getPaymentDueAt())
+                        ? Map.of("status", "PAYMENT_PENDING", "openingFeeAmount", update.getOpeningFeeAmount(),
+                                "paymentDueAt", update.getPaymentDueAt())
                         : Map.of("status", "REJECTED", "rejectReason", update.getRejectReason())
         );
 
@@ -407,6 +409,7 @@ public class FairService {
                 fairId,
                 update.getStatus().name(),
                 now,
+                update.getOpeningFeeAmount(),
                 update.getPaymentDueAt(),
                 update.getRejectReason()
         );
@@ -471,6 +474,10 @@ public class FairService {
         }
         if (request.decision() == FairReviewDecision.REJECT && isBlank(request.rejectReason())) {
             throw new CommonException(ErrorCode.FAIR_REJECT_REASON_REQUIRED);
+        }
+        if (request.decision() == FairReviewDecision.APPROVE
+                && (request.openingFeeAmount() == null || request.openingFeeAmount() <= 0)) {
+            throw new CommonException(ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         }
     }
 
