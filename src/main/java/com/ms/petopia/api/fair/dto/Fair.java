@@ -83,4 +83,16 @@ public class Fair {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    // ===== 조회 계산 값(테이블 컬럼 아님) =====
+    /**
+     * 공개 목록 조회({@link com.ms.petopia.api.fair.mapper.FairMapper#selectPublicFairs}) 전용 계산 값.
+     * 사전예약 가능(예매 기간 안 + 정원 남은 미래 운영일 존재)이면 true. 다른 조회에서는 null이다.
+     */
+    private Boolean reservable;
+    /**
+     * 공개 목록 조회 전용 계산 값. 참가기업 부스 모집중(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯
+     * 존재)이면 true. 다른 조회에서는 null이다.
+     */
+    private Boolean recruiting;
 }

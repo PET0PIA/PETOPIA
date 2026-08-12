@@ -1,21 +1,37 @@
 import type { ComponentType } from "react";
 import { Ban, BarChart3, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, LayoutDashboard, ListOrdered, Map, Megaphone, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Store, Ticket, UsersRound } from "lucide-react";
-import type { BusinessStatus } from "../types/domain";
+import type { UserRole } from "../api/auth";
 
 export interface NavigationItem {
   label: string;
   path?: string;
   icon?: ComponentType<{ size?: number; strokeWidth?: number }>;
   children?: NavigationItem[];
-  requiredBusinessStatus?: BusinessStatus;
+  /** 지정하면 해당 role로 로그인한 사용자에게만 노출한다. 없으면 비로그인 포함 누구나. */
+  requiredRole?: UserRole[];
 }
 
 export const publicNavigation: NavigationItem[] = [
-  { label: "행사 안내", children: [{ label: "지난 행사", path: "/fairs/past" }, { label: "예정 행사", path: "/fairs/upcoming" }, { label: "행사 신청", path: "/fair-applications/new" }, { label: "내 행사 신청 목록", path: "/fair-applications/me" }] },
-  { label: "티켓 예매", children: [{ label: "예매 가능한 행사", path: "/tickets" }, { label: "행사별 참여 기업", path: "/businesses" }] },
-  { label: "참여 업체", children: [{ label: "참여 부스 신청", path: "/participations/new" }, { label: "사업자 등록 신청", path: "/businesses/new", requiredBusinessStatus: "NOT_REGISTERED" }, { label: "사업자 등록 현황", path: "/businesses/status", requiredBusinessStatus: "PENDING" }, { label: "내 사업자 목록", path: "/businesses/me", requiredBusinessStatus: "APPROVED" }, { label: "참가 신청 현황", path: "/participations/me", requiredBusinessStatus: "APPROVED" }, { label: "내 부스 관리", path: "/booths/me", requiredBusinessStatus: "APPROVED" }, { label: "부스 방문 스캔", path: "/booths/scan", requiredBusinessStatus: "APPROVED" }] },
-  // 로그인/역할 배선 전이라 MVP 화면 확인용으로 항상 노출한다. 인증 도입 시 역할(EVENT_ADMIN/SUPER_ADMIN) 게이팅으로 교체한다.
-  { label: "관리자", children: [{ label: "박람회 관리자 콘솔", path: "/fair-admin/fair" }, { label: "최고 관리자 콘솔", path: "/admin" }] },
+  {
+    label: "행사 안내",
+    children: [
+      { label: "예정 행사", path: "/fairs/upcoming" },
+      { label: "지난 행사", path: "/fairs/past" },
+      { label: "행사 개최 신청", path: "/fair-applications/new" },
+      { label: "내 행사 신청 목록", path: "/fair-applications/me", requiredRole: ["USER", "VENDOR", "EVENT_ADMIN", "SUPER_ADMIN"] },
+    ],
+  },
+  { label: "티켓 예매", path: "/tickets" },
+  {
+    label: "참여 업체",
+    children: [
+      { label: "사업자 등록 신청", path: "/businesses/new", requiredRole: ["USER"] },
+      { label: "내 사업자 목록", path: "/businesses/me", requiredRole: ["VENDOR"] },
+      { label: "부스 방문 스캔", path: "/booths/scan", requiredRole: ["VENDOR"] },
+    ],
+  },
+  // 관리자 콘솔 진입은 공개 메뉴가 아니라, 로그인한 admin의 프로필 드롭다운에서 역할별로 노출한다(PublicHeader).
+  // 최고 관리자 로그인 입구는 푸터의 작은 링크(PublicLayout)로 둔다.
 ];
 
 export const fairAdminNavigation: NavigationItem[] = [
