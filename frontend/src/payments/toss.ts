@@ -80,6 +80,42 @@ export async function requestReservationPayment(request: ReservationPaymentReque
   });
 }
 
+export interface VendorFeePaymentRequest {
+  paymentId: number;
+  applicationId: number;
+  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다("PAYMENT_{paymentId}"). */
+  orderId: string;
+  /** 화면에 보여준 금액이 아니라 서버가 확정한 금액(승인 시 finalPrice). */
+  amount: number;
+  orderName: string;
+}
+
+/**
+ * 토스 결제창을 띄운다(참가비). requestReservationPayment와 동일한 결제창 방식 —
+ * successUrl 리다이렉트라 정상 흐름에서 이 Promise는 resolve되지 않는다.
+ */
+export async function requestVendorFeePayment(request: VendorFeePaymentRequest): Promise<void> {
+  const payment = await getTossPayment();
+  const origin = window.location.origin;
+
+  // confirm API는 paymentId로 대상을 식별하고, 성공 페이지는 결제유형 분기를 위해
+  // applicationId를 쓴다(예약금 쪽 reservationId와 같은 역할).
+  const query = `paymentId=${request.paymentId}&applicationId=${request.applicationId}`;
+
+  await payment.requestPayment({
+    method: "CARD",
+    amount: { currency: "KRW", value: request.amount },
+    orderId: request.orderId,
+    orderName: request.orderName.slice(0, ORDER_NAME_MAX_LENGTH),
+    successUrl: `${origin}/payments/success?${query}`,
+    failUrl: `${origin}/payments/fail?${query}`,
+    card: { flowMode: "DEFAULT", useEscrow: false, useCardPoint: false },
+  });
+}
+
+
+
+
 export interface FairOpeningFeePaymentRequest {
   paymentId: number;
   fairId: number;
