@@ -151,4 +151,10 @@
         VALUES (#{userId}, #{boothId}, NOW())
     </insert>
 
+    <!-- 즐겨찾기 삭제. 이미 삭제됐거나 존재하지 않는 조합이어도 0행 삭제로 조용히 끝난다(멱등) -->
+    <delete id="deleteFavorite">
+        DELETE FROM booth_favorites
+        WHERE user_id = #{userId} AND booth_id = #{boothId}
+    </delete>
+
 </mapper>

@@ -115,6 +115,13 @@ public class BoothService {
 
     }
 
+    // 즐겨찾기 삭제. 없는 걸 지워도 0행 조용히 무시(에러 아님) — 멱등.
+    public void removeFavorite(Long userId, Long boothId) {
+
+        boothMapper.deleteFavorite(userId, boothId);
+
+    }
+
     /*
      * 판매상품·이벤트를 등록한다. 본인 소유(부스가 속한 사업자의 owner) 부스만 가능하다.
      * 이름 중복은 의도적으로 막지 않는다 - 사업자가 같은 이름으로 여러 건(다른 배치 등)

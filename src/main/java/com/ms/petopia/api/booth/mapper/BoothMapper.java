@@ -49,7 +49,8 @@ public interface BoothMapper {
     void deleteBoothItemsByApplicationId(@Param("applicationId") Long applicationId);
 
     // 즐겨찾기 여부 확인 (부스 상세 조회 시 favorited 계산용)
-    boolean existsFavorite(@Param("userId") Long userId, @Param("boothId") Long boothId);
+    boolean existsFavorite(@Param("userId") Long userId,
+                           @Param("boothId") Long boothId);
 
     // 내 즐겨찾기 목록 (부스명·이미지·소속 행사명까지 조인해서 한 번에 조회)
     List<BoothFavoriteResponse> selectFavoritesByUserId(@Param("userId") Long userId);
@@ -58,6 +59,11 @@ public interface BoothMapper {
     void deleteFavoritesByApplicationId(@Param("applicationId") Long applicationId);
 
     // 즐겨찾기 추가 (INSERT IGNORE로 멱등 처리 — 중복 클릭 방어)
-    void insertFavorite(@Param("userId") Long userId, @Param("boothId") Long boothId);
+    void insertFavorite(@Param("userId") Long userId,
+                        @Param("boothId") Long boothId);
+
+    // 즐겨찾기 삭제 (없는 걸 지워도 0행, 에러 아님)
+    void deleteFavorite(@Param("userId") Long userId,
+                        @Param("boothId") Long boothId);
 
 }
