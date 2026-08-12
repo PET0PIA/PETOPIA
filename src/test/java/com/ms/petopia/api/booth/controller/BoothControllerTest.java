@@ -198,7 +198,7 @@ class BoothControllerTest {
     void getsConfirmedBooths() throws Exception {
 
         given(boothService.getConfirmedBooths(1L)).willReturn(
-                List.of(new ConfirmedBoothResponse(1L, "멍냥사료", "A-01", null, null)));
+                List.of(new ConfirmedBoothResponse(1L, "멍냥사료", "A-01", null, null, null, null, null, null, null)));
 
         mockMvc.perform(get("/api/fairs/1/confirmed-booths"))
                 .andExpect(status().isOk())

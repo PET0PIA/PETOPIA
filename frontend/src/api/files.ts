@@ -12,7 +12,7 @@ import { apiClient } from "./client";
  * 처리하고 미리 발급해서 오래 들고 있지 않는다.
  */
 
-export type StorageUploadPolicy = "IMAGE";
+export type StorageUploadPolicy = "IMAGE" | "DOCUMENT";
 
 interface PresignedUploadRequest {
   policy: StorageUploadPolicy;
@@ -29,12 +29,18 @@ interface PresignedUploadResponse {
 
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const DOCUMENT_EXTENSIONS = ["pdf", "docx", "xlsx", "pptx"];
+const DOCUMENT_MAX_BYTES = 50 * 1024 * 1024;
 
 const EXTENSION_CONTENT_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
 
 function extensionOf(filename: string): string {
@@ -51,6 +57,20 @@ export function validateImageFile(file: File): string | null {
   }
   if (file.size > IMAGE_MAX_BYTES) {
     return "이미지는 10MB 이하만 업로드할 수 있어요.";
+  }
+  return null;
+}
+
+/**
+ * 업로드 전에 프론트에서 먼저 걸러주는 검증(서버 UploadPolicy.DOCUMENT와 같은 기준).
+ * validateImageFile과 동일한 이유로 서버 쪽 검증을 대신하지 않는다.
+ */
+export function validateDocumentFile(file: File): string | null {
+  if (!DOCUMENT_EXTENSIONS.includes(extensionOf(file.name))) {
+    return "pdf, docx, xlsx, pptx 형식의 파일만 업로드할 수 있어요.";
+  }
+  if (file.size > DOCUMENT_MAX_BYTES) {
+    return "첨부파일은 50MB 이하만 업로드할 수 있어요.";
   }
   return null;
 }
@@ -72,9 +92,9 @@ function putToS3(uploadUrl: string, file: File, contentType: string): Promise<vo
     xhr.setRequestHeader("Content-Type", contentType);
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`이미지 업로드에 실패했어요. (status ${xhr.status})`));
+      else reject(new Error(`파일 업로드에 실패했어요. (status ${xhr.status})`));
     };
-    xhr.onerror = () => reject(new Error("이미지 업로드 중 네트워크 오류가 발생했어요."));
+    xhr.onerror = () => reject(new Error("파일 업로드 중 네트워크 오류가 발생했어요."));
     // Authorization 헤더는 절대 넣지 않는다 - S3 presigned 서명 대상이 아니라서 403
     // SignatureDoesNotMatch가 난다. FormData가 아니라 파일 자체를 바디로 그대로 보낸다.
     xhr.send(file);
@@ -86,6 +106,22 @@ export async function uploadImage(file: File): Promise<string> {
   const contentType = resolveContentType(file);
   const { uploadUrl, objectKey } = await issuePresignedUpload({
     policy: "IMAGE",
+    filename: file.name,
+    contentType,
+    size: file.size,
+  });
+  await putToS3(uploadUrl, file, contentType);
+  return objectKey;
+}
+
+/** 
+ * presigned URL 발급 → S3 PUT까지 처리하고, 도메인 API(신청서 제출)에 넘길 objectKey를 반환한다.
+ * uploadImage와 로직은 동일하고 policy만 DOCUMENT로 다르다.
+ */
+export async function uploadDocument(file: File): Promise<string> {
+  const contentType = resolveContentType(file);
+  const { uploadUrl, objectKey } = await issuePresignedUpload({
+    policy: "DOCUMENT",
     filename: file.name,
     contentType,
     size: file.size,

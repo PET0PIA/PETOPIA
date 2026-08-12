@@ -246,12 +246,26 @@ export interface ChangeVisitDateResult {
   reservationStatus: ReservationStatus;
 }
 
-/** 예약 취소 결과. 백엔드 CancelReservationResponse에 맞춘다. */
+/**
+ * 예약 취소 결과. 백엔드 CancelReservationResponse에 맞춘다.
+ *
+ * 환불 필드는 "결제까지 끝난 유료 예약을 취소한 경우"에만 채워진다.
+ * 무료 예약이나 결제 전(PENDING_PAYMENT) 취소는 환불할 돈이 없어 refunded=false + 나머지 null이다
+ * (결제 전 예약에 걸린 결제는 서버가 함께 취소하지만 환불 원장은 만들지 않는다).
+ */
 export interface CancelReservationResult {
   reservationId: number;
   reservationStatus: ReservationStatus;
   /** 취소시각(ISO) */
   canceledAt: string;
+  /** 예약금 환불이 함께 처리됐는지 */
+  refunded: boolean;
+  /** 환불 PK. 환불이 없으면 null */
+  refundId: number | null;
+  /** 환불 금액(원). MVP는 전액환불이라 결제금액과 같다. 환불이 없으면 null */
+  refundAmount: number | null;
+  /** 환불 상태. 모의 환불이라 접수와 동시에 COMPLETED다. 환불이 없으면 null */
+  refundStatus: string | null;
 }
 
 /**
@@ -268,7 +282,12 @@ export function changeVisitDate(reservationId: number, visitDate: string) {
 
 /**
  * 예약을 취소한다. reason은 선택(최대 500자).
- * 취소 마감 초과면 R019, 취소 불가 상태면 R013.
+ *
+ * 유료 확정 예약이면 서버가 예약금을 전액 환불하고 CANCELED로 전환한다
+ * (응답 refunded=true + refundAmount). 현장예매(ONSITE_DIRECT)는 자진취소 대상이 아니라 R013.
+ *
+ * 실패 코드: R019 취소 마감 초과 / R013 취소 불가 상태 / R020 환불할 결제 없음 /
+ * R021 결제 진행 중(일시적 — 잠시 후 재시도하면 풀린다).
  */
 export function cancelReservation(reservationId: number, reason?: string) {
   return apiClient.patch<CancelReservationResult>(

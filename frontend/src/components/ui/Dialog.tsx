@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 interface DialogProps {
@@ -36,7 +36,11 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
   // 매번 cleanup(이전 포커스로 복귀)+재실행(닫기 버튼으로 재포커스)되어 타이핑 중 포커스가
   // 계속 요동친다.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  // 렌더 중에 ref를 직접 대입하면 안 된다(react-hooks/refs) - 레이아웃 이펙트로 옮겨서
+  // 커밋 직후, 아래 포커스 트랩 이펙트가 읽기 전에 최신값으로 갱신되게 한다.
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;

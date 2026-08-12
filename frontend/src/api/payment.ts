@@ -79,9 +79,13 @@ export function createVendorFeePayment(
   });
 }
 
-/** 행사개설비 결제 생성. fair 상태 검증 없이 요청 금액을 그대로 신뢰한다(모의결제, 즉시 COMPLETED). */
-export function createFairOpeningPayment(fairId: number, amount: number, userId: number = TEMP_PAYER_USER_ID) {
-  return apiClient.post<PaymentDetail>(`/api/fairs/${fairId}/opening-payment`, { amount }, {
+/**
+ * 행사개설비 결제 생성. 예약금과 동일하게 금액을 보내지 않는다 - 서버가 승인 시 확정된
+ * fairs.opening_fee_amount를 그대로 써서 결제를 만든다(클라이언트가 보낸 금액을 더 이상
+ * 신뢰하지 않음). 실제 결제 완료는 별도로 confirmPayment 호출까지 이어져야 한다.
+ */
+export function createFairOpeningPayment(fairId: number, userId: number = TEMP_PAYER_USER_ID) {
+  return apiClient.post<PaymentDetail>(`/api/fairs/${fairId}/opening-payment`, undefined, {
     headers: { [TEMP_USER_ID_HEADER]: String(userId) },
   });
 }

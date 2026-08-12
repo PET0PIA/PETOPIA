@@ -120,6 +120,7 @@ public enum ErrorCode {
     FAIR_APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "F025", "본인이 신청한 행사만 수정할 수 있습니다."),
     FAIR_APPLICATION_NOT_EDITABLE(HttpStatus.CONFLICT, "F026", "심사 대기 중이거나 반려된 신청서만 수정할 수 있습니다."),
     FAIR_OPENING_FEE_AMOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "F027", "승인 시 개설비 금액을 입력해야 합니다."),
+    FAIR_OPENING_FEE_NOT_PAYABLE(HttpStatus.CONFLICT, "F028", "개설비를 결제할 수 없는 상태의 행사입니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -141,6 +142,8 @@ public enum ErrorCode {
     ENTRY_FAIR_MISMATCH(HttpStatus.FORBIDDEN, "R017", "해당 행사의 입장 QR이 아닙니다."),
     RESERVATION_CHANGE_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R018", "방문 날짜 변경 가능 시간이 지났습니다."),
     RESERVATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R019", "예약 취소 가능 시간이 지났습니다."),
+    RESERVATION_REFUND_PAYMENT_NOT_FOUND(HttpStatus.CONFLICT, "R020", "환불할 예약금 결제 내역을 찾을 수 없습니다."),
+    RESERVATION_PAYMENT_IN_PROGRESS(HttpStatus.CONFLICT, "R021", "결제가 진행 중입니다. 잠시 후 다시 시도해 주세요."),
 
     // ===== Notification =====
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),
@@ -157,9 +160,14 @@ public enum ErrorCode {
     SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
     SETTLEMENT_NOT_RECALCULABLE(HttpStatus.CONFLICT, "ST004", "재계산할 수 없는 정산 상태입니다."),
     SETTLEMENT_RECALCULATION_REQUIRED(HttpStatus.CONFLICT, "ST005", "재계산이 필요한 정산은 확정할 수 없습니다. 먼저 재계산해 주세요."),
+    SETTLEMENT_FAIR_CANCELED(HttpStatus.CONFLICT, "ST006", "취소된 행사는 정산을 계산하거나 확정할 수 없습니다."),
 
     // ===== Commission Rate (수수료율) =====
     COMMISSION_RATE_INVALID_SCOPE(HttpStatus.BAD_REQUEST, "CR001", "scope와 fairId 조합이 올바르지 않습니다(GLOBAL은 fairId 없이, FAIR는 fairId와 함께)."),
+
+    // ===== Banner & Popup =====
+    BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "AD001", "존재하지 않는 배너입니다."),
+    POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "AD002", "존재하지 않는 팝업입니다."),
 
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),

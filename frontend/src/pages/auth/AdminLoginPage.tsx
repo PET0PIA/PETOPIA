@@ -7,7 +7,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
-import petopiaLogoOriginal from "../../assets/petopia-logo-original.png";
+import petopiaLogoOriginal from "../../assets/logo/PetopiaLOGO.png";
 
 function label(text: string, htmlFor: string) {
   return <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-ink">{text}</label>;

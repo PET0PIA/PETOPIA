@@ -465,7 +465,7 @@ class BoothServiceTest {
 
             // given: 행사가 존재하고, 확정 부스 슬롯 1건이 있는 상황
             Long fairId = 1L;
-            ConfirmedBoothResponse response = new ConfirmedBoothResponse(1L, "멍냥사료", "A-01", null, null);
+            ConfirmedBoothResponse response = new ConfirmedBoothResponse(1L, "멍냥사료", "A-01", null, null, null, null, null, null, null);
 
             given(boothMapper.existsFair(fairId)).willReturn(true);
             given(boothMapper.selectConfirmedBooths(fairId)).willReturn(List.of(response));

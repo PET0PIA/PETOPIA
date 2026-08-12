@@ -23,6 +23,24 @@ export function getAssignedFairs() {
   return apiClient.get<AssignedFairSummary[]>("/api/fairs/mine-assigned");
 }
 
+export interface FairOpeningFeeSummary {
+  fairId: number;
+  name: string;
+  status: FairStatus;
+  /** 승인 시 확정된 개설비 금액(원). 승인 전이면 null. */
+  openingFeeAmount: number | null;
+  /** 개설비 결제 기한. 승인 전이면 null. */
+  paymentDueAt: string | null;
+}
+
+/**
+ * 개설비 결제 페이지 전용 요약 조회(EVENT_ADMIN/SUPER_ADMIN, 그 행사 담당자만). 신청자 본인이
+ * 아니라 승인 시 새로 발급된 담당자 계정이 보는 화면이라 getMyApplicationDetail을 쓸 수 없다.
+ */
+export function getFairOpeningFeeSummary(fairId: number) {
+  return apiClient.get<FairOpeningFeeSummary>(`/api/fairs/${fairId}/opening-fee`);
+}
+
 export type FairCategory = "DOG" | "CAT" | "ETC";
 export type IndoorOutdoor = "INDOOR" | "OUTDOOR";
 
@@ -87,6 +105,8 @@ export interface FairApplicationDetail {
   status: string;
   rejectReason: string | null;
   reviewedAt: string | null;
+  /** 승인 시 확정된 개설비 금액(원). 승인 전이거나 반려면 null. */
+  openingFeeAmount: number | null;
   paymentDueAt: string | null;
   createdAt: string;
   /** 취소 승인 일시(취소 아니면 null). 취소 승인은 status는 그대로 두고 이 필드만 채우므로,
@@ -215,6 +235,10 @@ export interface FairPublicListItem {
   placeName: string | null;
   operationStartDate: string | null;
   operationEndDate: string | null;
+  /** 사전예약 가능 여부(예매 기간 안 + 정원 남은 미래 운영일 존재). "사전예약중" 배지에 쓴다. */
+  reservable: boolean;
+  /** 참가기업 부스 모집중 여부(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯). "참가기업 모집중" 배지에 쓴다. */
+  recruiting: boolean;
 }
 
 /**
@@ -231,6 +255,8 @@ export type FairReviewDecision = "APPROVE" | "REJECT";
 
 export interface ReviewFairApplicationRequest {
   decision: FairReviewDecision;
+  /** decision이 APPROVE일 때만 필수(개설비 금액, 원). */
+  openingFeeAmount?: number;
   rejectReason?: string;
 }
 
@@ -238,6 +264,7 @@ export interface ReviewFairApplicationResponse {
   fairId: number;
   status: string;
   reviewedAt: string;
+  openingFeeAmount: number | null;
   paymentDueAt: string | null;
   rejectReason: string | null;
 }

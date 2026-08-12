@@ -5,6 +5,7 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairOpeningFeeSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
@@ -72,6 +73,7 @@ public class FairService {
     private final AdminAccountService adminAccountService;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     /**
      * 행사 신청서를 등록한다. 심사 전 상태이므로 status는 채우지 않고 DDL 기본값(RECEIVED)에
@@ -192,6 +194,31 @@ public class FairService {
     }
 
     /**
+     * 개설비 결제 페이지 전용 요약 조회. 이 화면을 보는 사람은 신청자 본인(applicant_user_id)이
+     * 아니라 승인 시 새로 발급된 담당자(EVENT_ADMIN) 계정이라 {@link #getMyApplicationDetail}
+     * (신청자 본인 검증)을 쓸 수 없다 - {@link FairAdminAccessGuard}로 그 행사에 배정된
+     * 담당자인지 확인한다(SUPER_ADMIN은 배정 여부와 무관하게 통과).
+     *
+     * <p>접근 검증(checkAssigned)을 행사 존재 확인(findFairOrThrow)보다 먼저 한다 - 순서가
+     * 반대면 배정 안 된 사용자에게 "존재하는 행사는 ACCESS_DENIED, 없는 행사는 FAIR_NOT_FOUND"로
+     * 서로 다른 에러가 나가 행사 ID 존재 여부가 새어나간다. fair_admin_assignments에는
+     * fairs로의 FK는 없지만, 이 행에는 승인된(=존재가 확정된) 행사에 대해서만 행이 생기므로
+     * (issueEventAdminAccount 참고) 순서를 바꿔도 정상 배정건 조회 결과는 달라지지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public FairOpeningFeeSummaryResponse getOpeningFeeSummary(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
+        Fair fair = findFairOrThrow(fairId);
+        return new FairOpeningFeeSummaryResponse(
+                fairId,
+                fair.getName(),
+                fair.getStatus() == null ? null : fair.getStatus().name(),
+                fair.getOpeningFeeAmount(),
+                fair.getPaymentDueAt()
+        );
+    }
+
+    /**
      * 공개된 행사의 요약 정보를 인증 없이 조회한다(티켓 예매 화면 등). {@link #getApplication}·
      * {@link #getMyApplicationDetail}과 달리 managerName/managerPhone/managerEmail 같은 PII와
      * 심사 관련 필드(reviewedAt/rejectReason/paymentDueAt)를 아예 응답에 담지 않는다
@@ -232,8 +259,9 @@ public class FairService {
         if (filter == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        LocalDate today = timeProvider.now().toLocalDate();
-        return fairMapper.selectPublicFairs(filter, today).stream()
+        LocalDateTime now = timeProvider.now();
+        LocalDate today = now.toLocalDate();
+        return fairMapper.selectPublicFairs(filter, today, now).stream()
                 .map(this::toPublicListItemResponse)
                 .toList();
     }
@@ -376,7 +404,8 @@ public class FairService {
 
         if (approved) {
             adminAccountService.issueEventAdminAccount(
-                    fairId, fair.getApplicantUserId(), fair.getManagerName(), fair.getManagerEmail(), fair.getManagerPhone()
+                    fairId, fair.getApplicantUserId(), fair.getManagerName(), fair.getManagerEmail(), fair.getManagerPhone(),
+                    update.getOpeningFeeAmount(), update.getPaymentDueAt()
             );
         }
 
@@ -519,6 +548,7 @@ public class FairService {
                 fair.getStatus() == null ? null : fair.getStatus().name(),
                 fair.getRejectReason(),
                 fair.getReviewedAt(),
+                fair.getOpeningFeeAmount(),
                 fair.getPaymentDueAt(),
                 fair.getCreatedAt(),
                 fair.getCanceledAt(),
@@ -551,7 +581,9 @@ public class FairService {
                 fair.getPosterImageUrl(),
                 fair.getPlaceName(),
                 fair.getOperationStartDate(),
-                fair.getOperationEndDate()
+                fair.getOperationEndDate(),
+                Boolean.TRUE.equals(fair.getReservable()),
+                Boolean.TRUE.equals(fair.getRecruiting())
         );
     }
 

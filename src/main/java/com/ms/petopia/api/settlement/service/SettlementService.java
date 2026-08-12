@@ -15,6 +15,8 @@ import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.mapper.RefundMapper;
+import com.ms.petopia.api.settlement.client.FairContractClient;
+import com.ms.petopia.api.settlement.dto.FairCancellationStatus;
 import com.ms.petopia.api.settlement.dto.SettlementItemRow;
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import com.ms.petopia.api.settlement.dto.SettlementRow;
@@ -63,6 +65,7 @@ public class SettlementService {
     private final NotificationService notificationService;
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final AuditLogService auditLogService;
+    private final FairContractClient fairContractClient;
 
     /**
      * 특정 행사·업체의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
@@ -76,9 +79,11 @@ public class SettlementService {
      * 후속 과제.
      *
      * @throws CommonException {@link ErrorCode#SETTLEMENT_ALREADY_EXISTS} 이미 계산된 정산이 있을 때
+     * @throws CommonException {@link ErrorCode#SETTLEMENT_FAIR_CANCELED} 취소된 행사일 때
      */
     @Transactional
     public SettlementResponse calculate(Long fairId, Long businessId) {
+        assertFairNotCanceled(fairId);
         if (settlementMapper.selectByFairAndBusiness(fairId, businessId) != null) {
             throw new CommonException(ErrorCode.SETTLEMENT_ALREADY_EXISTS);
         }
@@ -218,6 +223,7 @@ public class SettlementService {
      * "확정 이후 변경은 감사기록 필수"이지만 그 정정 절차 자체는 이번 스코프 밖).
      *
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_FOUND} 존재하지 않는 정산일 때
+     * @throws CommonException {@link ErrorCode#SETTLEMENT_FAIR_CANCELED} 그 사이 행사가 취소됐을 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_CONFIRMABLE} PENDING이 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_RECALCULATION_REQUIRED} 재계산이
      *         필요한 상태(needs_recalculation)일 때 — 먼저 {@link #recalculate}를 호출해야 한다
@@ -228,6 +234,7 @@ public class SettlementService {
         if (row == null) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND);
         }
+        assertFairNotCanceled(row.getFairId());
         if (!PENDING.equals(row.getStatus())) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);
         }
@@ -263,6 +270,20 @@ public class SettlementService {
         notifySettlementCompleted(row.getFairId(), row.getSettlementId());
 
         return SettlementResponse.from(row);
+    }
+
+    /**
+     * 정산 계산·확정 직전에 행사가 취소되지 않았는지 확인한다. {@link #recalculate}는
+     * 의도적으로 이 체크를 하지 않는다 — 취소된 행사라도 이미 계산된 정산은 환불 반영을
+     * 위해 재계산 가능해야 하기 때문이다.
+     *
+     * @throws CommonException {@link ErrorCode#SETTLEMENT_FAIR_CANCELED} 취소된 행사일 때
+     */
+    private void assertFairNotCanceled(Long fairId) {
+        FairCancellationStatus status = fairContractClient.getCancellationStatus(fairId);
+        if (status.canceled()) {
+            throw new CommonException(ErrorCode.SETTLEMENT_FAIR_CANCELED);
+        }
     }
 
     private void notifySettlementCompleted(Long fairId, Long settlementId) {

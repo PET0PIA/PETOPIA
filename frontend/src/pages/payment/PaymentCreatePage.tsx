@@ -234,10 +234,10 @@ function ReservationDepositSection() {
   );
 }
 
-// 행사개설비 결제. fair 상태 검증 없이 요청 금액을 그대로 신뢰한다(모의결제, 즉시 COMPLETED).
+// 행사개설비 결제. 금액은 서버가 승인 시 확정된 fairs.opening_fee_amount를 그대로 쓴다
+// (더 이상 요청으로 금액을 받지 않음).
 function FairOpeningFeeSection() {
   const [fairId, setFairId] = useState("");
-  const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PaymentDetail | null>(null);
@@ -245,16 +245,15 @@ function FairOpeningFeeSection() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedFairId = Number(fairId);
-    const parsedAmount = Number(amount);
-    if (!Number.isInteger(parsedFairId) || parsedFairId <= 0 || !Number.isInteger(parsedAmount) || parsedAmount <= 0) {
-      setError("행사 ID와 금액 모두 1 이상의 숫자로 입력해 주세요.");
+    if (!Number.isInteger(parsedFairId) || parsedFairId <= 0) {
+      setError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
 
     setSubmitting(true);
     setError(null);
     try {
-      const created = await createFairOpeningPayment(parsedFairId, parsedAmount);
+      const created = await createFairOpeningPayment(parsedFairId);
       setResult(created);
     } catch (err) {
       setResult(null);
@@ -266,16 +265,12 @@ function FairOpeningFeeSection() {
 
   return (
     <section>
-      <SectionHeader title="행사개설비 결제 생성" description="fair 상태는 검증하지 않고 요청 금액을 그대로 써요. 완료 후 행사 상태 전이는 이번 구현 범위 밖이라 별도로 반영되지 않아요." />
+      <SectionHeader title="행사개설비 결제 생성" description="금액은 승인 시 확정된 값을 서버가 그대로 써요(개설비 결제 대기 상태의 행사만 가능). 완료 후 행사 상태 전이는 이번 구현 범위 밖이라 별도로 반영되지 않아요." />
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-3 sm:items-end">
           <div>
             <label htmlFor="of-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
             <Input id="of-fair-id" className="input-no-spinner" type="number" min={1} value={fairId} onChange={(event) => setFairId(event.target.value)} placeholder="예: test1" />
-          </div>
-          <div>
-            <label htmlFor="of-amount" className="mb-1.5 block text-sm font-bold text-ink">금액</label>
-            <Input id="of-amount" type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="예: 500000" />
           </div>
           <div>
             <Button type="submit" disabled={submitting}>
