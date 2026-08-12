@@ -1,6 +1,7 @@
 package com.ms.petopia.api.popup.dto.request;
 
 import com.ms.petopia.api.popup.domain.Popup;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -20,8 +21,12 @@ public class PopupUpdateRequest {
     private String linkUrl;
 
     private Popup.LinkTarget linkTarget;
+    @Positive
     private Integer width;
+
+    @Positive
     private Integer height;
+
     private LocalDateTime startedAt;
     private LocalDateTime endedAt;
 }

@@ -16,7 +16,7 @@ public class Banner {
     private String imageKey;
     private String linkUrl;
     private LinkTarget linkTarget;
-    private int sortOrder;
+    private Integer sortOrder;
     private boolean isActive;
     private LocalDateTime startedAt;
     private LocalDateTime endedAt;

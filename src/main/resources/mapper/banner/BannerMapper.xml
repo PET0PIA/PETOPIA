@@ -6,7 +6,7 @@
     <!--현재 노출 중인 배너 목록(is_active=1, 기간 유효, sort_order 오름차순)-->
     <select id="selectActiveList" resultType="com.ms.petopia.api.banner.domain.Banner">
         SELECT banner_id, title, image_key, link_url, link_target,
-            sort_order, is_active, started_at, ended_atm created_at
+            sort_order, is_active, started_at, ended_at, created_at
         FROM banner
         WHERE is_active = 1
             AND (started_at IS NULL OR started_at &lt;= NOW())
