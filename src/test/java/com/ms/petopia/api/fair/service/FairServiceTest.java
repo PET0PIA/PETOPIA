@@ -476,9 +476,10 @@ class FairServiceTest {
     }
 
     @Test
-    @DisplayName("담당 관리자가 아니면 FairAdminAccessGuard가 던지는 예외가 그대로 전파된다")
+    @DisplayName("담당 관리자가 아니면 FairAdminAccessGuard가 던지는 예외가 그대로 전파되고 행사는 조회하지 않는다")
     void getOpeningFeeSummary_담당관리자아니면_예외를_던진다() {
-        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+        // 접근 검증을 행사 조회보다 먼저 하므로(ID 존재 여부가 새어나가지 않게) 여기서
+        // 예외가 나면 fairMapper.selectById는 아예 호출되지 않는다 - 그래서 그 스텁은 안 둔다.
         willAnswer(invocation -> {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }).given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
@@ -487,15 +488,16 @@ class FairServiceTest {
                 () -> fairService.getOpeningFeeSummary(FAIR_ID),
                 ErrorCode.ACCESS_DENIED
         );
+        verify(fairMapper, never()).selectById(any());
     }
 
     @Test
-    @DisplayName("존재하지 않는 행사를 조회하면 FAIR_NOT_FOUND를 던지고 접근 검증은 하지 않는다")
+    @DisplayName("접근 검증을 통과했지만 존재하지 않는 행사면 FAIR_NOT_FOUND를 던진다")
     void getOpeningFeeSummary_존재하지않으면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(null);
 
         assertErrorCode(() -> fairService.getOpeningFeeSummary(FAIR_ID), ErrorCode.FAIR_NOT_FOUND);
-        verify(fairAdminAccessGuard, never()).checkAssigned(any());
+        verify(fairAdminAccessGuard).checkAssigned(FAIR_ID);
     }
 
     // ===== updateApplication =====

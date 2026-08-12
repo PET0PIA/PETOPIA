@@ -198,11 +198,17 @@ public class FairService {
      * 아니라 승인 시 새로 발급된 담당자(EVENT_ADMIN) 계정이라 {@link #getMyApplicationDetail}
      * (신청자 본인 검증)을 쓸 수 없다 - {@link FairAdminAccessGuard}로 그 행사에 배정된
      * 담당자인지 확인한다(SUPER_ADMIN은 배정 여부와 무관하게 통과).
+     *
+     * <p>접근 검증(checkAssigned)을 행사 존재 확인(findFairOrThrow)보다 먼저 한다 - 순서가
+     * 반대면 배정 안 된 사용자에게 "존재하는 행사는 ACCESS_DENIED, 없는 행사는 FAIR_NOT_FOUND"로
+     * 서로 다른 에러가 나가 행사 ID 존재 여부가 새어나간다. fair_admin_assignments에는
+     * fairs로의 FK는 없지만, 이 행에는 승인된(=존재가 확정된) 행사에 대해서만 행이 생기므로
+     * (issueEventAdminAccount 참고) 순서를 바꿔도 정상 배정건 조회 결과는 달라지지 않는다.
      */
     @Transactional(readOnly = true)
     public FairOpeningFeeSummaryResponse getOpeningFeeSummary(Long fairId) {
-        Fair fair = findFairOrThrow(fairId);
         fairAdminAccessGuard.checkAssigned(fairId);
+        Fair fair = findFairOrThrow(fairId);
         return new FairOpeningFeeSummaryResponse(
                 fairId,
                 fair.getName(),
