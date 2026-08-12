@@ -61,6 +61,20 @@ public class BoothController {
 
     }
 
+    // 즐겨찾기 추가
+    @PostMapping("/booths/{boothId}/favorites")
+    public ResponseEntity<ApiResponse<Void>> addFavorite(
+            @AuthenticationPrincipal Long callerId,
+            @PathVariable Long boothId
+    ) {
+
+        boothService.addFavorite(callerId, boothId);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED, null));
+
+    }
+
     // 판매상품·이벤트 등록 (본인 소유 부스만)
     @PostMapping("/booths/{boothId}/items")
     public ResponseEntity<ApiResponse<BoothItemResponse>> addItem(

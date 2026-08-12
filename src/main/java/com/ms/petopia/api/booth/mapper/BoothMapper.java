@@ -57,4 +57,7 @@ public interface BoothMapper {
     // 신청 ID 기준으로 그 부스를 즐겨찾기한 행 전부 삭제 (부스 삭제 전 정리용)
     void deleteFavoritesByApplicationId(@Param("applicationId") Long applicationId);
 
+    // 즐겨찾기 추가 (INSERT IGNORE로 멱등 처리 — 중복 클릭 방어)
+    void insertFavorite(@Param("userId") Long userId, @Param("boothId") Long boothId);
+
 }

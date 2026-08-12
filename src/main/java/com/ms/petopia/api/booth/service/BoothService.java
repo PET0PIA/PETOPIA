@@ -102,6 +102,20 @@ public class BoothService {
     }
 
     /*
+     * 즐겨찾기 추가. 부스 존재 확인 후 insert — INSERT IGNORE라 이미 즐겨찾기한 부스를
+     * 다시 눌러도(중복 클릭) 에러 없이 조용히 통과한다(멱등).
+     */
+    public void addFavorite(Long userId, Long boothId) {
+
+        if(boothMapper.selectById(boothId) == null) {
+            throw new CommonException(ErrorCode.BOOTH_NOT_FOUND);
+        }
+
+        boothMapper.insertFavorite(userId, boothId);
+
+    }
+
+    /*
      * 판매상품·이벤트를 등록한다. 본인 소유(부스가 속한 사업자의 owner) 부스만 가능하다.
      * 이름 중복은 의도적으로 막지 않는다 - 사업자가 같은 이름으로 여러 건(다른 배치 등)
      * 등록하고 싶을 수 있어서, 중복 체크 대신 프론트의 이중 클릭 방지에 맡긴다.

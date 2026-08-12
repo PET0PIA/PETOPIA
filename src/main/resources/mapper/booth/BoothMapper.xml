@@ -142,4 +142,13 @@
         WHERE b.application_id = #{applicationId}
     </delete>
 
+    <!--
+         즐겨찾기 추가. INSERT IGNORE로 멱등 처리 - 중복 클릭으로 같은 (user_id, booth_id) 쌍이
+         두 번 들어와도(UNIQUE 제약 위반) 에러 없이 조용히 무시된다
+    -->
+    <insert id="insertFavorite">
+        INSERT IGNORE INTO booth_favorites (user_id, booth_id, created_at)
+        VALUES (#{userId}, #{boothId}, NOW())
+    </insert>
+
 </mapper>
