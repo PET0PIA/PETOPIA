@@ -85,20 +85,30 @@ export function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
   const { user, status } = useAuth();
 
-  // 토스가 붙여주는 값: paymentKey·orderId·amount. paymentId·reservationId는 결제창을
-  // 띄울 때 successUrl에 우리가 직접 실어보낸 값이다.
+  // 토스가 붙여주는 값: paymentKey·orderId·amount. paymentId·reservationId(예약금 결제)
+  // 또는 fairId(개설비 결제)는 결제창을 띄울 때 successUrl에 우리가 직접 실어보낸 값이다.
+  // 두 흐름은 toss.ts에서 서로 다른 쿼리 파라미터를 붙이므로 한쪽만 채워진다.
   const paymentId = parsePositiveInt(searchParams.get("paymentId"));
   const reservationId = parsePositiveInt(searchParams.get("reservationId"));
+  const fairId = parsePositiveInt(searchParams.get("fairId"));
   const paymentKey = searchParams.get("paymentKey");
   const orderId = searchParams.get("orderId");
+  const isFairOpeningFee = reservationId === null && fairId !== null;
+  // 확정 실패·이탈 시 되돌아갈 곳. 예약금 결제는 "내 예약 목록", 개설비 결제는 마땅한
+  // 전용 목록이 없어(A.4가 fairId 단위 페이지라) 홈으로 보낸다.
+  const backLink = isFairOpeningFee ? { to: "/", label: "홈으로" } : { to: "/reservations/me", label: "내 예약 목록으로" };
 
   // 파라미터 검증은 렌더 입력만으로 결정되는 순수 계산이라 이펙트에 둘 이유가 없다.
   let blockedReason: string | null = null;
-  if (paymentId === null || reservationId === null || !paymentKey) {
-    blockedReason = "결제 결과 주소에 필요한 정보가 없어요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
+  if (paymentId === null || (reservationId === null && fairId === null) || !paymentKey) {
+    blockedReason = isFairOpeningFee
+      ? "결제 결과 주소에 필요한 정보가 없어요. 결제 상태를 확인해 주세요."
+      : "결제 결과 주소에 필요한 정보가 없어요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
   } else if (orderId !== null && orderId !== `PAYMENT_${paymentId}`) {
     // 백엔드가 "PAYMENT_" + paymentId로 orderId를 만든다. 어긋나면 어차피 토스가 거절한다.
-    blockedReason = "결제 주문번호가 이 결제와 맞지 않아요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
+    blockedReason = isFairOpeningFee
+      ? "결제 주문번호가 이 결제와 맞지 않아요. 결제 상태를 확인해 주세요."
+      : "결제 주문번호가 이 결제와 맞지 않아요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
   }
   const blocked = blockedReason !== null;
 
@@ -112,7 +122,8 @@ export function PaymentSuccessPage() {
   useEffect(() => {
     // 토큰 재발급이 끝날 때까지 기다린다. status가 확정되기 전에 부르면 401로 실패한다.
     if (status !== "authenticated" || !user) return;
-    if (blocked || paymentId === null || reservationId === null || paymentKey === null) return;
+    if (blocked || paymentId === null || paymentKey === null) return;
+    if (reservationId === null && fairId === null) return;
     if (confirmStarted.current) return;
     confirmStarted.current = true;
 
@@ -144,16 +155,19 @@ export function PaymentSuccessPage() {
       }
 
       // confirm 응답에는 QR 토큰이 없다. 승인이 확정되면 결제 도메인이 예약 도메인에
-      // 통지하고 그 시점에 QR이 발급되므로 따로 조회한다.
-      try {
-        const qr = await getEntryQr(reservationId);
-        setEntryQrToken(qr.qrToken);
-      } catch {
-        // 결제는 이미 성공 - QR 조회 실패를 결제 실패로 보여주지 않는다.
+      // 통지하고 그 시점에 QR이 발급되므로 따로 조회한다. 개설비 결제는 QR이 없는
+      // 흐름이라(예약이 아니다) 이 조회 자체를 건너뛴다.
+      if (reservationId !== null) {
+        try {
+          const qr = await getEntryQr(reservationId);
+          setEntryQrToken(qr.qrToken);
+        } catch {
+          // 결제는 이미 성공 - QR 조회 실패를 결제 실패로 보여주지 않는다.
+        }
       }
       setPhase("done");
     })();
-  }, [status, user, blocked, paymentId, reservationId, paymentKey]);
+  }, [status, user, blocked, paymentId, reservationId, fairId, paymentKey]);
 
   if (blockedReason) {
     return (
@@ -161,7 +175,7 @@ export function PaymentSuccessPage() {
         tone="error"
         icon={<AlertCircle size={28} />}
         title="결제 결과를 확인할 수 없어요"
-        actions={<PrimaryLink to="/reservations/me">내 예약 목록으로</PrimaryLink>}
+        actions={<PrimaryLink to={backLink.to}>{backLink.label}</PrimaryLink>}
       >
         {blockedReason}
       </ResultShell>
@@ -185,13 +199,23 @@ export function PaymentSuccessPage() {
         actions={
           <>
             <PrimaryLink to="/login">다시 로그인하기</PrimaryLink>
-            <SecondaryLink to="/reservations/me">내 예약 목록으로</SecondaryLink>
+            <SecondaryLink to={backLink.to}>{backLink.label}</SecondaryLink>
           </>
         }
       >
-        결제는 승인됐을 수 있지만 예약 확정을 마치지 못했어요.
-        <br />
-        다시 로그인한 뒤 내 예약 목록에서 예약 상태를 꼭 확인해 주세요.
+        {isFairOpeningFee ? (
+          <>
+            결제는 승인됐을 수 있지만 개설비 결제 확정을 마치지 못했어요.
+            <br />
+            다시 로그인한 뒤 결제 상태를 꼭 확인해 주세요.
+          </>
+        ) : (
+          <>
+            결제는 승인됐을 수 있지만 예약 확정을 마치지 못했어요.
+            <br />
+            다시 로그인한 뒤 내 예약 목록에서 예약 상태를 꼭 확인해 주세요.
+          </>
+        )}
       </ResultShell>
     );
   }
@@ -210,11 +234,28 @@ export function PaymentSuccessPage() {
         tone="error"
         icon={<AlertCircle size={28} />}
         title="결제 확정에 실패했어요"
-        actions={<PrimaryLink to="/reservations/me">내 예약 목록으로</PrimaryLink>}
+        actions={<PrimaryLink to={backLink.to}>{backLink.label}</PrimaryLink>}
       >
         {errorMessage ?? "결제 승인을 확정하지 못했어요."}
         <br />
-        결제가 이미 승인된 상태일 수 있어요. 내 예약 목록에서 상태를 확인해 주세요.
+        {isFairOpeningFee
+          ? "결제가 이미 승인된 상태일 수 있어요. 관리자에게 문의해 상태를 확인해 주세요."
+          : "결제가 이미 승인된 상태일 수 있어요. 내 예약 목록에서 상태를 확인해 주세요."}
+      </ResultShell>
+    );
+  }
+
+  // 개설비 결제는 예약이 아니라 QR·입장 절차가 없다 - 승인 확정만으로 끝나므로
+  // 기존 예약금 성공 화면(QR 표시)과 별도로 짧게 처리한다.
+  if (isFairOpeningFee) {
+    return (
+      <ResultShell
+        tone="success"
+        icon={<CheckCircle2 size={28} />}
+        title="개설비 결제가 완료됐어요"
+        actions={<PrimaryLink to="/">홈으로</PrimaryLink>}
+      >
+        행사 개설비 결제가 정상적으로 승인·확정됐어요.
       </ResultShell>
     );
   }
@@ -259,6 +300,29 @@ export function PaymentFailPage() {
   // 토스가 실패 리다이렉트에 붙여주는 값.
   const code = searchParams.get("code");
   const message = searchParams.get("message");
+  // 성공 착지와 마찬가지로 개설비 결제는 fairId가 실려온다(toss.ts 참고).
+  const fairId = parsePositiveInt(searchParams.get("fairId"));
+
+  if (fairId !== null) {
+    return (
+      <ResultShell
+        tone="error"
+        icon={<AlertCircle size={28} />}
+        title="결제가 완료되지 않았어요"
+        actions={
+          <>
+            <PrimaryLink to={`/payments/fair-opening-fee/${fairId}`}>다시 결제하기</PrimaryLink>
+            <SecondaryLink to="/">홈으로</SecondaryLink>
+          </>
+        }
+      >
+        {message ?? "결제가 취소되었거나 승인되지 않았어요."}
+        {code && <span className="ml-1 text-xs text-muted">({code})</span>}
+        <br />
+        개설비 결제가 아직 완료되지 않았어요. 결제 기한 전까지 다시 시도할 수 있어요.
+      </ResultShell>
+    );
+  }
 
   return (
     <ResultShell

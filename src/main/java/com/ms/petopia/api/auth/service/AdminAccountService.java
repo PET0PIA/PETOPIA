@@ -16,6 +16,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.TokenHashUtil;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -50,10 +51,16 @@ public class AdminAccountService {
     private final AccountSuspensionStore accountSuspensionStore;
     private final AuditLogService auditLogService;
 
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
+
     //행사 관리자 계정 생성
+    //openingFeeAmount/paymentDueAt은 계정 발급 메일에 개설비 청구내역을 함께 안내하기 위해
+    //받는다 - 호출부(FairService#review)가 이미 승인 시 확정한 값을 그대로 넘긴다.
     @Transactional
     public Long issueEventAdminAccount(Long fairId, Long applicantUserId,
-                                       String managerName, String managerEmail, String managerPhone) {
+                                       String managerName, String managerEmail, String managerPhone,
+                                       Long openingFeeAmount, LocalDateTime paymentDueAt) {
 
         if(authMapper.selectUserByEmail(managerEmail) != null) {
             throw new CommonException(ErrorCode.DUPLICATED_EMAIL);
@@ -103,8 +110,11 @@ public class AdminAccountService {
             throw new CommonException(ErrorCode.FAIR_ADMIN_ALREADY_ASSIGNED, e);
         }
 
-        //비밀번호가 담긴 메일 전송
-        mailService.sendAdminAccountIssueEmail(managerEmail, tempPassword);
+        //비밀번호 + 개설비 청구내역 + 결제 링크가 담긴 메일 전송. 담당자는 신청자 본인이
+        //아니라 새로 발급된 이 계정이라(fairId가 이미 정해져 있음) 행사 선택 없이 바로
+        //그 행사의 결제 페이지로 보낸다.
+        String paymentLink = frontendUrl + "/payments/fair-opening-fee/" + fairId;
+        mailService.sendAdminAccountIssueEmail(managerEmail, tempPassword, openingFeeAmount, paymentDueAt, paymentLink);
 
         return newAdmin.getUserId();
 

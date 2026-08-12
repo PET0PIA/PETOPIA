@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, Send } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -113,6 +113,16 @@ export function ApplicationSubmitPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<ApplicationResponse | null>(null);
+
+  const errorsRef = useRef<HTMLDivElement>(null);
+
+  // 에러가 새로 생기면(신청하기 눌렀는데 검증 실패) 에러 박스로 스크롤해서
+  // 사용자가 폼 하단(제출 버튼 근처)에 있어도 에러를 놓치지 않게 한다.
+  useEffect(() => {
+    if (errors.length > 0) {
+      errorsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [errors]);
 
   useEffect(() => {
     if (!fairId) return;
@@ -230,7 +240,7 @@ export function ApplicationSubmitPage() {
       />
 
       {errors.length > 0 && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+  <div ref={errorsRef} className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong scroll-mt-[88px]">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <ul className="space-y-1">
             {errors.map((message) => <li key={message}>{message}</li>)}
@@ -323,7 +333,16 @@ export function ApplicationSubmitPage() {
               </div>
               <div>
                 {label("managerPhone", "담당자 연락처", true)}
-                <Input id="managerPhone" value={form.managerPhone} onChange={(event) => update("managerPhone", event.target.value)} placeholder="010-0000-0000" maxLength={20} required />
+                <Input
+                  id="managerPhone"
+                  type="tel"
+                  value={form.managerPhone}
+                  onChange={(event) => update("managerPhone", event.target.value)}
+                  placeholder="010-0000-0000"
+                  pattern="\d{2,3}-\d{3,4}-\d{4}"
+                  maxLength={20}
+                  required
+                />
               </div>
               <div>
                 {label("managerEmail", "담당자 이메일", true)}

@@ -98,6 +98,49 @@ export interface ApplicationDetail {
   cancelable: boolean; // 취소 요청 가능 여부 (프론트 버튼 활성화 판단용, 서버가 계산해서 내려줌)
 }
 
+// GET /api/fairs/{fairId}/applications 응답 항목 하나 (관리자 목록용)
+export interface ApplicationReviewSummary {
+  applicationId: number;
+  businessId: number;
+  businessName: string;
+  status: ApplicationStatus;
+  submittedAt: string;
+  finalPrice: number | null;
+  rejectReason: string | null;
+}
+
+// PUT .../approve, .../reject 공용 응답
+export interface ApplicationReviewResult {
+  applicationId: number;
+  status: ApplicationStatus;
+  finalPrice: number | null;
+  paymentDueAt: string | null;
+  rejectReason: string | null;
+  reviewedAt: string;
+}
+
+// 취소 요청 처리 상태(진행 중/승인/반려) 기준으로 필터할 때 재사용
+export interface CancelRequestSummary {
+  cancelRequestId: number;
+  applicationId: number;
+  businessId: number;
+  businessName: string;
+  reason: string;
+  status: CancelRequestStatus;
+  requestedAt: string;
+  decidedAt: string | null;
+}
+
+// PUT .../cancel-requests/approve, /reject 공용 응답
+export interface CancelRequestResult {
+  cancelRequestId: number;
+  applicationId: number;
+  status: CancelRequestStatus; // APPROVED 또는 REJECTED
+  applicationStatus: ApplicationStatus; // 처리 후 신청 상태(승인 시 CANCELED, 반려 시 기존 상태 유지)
+  decidedAt: string;
+  boothDeleted: boolean; // 승인 시 이전 상태가 CONFIRMED였다면 true(부스도 같이 삭제됨)
+}
+
 // 부스 슬롯 목록 + 잠금 상태 조회 (비회원도 조회 가능, 인증 불필요)
 export async function getBoothSlots(fairId: number): Promise<BoothSlotLockStatus[]> {
   const response = await apiClient.get<ApiEnvelope<BoothSlotLockStatus[]>>(`/api/fairs/${fairId}/booth-slots`);
@@ -127,5 +170,60 @@ export async function getMyApplications(businessId?: number): Promise<Applicatio
 // 신청 상세 조회 (사업자 본인 또는 담당 행사 관리자만 조회 가능 — 권한 체크는 서버가 함)
 export async function getApplicationDetail(applicationId: number): Promise<ApplicationDetail> {
   const response = await apiClient.get<ApiEnvelope<ApplicationDetail>>(`/api/applications/${applicationId}`);
+  return response.data;
+}
+
+// 담당 행사의 신청 목록 조회 (행사 담당자용). status 생략하면 전체 상태.
+export async function getApplicationsForFair(fairId: number, status?: ApplicationStatus): Promise<ApplicationReviewSummary[]> {
+  const query = status ? `?status=${status}` : "";
+  const response = await apiClient.get<ApiEnvelope<ApplicationReviewSummary[]>>(`/api/fairs/${fairId}/applications${query}`);
+  return response.data;
+}
+
+// 참가 신청서 승인 (행사 담당자용). finalPrice 생략하면 슬롯 가격 합계로 서버가 자동 계산한다.
+export async function approveApplication(applicationId: number, finalPrice?: number): Promise<ApplicationReviewResult> {
+  const response = await apiClient.put<ApiEnvelope<ApplicationReviewResult>>(
+    `/api/applications/${applicationId}/approve`,
+    finalPrice !== undefined ? { finalPrice } : undefined
+  );
+  return response.data;
+}
+
+// 참가 신청서 반려 (행사 담당자용)
+export async function rejectApplication(applicationId: number, rejectReason: string): Promise<ApplicationReviewResult> {
+  const response = await apiClient.put<ApiEnvelope<ApplicationReviewResult>>(
+    `/api/applications/${applicationId}/reject`,
+    { rejectReason }
+  );
+  return response.data;
+}
+
+// 참가 취소 요청 제출 (신청자용)
+export async function submitCancelRequest(applicationId: number, reason: string): Promise<void> {
+  await apiClient.post<ApiEnvelope<null>>(`/api/applications/${applicationId}/cancel-requests`, { reason });
+}
+
+// 담당 행사의 취소 요청 목록 조회 (행사 담당자용). status 생략하면 전체 상태.
+export async function getCancelRequestsForFair(fairId: number, status?: CancelRequestStatus): Promise<CancelRequestSummary[]> {
+  const query = status ? `?status=${status}` : "";
+  const response = await apiClient.get<ApiEnvelope<CancelRequestSummary[]>>(`/api/fairs/${fairId}/cancel-requests${query}`);
+  return response.data;
+}
+
+// 참가 취소 요청 승인 (행사 담당자용)
+export async function approveCancelRequest(applicationId: number): Promise<CancelRequestResult> {
+  const response = await apiClient.put<ApiEnvelope<CancelRequestResult>>(
+    `/api/applications/${applicationId}/cancel-requests/approve`,
+    undefined
+  );
+  return response.data;
+}
+
+// 참가 취소 요청 반려 (행사 담당자용)
+export async function rejectCancelRequest(applicationId: number): Promise<CancelRequestResult> {
+  const response = await apiClient.put<ApiEnvelope<CancelRequestResult>>(
+    `/api/applications/${applicationId}/cancel-requests/reject`,
+    undefined
+  );
   return response.data;
 }

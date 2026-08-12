@@ -28,6 +28,8 @@ import { PaymentDetailPage } from "../pages/payment/PaymentDetailPage";
 import { PaymentCreatePage } from "../pages/payment/PaymentCreatePage";
 import { PaymentListPage } from "../pages/payment/PaymentListPage";
 import { PaymentFailPage, PaymentSuccessPage } from "../pages/payment/PaymentResultPage";
+import { FairOpeningFeePaymentPage } from "../pages/payment/FairOpeningFeePaymentPage";
+import { FairOpeningFeeSelectPage } from "../pages/payment/FairOpeningFeeSelectPage";
 import { RefundPage } from "../pages/payment/RefundPage";
 import { AuditLogPage } from "../pages/admin/AuditLogPage";
 import { SettlementPage } from "../pages/admin/SettlementPage";
@@ -55,6 +57,10 @@ import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
 import { BusinessDetailPage } from "../pages/business/BusinessDetailPage";
 import { RecruitNoticeFormPage } from "../pages/recruit-notice/RecruitNoticeFormPage";
 import { ApplicationSubmitPage } from "../pages/application/ApplicationSubmitPage";
+import { MyApplicationsPage } from "../pages/application/MyApplicationsPage";
+import { ApplicationDetailPage } from "../pages/application/ApplicationDetailPage";
+import { ParticipationReviewPage } from "../pages/fair-admin/ParticipationReviewPage";
+import { CancelRequestReviewPage } from "../pages/fair-admin/CancelRequestReviewPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
@@ -62,7 +68,7 @@ import { ProtectedRoute } from "./ProtectedRoute";
 const publicPages: Record<string, string> = {
   "/businesses": "행사별 참여 기업",
   "/businesses/status": "사업자 등록 현황",
-  "/participations/me": "참가 신청 현황",
+  "/participations/new": "참여 부스 신청",
   "/booths/me": "내 부스 관리",
   "/about": "서비스 소개",
   "/terms": "이용약관",
@@ -78,6 +84,10 @@ const fairAdminImplementedPaths = [
   "/fair-admin/statistics",
   "/fair-admin/cancellation",
   "/fair-admin/recruit-notice",
+  "/fair-admin/participations",
+  // fair-admin 레이아웃 밖(PublicLayout)에 별도로 라우팅돼 있다 - fair-admin 하위
+  // 폴백 라우트(AdminFallback)를 만들 필요가 없어서 여기 포함시켜 그 목록에서 뺀다.
+  "/payments/fair-opening-fee",
 ];
 const fairAdminFallbackNavigation = fairAdminNavigation.filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
 const superAdminFallbackNavigation = superAdminNavigation.filter(
@@ -133,12 +143,18 @@ export function AppRouter() {
           {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}
           <Route path="/payments/success" element={<PaymentSuccessPage />} />
           <Route path="/payments/fail" element={<PaymentFailPage />} />
+          <Route element={<ProtectedRoute roles={["EVENT_ADMIN", "SUPER_ADMIN"]} />}>
+            <Route path="/payments/fair-opening-fee" element={<FairOpeningFeeSelectPage />} />
+            <Route path="/payments/fair-opening-fee/:fairId" element={<FairOpeningFeePaymentPage />} />
+          </Route>
           <Route path="/booths/scan" element={<BoothVisitScanPage />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
           <Route path="/businesses/me" element={<MyBusinessesPage />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
           <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
+          <Route path="/participations/me" element={<MyApplicationsPage />} />
+          <Route path="/participations/me/:applicationId" element={<ApplicationDetailPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
           ))}
@@ -158,6 +174,8 @@ export function AppRouter() {
           <Route path="cancellation" element={<FairCancelRequestPage />} />
           <Route path="recruit-notice" element={<RecruitNoticeFormPage />} />
           <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
+          <Route path="participations" element={<ParticipationReviewPage />} />
+          <Route path="cancellation-requests" element={<CancelRequestReviewPage />} />
           {fairAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
           ))}
