@@ -152,7 +152,13 @@ export function CancelRequestReviewPage() {
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader eyebrow="참가업체 관리" title="참가 취소 요청 심사" description="신청자가 보낸 취소 요청을 확인하고 승인 또는 반려해요." />
 
-      <FairSelectorBar selectableFairs={selectableFairs} fairId={fairId} onFairIdChange={setFairId} />
+      <FairSelectorBar
+        selectableFairs={selectableFairs}
+        fairId={fairId}
+        onFairIdChange={(id) => {
+          if (!reviewing) setFairId(id);
+        }}
+      />
 
       {fairId !== null && (
         <div className="mb-6">
@@ -161,8 +167,9 @@ export function CancelRequestReviewPage() {
               <button
                 key={tab.status}
                 type="button"
+                disabled={reviewing}
                 onClick={() => setActiveStatus(tab.status)}
-                className={`px-3 py-2 text-sm font-bold ${
+                className={`px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-60 ${
                   activeStatus === tab.status
                     ? "border-b-2 border-primary-strong text-ink"
                     : "text-muted hover:text-ink"
@@ -197,7 +204,7 @@ export function CancelRequestReviewPage() {
                     <td className="px-4 py-3 font-bold text-ink">{request.businessName}</td>
                     <td className="px-4 py-3 text-muted">{formatDateTime(request.requestedAt)}</td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="outline" onClick={() => setSelectedRequest(request)}>
+                      <Button variant="outline" onClick={() => setSelectedRequest(request)} disabled={reviewing}>
                         상세보기
                       </Button>
                     </td>
@@ -243,7 +250,7 @@ export function CancelRequestReviewPage() {
               <p className="text-sm text-muted">신청 정보를 불러오는 중이에요...</p>
             ) : detailError ? (
               <p className="text-sm text-primary-strong">{detailError}</p>
-            ) : applicationDetail ? (
+            ) : applicationDetail?.applicationId === selectedRequest.applicationId ? (
               <>
                 <div className="rounded-card border border-line bg-page p-4">
                   <h3 className="mb-3 text-sm font-extrabold text-muted">선택한 부스 슬롯</h3>

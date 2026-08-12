@@ -156,7 +156,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
     setCancelError(null);
     try {
       await submitCancelRequest(detail.applicationId, cancelReason.trim());
-      setDetail({ ...detail, cancelRequestStatus: "REQUESTED" });
+      setDetail({ ...detail, cancelRequestStatus: "REQUESTED", cancelable: false });
       setCancelDialogOpen(false);
       setCancelReason("");
     } catch (err) {
