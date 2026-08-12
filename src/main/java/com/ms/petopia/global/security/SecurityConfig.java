@@ -150,6 +150,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/booths/*/items").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/booth-items/*").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/booth-items/*").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/booths/favorites").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->
