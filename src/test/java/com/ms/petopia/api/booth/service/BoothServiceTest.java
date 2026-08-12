@@ -499,5 +499,71 @@ class BoothServiceTest {
 
     }
 
+    @Nested
+    @DisplayName("즐겨찾기 추가")
+    class AddFavorite {
+
+        @Test
+        @DisplayName("부스가 존재하면 정상적으로 추가한다")
+        void addsSuccessfully() {
+
+            // given: 존재하는 boothId
+            Long userId = 1L;
+            Long boothId = 1L;
+
+            given(boothMapper.selectById(boothId)).willReturn(createBooth(boothId, 1L));
+
+            // when
+            boothService.addFavorite(userId, boothId);
+
+            // then: insert 쿼리가 실제로 호출됐는지 확인
+            verify(boothMapper).insertFavorite(userId, boothId);
+
+        }
+
+        @Test
+        @DisplayName("부스가 없으면 예외를 던지고 추가를 시도하지 않는다")
+        void throwsWhenBoothNotFound() {
+
+            // given: 존재하지 않는 boothId
+            Long userId = 1L;
+            Long boothId = 999L;
+
+            given(boothMapper.selectById(boothId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> boothService.addFavorite(userId, boothId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("부스를 찾을 수 없습니다");
+
+            // 부스 자체가 없으니, insert 쿼리는 시도되면 안 됨
+            verify(boothMapper, never()).insertFavorite(any(), any());
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("즐겨찾기 삭제")
+    class RemoveFavorite {
+
+        @Test
+        @DisplayName("정상적으로 삭제한다")
+        void removesSuccessfully() {
+
+            // given
+            Long userId = 1L;
+            Long boothId = 1L;
+
+            // when
+            boothService.removeFavorite(userId, boothId);
+
+            // then: 삭제 쿼리가 실제로 호출됐는지 확인 (존재하지 않는 조합이어도 멱등하게 통과하므로 존재 확인 없음)
+            verify(boothMapper).deleteFavorite(userId, boothId);
+
+        }
+
+    }
+
 
 }

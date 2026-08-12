@@ -220,6 +220,42 @@ class BoothControllerTest {
 
     }
 
+    // POST /api/booths/{boothId}/favorites - 정상 추가 (201)
+    @Test
+    void addsFavorite() throws Exception {
+
+        mockMvc.perform(post("/api/booths/1/favorites")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true));
+
+    }
+
+    // POST /api/booths/{boothId}/favorites - 존재하지 않는 부스 -> 404 + V024
+    @Test
+    void returns404WhenFavoritingMissingBooth() throws Exception {
+
+        willThrow(new CommonException(ErrorCode.BOOTH_NOT_FOUND))
+                .given(boothService).addFavorite(eq(1L), eq(999L));
+
+        mockMvc.perform(post("/api/booths/999/favorites")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("V024"));
+
+    }
+
+    // DELETE /api/booths/{boothId}/favorites - 정상 삭제 (200)
+    @Test
+    void removesFavorite() throws Exception {
+
+        mockMvc.perform(delete("/api/booths/1/favorites")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+    }
+
     private RequestPostProcessor authenticatedAs(Long userId) {
 
         return request -> {
