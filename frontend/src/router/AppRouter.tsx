@@ -58,6 +58,7 @@ import { ApplicationSubmitPage } from "../pages/application/ApplicationSubmitPag
 import { MyApplicationsPage } from "../pages/application/MyApplicationsPage";
 import { ApplicationDetailPage } from "../pages/application/ApplicationDetailPage";
 import { ParticipationReviewPage } from "../pages/fair-admin/ParticipationReviewPage";
+import { CancelRequestReviewPage } from "../pages/fair-admin/CancelRequestReviewPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
@@ -165,6 +166,7 @@ export function AppRouter() {
           <Route path="recruit-notice" element={<RecruitNoticeFormPage />} />
           <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
           <Route path="participations" element={<ParticipationReviewPage />} />
+          <Route path="cancellation-requests" element={<CancelRequestReviewPage />} />
           {fairAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
           ))}
