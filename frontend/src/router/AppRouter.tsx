@@ -85,6 +85,9 @@ const fairAdminImplementedPaths = [
   "/fair-admin/cancellation",
   "/fair-admin/recruit-notice",
   "/fair-admin/participations",
+  // fair-admin 레이아웃 밖(PublicLayout)에 별도로 라우팅돼 있다 - fair-admin 하위
+  // 폴백 라우트(AdminFallback)를 만들 필요가 없어서 여기 포함시켜 그 목록에서 뺀다.
+  "/payments/fair-opening-fee",
 ];
 const fairAdminFallbackNavigation = fairAdminNavigation.filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
 const superAdminFallbackNavigation = superAdminNavigation.filter(

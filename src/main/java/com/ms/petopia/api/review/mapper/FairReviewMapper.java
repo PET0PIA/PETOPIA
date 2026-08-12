@@ -1,0 +1,35 @@
+package com.ms.petopia.api.review.mapper;
+
+import com.ms.petopia.api.review.dto.FairReview;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
+
+/**
+ * fair_reviews 테이블 매퍼. XML은 {@code mapper/review/FairReviewMapper.xml}에 있다.
+ *
+ * <p>순수 데이터 접근 메서드만 둔다 - "평점 범위 검증", "본인 리뷰인지 확인" 같은 업무
+ * 규칙은 여기가 아니라 서비스 계층(FairReviewService, 추후 작업)이 담당한다.
+ */
+@Mapper
+public interface FairReviewMapper {
+
+    int insert(FairReview review);
+
+    FairReview selectById(@Param("reviewId") Long reviewId);
+
+    /** 한 행사의 리뷰 목록. 최신순 정렬은 XML에서 처리한다. */
+    List<FairReview> selectByFairId(@Param("fairId") Long fairId);
+
+    /** 한 사용자가 쓴 리뷰 목록(마이페이지 "내 리뷰"용). 최신순 정렬은 XML에서 처리한다. */
+    List<FairReview> selectByUserId(@Param("userId") Long userId);
+
+    /**
+     * rating/content만 갱신한다. fair_id·user_id·verified_visit(작성 시점 스냅샷)은
+     * 수정 대상이 아니다.
+     */
+    int update(FairReview review);
+
+    int deleteById(@Param("reviewId") Long reviewId);
+}

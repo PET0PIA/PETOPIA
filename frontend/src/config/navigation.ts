@@ -19,6 +19,7 @@ export const publicNavigation: NavigationItem[] = [
 ];
 
 export const fairAdminNavigation: NavigationItem[] = [
+  { label: "개설비 결제", path: "/payments/fair-opening-fee", icon: CreditCard },
   { label: "행사 정보 관리", path: "/fair-admin/fair", icon: Settings2 },
   { label: "현장예매 설정", path: "/fair-admin/onsite-sales", icon: Store },
   { label: "부스 배치 관리", path: "/fair-admin/booths", icon: Map },
