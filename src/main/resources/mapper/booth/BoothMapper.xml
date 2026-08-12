@@ -135,4 +135,11 @@
         ORDER BY bf.created_at DESC
     </select>
 
+    <!-- 신청 ID 기준으로 그 부스를 즐겨찾기한 행 전부 삭제 -->
+    <delete id="deleteFavoritesByApplicationId">
+        DELETE bf FROM booth_favorites bf
+        JOIN booth b ON b.booth_id = bf.booth_id
+        WHERE b.application_id = #{applicationId}
+    </delete>
+
 </mapper>

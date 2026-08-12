@@ -54,4 +54,7 @@ public interface BoothMapper {
     // 내 즐겨찾기 목록 (부스명·이미지·소속 행사명까지 조인해서 한 번에 조회)
     List<BoothFavoriteResponse> selectFavoritesByUserId(@Param("userId") Long userId);
 
+    // 신청 ID 기준으로 그 부스를 즐겨찾기한 행 전부 삭제 (부스 삭제 전 정리용)
+    void deleteFavoritesByApplicationId(@Param("applicationId") Long applicationId);
+
 }
