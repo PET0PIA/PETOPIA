@@ -233,19 +233,72 @@
         UPCOMING: operation_end_date가 없거나(일정 미정) today 이상인 것 - 끝났다고 볼 근거가
         없는 행사는 예정으로 취급한다. PAST: operation_end_date가 있고 today보다 이전인 것.
     -->
+    <!--
+        reservable: 사전예약 가능 여부(계산 컬럼, 목록 전용). ReservationService#validateFair +
+        ReservationMapper#selectAvailabilityDates의 규칙을 그대로 옮긴다 - 예매 기간(reservation_start/
+        end_date) 안이고, 미래 운영일(operation_date > today) 중 정원이 남은(ADVANCE·유효상태 예약수 <
+        capacity) 날이 하나라도 있으면 true. 종료(PAST) 행사는 미래 운영일이 없어 자연히 false다.
+
+        recruiting: 참가기업 부스 모집중 여부(계산 컬럼, 목록 전용). ⚠ 모집 도메인 테이블
+        (recruit_notice·halls·booth_slots·application_slot·application)을 조인한다 - 도메인 경계상
+        모집 담당자 검토 필요. RecruitNoticeService#isClosed(마감일 지남 OR 행사 ENDED OR 취소)의
+        반대 + selectBoothSlotStatusesByFairId의 AVAILABLE 규칙(활성 신청 PENDING_REVIEW/
+        PAYMENT_PENDING/CONFIRMED이 안 걸린 활성 슬롯 존재)을 그대로 옮겼다. 마감일은 DATETIME이라
+        #{now}(LocalDateTime)와 비교한다.
+    -->
     <select id="selectPublicFairs" resultType="Fair">
-        SELECT fair_id, name, category, poster_image_url, place_name,
-               operation_start_date, operation_end_date
-          FROM fairs
-         WHERE published_at IS NOT NULL
-           AND canceled_at IS NULL
+        SELECT f.fair_id, f.name, f.category, f.poster_image_url, f.place_name,
+               f.operation_start_date, f.operation_end_date,
+               (
+                 f.reservation_start_date IS NOT NULL
+                 AND f.reservation_end_date IS NOT NULL
+                 AND #{today} &gt;= f.reservation_start_date
+                 AND #{today} &lt;= f.reservation_end_date
+                 AND EXISTS (
+                   SELECT 1
+                     FROM fair_dates fd
+                    WHERE fd.fair_id = f.fair_id
+                      AND fd.operation_date &gt; #{today}
+                      AND fd.capacity &gt; (
+                            SELECT COUNT(*)
+                              FROM reservations r
+                             WHERE r.fair_id = fd.fair_id
+                               AND r.visit_date = fd.operation_date
+                               AND r.reservation_type = 'ADVANCE'
+                               AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
+                          )
+                 )
+               ) AS reservable,
+               (
+                 EXISTS (SELECT 1 FROM recruit_notice rn
+                          WHERE rn.fair_id = f.fair_id
+                            AND rn.recruit_deadline &gt; #{now})
+                 AND f.status &lt;&gt; 'ENDED'
+                 AND EXISTS (
+                   SELECT 1
+                     FROM booth_slots bs
+                     JOIN halls h ON bs.hall_id = h.hall_id
+                    WHERE h.fair_id = f.fair_id
+                      AND bs.is_active = TRUE
+                      AND NOT EXISTS (
+                        SELECT 1
+                          FROM application_slot aps
+                          JOIN application a ON a.application_id = aps.application_id
+                         WHERE aps.booth_slot_id = bs.booth_slot_id
+                           AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+                      )
+                 )
+               ) AS recruiting
+          FROM fairs f
+         WHERE f.published_at IS NOT NULL
+           AND f.canceled_at IS NULL
         <if test="filter.name() == 'UPCOMING'">
-           AND (operation_end_date IS NULL OR operation_end_date &gt;= #{today})
-         ORDER BY (operation_start_date IS NULL), operation_start_date ASC
+           AND (f.operation_end_date IS NULL OR f.operation_end_date &gt;= #{today})
+         ORDER BY (f.operation_start_date IS NULL), f.operation_start_date ASC
         </if>
         <if test="filter.name() == 'PAST'">
-           AND operation_end_date IS NOT NULL AND operation_end_date &lt; #{today}
-         ORDER BY operation_end_date DESC
+           AND f.operation_end_date IS NOT NULL AND f.operation_end_date &lt; #{today}
+         ORDER BY f.operation_end_date DESC
         </if>
     </select>
 
