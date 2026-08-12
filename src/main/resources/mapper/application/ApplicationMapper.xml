@@ -301,13 +301,18 @@
     <!--
         payment 테이블을 직접 조회하는 단순 읽기 전용 쿼리.
         VENDOR_FEE 전용 계약이라 payment_type도 같이 건다.
-        status는 일부러 안 거름 — 환불 가능 여부 판단은 RefundService.refund()가 자체적으로 함.
+        COMPLETED만 대상으로 건다 — PENDING(결제 시도만 하고 미완료)까지 걸리면 이 paymentId로
+        RefundService.refund()를 부르게 되는데, RefundService는 COMPLETED가 아니면 무조건
+        REFUND_TARGET_NOT_REFUNDABLE(409)을 던져서 approveCancelRequest() 전체가 롤백된다.
+        COMPLETED만 조회 대상으로 두면 PENDING일 땐 null이 와서(환불할 게 없으니 당연) 아래
+        approveCancelRequest()의 "결제 없으면 null" 가정과 맞아떨어진다.
     -->
     <select id="selectPaymentIdByApplicationId" resultType="long">
         SELECT payment_id
         FROM payment
         WHERE application_id = #{applicationId}
         AND payment_type = 'VENDOR_FEE'
+        AND status = 'COMPLETED'
     </select>
 
     <!-- 참가비 결제 완료 시, 신청서 상태 confirmed로 변경 -->

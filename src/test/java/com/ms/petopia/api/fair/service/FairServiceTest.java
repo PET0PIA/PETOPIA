@@ -881,7 +881,7 @@ class FairServiceTest {
     @DisplayName("filter가 없으면 조회하지 않고 INVALID_INPUT_VALUE를 던진다")
     void listPublicFairs_filter없으면_예외를_던진다() {
         assertErrorCode(() -> fairService.listPublicFairs(null), ErrorCode.INVALID_INPUT_VALUE);
-        verify(fairMapper, never()).selectPublicFairs(any(), any());
+        verify(fairMapper, never()).selectPublicFairs(any(), any(), any());
     }
 
     @Test
@@ -893,12 +893,12 @@ class FairServiceTest {
         fair.setPosterImageUrl("https://cdn.petopia.example/poster.jpg");
         fair.setOperationStartDate(FUTURE_START);
         fair.setOperationEndDate(FUTURE_END);
-        given(fairMapper.selectPublicFairs(PublicFairListFilter.UPCOMING, NOW.toLocalDate()))
+        given(fairMapper.selectPublicFairs(PublicFairListFilter.UPCOMING, NOW.toLocalDate(), NOW))
                 .willReturn(List.of(fair));
 
         List<FairPublicListItemResponse> response = fairService.listPublicFairs(PublicFairListFilter.UPCOMING);
 
-        verify(fairMapper).selectPublicFairs(PublicFairListFilter.UPCOMING, NOW.toLocalDate());
+        verify(fairMapper).selectPublicFairs(PublicFairListFilter.UPCOMING, NOW.toLocalDate(), NOW);
         assertThat(response).hasSize(1);
         FairPublicListItemResponse item = response.get(0);
         assertThat(item.fairId()).isEqualTo(FAIR_ID);
@@ -913,12 +913,12 @@ class FairServiceTest {
     @Test
     @DisplayName("PAST 필터로 조회하면 매퍼에 PAST를 그대로 넘긴다")
     void listPublicFairs_PAST필터로_조회한다() {
-        given(fairMapper.selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate()))
+        given(fairMapper.selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate(), NOW))
                 .willReturn(List.of());
 
         List<FairPublicListItemResponse> response = fairService.listPublicFairs(PublicFairListFilter.PAST);
 
-        verify(fairMapper).selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate());
+        verify(fairMapper).selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate(), NOW);
         assertThat(response).isEmpty();
     }
 

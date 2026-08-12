@@ -235,6 +235,10 @@ export interface FairPublicListItem {
   placeName: string | null;
   operationStartDate: string | null;
   operationEndDate: string | null;
+  /** 사전예약 가능 여부(예매 기간 안 + 정원 남은 미래 운영일 존재). "사전예약중" 배지에 쓴다. */
+  reservable: boolean;
+  /** 참가기업 부스 모집중 여부(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯). "참가기업 모집중" 배지에 쓴다. */
+  recruiting: boolean;
 }
 
 /**
