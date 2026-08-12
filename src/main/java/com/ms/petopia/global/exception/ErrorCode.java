@@ -164,6 +164,10 @@ public enum ErrorCode {
 
     // ===== Commission Rate (수수료율) =====
     COMMISSION_RATE_INVALID_SCOPE(HttpStatus.BAD_REQUEST, "CR001", "scope와 fairId 조합이 올바르지 않습니다(GLOBAL은 fairId 없이, FAIR는 fairId와 함께)."),
+
+    // ===== Banner & Popup =====
+    BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "AD001", "존재하지 않는 배너입니다."),
+    POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "AD002", "존재하지 않는 팝업입니다."),
     ;
 
     private final HttpStatus httpStatus;
