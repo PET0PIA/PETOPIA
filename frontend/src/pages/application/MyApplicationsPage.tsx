@@ -106,6 +106,9 @@ export function MyApplicationsPage() {
                     {application.cancelRequestStatus === "REQUESTED" && (
                       <Badge tone="sun">취소 요청중</Badge>
                     )}
+                    {application.cancelRequestStatus === "REJECTED" && (
+                      <Badge tone="neutral">취소 요청 반려</Badge>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right">

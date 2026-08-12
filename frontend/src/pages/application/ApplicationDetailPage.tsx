@@ -1,15 +1,18 @@
-import { AlertCircle, ChevronLeft, Paperclip } from "lucide-react";
-import { useState } from "react";
+import { AlertCircle, ChevronLeft, Paperclip, XCircle } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useEffect } from "react";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { Dialog } from "../../components/ui/Dialog";
+import { Textarea } from "../../components/ui/Textarea";
+import { useConfirm } from "../../components/ui/useConfirm";
 import { ApiError } from "../../api/client";
 import { createVendorFeePayment } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
-import { getApplicationDetail, type ApplicationDetail, type ApplicationStatus } from "../../api/application";
+import { getApplicationDetail, submitCancelRequest, type ApplicationDetail, type ApplicationStatus } from "../../api/application";
 
 const statusLabels: Record<ApplicationStatus, string> = {
   PENDING_REVIEW: "심사 대기",
@@ -81,6 +84,7 @@ export function ApplicationDetailPage() {
 
 function ApplicationDetailContent({ id }: { id: number }) {
   const { user } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -88,6 +92,11 @@ function ApplicationDetailContent({ id }: { id: number }) {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [paymentReady, setPaymentReady] = useState(false);
+
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [canceling, setCanceling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -109,6 +118,14 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
   async function handlePay() {
     if (!detail || !user || detail.finalPrice === null) return;
+
+    const proceed = await confirm({
+      title: "참가비를 결제할까요?",
+      description: `참가비 ${detail.finalPrice.toLocaleString()}원을 결제해요. 결제 후 신청이 확정돼요.`,
+      confirmLabel: "결제",
+    });
+    if (!proceed) return;
+
     setPaying(true);
     setPayError(null);
     try {
@@ -124,6 +141,28 @@ function ApplicationDetailContent({ id }: { id: number }) {
       setPayError(err instanceof ApiError ? err.message : "결제를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setPaying(false);
+    }
+  }
+
+  async function handleCancelSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!detail) return;
+    if (cancelReason.trim() === "") {
+      setCancelError("취소 사유를 입력해 주세요.");
+      return;
+    }
+
+    setCanceling(true);
+    setCancelError(null);
+    try {
+      await submitCancelRequest(detail.applicationId, cancelReason.trim());
+      setDetail({ ...detail, cancelRequestStatus: "REQUESTED", cancelable: false });
+      setCancelDialogOpen(false);
+      setCancelReason("");
+    } catch (err) {
+      setCancelError(err instanceof ApiError ? err.message : "취소 요청을 제출하지 못했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setCanceling(false);
     }
   }
 
@@ -156,20 +195,31 @@ function ApplicationDetailContent({ id }: { id: number }) {
     <div className="mx-auto max-w-3xl py-2">
       <BackLink />
 
-      <div className="mt-4 mb-6">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <Badge tone={statusTones[detail.status]}>{statusLabels[detail.status]}</Badge>
-          {detail.cancelRequestStatus === "REQUESTED" && <Badge tone="sun">취소 요청중</Badge>}
+      <div className="mt-4 mb-6 flex items-start justify-between gap-4">
+        <div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <Badge tone={statusTones[detail.status]}>{statusLabels[detail.status]}</Badge>
+            {detail.cancelRequestStatus === "REQUESTED" && <Badge tone="sun">취소 요청중</Badge>}
+            {detail.cancelRequestStatus === "REJECTED" && <Badge tone="neutral">취소 요청 반려</Badge>}
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">참가 신청서</h1>
         </div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">참가 신청서</h1>
+        {detail.cancelRequestStatus === "REJECTED" && detail.cancelDecidedAt && (
+          <p className="mt-2 text-sm text-muted">
+            취소 요청이 {formatDateTime(detail.cancelDecidedAt)}에 반려됐어요. 필요하면 다시 취소 요청을 보낼 수 있어요.
+          </p>
+        )}
+        {detail.cancelable && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCancelDialogOpen(true)}
+            className="shrink-0"
+          >
+            <XCircle size={16} />취소 요청하기
+          </Button>
+        )}
       </div>
-
-      {detail.status === "REJECTED" && detail.rejectReason && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <p>반려 사유: {detail.rejectReason}</p>
-        </div>
-      )}
 
       <div className="space-y-6">
         <Card className="space-y-4 p-6">
@@ -187,7 +237,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
             <span>{detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0).toLocaleString()}원</span>
           </div>
 
-          {detail.status === "PAYMENT_PENDING" && (
+          {detail.status === "PAYMENT_PENDING" && detail.cancelRequestStatus !== "REQUESTED" && (
             <div className="border-t border-line pt-4">
               {payError && (
                 <div className="mb-3 flex items-start gap-2 text-sm text-primary-strong">
@@ -249,6 +299,22 @@ function ApplicationDetailContent({ id }: { id: number }) {
           </dl>
         </Card>
       </div>
+
+      <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)} title="참가 취소 요청">
+        <form onSubmit={handleCancelSubmit} className="space-y-4">
+          <p className="text-sm text-muted">취소 요청을 보내면 행사 담당자가 확인 후 승인/반려를 결정해요.</p>
+          <div>
+            <label htmlFor="cancelReason" className="mb-1.5 block text-sm font-bold text-ink">취소 사유<span className="ml-1 text-primary-strong">*</span></label>
+            <Textarea id="cancelReason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="취소하려는 이유를 입력해 주세요." required />
+          </div>
+          {cancelError && <p className="text-sm font-bold text-primary-strong">{cancelError}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setCancelDialogOpen(false)}>닫기</Button>
+            <Button type="submit" disabled={canceling}>{canceling ? "제출 중..." : "취소 요청 제출"}</Button>
+          </div>
+        </form>
+      </Dialog>
+      {confirmDialog}
     </div>
   );
 }
