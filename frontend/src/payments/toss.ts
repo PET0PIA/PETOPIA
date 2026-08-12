@@ -79,3 +79,35 @@ export async function requestReservationPayment(request: ReservationPaymentReque
     card: { flowMode: "DEFAULT", useEscrow: false, useCardPoint: false },
   });
 }
+
+export interface FairOpeningFeePaymentRequest {
+  paymentId: number;
+  fairId: number;
+  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다("PAYMENT_{paymentId}"). */
+  orderId: string;
+  /** 화면에 보여준 개설비가 아니라 서버가 승인 시 확정해 저장해둔 금액. */
+  amount: number;
+  orderName: string;
+}
+
+/**
+ * 개설비 결제창을 띄운다. successUrl·failUrl은 예약금 결제와 같은 착지 경로
+ * (/payments/success, /payments/fail)를 쓰되 reservationId 대신 fairId를 싣는다 -
+ * 그 착지 페이지가 fairId 유무로 예약금/개설비 흐름을 구분해 confirm까지 처리한다.
+ */
+export async function requestFairOpeningFeePayment(request: FairOpeningFeePaymentRequest): Promise<void> {
+  const payment = await getTossPayment();
+  const origin = window.location.origin;
+
+  const query = `paymentId=${request.paymentId}&fairId=${request.fairId}`;
+
+  await payment.requestPayment({
+    method: "CARD",
+    amount: { currency: "KRW", value: request.amount },
+    orderId: request.orderId,
+    orderName: request.orderName.slice(0, ORDER_NAME_MAX_LENGTH),
+    successUrl: `${origin}/payments/success?${query}`,
+    failUrl: `${origin}/payments/fail?${query}`,
+    card: { flowMode: "DEFAULT", useEscrow: false, useCardPoint: false },
+  });
+}

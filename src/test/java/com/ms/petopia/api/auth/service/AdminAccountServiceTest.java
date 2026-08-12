@@ -12,6 +12,7 @@ import com.ms.petopia.api.auth.mapper.FairAdminAssignmentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -19,8 +20,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,6 +45,9 @@ class AdminAccountServiceTest {
     private static final String MANAGER_NAME = "김담당";
     private static final String MANAGER_EMAIL = "manager@fair.com";
     private static final String MANAGER_PHONE = "010-9999-8888";
+    private static final Long OPENING_FEE_AMOUNT = 500_000L;
+    private static final LocalDateTime PAYMENT_DUE_AT = LocalDateTime.of(2026, 8, 20, 18, 0);
+    private static final String FRONTEND_URL = "http://localhost:5173";
 
     private static final Long ADMIN_USER_ID = 1L;
     private static final String ADMIN_EMAIL = "admin@petopia.com";
@@ -65,19 +71,26 @@ class AdminAccountServiceTest {
     @InjectMocks
     private AdminAccountService adminAccountService;
 
+    @BeforeEach
+    void setUp() {
+        //@Value 필드는 Spring이 주입하므로 테스트에서는 ReflectionTestUtils로 세팅
+        ReflectionTestUtils.setField(adminAccountService, "frontendUrl", FRONTEND_URL);
+    }
+
     @Test
     void issueEventAdminAccount_managerEmail이_이미존재하면_DUPLICATED_EMAIL을_던지고_아무것도_하지않는다() {
         given(authMapper.selectUserByEmail(MANAGER_EMAIL)).willReturn(applicant());
 
         assertThatThrownBy(() -> adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE))
+                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
+                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT))
                 .isInstanceOf(CommonException.class)
                 .extracting(ex -> ((CommonException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.DUPLICATED_EMAIL);
 
         verify(authMapper, never()).insertUser(any());
         verify(fairAdminAssignmentMapper, never()).insertFairAdminAssignment(any());
-        verify(mailService, never()).sendAdminAccountIssueEmail(any(), any());
+        verify(mailService, never()).sendAdminAccountIssueEmail(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -85,7 +98,8 @@ class AdminAccountServiceTest {
         givenHappyPath();
 
         adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE);
+                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
+                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
 
         User saved = capturedUser();
         assertThat(saved.getPhone()).isEqualTo(MANAGER_PHONE);
@@ -96,7 +110,8 @@ class AdminAccountServiceTest {
         givenHappyPath();
 
         adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, null);
+                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, null,
+                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
 
         User saved = capturedUser();
         assertThat(saved.getPhone()).isEqualTo(applicant().getPhone());
@@ -107,7 +122,8 @@ class AdminAccountServiceTest {
         givenHappyPath();
 
         adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE);
+                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
+                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
 
         User saved = capturedUser();
         assertThat(saved.getEmail()).isEqualTo(MANAGER_EMAIL);
@@ -127,7 +143,8 @@ class AdminAccountServiceTest {
         givenHappyPath();
 
         adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE);
+                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
+                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
 
         ArgumentCaptor<FairAdminAssignment> captor = ArgumentCaptor.forClass(FairAdminAssignment.class);
         verify(fairAdminAssignmentMapper).insertFairAdminAssignment(captor.capture());
@@ -142,10 +159,14 @@ class AdminAccountServiceTest {
         givenHappyPath();
 
         Long result = adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE);
+                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
+                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
 
         assertThat(result).isEqualTo(NEW_ADMIN_ID);
-        verify(mailService).sendAdminAccountIssueEmail(eq(MANAGER_EMAIL), anyString());
+        verify(mailService).sendAdminAccountIssueEmail(
+                eq(MANAGER_EMAIL), anyString(), eq(OPENING_FEE_AMOUNT), eq(PAYMENT_DUE_AT),
+                eq(FRONTEND_URL + "/payments/fair-opening-fee/" + FAIR_ID)
+        );
     }
 
     //신청자 중복(managerEmail 미존재) + insertUser 시 PK 생성까지 흉내내는 공통 스텁

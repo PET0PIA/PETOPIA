@@ -6,6 +6,7 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairOpeningFeeSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairStatus;
@@ -79,6 +80,13 @@ public class FairController {
             @AuthenticationPrincipal Long requesterId
     ) {
         return fairService.getMyApplicationDetail(fairId, requesterId);
+    }
+
+    // SecurityConfig에서 EVENT_ADMIN/SUPER_ADMIN role만 이 엔드포인트에 도달할 수 있게 막고,
+    // "그 행사 담당자인지"는 FairService가 FairAdminAccessGuard로 한 번 더 확인한다.
+    @GetMapping("/{fairId}/opening-fee")
+    public FairOpeningFeeSummaryResponse getOpeningFeeSummary(@PathVariable Long fairId) {
+        return fairService.getOpeningFeeSummary(fairId);
     }
 
     @GetMapping("/{fairId}/public")
