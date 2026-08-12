@@ -1,5 +1,5 @@
 import { AlertCircle, Check, Paperclip, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   approveApplication,
@@ -81,17 +81,23 @@ export function ParticipationReviewPage() {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
 
+  const queueRequestIdRef = useRef(0);
+  const detailRequestIdRef = useRef(0);
+
   async function loadQueue(currentFairId: number, status: ApplicationStatus) {
+    const requestId = ++queueRequestIdRef.current;
     setQueueLoading(true);
     setQueueError(null);
     try {
       const data = await getApplicationsForFair(currentFairId, status);
+      if (requestId !== queueRequestIdRef.current) return; // 그 사이 다른 요청이 시작됐으면 이 응답은 버린다
       setQueue(data);
     } catch (error) {
+      if (requestId !== queueRequestIdRef.current) return;
       setQueue([]);
       setQueueError(error instanceof ApiError ? error.message : "신청 목록을 불러오지 못했어요.");
     } finally {
-      setQueueLoading(false);
+      if (requestId === queueRequestIdRef.current) setQueueLoading(false);
     }
   }
 
@@ -103,18 +109,21 @@ export function ParticipationReviewPage() {
   }, [fairId, activeStatus]);
 
   async function openApplication(applicationId: number) {
+    const requestId = ++detailRequestIdRef.current;
     setSelectedId(applicationId);
     setDetailLoading(true);
     setDetailError(null);
     setReviewError(null);
     try {
       const data = await getApplicationDetail(applicationId);
+      if (requestId !== detailRequestIdRef.current) return; // 그 사이 다른 신청서를 열었으면 이 응답은 버린다
       setDetail(data);
     } catch (error) {
+      if (requestId !== detailRequestIdRef.current) return;
       setDetail(null);
       setDetailError(error instanceof ApiError ? error.message : "신청서를 불러오지 못했어요.");
     } finally {
-      setDetailLoading(false);
+      if (requestId === detailRequestIdRef.current) setDetailLoading(false);
     }
   }
 
