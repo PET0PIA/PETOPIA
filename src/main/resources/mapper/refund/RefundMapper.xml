@@ -36,6 +36,29 @@
          WHERE r.payment_id = #{paymentId}
     </select>
 
+    <!--
+        "기존 환불 재사용 또는 신규 생성"을 원자적으로 판단하기 위한 잠금 조회.
+
+        payment를 조인하지 않는다 — 조인한 상태로 FOR UPDATE를 걸면 어느 테이블이 잠기는지가
+        모호해지고, reservationId는 호출자(RefundService)가 이미 잠가서 들고 있는 PAYMENT 행에서
+        채워 넣으면 되기 때문이다(insert 경로도 같은 방식이다).
+    -->
+    <select id="selectByPaymentIdForUpdate" resultType="RefundRow">
+        SELECT refund_id
+             , payment_id
+             , refund_reason
+             , requested_by_domain
+             , refund_amount
+             , status
+             , requested_at
+             , processed_at
+             , created_at
+             , updated_at
+          FROM refund
+         WHERE payment_id = #{paymentId}
+         FOR UPDATE
+    </select>
+
     <insert id="insert" parameterType="RefundRow"
             useGeneratedKeys="true" keyProperty="refundId">
         INSERT INTO refund (

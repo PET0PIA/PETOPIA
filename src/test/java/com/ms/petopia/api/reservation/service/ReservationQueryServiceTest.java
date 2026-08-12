@@ -93,7 +93,7 @@ class ReservationQueryServiceTest {
     }
 
     @Test
-    void detailOfPaidConfirmedAdvanceAllowsChangeButNotCancel() {
+    void detailOfPaidConfirmedAdvanceAllowsChangeAndCancel() {
         given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
         given(reservationMapper.selectReservationForOwner(30L, 20L))
                 .willReturn(detailRow("CONFIRMED", "ADVANCE", 10_000, null));
@@ -105,7 +105,8 @@ class ReservationQueryServiceTest {
         assertThat(detail.reservationType()).isEqualTo("ADVANCE");
         assertThat(detail.qrAvailable()).isTrue();
         assertThat(detail.canChangeVisitDate()).isTrue();
-        assertThat(detail.canCancel()).isFalse(); // 유료 확정은 취소 불가(코스 판단)
+        // 취소 API가 예약금을 전액 환불하고 취소하므로 유료 확정도 취소 가능하다.
+        assertThat(detail.canCancel()).isTrue();
     }
 
     @Test
