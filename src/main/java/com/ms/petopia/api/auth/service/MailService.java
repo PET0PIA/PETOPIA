@@ -6,6 +6,9 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 @Service
 @RequiredArgsConstructor
 public class MailService {
@@ -37,8 +40,9 @@ public class MailService {
         javaMailSender.send(simpleMailMessage);
     }
 
-    //관리자 계정 발급 메일
-    public void sendAdminAccountIssueEmail(String to, String tempPassword){
+    //관리자 계정 발급 메일 (개설비 청구내역 + 결제 링크 포함)
+    public void sendAdminAccountIssueEmail(String to, String tempPassword,
+                                            Long openingFeeAmount, LocalDateTime paymentDueAt, String paymentLink){
         SimpleMailMessage simpleMailMessage = new SimpleMailMessage();
         simpleMailMessage.setFrom(fromEmail);
         simpleMailMessage.setTo(to);
@@ -53,9 +57,21 @@ public class MailService {
 
             로그인 후 반드시 비밀번호를 변경해 주세요.
 
+            [개설비 청구내역]
+            결제 금액: %s원
+            결제 기한: %s까지
+
+            아래 링크에서 개설비를 결제해 주세요.
+            [개설비 결제 링크] %s
+
             감사합니다.
             PETOPIA 드림.
-            """.formatted(to, tempPassword));
+            """.formatted(
+                to, tempPassword,
+                String.format("%,d", openingFeeAmount),
+                paymentDueAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),
+                paymentLink
+        ));
         javaMailSender.send(simpleMailMessage);
     }
 

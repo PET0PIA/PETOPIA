@@ -5,6 +5,7 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairOpeningFeeSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
@@ -99,6 +100,9 @@ class FairServiceTest {
 
     @Mock
     private AuditLogService auditLogService;
+
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
 
     @InjectMocks
     private FairService fairService;
@@ -439,6 +443,61 @@ class FairServiceTest {
         verify(fairMapper, never()).selectById(any());
     }
 
+    // ===== getOpeningFeeSummary =====
+
+    @Test
+    @DisplayName("담당 관리자가 조회하면 개설비 요약으로 매핑한다")
+    void getOpeningFeeSummary_담당관리자면_요약으로_매핑한다() {
+        Fair fair = fairWithStatus(FairStatus.PAYMENT_PENDING);
+        fair.setOpeningFeeAmount(500_000L);
+        fair.setPaymentDueAt(NOW.plusDays(3));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fair);
+
+        FairOpeningFeeSummaryResponse response = fairService.getOpeningFeeSummary(FAIR_ID);
+
+        assertThat(response.fairId()).isEqualTo(FAIR_ID);
+        assertThat(response.name()).isEqualTo("2026 서울 펫페어");
+        assertThat(response.status()).isEqualTo("PAYMENT_PENDING");
+        assertThat(response.openingFeeAmount()).isEqualTo(500_000L);
+        assertThat(response.paymentDueAt()).isEqualTo(NOW.plusDays(3));
+        verify(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+    }
+
+    @Test
+    @DisplayName("승인 전(개설비 미확정)이면 openingFeeAmount·paymentDueAt이 null로 내려간다")
+    void getOpeningFeeSummary_승인전이면_금액과기한이_null이다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+
+        FairOpeningFeeSummaryResponse response = fairService.getOpeningFeeSummary(FAIR_ID);
+
+        assertThat(response.status()).isEqualTo("RECEIVED");
+        assertThat(response.openingFeeAmount()).isNull();
+        assertThat(response.paymentDueAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("담당 관리자가 아니면 FairAdminAccessGuard가 던지는 예외가 그대로 전파된다")
+    void getOpeningFeeSummary_담당관리자아니면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.PAYMENT_PENDING));
+        willAnswer(invocation -> {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }).given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertErrorCode(
+                () -> fairService.getOpeningFeeSummary(FAIR_ID),
+                ErrorCode.ACCESS_DENIED
+        );
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 행사를 조회하면 FAIR_NOT_FOUND를 던지고 접근 검증은 하지 않는다")
+    void getOpeningFeeSummary_존재하지않으면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(null);
+
+        assertErrorCode(() -> fairService.getOpeningFeeSummary(FAIR_ID), ErrorCode.FAIR_NOT_FOUND);
+        verify(fairAdminAccessGuard, never()).checkAssigned(any());
+    }
+
     // ===== updateApplication =====
 
     @Test
@@ -639,7 +698,8 @@ class FairServiceTest {
         assertThat(updated.getPaymentDueAt()).isEqualTo(NOW.plusDays(7));
 
         verify(adminAccountService).issueEventAdminAccount(
-                FAIR_ID, USER_ID, "김담당", "manager@petopia.example", null
+                FAIR_ID, USER_ID, "김담당", "manager@petopia.example", null,
+                500_000L, NOW.plusDays(7)
         );
 
         TransactionSynchronizationManager.getSynchronizations()
@@ -664,7 +724,7 @@ class FairServiceTest {
         assertThat(response.status()).isEqualTo(FairStatus.REJECTED.name());
         assertThat(response.paymentDueAt()).isNull();
         assertThat(response.rejectReason()).isEqualTo("서류 미비");
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
 
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);
@@ -681,7 +741,7 @@ class FairServiceTest {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  ");
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_REJECT_REASON_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -690,7 +750,7 @@ class FairServiceTest {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -699,7 +759,7 @@ class FairServiceTest {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 0L, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -710,7 +770,7 @@ class FairServiceTest {
 
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_NOT_PENDING_REVIEW);
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
