@@ -181,6 +181,9 @@ class BannerServiceTest {
         @Test
         @DisplayName("전달된 순서대로 sort_order를 갱신한다")
         void updatesOrderByIndex() {
+            given(bannerMapper.selectActiveList())
+                    .willReturn(List.of(createBanner(1L), createBanner(2L), createBanner(3L)));
+
             BannerOrderRequest request = new BannerOrderRequest();
             request.setBannerIds(List.of(3L, 1L, 2L));
 
