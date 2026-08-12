@@ -13,7 +13,8 @@ import { ApiError } from "../../api/client";
 import { createVendorFeePayment } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
 import { getApplicationDetail, submitCancelRequest, type ApplicationDetail, type ApplicationStatus } from "../../api/application";
-import { requestVendorFeePayment } from "../../payments/toss";
+import { isTossConfigured, requestVendorFeePayment, type PaymentMethodOption } from "../../payments/toss";
+import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 
 const statusLabels: Record<ApplicationStatus, string> = {
   PENDING_REVIEW: "심사 대기",
@@ -92,11 +93,14 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [canceling, setCanceling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const tossReady = isTossConfigured();
 
   useEffect(() => {
     let alive = true;
@@ -140,6 +144,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
         orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
         amount: created.amount,
         orderName: `참가비 결제 (행사 #${detail.fairId})`,
+        method: paymentMethod,
       });
       // 리다이렉트가 시작됐으므로 paying을 되돌리지 않는다(예약금 쪽과 동일 패턴).
     } catch (err) {
@@ -243,14 +248,21 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
           {detail.status === "PAYMENT_PENDING" && detail.cancelRequestStatus !== "REQUESTED" && (
             <div className="border-t border-line pt-4">
+              {tossReady ? (
+                <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+              ) : (
+                <p className="rounded-button border border-dashed border-line bg-page p-4 text-center text-sm text-muted">
+                  결제 설정이 없어요. 결제 클라이언트 키가 주입되지 않았어요.
+                </p>
+              )}
               {payError && (
-                <div className="mb-3 flex items-start gap-2 text-sm text-primary-strong">
+                <div className="mt-3 flex items-start gap-2 text-sm text-primary-strong">
                   <AlertCircle size={16} className="mt-0.5 shrink-0" />
                   <p>{payError}</p>
                 </div>
               )}
-              <div className="flex justify-end">
-                <Button type="button" onClick={handlePay} disabled={paying}>
+              <div className="mt-3 flex justify-end">
+                <Button type="button" onClick={handlePay} disabled={paying || !tossReady}>
                   {paying ? "결제창을 여는 중..." : "결제하기"}
                 </Button>
               </div>
