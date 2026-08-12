@@ -12,7 +12,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -53,7 +57,7 @@ public class BannerService {
                 .isActive(true)
                 .startedAt(request.getStartedAt())
                 .endedAt(request.getEndedAt())
-                .createdAt(java.time.LocalDateTime.now())
+                .createdAt(LocalDateTime.now())
                 .createdBy(callerId)
                 .build();
         bannerMapper.insert(banner);
@@ -99,11 +103,26 @@ public class BannerService {
         bannerMapper.updateActive(bannerId, isActive);
     }
 
-    // 관리자 - 순서 일관 변경
+    // 관리자 - 순서 일괄 변경
     @Transactional
     public void updateOrder(BannerOrderRequest request){
         List<Long> ids = request.getBannerIds();
-        for(int i=0; i < ids.size(); i++){
+
+        // 중복 ID 검사
+        Set<Long> uniqueIds = new HashSet<>(ids);
+        if (uniqueIds.size() != ids.size()) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        // 활성 배너 ID와 일치 여부 검사 (누락·미존재 ID 모두 거부)
+        Set<Long> dbIds = bannerMapper.selectActiveList().stream()
+                .map(Banner::getBannerId)
+                .collect(Collectors.toSet());
+        if (!uniqueIds.equals(dbIds)) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        for (int i = 0; i < ids.size(); i++) {
             bannerMapper.updateOrder(ids.get(i), i);
         }
     }

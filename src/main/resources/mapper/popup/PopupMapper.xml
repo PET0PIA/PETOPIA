@@ -42,7 +42,7 @@
         UPDATE popup
         <set>
             <if test="title != null">title = #{title},</if>
-            <if test="imageKey != null">imgae_key = #{imageKey},</if>
+            <if test="imageKey != null">image_key = #{imageKey},</if>
             <if test="linkUrl != null">link_url = #{linkUrl},</if>
             <if test="linkTarget != null">link_target = #{linkTarget},</if>
             <if test="width != null">width = #{width},</if>
