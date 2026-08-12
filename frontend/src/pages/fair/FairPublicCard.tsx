@@ -9,15 +9,11 @@ interface FairPublicCardProps {
   fair: FairPublicListItem;
   /** 클릭 시 이동 경로. 없으면(또는 ended면) 클릭 불가. */
   to?: string;
-  /** 운영이 끝난 행사. 흑백+톤다운+"운영 종료" 배지, 클릭 불가. */
+  /** 운영이 끝난 행사. 흑백+톤다운+"운영 종료" 배지, 클릭 불가. (fair엔 없는 값이라 목록에서 넘겨준다) */
   ended?: boolean;
-  /** 사전예약 가능(백엔드 reservable 플래그, B단계). true면 "사전예약중" 배지. */
-  reservable?: boolean;
-  /** 참가기업 부스 모집 중(백엔드 recruiting 플래그, C단계). true면 "참가기업 모집중" 배지. */
-  recruiting?: boolean;
 }
 
-export function FairPublicCard({ fair, to, ended, reservable, recruiting }: FairPublicCardProps) {
+export function FairPublicCard({ fair, to, ended }: FairPublicCardProps) {
   const clickable = !!to && !ended;
 
   const poster = fair.posterImageUrl ? (
@@ -46,14 +42,14 @@ export function FairPublicCard({ fair, to, ended, reservable, recruiting }: Fair
         <h3 className="text-lg font-extrabold">{fair.name}</h3>
 
         {/* 상태 배지 줄: 종료면 "운영 종료"만, 아니면 사전예약중/참가기업 모집중을 있는 대로(둘 다 가능) */}
-        {(ended || reservable || recruiting) && (
+        {(ended || fair.reservable || fair.recruiting) && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {ended ? (
               <Badge tone="ink">운영 종료</Badge>
             ) : (
               <>
-                {reservable && <Badge tone="leaf">사전예약중</Badge>}
-                {recruiting && <Badge tone="sun">참가기업 모집중</Badge>}
+                {fair.reservable && <Badge tone="leaf">사전예약중</Badge>}
+                {fair.recruiting && <Badge tone="sun">참가기업 모집중</Badge>}
               </>
             )}
           </div>

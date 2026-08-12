@@ -74,8 +74,6 @@ export function FairListPage() {
               fair={fair}
               ended={ended}
               to={ended ? undefined : `/tickets/${fair.fairId}`}
-              reservable={fair.reservable}
-              recruiting={fair.recruiting}
             />
           ))}
         </div>

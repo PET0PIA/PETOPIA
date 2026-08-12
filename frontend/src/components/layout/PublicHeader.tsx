@@ -131,7 +131,13 @@ export function PublicHeader() {
     setMobileOpen(false);
   };
   const handleLogout = async () => {
-    await logout();
+    // logout()은 서버 요청이 실패해도 finally에서 로컬 인증 상태를 지운다.
+    // 요청이 throw하더라도 로그아웃은 이미 성립했으니, 오류를 삼키고 항상 홈으로 이동한다.
+    try {
+      await logout();
+    } catch {
+      // 로그아웃 요청 실패는 무시 - 로컬 상태는 이미 정리됨
+    }
     go("/");
   };
 
