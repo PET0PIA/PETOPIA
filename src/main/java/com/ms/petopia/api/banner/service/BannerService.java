@@ -46,14 +46,14 @@ public class BannerService {
     public BannerResponse create(Long callerId, BannerCreateRequest request){
         Banner banner = Banner.builder()
                 .title(request.getTitle())
-                .imageKey(request.getTitle())
+                .imageKey(request.getImageKey())
                 .linkUrl(request.getLinkUrl())
                 .linkTarget(request.getLinkTarget())
                 .sortOrder(request.getSortOrder())
                 .isActive(true)
                 .startedAt(request.getStartedAt())
                 .endedAt(request.getEndedAt())
-                .createdAt(request.getEndedAt())
+                .createdAt(java.time.LocalDateTime.now())
                 .createdBy(callerId)
                 .build();
         bannerMapper.insert(banner);
