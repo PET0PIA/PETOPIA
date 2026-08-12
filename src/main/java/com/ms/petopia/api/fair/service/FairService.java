@@ -259,8 +259,9 @@ public class FairService {
         if (filter == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        LocalDate today = timeProvider.now().toLocalDate();
-        return fairMapper.selectPublicFairs(filter, today).stream()
+        LocalDateTime now = timeProvider.now();
+        LocalDate today = now.toLocalDate();
+        return fairMapper.selectPublicFairs(filter, today, now).stream()
                 .map(this::toPublicListItemResponse)
                 .toList();
     }
@@ -580,7 +581,9 @@ public class FairService {
                 fair.getPosterImageUrl(),
                 fair.getPlaceName(),
                 fair.getOperationStartDate(),
-                fair.getOperationEndDate()
+                fair.getOperationEndDate(),
+                Boolean.TRUE.equals(fair.getReservable()),
+                Boolean.TRUE.equals(fair.getRecruiting())
         );
     }
 

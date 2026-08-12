@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -93,7 +94,9 @@ public interface FairMapper {
      * UPCOMING은 임박한 순으로(operation_start_date ASC, NULL은 맨 뒤), PAST는 최근에 끝난
      * 순으로(operation_end_date DESC) 정렬한다.
      */
-    List<Fair> selectPublicFairs(@Param("filter") PublicFairListFilter filter, @Param("today") LocalDate today);
+    List<Fair> selectPublicFairs(@Param("filter") PublicFairListFilter filter,
+                                 @Param("today") LocalDate today,
+                                 @Param("now") LocalDateTime now);
 
     /**
      * 관리자 심사 큐 조회({@code FairService#getApplications} 전용). {@code status}가 없으면

@@ -15,6 +15,10 @@ public record FairPublicListItemResponse(
         String posterImageUrl,
         String placeName,
         LocalDate operationStartDate,
-        LocalDate operationEndDate
+        LocalDate operationEndDate,
+        /** 사전예약 가능 여부(예매 기간 안 + 정원 남은 미래 운영일 존재). 목록 카드의 "사전예약중" 배지에 쓴다. */
+        boolean reservable,
+        /** 참가기업 부스 모집중 여부(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯). "참가기업 모집중" 배지에 쓴다. */
+        boolean recruiting
 ) {
 }
