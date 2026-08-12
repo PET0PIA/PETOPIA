@@ -19,7 +19,9 @@ public class BoothResponse {
     private String imageUrl;
     private List<BoothItemResponse> items;
 
-    public static BoothResponse from(Booth booth, List<BoothItemResponse> items) {
+    private boolean favorited; // 로그인 안 했거나 즐겨찾기 안 했으면 false
+
+    public static BoothResponse from(Booth booth, List<BoothItemResponse> items, boolean favorited) {
 
         return BoothResponse.builder()
                 .boothId(booth.getBoothId())
@@ -29,8 +31,14 @@ public class BoothResponse {
                 .targetAnimal(booth.getTargetAnimal() != null ? booth.getTargetAnimal().name() : null)
                 .imageUrl(booth.getImageUrl())
                 .items(items)
+                .favorited(favorited)
                 .build();
 
+    }
+
+    // 프로필 수정 응답 등 즐겨찾기 여부가 의미 없는 곳에서 쓰는 오버로드(false 고정)
+    public static BoothResponse from(Booth booth, List<BoothItemResponse> items) {
+        return from(booth, items, false);
     }
 
 }
