@@ -8,6 +8,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Dialog } from "../../components/ui/Dialog";
 import { Textarea } from "../../components/ui/Textarea";
+import { useConfirm } from "../../components/ui/useConfirm";
 import { ApiError } from "../../api/client";
 import { createVendorFeePayment } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
@@ -83,6 +84,7 @@ export function ApplicationDetailPage() {
 
 function ApplicationDetailContent({ id }: { id: number }) {
   const { user } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -116,6 +118,14 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
   async function handlePay() {
     if (!detail || !user || detail.finalPrice === null) return;
+
+    const proceed = await confirm({
+      title: "참가비를 결제할까요?",
+      description: `참가비 ${detail.finalPrice.toLocaleString()}원을 결제해요. 결제 후 신청이 확정돼요.`,
+      confirmLabel: "결제",
+    });
+    if (!proceed) return;
+
     setPaying(true);
     setPayError(null);
     try {
@@ -304,6 +314,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
           </div>
         </form>
       </Dialog>
+      {confirmDialog}
     </div>
   );
 }
