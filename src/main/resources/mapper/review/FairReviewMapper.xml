@@ -25,14 +25,28 @@
         SELECT <include refid="columns" />
           FROM fair_reviews
          WHERE fair_id = #{fairId}
-         ORDER BY created_at DESC
+         ORDER BY created_at DESC, review_id DESC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countByFairId" resultType="long">
+        SELECT COUNT(*)
+          FROM fair_reviews
+         WHERE fair_id = #{fairId}
     </select>
 
     <select id="selectByUserId" resultType="FairReview">
         SELECT <include refid="columns" />
           FROM fair_reviews
          WHERE user_id = #{userId}
-         ORDER BY created_at DESC
+         ORDER BY created_at DESC, review_id DESC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countByUserId" resultType="long">
+        SELECT COUNT(*)
+          FROM fair_reviews
+         WHERE user_id = #{userId}
     </select>
 
     <update id="update">

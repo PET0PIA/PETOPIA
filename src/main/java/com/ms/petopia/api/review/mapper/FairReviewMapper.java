@@ -19,11 +19,21 @@ public interface FairReviewMapper {
 
     FairReview selectById(@Param("reviewId") Long reviewId);
 
-    /** 한 행사의 리뷰 목록. 최신순 정렬은 XML에서 처리한다. */
-    List<FairReview> selectByFairId(@Param("fairId") Long fairId);
+    /** 한 행사의 리뷰 목록. 최신순 정렬·페이징은 XML에서 처리한다. */
+    List<FairReview> selectByFairId(@Param("fairId") Long fairId,
+                                     @Param("offset") long offset,
+                                     @Param("limit") int limit);
 
-    /** 한 사용자가 쓴 리뷰 목록(마이페이지 "내 리뷰"용). 최신순 정렬은 XML에서 처리한다. */
-    List<FairReview> selectByUserId(@Param("userId") Long userId);
+    /** 한 행사의 전체 리뷰 개수(페이징 UI용). */
+    long countByFairId(@Param("fairId") Long fairId);
+
+    /** 한 사용자가 쓴 리뷰 목록(마이페이지 "내 리뷰"용). 최신순 정렬·페이징은 XML에서 처리한다. */
+    List<FairReview> selectByUserId(@Param("userId") Long userId,
+                                     @Param("offset") long offset,
+                                     @Param("limit") int limit);
+
+    /** 한 사용자가 쓴 전체 리뷰 개수(페이징 UI용). */
+    long countByUserId(@Param("userId") Long userId);
 
     /**
      * rating/content만 갱신한다. fair_id·user_id·verified_visit(작성 시점 스냅샷)은

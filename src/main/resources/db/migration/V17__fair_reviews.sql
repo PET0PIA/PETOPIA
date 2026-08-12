@@ -16,12 +16,17 @@ CREATE TABLE `fair_reviews` (
     `review_id`          BIGINT     NOT NULL AUTO_INCREMENT,
     `fair_id`            BIGINT     NOT NULL COMMENT '리뷰 대상 fairs.fair_id',
     `user_id`            BIGINT     NOT NULL COMMENT '작성자 users.user_id',
-    `rating`             TINYINT    NOT NULL COMMENT '평점(1~5). 범위 검증은 애플리케이션에서 한다',
+    `rating`             TINYINT    NOT NULL COMMENT '평점(1~5)',
     `content`            TEXT       NOT NULL COMMENT '리뷰 내용',
     `is_verified_visit`  TINYINT(1) NOT NULL DEFAULT 0 COMMENT '작성 시점에 이 사용자의 예매·방문 이력이 있었는지(뱃지 표시용 스냅샷)',
     `created_at`         DATETIME   NOT NULL,
     `updated_at`         DATETIME   NOT NULL,
     CONSTRAINT `PK_FAIR_REVIEWS` PRIMARY KEY (`review_id`),
-    KEY `idx_fair_reviews_fair` (`fair_id`),
-    KEY `idx_fair_reviews_user` (`user_id`)
+    CONSTRAINT `CK_FAIR_REVIEWS_RATING` CHECK (`rating` BETWEEN 1 AND 5),
+    -- 목록 조회가 fair_id/user_id로 필터링 후 created_at DESC로 정렬해 LIMIT/OFFSET 페이징하므로
+    -- (FairReviewMapper#selectByFairId/#selectByUserId 참고), 단일 컬럼 인덱스 대신 정렬까지
+    -- 커버하는 복합 인덱스를 둔다. review_id를 마지막에 둔 건 같은 created_at 값이 여러 건일 때
+    -- 페이지 경계에서 순서가 흔들리지 않게 하기 위해서다.
+    KEY `idx_fair_reviews_fair_created` (`fair_id`, `created_at`, `review_id`),
+    KEY `idx_fair_reviews_user_created` (`user_id`, `created_at`, `review_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
