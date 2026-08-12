@@ -57,7 +57,8 @@
     <!--
          부스 슬롯 현황 + 확정 업체명.
          한 슬롯을 참조하는 활성(PENDING_REVIEW/PAYMENT_PENDING/CONFIRMED) application_slot은
-         최대 1건만 존재한다는 전제(ApplicationService의 FOR UPDATE 락으로 보장됨).
+         최대 1건만 존재한다는 전제(ApplicationService의 슬롯별 MySQL 네임드 락(GET_LOCK)과
+         활성 신청 재확인으로 보장됨).
          그래서 상관 서브쿼리로 상태 하나만 뽑아도 안전하다 — JOIN으로 하면 과거
          REJECTED/CANCELED 이력까지 같이 잡혀서 슬롯 하나가 여러 행으로 중복될 수 있음.
     -->
@@ -114,7 +115,7 @@
         <foreach item="fairId" collection="fairIds" open="(" separator="," close=")">
             #{fairId}
         </foreach>
-        AND rn.recruit_deadline > NOW()
+        AND rn.recruit_deadline > #{now}
         AND f.canceled_at IS NULL
         AND f.status != 'ENDED'
     </select>

@@ -126,7 +126,7 @@ public class RecruitNoticeService {
             return Set.of();
         }
 
-        return recruitNoticeMapper.selectRecruitingFairIds(fairIds);
+        return recruitNoticeMapper.selectRecruitingFairIds(fairIds, LocalDateTime.now());
 
     }
 
