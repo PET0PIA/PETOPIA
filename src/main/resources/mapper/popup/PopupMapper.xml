@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.popup.mapper.PopupMapper">
+    <!--현재 노출 중인 팝업 목록-->
+    <select id="selectActiveList" resultType="com.ms.petopia.api.popup.domain.Popup">
+        SELECT popup_id, title, image_key, link_url, link_target,
+            width, height, is_active, started_at, ended_at, created_at
+        FROM popup
+        WHERE is_active = 1
+            AND (started_at IS NULL OR started_at &lt;= NOW())
+            AND (ended_at IS NULL OR ended_at &gt;= NOW())
+    </select>
+
+    <!--전체 팝업 목록 (관리자)-->
+    <select id="selectAll" resultType="com.ms.petopia.api.popup.domain.Popup">
+        SELECT popup_id, title, image_key, link_url, link_target,
+            width, height, is_active, started_at, ended_at, created_at
+        FROM popup
+    </select>
+
+    <!--단건 조회-->
+    <select id="selectById" resultType="com.ms.petopia.api.popup.domain.Popup">
+        SELECT popup_id, title, image_key, link_url, link_target,
+            width, height, is_active, started_at, ended_at,
+            created_by, created_at, updated_at
+        FROM popup
+        WHERE popup_id = #{popupId}
+    </select>
+
+    <!--등록-->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="popupId">
+        INSERT INTO popup(title, image_key, link_url, link_target,
+            width, height, is_active, started_at, ended_at, created_by)
+        VALUES (#{title}, #{imageKey}, #{linkUrl}, #{linkTarget},
+            #{width}, #{height}, #{isActive}, #{startedAt}, #{endedAt}, #{createdBy})
+    </insert>
+
+    <!--수정 (null이 아닌 필드만 갱신)-->
+    <update id="update">
+        UPDATE popup
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="imageKey != null">imgae_key = #{imageKey},</if>
+            <if test="linkUrl != null">link_url = #{linkUrl},</if>
+            <if test="linkTarget != null">link_target = #{linkTarget},</if>
+            <if test="width != null">width = #{width},</if>
+            <if test="height != null">height = #{height},</if>
+            <if test="startedAt != null">started_at = #{startedAt},</if>
+            <if test="endedAt != null">ended_at = #{endedAt},</if>
+        </set>
+        WHERE popup_id = #{popupId}
+    </update>
+
+    <!--삭제-->
+    <delete id="delete">
+        DELETE FROM popup WHERE popup_id = #{popupId}
+    </delete>
+
+    <!--노출 여부 토글-->
+    <update id="updateActive">
+        UPDATE popup SET is_active = #{isActive}
+        WHERE popup_id = #{popupId}
+    </update>
+</mapper>
