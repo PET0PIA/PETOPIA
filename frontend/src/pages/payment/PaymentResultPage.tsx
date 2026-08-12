@@ -374,7 +374,8 @@ export function PaymentFailPage() {
         {message ?? "결제가 취소되었거나 승인되지 않았어요."}
         {code && <span className="ml-1 text-xs text-muted">({code})</span>}
         <br />
-        신청은 결제 대기 상태로 남아 있어요. 참가 신청 현황에서 다시 결제할 수 있어요.
+        신청은 결제 대기 상태로 남아 있어요. 참가 신청 현황에서 다시 결제를 시도해 주세요.
+        계속 안 되면 담당자에게 문의해 주세요.
       </ResultShell>
     );
   }
