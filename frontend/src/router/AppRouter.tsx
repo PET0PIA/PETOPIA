@@ -57,6 +57,9 @@ import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
 import { BusinessDetailPage } from "../pages/business/BusinessDetailPage";
 import { RecruitNoticeFormPage } from "../pages/recruit-notice/RecruitNoticeFormPage";
 import { ApplicationSubmitPage } from "../pages/application/ApplicationSubmitPage";
+import { MyApplicationsPage } from "../pages/application/MyApplicationsPage";
+import { ApplicationDetailPage } from "../pages/application/ApplicationDetailPage";
+import { ParticipationReviewPage } from "../pages/fair-admin/ParticipationReviewPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
@@ -64,7 +67,7 @@ import { ProtectedRoute } from "./ProtectedRoute";
 const publicPages: Record<string, string> = {
   "/businesses": "행사별 참여 기업",
   "/businesses/status": "사업자 등록 현황",
-  "/participations/me": "참가 신청 현황",
+  "/participations/new": "참여 부스 신청",
   "/booths/me": "내 부스 관리",
   "/about": "서비스 소개",
   "/terms": "이용약관",
@@ -80,6 +83,7 @@ const fairAdminImplementedPaths = [
   "/fair-admin/statistics",
   "/fair-admin/cancellation",
   "/fair-admin/recruit-notice",
+  "/fair-admin/participations",
 ];
 const fairAdminFallbackNavigation = fairAdminNavigation.filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
 const superAdminFallbackNavigation = superAdminNavigation.filter(
@@ -145,6 +149,8 @@ export function AppRouter() {
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
           <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
+          <Route path="/participations/me" element={<MyApplicationsPage />} />
+          <Route path="/participations/me/:applicationId" element={<ApplicationDetailPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
           ))}
@@ -164,6 +170,7 @@ export function AppRouter() {
           <Route path="cancellation" element={<FairCancelRequestPage />} />
           <Route path="recruit-notice" element={<RecruitNoticeFormPage />} />
           <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
+          <Route path="participations" element={<ParticipationReviewPage />} />
           {fairAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
           ))}
