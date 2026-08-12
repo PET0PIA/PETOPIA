@@ -1740,6 +1740,7 @@ class ApplicationServiceTest {
 
             // then
             assertThat(result.getBoothDeleted()).isTrue();
+            verify(boothMapper).deleteFavoritesByApplicationId(applicationId);
             verify(boothMapper).deleteBoothItemsByApplicationId(applicationId);
             verify(boothMapper).deleteBoothByApplicationId(applicationId);
 
@@ -1772,6 +1773,7 @@ class ApplicationServiceTest {
 
             // then
             assertThat(result.getBoothDeleted()).isFalse();
+            verify(boothMapper, never()).deleteFavoritesByApplicationId(any());
             verify(boothMapper, never()).deleteBoothByApplicationId(any());
 
         }
@@ -2290,6 +2292,7 @@ class ApplicationServiceTest {
             applicationService.cancelApplicationForCanceledFair(applicationId);
 
             // then
+            verify(boothMapper).deleteFavoritesByApplicationId(applicationId);
             verify(boothMapper).deleteBoothItemsByApplicationId(applicationId);
             verify(boothMapper).deleteBoothByApplicationId(applicationId);
 
@@ -2314,6 +2317,7 @@ class ApplicationServiceTest {
             applicationService.cancelApplicationForCanceledFair(applicationId);
 
             // then
+            verify(boothMapper, never()).deleteFavoritesByApplicationId(any());
             verify(boothMapper, never()).deleteBoothByApplicationId(any());
 
         }

@@ -95,7 +95,7 @@ class BoothServiceTest {
             given(boothMapper.selectItemsByBoothId(boothId)).willReturn(List.of(item));
 
             // when
-            BoothResponse result = boothService.getBooth(boothId);
+            BoothResponse result = boothService.getBooth(boothId, null);
 
             // then: 부스 정보 + 상품 목록이 응답에 같이 담겼는지 확인
             assertThat(result.getBoothId()).isEqualTo(boothId);
@@ -113,7 +113,7 @@ class BoothServiceTest {
             given(boothMapper.selectById(boothId)).willReturn(null);
 
             // when & then
-            assertThatThrownBy(() -> boothService.getBooth(boothId))
+            assertThatThrownBy(() -> boothService.getBooth(boothId, null))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("부스를 찾을 수 없습니다");
 
