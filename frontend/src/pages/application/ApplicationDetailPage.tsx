@@ -171,27 +171,6 @@ function ApplicationDetailContent({ id }: { id: number }) {
         </div>
       )}
 
-      {detail.status === "PAYMENT_PENDING" && (
-        <div className="surface mb-6 space-y-3 p-6">
-          <p className="text-sm text-ink">
-            심사에 통과했어요. 참가비 <strong>{detail.finalPrice?.toLocaleString()}원</strong>을 결제하면 부스가 확정돼요.
-          </p>
-          {payError && (
-            <div className="flex items-start gap-2 text-sm text-primary-strong">
-              <AlertCircle size={16} className="mt-0.5 shrink-0" />
-              <p>{payError}</p>
-            </div>
-          )}
-          {paymentReady ? (
-            <p className="text-sm font-bold text-ink">결제가 준비됐어요. (결제창 연동은 곧 추가될 예정이에요)</p>
-          ) : (
-            <Button type="button" onClick={handlePay} disabled={paying}>
-              {paying ? "준비 중..." : "결제하기"}
-            </Button>
-          )}
-        </div>
-      )}
-
       <div className="space-y-6">
         <Card className="space-y-4 p-6">
           <h3 className="text-sm font-extrabold text-muted">선택한 부스 슬롯</h3>
@@ -207,6 +186,26 @@ function ApplicationDetailContent({ id }: { id: number }) {
             <span>합계</span>
             <span>{detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0).toLocaleString()}원</span>
           </div>
+
+          {detail.status === "PAYMENT_PENDING" && (
+            <div className="border-t border-line pt-4">
+              {payError && (
+                <div className="mb-3 flex items-start gap-2 text-sm text-primary-strong">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <p>{payError}</p>
+                </div>
+              )}
+              {paymentReady ? (
+                <p className="text-right text-sm font-bold text-ink">결제가 준비됐어요. (결제창 연동은 곧 추가될 예정이에요)</p>
+              ) : (
+                <div className="flex justify-end">
+                  <Button type="button" onClick={handlePay} disabled={paying}>
+                    {paying ? "준비 중..." : "결제하기"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
 
         <Card className="space-y-4 p-6">
