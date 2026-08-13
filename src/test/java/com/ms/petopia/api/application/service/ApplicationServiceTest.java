@@ -2539,6 +2539,45 @@ class ApplicationServiceTest {
         }
 
         @Test
+        @DisplayName("첨부파일 objectKey가 빈 문자열이어도 기존 첨부파일을 유지한다")
+        void keepsExistingAttachmentWhenObjectKeyIsBlank() {
+
+            // given: attachmentObjectKey가 null이 아니라 빈 문자열로 온 엣지 케이스
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+            Long fairId = 1L;
+
+            Application application = createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW);
+            ApplicationUpdateRequest request = createUpdateRequest();
+            request.setAttachmentObjectKey("");
+
+            ApplicationDetailResponse existing = ApplicationDetailResponse.builder()
+                    .applicationId(applicationId)
+                    .fairId(fairId)
+                    .businessId(1L)
+                    .status("PENDING_REVIEW")
+                    .attachmentUrl("https://cdn.petopia.kr/uploads/document/old.pdf")
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectApplicationDetail(applicationId)).willReturn(existing);
+            given(applicationMapper.updateApplicationForm(any())).willReturn(1);
+            given(applicationMapper.selectApplicationSlotDetails(applicationId)).willReturn(List.of());
+
+            ArgumentCaptor<ApplicationForm> captor = ArgumentCaptor.forClass(ApplicationForm.class);
+
+            // when
+            applicationService.updateApplication(ownerId, applicationId, request);
+
+            // then
+            verify(applicationMapper).updateApplicationForm(captor.capture());
+            assertThat(captor.getValue().getAttachmentUrl()).isEqualTo("https://cdn.petopia.kr/uploads/document/old.pdf");
+            verify(storageService, never()).confirm(any(), any());
+
+        }
+
+        @Test
         @DisplayName("수정 도중 상태가 바뀌어(동시성) UPDATE가 0행 반영되면 예외를 던진다")
         void throwsWhenUpdateRaceLoses() {
 

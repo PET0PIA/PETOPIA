@@ -294,6 +294,34 @@ class RecruitNoticeServiceTest {
 
         }
 
+        @Test
+        @DisplayName("imageObjectKey가 빈 문자열이어도 기존 이미지를 유지한다")
+        void keepsExistingImageWhenObjectKeyIsBlank() {
+
+            // given: imageObjectKey가 null이 아니라 빈 문자열로 온 엣지 케이스
+            Long fairId = 1L;
+            Long writerId = 1L;
+
+            RecruitNoticeRequest request = createRequest("이미지 빈 문자열 엣지케이스");
+            request.setImageObjectKey("");
+
+            RecruitNotice existing = createNotice(1L, fairId, writerId, "이전 제목", null);
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(existing);
+
+            ArgumentCaptor<RecruitNotice> captor = ArgumentCaptor.forClass(RecruitNotice.class);
+
+            // when
+            recruitNoticeService.upsertNotice(fairId, request);
+
+            // then
+            verify(recruitNoticeMapper).upsertNotice(captor.capture());
+            assertThat(captor.getValue().getImageUrl()).isEqualTo("https://cdn.petopia.kr/notice/1.jpg");
+            verify(storageService, never()).confirm(any(), any());
+
+        }
+
     }
 
     @Nested

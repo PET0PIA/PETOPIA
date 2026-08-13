@@ -410,7 +410,9 @@ class ApplicationControllerTest {
             } finally {
                 SecurityContextHolder.clearContext();
             }
+
         }
+
     }
 
 }

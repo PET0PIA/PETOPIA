@@ -361,7 +361,8 @@ public class ApplicationService {
          * 그대로 유지한다 - 안 그러면 attachment_url이 매번 null로 덮어써져서 첨부파일이 사라진다.
          */
         ApplicationDetailResponse existing = applicationMapper.selectApplicationDetail(applicationId);
-        String attachmentUrl = request.getAttachmentObjectKey() != null
+
+        String attachmentUrl = (request.getAttachmentObjectKey() != null && !request.getAttachmentObjectKey().isBlank())
                 ? resolveAttachmentUrl(request.getAttachmentObjectKey())
                 : (existing != null ? existing.getAttachmentUrl() : null);
 

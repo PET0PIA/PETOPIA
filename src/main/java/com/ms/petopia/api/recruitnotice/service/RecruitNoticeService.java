@@ -46,7 +46,7 @@ public class RecruitNoticeService {
          */
         RecruitNotice existing = recruitNoticeMapper.selectByFairId(fairId);
 
-        String imageUrl = request.getImageObjectKey() != null
+        String imageUrl = (request.getImageObjectKey() != null && !request.getImageObjectKey().isBlank())
                 ? resolveImageUrl(request.getImageObjectKey())
                 : (existing != null ? existing.getImageUrl() : null);
 

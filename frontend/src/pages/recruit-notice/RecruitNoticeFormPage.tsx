@@ -73,6 +73,7 @@ export function RecruitNoticeFormPage() {
     setForm(initialForm);
     setLoadedForm(initialForm);
     setExistingImageUrl(null);
+    setImageObjectKey(null);
 
     setLoading(true);
     setLoadError(null);
@@ -189,6 +190,7 @@ export function RecruitNoticeFormPage() {
                 <Input type="datetime-local" value={form.recruitDeadline} onChange={(event) => update("recruitDeadline", event.target.value)} required />
               </div>
               <ImageUploadField
+                key={fairId}
                 label="공고 이미지"
                 initialImageUrl={existingImageUrl}
                 onObjectKeyChange={setImageObjectKey}
