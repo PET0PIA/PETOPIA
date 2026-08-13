@@ -94,6 +94,13 @@ jobs:
       GOOGLE_CLIENT_SECRET: ci-smoke-test-google-client-secret
       NAVER_CLIENT_ID: ci-smoke-test-naver-client-id
       NAVER_CLIENT_SECRET: ci-smoke-test-naver-client-secret
+      # anthropic.api-key 도 위와 같은 이유로 기본값이 없다(application.yaml 참고).
+      # 다만 위 값들과 달리 더미 문자열을 넣지 않고 빈 문자열로 둔다 - Spring 입장에서는
+      # "환경변수가 존재"하기만 하면 되어 컨텍스트 로딩은 통과하고(ClaudeBoothRecommender가
+      # 빈 값이면 비활성 상태로 처리), ClaudeBoothRecommenderManualTest의
+      # @EnabledIfEnvironmentVariable(matches = ".+")는 빈 문자열엔 안 걸려 CI에서
+      # 계속 스킵된다. 더미라도 값을 채우면 그 수동 테스트가 CI에서 돌려다 실패한다.
+      ANTHROPIC_API_KEY: ""
 
     steps:
       - name: 체크아웃
@@ -247,6 +254,7 @@ jobs:
             -e NTS_SERVICE_KEY \
             -e GOOGLE_CLIENT_ID -e GOOGLE_CLIENT_SECRET \
             -e NAVER_CLIENT_ID -e NAVER_CLIENT_SECRET \
+            -e ANTHROPIC_API_KEY \
             petopia:ci-${{ github.sha }}
 
           deadline=$(( SECONDS + 120 ))
