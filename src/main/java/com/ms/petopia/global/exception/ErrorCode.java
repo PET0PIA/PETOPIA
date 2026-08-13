@@ -172,6 +172,9 @@ public enum ErrorCode {
     // ===== Review (페어 리뷰) =====
     REVIEW_INVALID_RATING(HttpStatus.BAD_REQUEST, "RV001", "평점은 1~5 사이여야 합니다."),
     REVIEW_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "RV002", "리뷰 내용을 입력해야 합니다."),
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "RV003", "존재하지 않는 리뷰이거나 해당 행사의 리뷰가 아닙니다."),
+    REVIEW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "RV004", "본인이 작성한 리뷰만 수정·삭제할 수 있습니다."),
+    REVIEW_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "RV005", "리뷰 내용은 1000자를 초과할 수 없습니다."),
     ;
 
     private final HttpStatus httpStatus;

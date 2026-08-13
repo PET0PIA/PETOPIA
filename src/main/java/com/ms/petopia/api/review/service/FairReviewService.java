@@ -5,6 +5,7 @@ import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.review.dto.CreateFairReviewRequest;
 import com.ms.petopia.api.review.dto.FairReview;
 import com.ms.petopia.api.review.dto.FairReviewResponse;
+import com.ms.petopia.api.review.dto.UpdateFairReviewRequest;
 import com.ms.petopia.api.review.mapper.FairReviewMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -20,6 +21,7 @@ public class FairReviewService {
 
     private static final int MIN_RATING = 1;
     private static final int MAX_RATING = 5;
+    private static final int MAX_CONTENT_LENGTH = 1000;
 
     private final FairReviewMapper fairReviewMapper;
     private final FairMapper fairMapper;
@@ -55,6 +57,48 @@ public class FairReviewService {
         return FairReviewResponse.from(review);
     }
 
+    /**
+     * 리뷰를 수정한다. rating·content만 바뀐다 - fair_id·user_id·verified_visit(작성 시점
+     * 스냅샷)은 수정 대상이 아니다. 본인이 작성한 리뷰만 수정할 수 있다.
+     */
+    @Transactional
+    public FairReviewResponse update(Long fairId, Long reviewId, Long userId, UpdateFairReviewRequest request) {
+        FairReview review = getOwnedReview(fairId, reviewId, userId);
+        validateRating(request.rating());
+        validateContent(request.content());
+
+        review.setRating(request.rating());
+        review.setContent(request.content());
+        review.setUpdatedAt(LocalDateTime.now());
+
+        fairReviewMapper.update(review);
+        return FairReviewResponse.from(review);
+    }
+
+    /** 리뷰를 삭제한다. 본인이 작성한 리뷰만 삭제할 수 있다. */
+    @Transactional
+    public void delete(Long fairId, Long reviewId, Long userId) {
+        getOwnedReview(fairId, reviewId, userId);
+        fairReviewMapper.deleteById(reviewId);
+    }
+
+    /**
+     * reviewId로 리뷰를 조회하고, 그 fairId·userId가 경로·호출자와 일치하는지 확인한다.
+     * fairId가 다르면(다른 행사 리뷰를 잘못된 경로로 가리킨 경우) 존재 여부를 굳이 드러내지
+     * 않고 NOT_FOUND로 처리한다 - ReservationMapper#selectReservationForOwner가 조회
+     * 조건 자체에 소유자 스코프를 거는 것과 같은 취지다. 작성자 본인이 아니면 ACCESS_DENIED.
+     */
+    private FairReview getOwnedReview(Long fairId, Long reviewId, Long userId) {
+        FairReview review = fairReviewMapper.selectById(reviewId);
+        if (review == null || !review.getFairId().equals(fairId)) {
+            throw new CommonException(ErrorCode.REVIEW_NOT_FOUND);
+        }
+        if (!review.getUserId().equals(userId)) {
+            throw new CommonException(ErrorCode.REVIEW_ACCESS_DENIED);
+        }
+        return review;
+    }
+
     private void validateRating(Integer rating) {
         if (rating == null || rating < MIN_RATING || rating > MAX_RATING) {
             throw new CommonException(ErrorCode.REVIEW_INVALID_RATING);
@@ -64,6 +108,9 @@ public class FairReviewService {
     private void validateContent(String content) {
         if (content == null || content.isBlank()) {
             throw new CommonException(ErrorCode.REVIEW_CONTENT_REQUIRED);
+        }
+        if (content.length() > MAX_CONTENT_LENGTH) {
+            throw new CommonException(ErrorCode.REVIEW_CONTENT_TOO_LONG);
         }
     }
 }
