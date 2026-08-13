@@ -2,11 +2,9 @@ package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.domain.Application;
 import com.ms.petopia.api.application.domain.ApplicationCancelRequest;
+import com.ms.petopia.api.application.domain.ApplicationForm;
 import com.ms.petopia.api.application.domain.BoothSlotHallRef;
-import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
+import com.ms.petopia.api.application.dto.request.*;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
@@ -28,6 +26,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -2360,6 +2359,252 @@ class ApplicationServiceTest {
 
             // then
             assertThat(result).isFalse();
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("참가 신청서 수정")
+    class UpdateApplication {
+
+        private Application createApplication(Long applicationId, Long fairId, Application.Status status) {
+
+            return Application.builder()
+                    .applicationId(applicationId)
+                    .businessId(1L)
+                    .fairId(fairId)
+                    .status(status)
+                    .build();
+
+        }
+
+        // 테스트용 수정 요청 DTO
+        private ApplicationUpdateRequest createUpdateRequest() {
+
+            ApplicationUpdateRequest request = new ApplicationUpdateRequest();
+
+            request.setPurpose("수정된 참가 목적");
+            request.setItemsDesc("수정된 판매·전시 품목");
+            request.setManagerName("김수정");
+            request.setManagerPhone("010-1111-2222");
+            request.setManagerEmail("edit@petopia.kr");
+
+            return request;
+
+        }
+
+        @Test
+        @DisplayName("심사 대기 상태의 본인 소유 신청이면 정상적으로 수정한다")
+        void updatesSuccessfully() {
+
+            // given: 요청자(1L)가 본인 소유 사업자의 심사 대기 중인 신청을 수정하는 상황
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+            Long fairId = 1L;
+
+            Application application = createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW);
+            ApplicationUpdateRequest request = createUpdateRequest();
+
+            ApplicationDetailResponse detail = ApplicationDetailResponse.builder()
+                    .applicationId(applicationId)
+                    .fairId(fairId)
+                    .businessId(1L)
+                    .status("PENDING_REVIEW")
+                    .purpose("수정된 참가 목적")
+                    .attachmentUrl("https://cdn.petopia.kr/old.pdf")
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectApplicationDetail(applicationId)).willReturn(detail);
+            given(applicationMapper.updateApplicationForm(any())).willReturn(1);
+            given(applicationMapper.selectApplicationSlotDetails(applicationId)).willReturn(List.of());
+
+            // when
+            ApplicationDetailResponse result = applicationService.updateApplication(ownerId, applicationId, request);
+
+            // then: 수정된 최신 상태로 재조회한 응답이 반환되는지 확인
+            assertThat(result.getApplicationId()).isEqualTo(applicationId);
+            assertThat(result.getPurpose()).isEqualTo("수정된 참가 목적");
+            verify(applicationMapper).updateApplicationForm(any());
+
+        }
+
+        @Test
+        @DisplayName("신청이 존재하지 않으면 예외를 던진다")
+        void throwsWhenApplicationNotFound() {
+
+            // given: 존재하지 않는 applicationId(매퍼가 null 리턴)
+            Long ownerId = 1L;
+            Long applicationId = 999L;
+
+            given(applicationMapper.selectById(applicationId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.updateApplication(ownerId, applicationId, createUpdateRequest()))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("신청을 찾을 수 없습니다");
+
+            // 신청 자체가 없으니, 그 이후 로직(소유권 확인·수정)은 전혀 실행되면 안 됨
+            verify(businessMapper, never()).selectById(any());
+            verify(applicationMapper, never()).updateApplicationForm(any());
+
+        }
+
+        @Test
+        @DisplayName("본인 소유의 신청이 아니면 예외를 던진다")
+        void throwsWhenNotOwner() {
+
+            // given: 신청의 사업자(1L) 실제 소유자는 2L인데, 요청자는 1L인 상황
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+            Long fairId = 1L;
+
+            Application application = createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW);
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, 2L));
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.updateApplication(ownerId, applicationId, createUpdateRequest()))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인 소유의 신청만 수정할 수 있습니다");
+
+            verify(applicationMapper, never()).updateApplicationForm(any());
+
+        }
+
+        @Test
+        @DisplayName("심사 대기 상태가 아니면 예외를 던진다")
+        void throwsWhenNotPendingReview() {
+
+            // given: 이미 승인돼 결제 대기 중인(PAYMENT_PENDING) 신청을 수정하려는 상황
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+            Long fairId = 1L;
+
+            Application application = createApplication(applicationId, fairId, Application.Status.PAYMENT_PENDING);
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.updateApplication(ownerId, applicationId, createUpdateRequest()))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("심사 대기 중인 신청서만 수정할 수 있습니다");
+
+            verify(applicationMapper, never()).updateApplicationForm(any());
+
+        }
+
+        @Test
+        @DisplayName("새 첨부파일 없이 수정하면 기존 첨부파일을 그대로 유지한다")
+        void keepsExistingAttachmentWhenNoNewFileProvided() {
+
+            // given: 첨부파일은 안 건드리고 다른 필드만 수정하는 상황(attachmentObjectKey 없음)
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+            Long fairId = 1L;
+
+            Application application = createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW);
+            ApplicationUpdateRequest request = createUpdateRequest(); // attachmentObjectKey 세팅 안 함(null)
+
+            ApplicationDetailResponse existing = ApplicationDetailResponse.builder()
+                    .applicationId(applicationId)
+                    .fairId(fairId)
+                    .businessId(1L)
+                    .status("PENDING_REVIEW")
+                    .attachmentUrl("https://cdn.petopia.kr/uploads/document/old.pdf")
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectApplicationDetail(applicationId)).willReturn(existing);
+            given(applicationMapper.updateApplicationForm(any())).willReturn(1);
+            given(applicationMapper.selectApplicationSlotDetails(applicationId)).willReturn(List.of());
+
+            ArgumentCaptor<ApplicationForm> captor = ArgumentCaptor.forClass(ApplicationForm.class);
+
+            // when
+            applicationService.updateApplication(ownerId, applicationId, request);
+
+            // then: 매퍼에 넘어간 attachmentUrl이 null로 덮어써지지 않고 기존 값 그대로인지 확인
+            verify(applicationMapper).updateApplicationForm(captor.capture());
+            assertThat(captor.getValue().getAttachmentUrl()).isEqualTo("https://cdn.petopia.kr/uploads/document/old.pdf");
+
+            // 새로 올라온 파일이 없으니 S3 confirm 흐름은 시도되면 안 됨
+            verify(storageService, never()).confirm(any(), any());
+
+        }
+
+        @Test
+        @DisplayName("첨부파일 objectKey가 빈 문자열이어도 기존 첨부파일을 유지한다")
+        void keepsExistingAttachmentWhenObjectKeyIsBlank() {
+
+            // given: attachmentObjectKey가 null이 아니라 빈 문자열로 온 엣지 케이스
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+            Long fairId = 1L;
+
+            Application application = createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW);
+            ApplicationUpdateRequest request = createUpdateRequest();
+            request.setAttachmentObjectKey("");
+
+            ApplicationDetailResponse existing = ApplicationDetailResponse.builder()
+                    .applicationId(applicationId)
+                    .fairId(fairId)
+                    .businessId(1L)
+                    .status("PENDING_REVIEW")
+                    .attachmentUrl("https://cdn.petopia.kr/uploads/document/old.pdf")
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectApplicationDetail(applicationId)).willReturn(existing);
+            given(applicationMapper.updateApplicationForm(any())).willReturn(1);
+            given(applicationMapper.selectApplicationSlotDetails(applicationId)).willReturn(List.of());
+
+            ArgumentCaptor<ApplicationForm> captor = ArgumentCaptor.forClass(ApplicationForm.class);
+
+            // when
+            applicationService.updateApplication(ownerId, applicationId, request);
+
+            // then
+            verify(applicationMapper).updateApplicationForm(captor.capture());
+            assertThat(captor.getValue().getAttachmentUrl()).isEqualTo("https://cdn.petopia.kr/uploads/document/old.pdf");
+            verify(storageService, never()).confirm(any(), any());
+
+        }
+
+        @Test
+        @DisplayName("수정 도중 상태가 바뀌어(동시성) UPDATE가 0행 반영되면 예외를 던진다")
+        void throwsWhenUpdateRaceLoses() {
+
+            // given: 서비스가 조회한 시점엔 PENDING_REVIEW였지만, UPDATE 시점엔 이미
+            // 다른 요청(관리자 승인/반려)이 먼저 상태를 바꿔버린 상황 - EXISTS 조건에 안 걸려 0행 반영
+            Long ownerId = 1L;
+            Long applicationId = 100L;
+            Long fairId = 1L;
+
+            Application application = createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW);
+
+            ApplicationDetailResponse existing = ApplicationDetailResponse.builder()
+                    .applicationId(applicationId)
+                    .fairId(fairId)
+                    .businessId(1L)
+                    .status("PENDING_REVIEW")
+                    .build();
+
+            given(applicationMapper.selectById(applicationId)).willReturn(application);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectApplicationDetail(applicationId)).willReturn(existing);
+            given(applicationMapper.updateApplicationForm(any())).willReturn(0);
+
+            // when & then
+            assertThatThrownBy(() -> applicationService.updateApplication(ownerId, applicationId, createUpdateRequest()))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("심사 대기 중인 신청서만 수정할 수 있습니다");
 
         }
 

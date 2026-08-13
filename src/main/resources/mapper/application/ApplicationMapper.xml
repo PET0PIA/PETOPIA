@@ -134,6 +134,7 @@
         SELECT a.application_id AS applicationId,
             a.fair_id AS fairId,
             a.business_id AS businessId,
+            biz.name AS businessName,
             a.status AS status,
             af.purpose AS purpose,
             af.items_desc AS itemsDesc,
@@ -150,12 +151,13 @@
             acr.decided_at AS cancelDecidedAt
         FROM application a
         JOIN application_form af ON af.application_id = a.application_id
+        JOIN business biz ON biz.business_id = a.business_id
         LEFT JOIN application_cancel_request acr
-            ON acr.application_id = a.application_id
-            AND acr.cancel_request_id = (
-                SELECT MAX(cancel_request_id) FROM application_cancel_request
-                WHERE application_id = a.application_id
-            )
+        ON acr.application_id = a.application_id
+        AND acr.cancel_request_id = (
+            SELECT MAX(cancel_request_id) FROM application_cancel_request
+            WHERE application_id = a.application_id
+        )
         WHERE a.application_id = #{applicationId}
     </select>
 
@@ -180,6 +182,26 @@
     <select id="releaseBoothSlotLock" resultType="int">
         SELECT RELEASE_LOCK(CONCAT('booth_slot_apply_', #{boothSlotId}))
     </select>
+
+    <!--
+         신청서 내용 수정. application.status가 지금 이 순간에도 PENDING_REVIEW일 때만 반영된다
+         (수정 중에 관리자가 승인/반려를 먼저 처리해버리는 레이스 방지)
+     -->
+    <update id="updateApplicationForm">
+        UPDATE application_form
+        SET purpose = #{purpose},
+            items_desc = #{itemsDesc},
+            manager_name = #{managerName},
+            manager_phone = #{managerPhone},
+            manager_email = #{managerEmail},
+            attachment_url = #{attachmentUrl}
+        WHERE application_id = #{applicationId}
+        AND EXISTS (
+            SELECT 1 FROM application
+            WHERE application_id = #{applicationId}
+            AND status = 'PENDING_REVIEW'
+        )
+    </update>
 
     <!-- 담당 행사에 들어온 신청 목록(행사 담당자용). status는 선택적 필터 -->
     <select id="selectApplicationsByFair"
