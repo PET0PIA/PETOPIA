@@ -3,6 +3,7 @@ package com.ms.petopia.api.booth.controller;
 import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
+import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
 import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
@@ -26,10 +27,13 @@ public class BoothController {
 
     // 부스 상세 조회 (비회원 포함 공개, 인증 불필요)
     @GetMapping("/booths/{boothId}")
-    public ResponseEntity<ApiResponse<BoothResponse>> getBooth(@PathVariable Long boothId) {
+    public ResponseEntity<ApiResponse<BoothResponse>> getBooth(
+            @AuthenticationPrincipal Long viewerId,
+            @PathVariable Long boothId
+    ) {
 
         return ResponseEntity.ok(
-                ApiResponse.success(boothService.getBooth(boothId)));
+                ApiResponse.success(boothService.getBooth(boothId, viewerId)));
 
     }
 
@@ -43,6 +47,45 @@ public class BoothController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(boothService.updateBooth(callerId, boothId, request)));
+
+    }
+
+    // 내 즐겨찾기 목록 조회
+    @GetMapping("/booths/favorites")
+    public ResponseEntity<ApiResponse<List<BoothFavoriteResponse>>> getMyFavorites(
+            @AuthenticationPrincipal Long callerId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(boothService.getMyFavorites(callerId)));
+
+    }
+
+    // 즐겨찾기 추가
+    @PostMapping("/booths/{boothId}/favorites")
+    public ResponseEntity<ApiResponse<Void>> addFavorite(
+            @AuthenticationPrincipal Long callerId,
+            @PathVariable Long boothId
+    ) {
+
+        boothService.addFavorite(callerId, boothId);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(HttpStatus.CREATED, null));
+
+    }
+
+    // 즐겨찾기 삭제
+    @DeleteMapping("/booths/{boothId}/favorites")
+    public ResponseEntity<ApiResponse<Void>> removeFavorite(
+            @AuthenticationPrincipal Long callerId,
+            @PathVariable Long boothId
+    ) {
+
+        boothService.removeFavorite(callerId, boothId);
+
+        return ResponseEntity.ok(
+                ApiResponse.success(null));
 
     }
 

@@ -600,11 +600,12 @@ public class ApplicationService {
         // 슬롯 잠금 풀기
         unlockSlots(applicationId);
 
-        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
+        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 즐겨찾기와 부스도 함께 삭제한다
         boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
 
         if(wasConfirmed) {
 
+            boothMapper.deleteFavoritesByApplicationId(applicationId);
             boothMapper.deleteBoothItemsByApplicationId(applicationId);
             boothMapper.deleteBoothByApplicationId(applicationId);
 
@@ -669,9 +670,10 @@ public class ApplicationService {
         // 슬롯 잠금 풀기
         unlockSlots(applicationId);
 
-        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 부스도 함께 삭제한다
+        // 이전 상태가 CONFIRMED였다면(결제완료 상태) 즐겨찾기와 부스도 함께 삭제한다
         if(wasConfirmed) {
 
+            boothMapper.deleteFavoritesByApplicationId(applicationId);
             boothMapper.deleteBoothItemsByApplicationId(applicationId);
             boothMapper.deleteBoothByApplicationId(applicationId);
 

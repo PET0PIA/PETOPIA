@@ -48,6 +48,9 @@ public class RecommendationService {
 
         //부스 조회
         List<BoothCandidate> candidates = boothRecommendationMapper.selectBoothCandidates(fairId);
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
 
         //Claude 호출
         List<ClaudeBoothRecommender.RecommendationEntry> entries =
@@ -67,6 +70,7 @@ public class RecommendationService {
         return entries.stream()
                 //목록에 없는 boothId는 Claude가 지어낸 것일 수 있으니 걸러낸다
                 .filter(entry -> nameByBoothId.containsKey(entry.boothId()))
+                .limit(5)
                 .map(entry -> new BoothRecommendationItem(
                         entry.boothId(),
                         nameByBoothId.get(entry.boothId()),

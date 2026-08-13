@@ -137,6 +137,40 @@ class RecommendationServiceTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    void 후보_부스가_없으면_Claude를_호출하지_않고_빈_목록을_반환한다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(List.of());
+
+        List<BoothRecommendationItem> result = recommendationService.recommend(FAIR_ID, null, request);
+
+        assertThat(result).isEmpty();
+        verify(claudeBoothRecommender, never()).recommend(any(), any(), any());
+    }
+
+    @Test
+    void Claude가_6개_이상_추천해도_5개로_제한한다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        List<BoothCandidate> candidates = java.util.stream.IntStream.rangeClosed(1, 6)
+                .mapToObj(i -> boothCandidate((long) i, "부스" + i))
+                .toList();
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(candidates);
+        List<ClaudeBoothRecommender.RecommendationEntry> entries = java.util.stream.IntStream.rangeClosed(1, 6)
+                .mapToObj(i -> new ClaudeBoothRecommender.RecommendationEntry((long) i, "이유" + i))
+                .toList();
+        given(claudeBoothRecommender.recommend(null, "장난감 찾아요", candidates)).willReturn(entries);
+
+        List<BoothRecommendationItem> result = recommendationService.recommend(FAIR_ID, null, request);
+
+        assertThat(result).hasSize(5);
+    }
+
     private BoothCandidate boothCandidate(Long boothId, String name) {
         BoothCandidate candidate = new BoothCandidate();
         candidate.setBoothId(boothId);

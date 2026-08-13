@@ -73,7 +73,7 @@ class BoothControllerTest {
     @Test
     void getsBoothDetail() throws Exception {
 
-        given(boothService.getBooth(1L)).willReturn(
+        given(boothService.getBooth(1L, null)).willReturn(
                 BoothResponse.builder().boothId(1L).name("멍냥사료 부스").items(List.of()).build());
 
         mockMvc.perform(get("/api/booths/1"))
@@ -88,7 +88,7 @@ class BoothControllerTest {
     void returns404WhenBoothNotFound() throws Exception {
 
         willThrow(new CommonException(ErrorCode.BOOTH_NOT_FOUND))
-                .given(boothService).getBooth(999L);
+                .given(boothService).getBooth(999L, null);
 
         mockMvc.perform(get("/api/booths/999"))
                 .andExpect(status().isNotFound())

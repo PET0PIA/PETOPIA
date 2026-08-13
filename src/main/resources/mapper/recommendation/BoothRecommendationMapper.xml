@@ -15,6 +15,7 @@
         <result property="targetAnimal" column="target_animal"/>
         <result property="intro" column="intro"/>
         <collection property="items" ofType="BoothItemCandidate">
+            <id property="boothItemId" column="booth_item_id"/>
             <result property="name" column="item_name"/>
             <result property="type" column="item_type"/>
             <result property="note" column="item_note"/>
@@ -27,6 +28,7 @@
              , b.category
              , b.target_animal
              , b.intro
+             , bi.booth_item_id
              , bi.name AS item_name
              , bi.type AS item_type
              , bi.note AS item_note

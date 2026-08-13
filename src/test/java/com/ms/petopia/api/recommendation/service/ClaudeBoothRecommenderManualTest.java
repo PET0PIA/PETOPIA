@@ -13,13 +13,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /*
  * 실제 Claude API를 호출하는 수동 확인용 테스트(DB/Spring 컨텍스트 없이 이 클래스만 단독으로 테스트).
- * ANTHROPIC_API_KEY 환경변수가 있을 때만 실행되고, 없으면(CI 등) 자동으로 스킵된다.
- * 실행할 때마다 실제 과금이 발생하니 평소 테스트 스위트 돌릴 때 습관적으로 실행되지 않게 분리해뒀다.
+ * 실행할 때마다 실제 과금이 발생하니, 두 가지 환경변수가 "둘 다" 있을 때만 실행되게 이중으로 막는다.
+ *   1) ANTHROPIC_API_KEY - 실제 API 호출에 쓸 키
+ *   2) RUN_CLAUDE_MANUAL_TEST - 이 테스트 전용 옵트인 스위치
  */
 class ClaudeBoothRecommenderManualTest {
 
     @Test
     @EnabledIfEnvironmentVariable(named = "ANTHROPIC_API_KEY", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "RUN_CLAUDE_MANUAL_TEST", matches = "true")
     void 실제_Claude_API를_호출해서_추천을_받아온다() {
         String apiKey = System.getenv("ANTHROPIC_API_KEY");
         ClaudeBoothRecommender recommender = new ClaudeBoothRecommender(apiKey);

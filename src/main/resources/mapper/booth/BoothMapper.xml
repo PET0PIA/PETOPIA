@@ -110,4 +110,51 @@
         WHERE b.application_id = #{applicationId}
     </delete>
 
+    <!-- 부스 상세 조회 시 지금 로그인한 사용자가 이 부스를 이미 즐겨찾기했는지 확인 (favorited 계산용) -->
+    <select id="existsFavorite" resultType="boolean">
+        SELECT EXISTS (
+        SELECT 1 FROM booth_favorites
+        WHERE user_id = #{userId} AND booth_id = #{boothId}
+        )
+    </select>
+
+    <!-- 즐겨찾기한 부스명·이미지·소속 행사명까지 조인해서 한 번에 조회 -->
+    <select id="selectFavoritesByUserId" resultType="com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse">
+        SELECT b.booth_id AS boothId,
+            b.name AS name,
+            b.image_url AS imageUrl,
+            b.category AS category,
+            b.target_animal AS targetAnimal,
+            a.fair_id AS fairId,
+            f.name AS fairName
+        FROM booth_favorites bf
+        JOIN booth b ON b.booth_id = bf.booth_id
+        JOIN application a ON a.application_id = b.application_id
+        JOIN fairs f ON f.fair_id = a.fair_id
+        WHERE bf.user_id = #{userId}
+        ORDER BY bf.created_at DESC
+    </select>
+
+    <!-- 신청 ID 기준으로 그 부스를 즐겨찾기한 행 전부 삭제 -->
+    <delete id="deleteFavoritesByApplicationId">
+        DELETE bf FROM booth_favorites bf
+        JOIN booth b ON b.booth_id = bf.booth_id
+        WHERE b.application_id = #{applicationId}
+    </delete>
+
+    <!--
+         즐겨찾기 추가. INSERT IGNORE로 멱등 처리 - 중복 클릭으로 같은 (user_id, booth_id) 쌍이
+         두 번 들어와도(UNIQUE 제약 위반) 에러 없이 조용히 무시된다
+    -->
+    <insert id="insertFavorite">
+        INSERT IGNORE INTO booth_favorites (user_id, booth_id, created_at)
+        VALUES (#{userId}, #{boothId}, NOW())
+    </insert>
+
+    <!-- 즐겨찾기 삭제. 이미 삭제됐거나 존재하지 않는 조합이어도 0행 삭제로 조용히 끝난다(멱등) -->
+    <delete id="deleteFavorite">
+        DELETE FROM booth_favorites
+        WHERE user_id = #{userId} AND booth_id = #{boothId}
+    </delete>
+
 </mapper>

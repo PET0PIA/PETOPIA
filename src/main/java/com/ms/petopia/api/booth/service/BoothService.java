@@ -5,6 +5,7 @@ import com.ms.petopia.api.booth.domain.BoothItem;
 import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
+import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
 import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
@@ -29,8 +30,11 @@ public class BoothService {
     private final BusinessMapper businessMapper;
     private final StorageService storageService;
 
-    // 부스 상세 조회 (비회원 포함 공개)
-    public BoothResponse getBooth(Long boothId) {
+    /*
+     * 부스 상세 조회 (비회원 포함 공개). viewerId는 로그인 사용자면 채워지고, 비로그인이면
+     * null — null이면 즐겨찾기 여부를 조회할 필요가 없으니 favorited는 항상 false로 내려간다.
+     */
+    public BoothResponse getBooth(Long boothId, Long viewerId) {
 
         // 부스 존재 확인
         Booth booth = boothMapper.selectById(boothId);
@@ -44,7 +48,10 @@ public class BoothService {
                 .map(BoothItemResponse::from)
                 .toList();
 
-        return BoothResponse.from(booth, items);
+        // 즐겨찾기 여부
+        boolean favorited = viewerId != null && boothMapper.existsFavorite(viewerId, boothId);
+
+        return BoothResponse.from(booth, items, favorited);
 
     }
 
@@ -84,6 +91,34 @@ public class BoothService {
 
         // 프로필 수정 응답이라 상품 목록까지는 필요 없어 items는 비워서 반환(null)
         return BoothResponse.from(updated, null);
+
+    }
+
+    // 내 즐겨찾기 목록 조회
+    public List<BoothFavoriteResponse> getMyFavorites(Long userId) {
+
+        return boothMapper.selectFavoritesByUserId(userId);
+
+    }
+
+    /*
+     * 즐겨찾기 추가. 부스 존재 확인 후 insert — INSERT IGNORE라 이미 즐겨찾기한 부스를
+     * 다시 눌러도(중복 클릭) 에러 없이 조용히 통과한다(멱등).
+     */
+    public void addFavorite(Long userId, Long boothId) {
+
+        if(boothMapper.selectById(boothId) == null) {
+            throw new CommonException(ErrorCode.BOOTH_NOT_FOUND);
+        }
+
+        boothMapper.insertFavorite(userId, boothId);
+
+    }
+
+    // 즐겨찾기 삭제. 없는 걸 지워도 0행 조용히 무시(에러 아님) — 멱등.
+    public void removeFavorite(Long userId, Long boothId) {
+
+        boothMapper.deleteFavorite(userId, boothId);
 
     }
 
@@ -220,5 +255,7 @@ public class BoothService {
         return boothMapper.selectConfirmedBooths(fairId);
 
     }
+
+
 
 }

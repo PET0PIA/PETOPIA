@@ -13,6 +13,7 @@ import { ApiError } from "../../api/client";
 import { createVendorFeePayment } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
 import { getApplicationDetail, submitCancelRequest, type ApplicationDetail, type ApplicationStatus } from "../../api/application";
+import { requestVendorFeePayment } from "../../payments/toss";
 
 const statusLabels: Record<ApplicationStatus, string> = {
   PENDING_REVIEW: "심사 대기",
@@ -91,7 +92,6 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
-  const [paymentReady, setPaymentReady] = useState(false);
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -129,17 +129,21 @@ function ApplicationDetailContent({ id }: { id: number }) {
     setPaying(true);
     setPayError(null);
     try {
-      // TODO: 결제 생성까지만 처리한다. 토스 결제창 연동(requestPayment ~ /payments/success
-      // 착지)은 별도 확인 후 진행 예정 — 지금은 결제 row 준비까지만 확인한다.
-      await createVendorFeePayment(
+      const created = await createVendorFeePayment(
         detail.applicationId,
         { fairId: detail.fairId, businessId: detail.businessId, amount: detail.finalPrice },
         user.userId
       );
-      setPaymentReady(true);
+      await requestVendorFeePayment({
+        paymentId: created.paymentId,
+        applicationId: detail.applicationId,
+        orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
+        amount: created.amount,
+        orderName: `참가비 결제 (행사 #${detail.fairId})`,
+      });
+      // 리다이렉트가 시작됐으므로 paying을 되돌리지 않는다(예약금 쪽과 동일 패턴).
     } catch (err) {
       setPayError(err instanceof ApiError ? err.message : "결제를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.");
-    } finally {
       setPaying(false);
     }
   }
@@ -245,15 +249,11 @@ function ApplicationDetailContent({ id }: { id: number }) {
                   <p>{payError}</p>
                 </div>
               )}
-              {paymentReady ? (
-                <p className="text-right text-sm font-bold text-ink">결제가 준비됐어요. (결제창 연동은 곧 추가될 예정이에요)</p>
-              ) : (
-                <div className="flex justify-end">
-                  <Button type="button" onClick={handlePay} disabled={paying}>
-                    {paying ? "준비 중..." : "결제하기"}
-                  </Button>
-                </div>
-              )}
+              <div className="flex justify-end">
+                <Button type="button" onClick={handlePay} disabled={paying}>
+                  {paying ? "결제창을 여는 중..." : "결제하기"}
+                </Button>
+              </div>
             </div>
           )}
         </Card>

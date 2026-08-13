@@ -35,6 +35,23 @@
          WHERE fair_id = #{fairId}
     </select>
 
+    <select id="selectListByFairId" resultType="FairReviewListRow">
+        SELECT fr.review_id, fr.fair_id, fr.user_id, u.nickname,
+               fr.rating, fr.content, fr.is_verified_visit AS verifiedVisit,
+               fr.created_at, fr.updated_at
+          FROM fair_reviews fr
+          JOIN users u ON u.user_id = fr.user_id
+         WHERE fr.fair_id = #{fairId}
+         ORDER BY fr.created_at DESC, fr.review_id DESC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectSummaryByFairId" resultType="FairReviewSummaryRow">
+        SELECT AVG(rating) AS averageRating, COUNT(*) AS reviewCount
+          FROM fair_reviews
+         WHERE fair_id = #{fairId}
+    </select>
+
     <select id="selectByUserId" resultType="FairReview">
         SELECT <include refid="columns" />
           FROM fair_reviews

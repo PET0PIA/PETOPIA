@@ -7,6 +7,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class BoothItemCandidate {
+    private Long boothItemId;
     private String name;
     private String type;
     private String note;
