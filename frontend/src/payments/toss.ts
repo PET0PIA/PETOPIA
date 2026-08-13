@@ -43,6 +43,69 @@ function getTossPayment(): Promise<TossPaymentsPayment> {
   return paymentPromise;
 }
 
+/**
+ * 결제수단 선택지. "CARD"가 기본값(일반 카드/간편결제 통합결제창)이다.
+ *
+ * 네이버페이는 토스 SDK에서 별도 method가 아니라 - method는 여전히 "CARD"이고,
+ * `card.flowMode: "DIRECT"` + `card.easyPay` 코드로 그 간편결제사 자체창을 바로 여는
+ * 방식이다(카드/간편결제를 CARD 하나로 묶어서 취급함). 가상계좌만 진짜 다른 method다.
+ */
+export type PaymentMethodOption = "CARD" | "NAVER_PAY" | "VIRTUAL_ACCOUNT";
+
+interface CheckoutParams {
+  method: PaymentMethodOption;
+  amount: number;
+  orderId: string;
+  orderName: string;
+  successUrl: string;
+  failUrl: string;
+}
+
+/**
+ * 결제수단 선택지별로 실제 requestPayment 호출까지 담당한다. requestPayment는 method
+ * 리터럴값에 따라 오버로드가 갈리는 함수라, 유니언 타입 하나로 뭉쳐서 한 번에 스프레드해
+ * 넘기면 TS가 오버로드를 못 고른다(예전에 시도했다가 컴파일 에러) — 그래서 분기마다
+ * method를 리터럴로 직접 박아 별도로 호출한다.
+ *
+ * 가상계좌는 기한(validHours)·현금영수증 옵션이 필수급이라 여기서 기본값을 같이 정한다 —
+ * 백엔드가 아직 이 값들(입금기한 등)을 안 쓰고 있어서(2차 예정), 우선 24시간 고정.
+ */
+async function openTossCheckout(params: CheckoutParams): Promise<void> {
+  const payment = await getTossPayment();
+  const common = {
+    amount: { currency: "KRW" as const, value: params.amount },
+    orderId: params.orderId,
+    orderName: params.orderName.slice(0, ORDER_NAME_MAX_LENGTH),
+    successUrl: params.successUrl,
+    failUrl: params.failUrl,
+  };
+
+  switch (params.method) {
+    case "NAVER_PAY":
+      await payment.requestPayment({
+        ...common,
+        method: "CARD",
+        card: { flowMode: "DIRECT", easyPay: "NAVERPAY", useEscrow: false, useCardPoint: false },
+      });
+      return;
+    case "VIRTUAL_ACCOUNT":
+      await payment.requestPayment({
+        ...common,
+        method: "VIRTUAL_ACCOUNT",
+        virtualAccount: { cashReceipt: { type: "미발행" }, useEscrow: false, validHours: 24 },
+      });
+      return;
+    case "CARD":
+    default:
+      await payment.requestPayment({
+        ...common,
+        method: "CARD",
+        card: { flowMode: "DEFAULT", useEscrow: false, useCardPoint: false },
+      });
+      return;
+  }
+}
+
 export interface ReservationPaymentRequest {
   paymentId: number;
   reservationId: number;
@@ -51,6 +114,8 @@ export interface ReservationPaymentRequest {
   /** 화면에 보여준 예약금이 아니라 서버가 계산한 금액. */
   amount: number;
   orderName: string;
+  /** 생략하면 "CARD"(일반 카드/간편결제 통합결제창). */
+  method?: PaymentMethodOption;
 }
 
 /**
@@ -62,21 +127,19 @@ export interface ReservationPaymentRequest {
  * 금지"라고 명시하므로 userId를 쓰지 않는다.
  */
 export async function requestReservationPayment(request: ReservationPaymentRequest): Promise<void> {
-  const payment = await getTossPayment();
   const origin = window.location.origin;
 
   // 토스가 리다이렉트에 붙여주는 건 paymentKey·orderId·amount뿐이다.
   // confirm API는 paymentId로 대상을 식별하고 QR 조회에는 reservationId가 필요해서 직접 붙인다.
   const query = `paymentId=${request.paymentId}&reservationId=${request.reservationId}`;
 
-  await payment.requestPayment({
-    method: "CARD",
-    amount: { currency: "KRW", value: request.amount },
+  await openTossCheckout({
+    method: request.method ?? "CARD",
+    amount: request.amount,
     orderId: request.orderId,
-    orderName: request.orderName.slice(0, ORDER_NAME_MAX_LENGTH),
+    orderName: request.orderName,
     successUrl: `${origin}/payments/success?${query}`,
     failUrl: `${origin}/payments/fail?${query}`,
-    card: { flowMode: "DEFAULT", useEscrow: false, useCardPoint: false },
   });
 }
 
@@ -88,6 +151,8 @@ export interface VendorFeePaymentRequest {
   /** 화면에 보여준 금액이 아니라 서버가 확정한 금액(승인 시 finalPrice). */
   amount: number;
   orderName: string;
+  /** 생략하면 "CARD"(일반 카드/간편결제 통합결제창). */
+  method?: PaymentMethodOption;
 }
 
 /**
@@ -95,21 +160,19 @@ export interface VendorFeePaymentRequest {
  * successUrl 리다이렉트라 정상 흐름에서 이 Promise는 resolve되지 않는다.
  */
 export async function requestVendorFeePayment(request: VendorFeePaymentRequest): Promise<void> {
-  const payment = await getTossPayment();
   const origin = window.location.origin;
 
   // confirm API는 paymentId로 대상을 식별하고, 성공 페이지는 결제유형 분기를 위해
   // applicationId를 쓴다(예약금 쪽 reservationId와 같은 역할).
   const query = `paymentId=${request.paymentId}&applicationId=${request.applicationId}`;
 
-  await payment.requestPayment({
-    method: "CARD",
-    amount: { currency: "KRW", value: request.amount },
+  await openTossCheckout({
+    method: request.method ?? "CARD",
+    amount: request.amount,
     orderId: request.orderId,
-    orderName: request.orderName.slice(0, ORDER_NAME_MAX_LENGTH),
+    orderName: request.orderName,
     successUrl: `${origin}/payments/success?${query}`,
     failUrl: `${origin}/payments/fail?${query}`,
-    card: { flowMode: "DEFAULT", useEscrow: false, useCardPoint: false },
   });
 }
 
@@ -124,6 +187,8 @@ export interface FairOpeningFeePaymentRequest {
   /** 화면에 보여준 개설비가 아니라 서버가 승인 시 확정해 저장해둔 금액. */
   amount: number;
   orderName: string;
+  /** 생략하면 "CARD"(일반 카드/간편결제 통합결제창). */
+  method?: PaymentMethodOption;
 }
 
 /**
@@ -132,18 +197,16 @@ export interface FairOpeningFeePaymentRequest {
  * 그 착지 페이지가 fairId 유무로 예약금/개설비 흐름을 구분해 confirm까지 처리한다.
  */
 export async function requestFairOpeningFeePayment(request: FairOpeningFeePaymentRequest): Promise<void> {
-  const payment = await getTossPayment();
   const origin = window.location.origin;
 
   const query = `paymentId=${request.paymentId}&fairId=${request.fairId}`;
 
-  await payment.requestPayment({
-    method: "CARD",
-    amount: { currency: "KRW", value: request.amount },
+  await openTossCheckout({
+    method: request.method ?? "CARD",
+    amount: request.amount,
     orderId: request.orderId,
-    orderName: request.orderName.slice(0, ORDER_NAME_MAX_LENGTH),
+    orderName: request.orderName,
     successUrl: `${origin}/payments/success?${query}`,
     failUrl: `${origin}/payments/fail?${query}`,
-    card: { flowMode: "DEFAULT", useEscrow: false, useCardPoint: false },
   });
 }

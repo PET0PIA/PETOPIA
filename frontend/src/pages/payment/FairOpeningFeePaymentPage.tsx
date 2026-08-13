@@ -9,7 +9,8 @@ import { ApiError } from "../../api/client";
 import { getFairOpeningFeeSummary, type FairOpeningFeeSummary } from "../../api/fair";
 import { createFairOpeningPayment } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
-import { isTossConfigured, requestFairOpeningFeePayment } from "../../payments/toss";
+import { isTossConfigured, requestFairOpeningFeePayment, type PaymentMethodOption } from "../../payments/toss";
+import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 
 // PAYMENT_PENDING이면서 결제 가능(payable)한 상태가 아닐 때 보여줄 안내. PAYMENT_PENDING인데
 // 기한이 지난 경우는 별도로 판단해서 이 맵 밖에서 처리한다(배치가 아직 EXPIRED로 안 돌렸을 수 있어서).
@@ -43,6 +44,7 @@ export function FairOpeningFeePaymentPage() {
 
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
   // Date.now()를 렌더 중에 직접 부르면 impure(react-hooks/purity)라 state 초기화로 한 번만 잡아둔다.
   // 이 페이지는 라이브 카운트다운이 필요 없어(기한이 보통 며칠 단위) 타이머로 갱신하지 않는다.
   const [now] = useState(() => Date.now());
@@ -128,6 +130,7 @@ export function FairOpeningFeePaymentPage() {
         orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
         amount: created.amount,
         orderName: `${summary!.name} 개설비`,
+        method: paymentMethod,
       });
       // 리다이렉트가 시작됐으므로 paying을 되돌리지 않는다(버튼이 다시 눌리면 안 된다).
     } catch (err) {
@@ -176,9 +179,12 @@ export function FairOpeningFeePaymentPage() {
             결제 수단
           </div>
           {tossReady ? (
-            <p className="rounded-button border border-line bg-page p-4 text-sm leading-6 text-muted">
-              <b className="text-ink">결제하기</b>를 누르면 토스페이먼츠 카드 결제창이 열려요.
-            </p>
+            <>
+              <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+              <p className="mt-3 text-xs leading-5 text-muted">
+                <b className="text-ink">결제하기</b>를 누르면 토스페이먼츠 결제창이 열려요.
+              </p>
+            </>
           ) : (
             <div className="grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-10 text-center text-sm text-muted">
               <p className="font-bold text-ink">결제 설정이 없어요</p>

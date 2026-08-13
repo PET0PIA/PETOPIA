@@ -19,7 +19,8 @@ import {
   type ReservationAvailability,
 } from "../../api/reservation";
 import { useAuth } from "../../contexts/AuthContext";
-import { isTossConfigured, requestReservationPayment } from "../../payments/toss";
+import { isTossConfigured, requestReservationPayment, type PaymentMethodOption } from "../../payments/toss";
+import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 
 type ReservationType = "ADVANCE" | "ONSITE";
 type Phase = "form" | "payment" | "done";
@@ -96,6 +97,7 @@ export function TicketReservationPage() {
 
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
   const [now, setNow] = useState(() => Date.now());
 
   // 카운트다운은 결제 단계에서만 돌린다 - 폼/완료 화면에서 1초마다 리렌더할 이유가 없다.
@@ -306,6 +308,7 @@ export function TicketReservationPage() {
         orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
         amount: created.amount,
         orderName: `${fairName} 예약금`,
+        method: paymentMethod,
       });
       // 리다이렉트가 시작됐으므로 paying을 되돌리지 않는다(버튼이 다시 눌리면 안 된다).
     } catch (err) {
@@ -398,10 +401,13 @@ export function TicketReservationPage() {
             결제 수단
           </div>
           {tossReady ? (
-            <p className="rounded-button border border-line bg-page p-4 text-sm leading-6 text-muted">
-              <b className="text-ink">결제하기</b>를 누르면 토스페이먼츠 카드 결제창이 열려요.
-              결제를 마치면 이 사이트로 돌아와 예약이 확정돼요.
-            </p>
+            <>
+              <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+              <p className="mt-3 text-xs leading-5 text-muted">
+                <b className="text-ink">결제하기</b>를 누르면 토스페이먼츠 결제창이 열려요.
+                결제를 마치면 이 사이트로 돌아와 예약이 확정돼요.
+              </p>
+            </>
           ) : (
             <div className="grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-10 text-center text-sm text-muted">
               <p className="font-bold text-ink">결제 설정이 없어요</p>
