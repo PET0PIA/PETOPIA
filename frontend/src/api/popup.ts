@@ -34,9 +34,11 @@ export interface PopupInput {
   endedAt?: string;
 }
 
-/** 등록 시에는 imageKey와 subtitle 중 최소 하나가 있어야 한다. */
-export type PopupCreateInput = Omit<PopupInput, "imageKey" | "subtitle"> &
-  ({ imageKey: string; subtitle?: string } | { imageKey?: string; subtitle: string });
+/** 등록 시에는 imageKey와 subtitle 중 최소 하나가 있어야 하고, 노출 기간(startedAt/endedAt)은 항상 필수다. */
+export type PopupCreateInput = Omit<PopupInput, "imageKey" | "subtitle" | "startedAt" | "endedAt"> & {
+  startedAt: string;
+  endedAt: string;
+} & ({ imageKey: string; subtitle?: string } | { imageKey?: string; subtitle: string });
 
 // 공개 - 노출 중인 팝업 목록 (기간 유효)
 export async function getActivePopups(): Promise<Popup[]> {

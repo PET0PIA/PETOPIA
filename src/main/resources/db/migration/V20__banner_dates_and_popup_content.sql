@@ -14,7 +14,8 @@ UPDATE `banner` SET `ended_at` = COALESCE(`ended_at`, DATE_ADD(`created_at`, INT
 
 ALTER TABLE `banner`
     MODIFY COLUMN `started_at` DATETIME NOT NULL COMMENT '노출 시작일시',
-    MODIFY COLUMN `ended_at`   DATETIME NOT NULL COMMENT '노출 종료일시';
+    MODIFY COLUMN `ended_at`   DATETIME NOT NULL COMMENT '노출 종료일시',
+    MODIFY COLUMN `title`      VARCHAR(100) NOT NULL COMMENT '배너 제목 (화면에 큰 헤드라인으로 노출)';
 
 ALTER TABLE `popup`
     MODIFY COLUMN `image_key` VARCHAR(500) NULL COMMENT 'S3 object key (텍스트 전용 팝업은 NULL)',

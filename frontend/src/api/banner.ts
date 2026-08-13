@@ -45,9 +45,11 @@ export interface BannerInput {
   endedAt?: string;
 }
 
-/** 등록 시에는 imageKey가 필수다. */
-export interface BannerCreateInput extends Omit<BannerInput, "imageKey"> {
+/** 등록 시에는 imageKey와 노출 기간(startedAt/endedAt)이 필수다. */
+export interface BannerCreateInput extends Omit<BannerInput, "imageKey" | "startedAt" | "endedAt"> {
   imageKey: string;
+  startedAt: string;
+  endedAt: string;
 }
 
 // 공개 - 노출 중인 배너 목록 (기간 유효, sort_order 오름차순)
