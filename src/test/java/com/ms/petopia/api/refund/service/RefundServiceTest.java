@@ -14,6 +14,7 @@ import com.ms.petopia.api.refund.mapper.RefundMapper;
 import com.ms.petopia.api.settlement.mapper.SettlementMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,8 +22,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -50,6 +56,20 @@ class RefundServiceTest {
 
     @InjectMocks
     private RefundService refundService;
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateAs(String... roles) {
+        List<SimpleGrantedAuthority> authorities = java.util.Arrays.stream(roles)
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                .toList();
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(new UsernamePasswordAuthenticationToken(99L, null, authorities));
+        SecurityContextHolder.setContext(ctx);
+    }
 
     private static final RefundRequest USER_CANCEL_REQUEST =
             new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.RESERVATION);
@@ -96,6 +116,35 @@ class RefundServiceTest {
 
         verify(refundMapper).insert(argThat(row -> row.getPaymentId().equals(1L)
                 && "COMPLETED".equals(row.getStatus())));
+    }
+
+    @Test
+    @DisplayName("환불 요청자가 결제 소유자 본인이면 통과한다")
+    void assertRequesterAuthorized_본인이면_통과한다() {
+        given(paymentMapper.selectById(1L)).willReturn(completedPaymentRow());
+
+        refundService.assertRequesterAuthorized(1L, 90L);
+        // 예외 없이 끝나면 통과 - 별도 verify 불필요.
+    }
+
+    @Test
+    @DisplayName("환불 요청자가 본인이 아니어도 EVENT_ADMIN/SUPER_ADMIN이면 통과한다")
+    void assertRequesterAuthorized_관리자면_통과한다() {
+        authenticateAs("SUPER_ADMIN");
+        given(paymentMapper.selectById(1L)).willReturn(completedPaymentRow());
+
+        refundService.assertRequesterAuthorized(1L, 999L);
+    }
+
+    @Test
+    @DisplayName("환불 요청자가 본인도 관리자도 아니면 거부한다(IDOR 방지)")
+    void assertRequesterAuthorized_타인이면_예외를던진다() {
+        given(paymentMapper.selectById(1L)).willReturn(completedPaymentRow());
+
+        assertThatThrownBy(() -> refundService.assertRequesterAuthorized(1L, 999L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
     }
 
     @Test

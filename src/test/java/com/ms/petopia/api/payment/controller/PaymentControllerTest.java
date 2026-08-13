@@ -82,9 +82,9 @@ class PaymentControllerTest {
 
     @Test
     void getsPaymentDetailById() throws Exception {
-        // Arrange: paymentService.getPayment(1L)을 호출하면 이 응답을 리턴하도록
+        // Arrange: paymentService.getPayment(1L, 99L)을 호출하면 이 응답을 리턴하도록
         // 가짜로 세팅. 실제 DB는 전혀 관여 안 함.
-        given(paymentService.getPayment(1L)).willReturn(
+        given(paymentService.getPayment(1L, 99L)).willReturn(
 
                 new PaymentResponse(
                         1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "TOSS",
@@ -105,9 +105,9 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.amount").value(50000))
                 .andExpect(jsonPath("$.status").value("COMPLETED"));
 
-        // 컨트롤러가 진짜로 서비스의 getPayment(1L)을 호출했는지도 확인
+        // 컨트롤러가 진짜로 서비스의 getPayment(1L, 99L)을 호출했는지도 확인
         // (URL의 {paymentId}가 제대로 파싱돼서 넘어갔는지 검증하는 셈)
-        verify(paymentService).getPayment(1L);
+        verify(paymentService).getPayment(1L, 99L);
     }
 
     @Test
@@ -144,7 +144,7 @@ class PaymentControllerTest {
         // (PaymentServiceTest에서 이미 검증한 "존재하지 않으면 예외" 로직을,
         // 여기서는 "그 예외가 HTTP 응답으로 잘 변환되는지"만 다시 확인하는 것)
         willThrow(new CommonException(ErrorCode.PAYMENT_NOT_FOUND))
-                .given(paymentService).getPayment(999L);
+                .given(paymentService).getPayment(999L, 99L);
 
         mockMvc.perform(get("/api/payments/999"))
                 .andExpect(status().isNotFound()) // ErrorCode.PAYMENT_NOT_FOUND가 HttpStatus.NOT_FOUND라서 404 기대

@@ -166,8 +166,10 @@ public class SecurityConfig {
                                 "/api/vendor-applications/*/payment",
                                 "/api/reservations/*/payment", "/api/fairs/*/opening-payment")
                         .authenticated()
-                        // Refund 도메인 - 환불 생성/조회 로그인만 필요(세밀한 권한 검증은 TODO로 남아있는 상태 그대로)
-                        .requestMatchers("/api/payments/*/refunds", "/api/refunds/**").authenticated()
+                        // Refund 도메인 - 환불 조회는 로그인만 필요(생성 POST /api/payments/*/refunds는
+                        // 위 "/api/payments/**" 규칙에 이미 포함되므로 여기서 다시 안 적는다 - 중복 규칙으로
+                        // 두면 위쪽만 강화됐을 때 이 줄은 안 바뀌어서 의도와 어긋나 보일 수 있다, CodeRabbit 지적).
+                        .requestMatchers("/api/refunds/**").authenticated()
                         // Settlement 도메인 - 계산/확정은 관리자만(컨트롤러 주석 기준), 조회는 로그인만
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/vendors/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/*/confirm", "/api/settlements/*/recalculate").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")

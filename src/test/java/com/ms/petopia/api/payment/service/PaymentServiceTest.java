@@ -3,6 +3,7 @@ package com.ms.petopia.api.payment.service;
 
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
@@ -21,6 +22,7 @@ import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +30,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -84,10 +90,29 @@ class PaymentServiceTest {
     @Mock
     private RefundService refundService;
 
+    // getPayment(paymentId, userId)/getPayments의 fairId 소유권 검증이 부르는 가드.
+    // 기본(스텁 안 한) 상태에서는 아무 것도 안 하는 목이라 "담당자 맞음"으로 통과한다.
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     // PaymentService 생성자가 PaymentMapper를 받는 구조여야 동작함
     // (@RequiredArgsConstructor 패턴).
     @InjectMocks
     private PaymentService paymentService;
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateAs(String... roles) {
+        List<SimpleGrantedAuthority> authorities = java.util.Arrays.stream(roles)
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                .toList();
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(new UsernamePasswordAuthenticationToken(99L, null, authorities));
+        SecurityContextHolder.setContext(ctx);
+    }
 
     @Test
     // 테스트 리포트/IDE에 표시될 설명.
@@ -211,6 +236,47 @@ class PaymentServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("HTTP 조회(userId 포함)는 결제 소유자 본인이면 조회 가능하다")
+    void getPayment_userId포함_본인이면_조회가능하다() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPayerUserId(90L);
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        PaymentResponse result = paymentService.getPayment(1L, 90L);
+
+        assertThat(result.paymentId()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("HTTP 조회(userId 포함)는 본인이 아니어도 EVENT_ADMIN/SUPER_ADMIN이면 조회 가능하다")
+    void getPayment_userId포함_관리자면_조회가능하다() {
+        authenticateAs("EVENT_ADMIN");
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPayerUserId(90L);
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        PaymentResponse result = paymentService.getPayment(1L, 999L);
+
+        assertThat(result.paymentId()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("HTTP 조회(userId 포함)는 본인도 관리자도 아니면 거부한다(IDOR 방지)")
+    void getPayment_userId포함_타인이면_예외를던진다() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPayerUserId(90L);
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> paymentService.getPayment(1L, 999L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
     }
 
     @Test
@@ -989,7 +1055,7 @@ class PaymentServiceTest {
                         "paymentKey123", "PAYMENT_1", "WAITING_FOR_DEPOSIT", 50000L, "가상계좌",
                         OffsetDateTime.now(), null,
                         new TossPaymentResponse.VirtualAccount(
-                                "020", "1234567890", OffsetDateTime.now().plusHours(24), "secret-abc")
+                                "020", "1234567890", LocalDateTime.now().plusHours(24), "secret-abc")
                 ));
         given(paymentMapper.markWaitingForDeposit(any(PaymentRow.class))).willReturn(1);
 
@@ -1000,6 +1066,12 @@ class PaymentServiceTest {
         assertThat(result.status()).isEqualTo("WAITING_FOR_DEPOSIT");
         assertThat(result.virtualAccountBankCode()).isEqualTo("020");
         assertThat(result.virtualAccountNumber()).isEqualTo("1234567890");
+        assertThat(result.virtualAccountDueDate()).isNotNull();
+        // secret이 저장 안 되면 이후 입금 웹훅이 전부 무시된다 - 응답 DTO뿐 아니라 매퍼에
+        // 실제로 넘어간 저장값까지 확인한다(CodeRabbit 지적).
+        verify(paymentMapper).markWaitingForDeposit(argThat(
+                saved -> "secret-abc".equals(saved.getVirtualAccountSecret())
+                        && "020".equals(saved.getVirtualAccountBankCode())));
         // 입금 전이니 결제완료 처리(markCompleted)도, 참가비 확정 통지도 아직 일어나면 안 된다
         verify(paymentMapper, never()).markCompleted(any(PaymentRow.class));
         verify(applicationService, never()).confirmVendorPayment(anyLong(), anyLong(), anyLong());
@@ -1026,6 +1098,10 @@ class PaymentServiceTest {
         assertThat(result.status()).isEqualTo("COMPLETED");
         assertThat(result.method()).isEqualTo("카드");
         assertThat(result.easyPayProvider()).isEqualTo("네이버페이");
+        // markCompleted 호출 인자까지 확인 - easy_pay_provider가 실제로 DB 저장 대상에 포함됐는지
+        // (CodeRabbit이 지적한 "markCompleted SQL에 easy_pay_provider 누락" 버그의 회귀 방지).
+        verify(paymentMapper).markCompleted(argThat(
+                saved -> "네이버페이".equals(saved.getEasyPayProvider())));
     }
 
     @Test
@@ -1137,11 +1213,42 @@ class PaymentServiceTest {
         assertThat(result.size()).isEqualTo(20);
         assertThat(result.totalElements()).isEqualTo(1L);
         assertThat(result.totalPages()).isEqualTo(1);
+        // fairId가 있으면 FairAdminAccessGuard로 그 행사 담당자인지 확인하는지도 검증
+        verify(fairAdminAccessGuard).checkAssigned(10L);
+    }
+
+    @Test
+    @DisplayName("fairId 없이 전체 조회는 SUPER_ADMIN이 아니면 거부한다(EVENT_ADMIN이 남의 행사 결제까지 보는 것 방지)")
+    void getPayments_fairId없이_관리자아니면_예외를던진다() {
+        authenticateAs("EVENT_ADMIN");
+
+        assertThatThrownBy(() -> paymentService.getPayments(null, null, null, null, 0, 20))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).selectByFilter(any(), any(), any(), any(), any(), anyLong(), anyInt());
+    }
+
+    @Test
+    @DisplayName("fairId가 있어도 그 행사 담당자가 아니면 FairAdminAccessGuard가 막는다")
+    void getPayments_담당행사아니면_예외를던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> paymentService.getPayments(10L, null, null, null, 0, 20))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).selectByFilter(any(), any(), any(), any(), any(), anyLong(), anyInt());
     }
 
     @Test
     @DisplayName("조건에 맞는 결제가 없으면 빈 목록을 반환한다")
     void getPayments_결과없음_빈목록반환() {
+        // fairId 없이 전체 조회는 SUPER_ADMIN만 허용된다(assertFairScopeForNonSuperAdmin).
+        authenticateAs("SUPER_ADMIN");
         given(paymentMapper.selectByFilter(any(), any(), any(), any(), any(), anyLong(), anyInt()))
                 .willReturn(List.of());
         given(paymentMapper.countByFilter(any(), any(), any(), any(), any())).willReturn(0L);

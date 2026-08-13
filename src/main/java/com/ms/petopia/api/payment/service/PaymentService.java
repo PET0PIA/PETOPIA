@@ -5,6 +5,7 @@ import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -24,6 +25,8 @@ import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
@@ -56,6 +59,7 @@ public class PaymentService {
     private final AuditLogService auditLogService;
     private final ApplicationService applicationService;
     private final RefundService refundService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     // RefundService.refund()의 actingUserId는 원래 "누가 환불을 처리했는지" 기록하는 값인데,
     // 여기서는 사람이 아니라 시스템(이 메서드)이 자동으로 트리거하는 환불이라 실제 유저 ID가 없다.
@@ -68,11 +72,51 @@ public class PaymentService {
      * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 존재하지 않는 결제 ID일 때
      */
     public PaymentResponse getPayment(Long paymentId) {
+        PaymentRow row = selectByIdOrThrow(paymentId);
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * HTTP 요청 전용 조회 - 결제 소유자 본인이거나 EVENT_ADMIN/SUPER_ADMIN이어야 볼 수 있다
+     * (CodeRabbit 지적, IDOR 방지). {@link #getPayment(Long)}은 행사취소 오케스트레이션 등
+     * 내부 도메인 간 직접호출에서 계속 쓰이므로 그대로 두고, 로그인 사용자에게 노출하는
+     * 컨트롤러 경로만 이 오버로드를 쓰도록 분리했다.
+     */
+    public PaymentResponse getPayment(Long paymentId, Long requestingUserId) {
+        PaymentRow row = selectByIdOrThrow(paymentId);
+        if (!requestingUserId.equals(row.getPayerUserId()) && !hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+        return PaymentResponse.from(row);
+    }
+
+    private PaymentRow selectByIdOrThrow(Long paymentId) {
         PaymentRow row = paymentMapper.selectById(paymentId);
         if (row == null) {
             throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
         }
-        return PaymentResponse.from(row);
+        return row;
+    }
+
+    /**
+     * 로그인 사용자의 권한(role) 중 하나라도 일치하면 true. HTTP 요청 컨텍스트 전용 —
+     * SecurityContextHolder를 직접 읽으므로 내부 도메인 간 직접호출(HTTP 요청도 SecurityContext도
+     * 없는 흐름)에서 부르면 안 된다({@code FairAdminAccessGuard}와 동일한 제약).
+     */
+    private boolean hasAnyRole(String... roles) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> {
+                    for (String role : roles) {
+                        if (("ROLE_" + role).equals(authority.getAuthority())) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
     }
 
     /**
@@ -278,10 +322,27 @@ public class PaymentService {
             Long fairId, Long businessId, String paymentType, String status, int page, int size
     ) {
         validatePageAndSize(page, size);
+        assertFairScopeForNonSuperAdmin(fairId);
         long offset = (long) page * size;
         List<PaymentRow> rows = paymentMapper.selectByFilter(fairId, businessId, paymentType, status, null, offset, size);
         long total = paymentMapper.countByFilter(fairId, businessId, paymentType, status, null);
         return PaymentListResponse.of(rows, page, size, total);
+    }
+
+    /**
+     * getPayments는 SecurityConfig에서 EVENT_ADMIN/SUPER_ADMIN role까지만 걸러주고 "어느 행사"
+     * 담당인지는 안 가린다(CodeRabbit 지적과 같은 종류) - EVENT_ADMIN이 fairId 없이 부르면
+     * 전체 행사 결제가 다 보이고, 남의 fairId를 넣어도 그대로 통과했다. fairId가 있으면
+     * FairAdminAccessGuard로 담당 행사인지 확인하고, 없으면(전체 조회) SUPER_ADMIN만 허용한다.
+     */
+    private void assertFairScopeForNonSuperAdmin(Long fairId) {
+        if (fairId != null) {
+            fairAdminAccessGuard.checkAssigned(fairId);
+            return;
+        }
+        if (!hasAnyRole("SUPER_ADMIN")) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
     }
 
     /**
@@ -374,7 +435,7 @@ public class PaymentService {
             if (va != null) {
                 row.setVirtualAccountBankCode(va.bankCode());
                 row.setVirtualAccountNumber(va.accountNumber());
-                row.setVirtualAccountDueDate(va.dueDate() == null ? null : va.dueDate().toLocalDateTime());
+                row.setVirtualAccountDueDate(va.dueDate());
                 row.setVirtualAccountSecret(va.secret());
             }
 
@@ -490,7 +551,10 @@ public class PaymentService {
             completePaymentAndNotify(row, SYSTEM_ACTOR_USER_ID);
         } else if ("CANCELED".equals(data.status())) {
             // 입금기한 만료 등으로 토스가 가상계좌를 취소한 경우 - FAILED로 종료.
-            paymentMapper.markVirtualAccountDepositFailed(paymentId, now);
+            int failed = paymentMapper.markVirtualAccountDepositFailed(paymentId, now);
+            if (failed == 0) {
+                log.warn("가상계좌 입금취소 웹훅 상태전이 실패 - 이미 다른 요청이 처리함. paymentId={}", paymentId);
+            }
         }
         // 그 외 status 값은 우리가 아직 처리할 이유가 없어 무시한다.
     }

@@ -32,10 +32,8 @@ public class PaymentController {
             @PathVariable Long paymentId,
             @AuthenticationPrincipal Long userId
             ) {
-        // TODO 인증 도메인 완성 후: 조회한 결제가 이 userId 소유(또는 관리자 권한)인지
-        // 검증하는 로직 추가. 지금은 헤더 존재를 강제하는 수준까지만
-        // (다른 도메인 컨트롤러들과 최소한의 관례만 맞춘 것, 완전한 IDOR 방지는 아님).
-        return paymentService.getPayment(paymentId);
+        // 소유자 본인이거나 EVENT_ADMIN/SUPER_ADMIN이어야 조회 가능(IDOR 방지, CodeRabbit 지적).
+        return paymentService.getPayment(paymentId, userId);
     }
 
     // 예약ID로 그 예약의 예약금 결제 조회. 예약 도메인이 취소 처리 중 환불 API(paymentId 기준)를

@@ -2,6 +2,7 @@ package com.ms.petopia.api.settlement.service;
 
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
@@ -67,6 +68,10 @@ class SettlementServiceTest {
 
     @Mock
     private FairContractClient fairContractClient;
+
+    // confirm()이 부르는 담당자 검증 가드 - 스텁 안 하면(no-op) 기본적으로 "담당자 맞음"으로 통과한다.
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
 
     @InjectMocks
     private SettlementService settlementService;
@@ -237,6 +242,23 @@ class SettlementServiceTest {
 
         assertThat(result.status()).isEqualTo("CONFIRMED");
         assertThat(result.confirmedByUserId()).isEqualTo(99L);
+        // 이 정산의 fairId 담당자인지(또는 SUPER_ADMIN인지) 확인하는 가드를 거쳤는지도 검증
+        verify(fairAdminAccessGuard).checkAssigned(10L);
+    }
+
+    @Test
+    @DisplayName("담당 행사가 아니면 정산을 확정할 수 없다(다른 행사 EVENT_ADMIN 방지)")
+    void confirm_담당행사아님_예외를던진다() {
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(settlementMapper, never()).confirm(any(), any(), any(), any());
     }
 
     @Test

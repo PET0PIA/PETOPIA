@@ -22,15 +22,16 @@ public class RefundController {
     private final RefundService refundService;
 
     // 환불 요청 수신 + 처리(모의 환불이라 접수와 동시에 완료). 5경로(USER_CANCEL 등) 공용 —
-    // refundReason으로 구분한다. actingUserId는 권한 검증용이 아니라 "누가 이 환불을 처리했는지"
-    // 감사 추적용(다른 컨트롤러들과 헤더 관례 통일). 세밀한 권한 검증은 인증 도메인 완성 후
-    // 추가 예정(TODO).
+    // refundReason으로 구분한다. actingUserId는 "누가 이 환불을 처리했는지" 감사 추적용으로도
+    // 쓰이지만, 요청자가 이 결제의 소유자이거나 관리자인지는 assertRequesterAuthorized가 먼저
+    // 검증한다(IDOR 방지, CodeRabbit 지적).
     @PostMapping("/payments/{paymentId}/refunds")
     public ResponseEntity<RefundResponse> refund(
             @PathVariable Long paymentId,
             @AuthenticationPrincipal Long actingUserId,
             @Valid @RequestBody RefundRequest request
     ) {
+        refundService.assertRequesterAuthorized(paymentId, actingUserId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(refundService.refund(paymentId, actingUserId, request));
     }

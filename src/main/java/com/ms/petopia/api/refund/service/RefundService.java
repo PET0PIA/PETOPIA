@@ -17,6 +17,8 @@ import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +76,41 @@ public class RefundService {
     @Transactional
     public RefundResponse refund(Long paymentId, Long actingUserId, RefundRequest request) {
         return create(lockRefundablePayment(paymentId), actingUserId, request);
+    }
+
+    /**
+     * HTTP 요청 전용 - 환불을 요청한 사용자가 그 결제의 소유자(payer)이거나 EVENT_ADMIN/
+     * SUPER_ADMIN이어야 통과한다(CodeRabbit 지적, IDOR 방지). {@link #refund}/{@link #refundOrReuse}
+     * 자체에는 검증을 넣지 않는다 - 채린님 취소승인·승훈님 행사취소 오케스트레이션 등 다른 도메인이
+     * 스프링 빈 직접호출로 (결제자 본인이 아닌) 시스템/관리자 명의로 이 메서드들을 그대로 쓰고
+     * 있어서, 여기에 소유권 검증을 넣으면 그 호출들이 전부 깨진다. 그래서 HTTP 컨트롤러 경로에서만
+     * 이 메서드를 먼저 호출해서 가드한다.
+     */
+    public void assertRequesterAuthorized(Long paymentId, Long requestingUserId) {
+        PaymentRow row = paymentMapper.selectById(paymentId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!requestingUserId.equals(row.getPayerUserId()) && !hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+    }
+
+    /** HTTP 요청 컨텍스트 전용 - {@code PaymentService}의 동명 메서드와 동일한 제약. */
+    private boolean hasAnyRole(String... roles) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> {
+                    for (String role : roles) {
+                        if (("ROLE_" + role).equals(authority.getAuthority())) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
     }
 
     /**

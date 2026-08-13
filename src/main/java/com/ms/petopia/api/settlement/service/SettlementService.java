@@ -5,6 +5,7 @@ import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -66,6 +67,7 @@ public class SettlementService {
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final AuditLogService auditLogService;
     private final FairContractClient fairContractClient;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     /**
      * 특정 행사·업체의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
@@ -234,6 +236,9 @@ public class SettlementService {
         if (row == null) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND);
         }
+        // EVENT_ADMIN이면 이 정산의 fairId 담당자인지 확인(다른 행사 정산까지 확정 못 하게),
+        // SUPER_ADMIN은 배정 여부와 무관하게 통과(CodeRabbit 지적).
+        fairAdminAccessGuard.checkAssigned(row.getFairId());
         assertFairNotCanceled(row.getFairId());
         if (!PENDING.equals(row.getStatus())) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);

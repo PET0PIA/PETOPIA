@@ -27,6 +27,8 @@ public class PaymentRow {
     private String virtualAccountBankCode;
     private String virtualAccountNumber;
     private LocalDateTime virtualAccountDueDate;
+    // 웹훅 검증용 값이라 로그에 노출되면 안 됨(CodeRabbit 지적) - toString에서 제외.
+    @ToString.Exclude
     private String virtualAccountSecret;
     private LocalDateTime paidAt;
     private LocalDateTime createdAt;

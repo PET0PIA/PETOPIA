@@ -2,6 +2,7 @@ package com.ms.petopia.api.payment.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /**
@@ -31,11 +32,15 @@ public record TossPaymentResponse(
     }
 
     /**
+     * @param dueDate 토스 문서 기준 {@code yyyy-MM-dd'T'HH:mm:ss} 포맷 — approvedAt 등 다른
+     *               시각 필드와 달리 타임존 오프셋이 없다. {@link OffsetDateTime}으로 받으면
+     *               Jackson이 파싱에 실패해 가상계좌 결제 confirm 자체가 깨진다(CodeRabbit 지적,
+     *               토스 개발자센터 문서로 확인).
      * @param secret 이 가상계좌 건의 입금통지 웹훅(DEPOSIT_CALLBACK)에 그대로 실려오는 값 —
      *               웹훅 body의 secret과 여기서 받은 값이 같아야 정상 웹훅으로 검증한다
      *               (토스 문서 기준 가상계좌 웹훅의 공식 검증 방식, HMAC 서명이 아님).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record VirtualAccount(String bankCode, String accountNumber, OffsetDateTime dueDate, String secret) {
+    public record VirtualAccount(String bankCode, String accountNumber, LocalDateTime dueDate, String secret) {
     }
 }

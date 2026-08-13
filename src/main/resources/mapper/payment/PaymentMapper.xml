@@ -90,6 +90,7 @@
         UPDATE payment
         SET status = 'COMPLETED',
         method = #{method},
+        easy_pay_provider = #{easyPayProvider},
         toss_payment_key = #{tossPaymentKey},
         paid_at = #{paidAt},
         updated_at = #{updatedAt}
