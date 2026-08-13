@@ -53,16 +53,16 @@ public class BannerService {
     public BannerResponse create(Long callerId, BannerCreateRequest request){
         Banner banner = Banner.builder()
                 .title(request.getTitle())
-                .eyebrow(request.getEyebrow())
-                .subtitle(request.getSubtitle())
+                .eyebrow(clearable(request.getEyebrow()))
+                .subtitle(clearable(request.getSubtitle()))
                 .imageKey(resolveImageUrl(request.getImageKey()))
-                .linkUrl(request.getLinkUrl())
+                .linkUrl(clearable(request.getLinkUrl()))
                 .linkTarget(request.getLinkTarget())
-                .linkLabel(request.getLinkLabel())
-                .link2Label(request.getLink2Label())
-                .link2Url(request.getLink2Url())
+                .linkLabel(clearable(request.getLinkLabel()))
+                .link2Label(clearable(request.getLink2Label()))
+                .link2Url(clearable(request.getLink2Url()))
                 .link2Target(request.getLink2Target())
-                .bgColor(request.getBgColor())
+                .bgColor(clearable(request.getBgColor()))
                 .sortOrder(request.getSortOrder())
                 .isActive(true)
                 .startedAt(request.getStartedAt())
@@ -91,16 +91,16 @@ public class BannerService {
             Banner patch = Banner.builder()
                     .bannerId(bannerId)
                     .title(request.getTitle())
-                    .eyebrow(request.getEyebrow())
-                    .subtitle(request.getSubtitle())
+                    .eyebrow(clearable(request.getEyebrow()))
+                    .subtitle(clearable(request.getSubtitle()))
                     .imageKey(resolveImageUrl(request.getImageKey()))
-                    .linkUrl(request.getLinkUrl())
+                    .linkUrl(clearable(request.getLinkUrl()))
                     .linkTarget(request.getLinkTarget())
-                    .linkLabel(request.getLinkLabel())
-                    .link2Label(request.getLink2Label())
-                    .link2Url(request.getLink2Url())
+                    .linkLabel(clearable(request.getLinkLabel()))
+                    .link2Label(clearable(request.getLink2Label()))
+                    .link2Url(clearable(request.getLink2Url()))
                     .link2Target(request.getLink2Target())
-                    .bgColor(request.getBgColor())
+                    .bgColor(clearable(request.getBgColor()))
                     .sortOrder(request.getSortOrder())
                     .startedAt(request.getStartedAt())
                     .endedAt(request.getEndedAt())
@@ -154,6 +154,12 @@ public class BannerService {
             throw new CommonException(ErrorCode.BANNER_NOT_FOUND);
         }
         return banner;
+    }
+
+    // null(생략)은 그대로 두고, 공백만 입력된 경우는 명시적 삭제 신호(빈 문자열)로 정규화한다.
+    // 매퍼는 빈 문자열을 컬럼 NULL로, null은 미변경으로 해석한다.
+    private String clearable(String raw){
+        return raw == null ? null : raw.trim();
     }
 
     private String resolveImageUrl(String temporaryObjectKey){

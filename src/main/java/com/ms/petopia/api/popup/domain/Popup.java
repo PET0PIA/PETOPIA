@@ -11,9 +11,12 @@ import java.time.LocalDateTime;
 public class Popup {
     private Long popupId;
     private String title;
+    private String subtitle;
     private String imageKey;
     private String linkUrl;
     private LinkTarget linkTarget;
+    private String linkLabel;
+    private String bgColor;
     private Integer width;
     private Integer height;
     private boolean isActive;
