@@ -50,6 +50,17 @@ public class BoothController {
 
     }
 
+    // 내가 소유한 부스 목록 조회
+    @GetMapping("/booths/me")
+    public ResponseEntity<ApiResponse<List<BoothFavoriteResponse>>> getMyBooths(
+            @AuthenticationPrincipal Long callerId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(boothService.getMyBooths(callerId)));
+
+    }
+
     // 내 즐겨찾기 목록 조회
     @GetMapping("/booths/favorites")
     public ResponseEntity<ApiResponse<List<BoothFavoriteResponse>>> getMyFavorites(

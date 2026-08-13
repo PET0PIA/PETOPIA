@@ -66,4 +66,7 @@ public interface BoothMapper {
     void deleteFavorite(@Param("userId") Long userId,
                         @Param("boothId") Long boothId);
 
+    // 내가 소유한 부스 목록 (부스명·이미지·소속 행사명까지 조인해서 한 번에 조회)
+    List<BoothFavoriteResponse> selectByOwnerId(@Param("userId") Long userId);
+
 }

@@ -85,4 +85,7 @@ petopia:
 nts:
   service-key: ${NTS_SERVICE_KEY}
 
+anthropic:
+  api-key: ${ANTHROPIC_API_KEY}
+
 

@@ -65,6 +65,9 @@ app:
   # 비밀번호 재설정 링크 등 이메일에 실을 프론트 주소. 배포 도메인이 정해지면 FRONTEND_URL 환경변수로 덮어쓴다.
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
 
+anthropic:
+  api-key: ${ANTHROPIC_API_KEY}
+
 oauth:
   google:
     # 기본값 없음 - 값이 없으면 기동 실패(JWT_SECRET과 동일한 fail-fast 정책)
