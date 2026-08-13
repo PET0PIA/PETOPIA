@@ -75,6 +75,8 @@ import { ParticipationNewPage } from "../pages/application/ParticipationNewPage"
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
   "/businesses/status": "사업자 등록 현황",
+  "/news": "소식·이벤트",
+  "/advertising": "광고 문의",
   "/about": "서비스 소개",
   "/terms": "이용약관",
   "/privacy": "개인정보 처리방침",
@@ -146,6 +148,19 @@ export function AppRouter() {
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
           <Route path="/fairs/upcoming" element={<FairUpcomingPage />} />
           <Route path="/fairs/past" element={<FairPastPage />} />
+          {/* 비즈니스 ▾ "부스 참가 신청" 입구. 실제 목록(모집 중 행사)·미등록 유도 로직은 후속.
+              지금은 준비중 화면에서 사업자 등록으로만 안내한다. */}
+          <Route
+            path="/fairs/recruiting"
+            element={
+              <PlaceholderPage
+                title="부스 참가 신청"
+                description="박람회에 부스로 참가 신청하는 화면이에요. 참가하려면 먼저 사업자(참가업체) 등록이 필요해요."
+                actionTo="/businesses/new"
+                actionLabel="사업자 등록하러 가기"
+              />
+            }
+          />
           <Route path="/tickets" element={<TicketFairListPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}

@@ -1,5 +1,5 @@
-import { AlertCircle, Search, Settings2 } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
+import { AlertCircle, Settings2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import { getFairDates, type FairDate } from "../../api/fair";
 import {
@@ -15,6 +15,7 @@ import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Table } from "../../components/ui/Table";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 
 const statusLabels: Record<OnsiteSalesStatus, string> = {
   OPEN: "판매중",
@@ -38,9 +39,8 @@ function formatPrice(price: number) {
 }
 
 export function OnsiteSalesPolicyPage() {
-  // TODO 관리자 세션에 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [fairId, setFairId] = useState<number | null>(null);
+  // 콘솔 상단 바의 "관리 행사" 선택기가 현재 행사를 정한다.
+  const { fairId } = useFairSelector();
 
   const [rows, setRows] = useState<PolicyRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -56,40 +56,32 @@ export function OnsiteSalesPolicyPage() {
   // 요청 세대 번호. 늦게 도착한 이전 조회 응답이 최신 화면을 덮어쓰지 못하게 막는다.
   const loadSeq = useRef(0);
 
-  async function loadPolicies(targetFairId: number) {
+  // 상단 선택기의 행사가 바뀌면 그 행사의 운영일 + 운영일별 현장예매 정책을 다시 불러온다.
+  // loadSeq로 늦게 도착한 이전 조회가 최신 화면을 덮어쓰지 못하게 막는다.
+  useEffect(() => {
+    if (fairId === null) return;
+    const currentFairId = fairId;
     const seq = ++loadSeq.current;
     setLoading(true);
     setLoadError(null);
-    try {
-      const dates = await getFairDates(targetFairId);
-      // 운영일마다 현장예매 정책을 조회한다(미설정이면 서버가 기본값을 준다).
-      const policies = await Promise.all(
-        dates.map((date) => getOnsiteSalesPolicy(targetFairId, date.fairDateId)),
-      );
-      if (seq !== loadSeq.current) return; // 더 최신 조회가 있으면 이 응답은 버린다
-      setRows(dates.map((fairDate, index) => ({ fairDate, policy: policies[index] })));
-    } catch (error) {
-      if (seq !== loadSeq.current) return;
-      setRows([]);
-      setLoadError(error instanceof ApiError ? error.message : "현장예매 정책을 불러오지 못했어요.");
-    } finally {
-      if (seq === loadSeq.current) setLoading(false);
-    }
-  }
-
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      // 새 조회를 시작하지 않더라도 진행 중이던 이전 조회는 무효화한다.
-      loadSeq.current += 1;
-      setLoading(false);
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-    setFairId(parsed);
-    void loadPolicies(parsed);
-  }
+    (async () => {
+      try {
+        const dates = await getFairDates(currentFairId);
+        // 운영일마다 현장예매 정책을 조회한다(미설정이면 서버가 기본값을 준다).
+        const policies = await Promise.all(
+          dates.map((date) => getOnsiteSalesPolicy(currentFairId, date.fairDateId)),
+        );
+        if (seq !== loadSeq.current) return; // 더 최신 조회가 있으면 이 응답은 버린다
+        setRows(dates.map((fairDate, index) => ({ fairDate, policy: policies[index] })));
+      } catch (error) {
+        if (seq !== loadSeq.current) return;
+        setRows([]);
+        setLoadError(error instanceof ApiError ? error.message : "현장예매 정책을 불러오지 못했어요.");
+      } finally {
+        if (seq === loadSeq.current) setLoading(false);
+      }
+    })();
+  }, [fairId]);
 
   function openDialog(row: PolicyRow) {
     setEditing(row);
@@ -142,23 +134,6 @@ export function OnsiteSalesPolicyPage() {
         description="운영일마다 현장 직접예매의 가격과 판매 상태(판매중·일시중지·마감)를 관리해요. 판매중이 아니면 현장예매를 받지 않아요."
       />
 
-      <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <span className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</span>
-          <Input
-            type="number"
-            min={1}
-            value={fairIdInput}
-            onChange={(event) => setFairIdInput(event.target.value)}
-            placeholder="예: 1"
-          />
-        </div>
-        <Button type="submit" variant="outline">
-          <Search size={16} />
-          불러오기
-        </Button>
-      </form>
-
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -168,8 +143,8 @@ export function OnsiteSalesPolicyPage() {
 
       {fairId === null && !loadError && (
         <EmptyState
-          title="행사 ID를 먼저 입력해 주세요."
-          description="관리할 행사의 ID를 입력하고 불러오기를 누르면 운영일별 현장예매 정책이 표시돼요."
+          title="관리할 행사가 없어요."
+          description="상단 바에서 행사를 선택하면 운영일별 현장예매 정책이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요."
         />
       )}
 

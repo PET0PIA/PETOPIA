@@ -13,24 +13,27 @@ export interface NavigationItem {
 
 export const publicNavigation: NavigationItem[] = [
   {
-    label: "행사 안내",
+    // 관람객 구역: 행사를 둘러보고(행사 목록) 예매(티켓 예매)까지. 둘 다 같은 공개 행사를 쓰지만
+    // "둘러보기 vs 바로 예매"로 성격이 달라 한 드롭다운에 나눠 담는다.
+    label: "행사·티켓",
     children: [
-      { label: "예정 행사", path: "/fairs/upcoming" },
-      { label: "지난 행사", path: "/fairs/past" },
-      { label: "행사 개최 신청", path: "/fair-applications/new" },
-      { label: "내 행사 신청 목록", path: "/fair-applications/me", requiredRole: ["USER", "VENDOR", "EVENT_ADMIN", "SUPER_ADMIN"] },
+      { label: "행사 목록", path: "/fairs/upcoming" },
+      { label: "티켓 예매", path: "/tickets" },
     ],
   },
-  { label: "티켓 예매", path: "/tickets" },
+  { label: "소식·이벤트", path: "/news" },
   {
-    label: "참여 업체",
+    // 비즈니스 구역: "일하러 온 사람"(주최자·업체·광고주)의 신청/문의 창구 3개.
+    // 사업자(참가업체) 등록은 메뉴에 두지 않고, "부스 참가 신청" 흐름에서 미등록 시 등록으로 유도한다.
+    label: "비즈니스",
     children: [
-      { label: "사업자 등록 신청", path: "/businesses/new", requiredRole: ["USER"] },
-      { label: "내 사업자 목록", path: "/businesses/me", requiredRole: ["VENDOR"] },
-      { label: "부스 방문 스캔", path: "/booths/scan", requiredRole: ["VENDOR"] },
+      { label: "박람회 개최 신청", path: "/fair-applications/new" },
+      { label: "부스 참가 신청", path: "/fairs/recruiting" },
+      { label: "광고 문의", path: "/advertising" },
     ],
   },
   // 관리자 콘솔 진입은 공개 메뉴가 아니라, 로그인한 admin의 프로필 드롭다운에서 역할별로 노출한다(PublicHeader).
+  // 로그인 사용자의 "내 업무"(내 예약·내 사업자·부스 방문 스캔·내 행사 신청)도 프로필 드롭다운으로 옮겼다.
   // 최고 관리자 로그인 입구는 푸터의 작은 링크(PublicLayout)로 둔다.
 ];
 
