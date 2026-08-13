@@ -21,7 +21,11 @@ export interface Banner {
   link2Target: LinkTarget | null;
   bgColor: string | null;
   sortOrder: number;
-  isActive: boolean;
+  /**
+   * 백엔드 필드명은 isActive지만, Lombok의 isActive() getter를 Jackson이 직렬화할 때
+   * "is" 접두사를 떼어 JSON 키가 "active"로 나간다. 여기서도 그 실제 응답 키에 맞춘다.
+   */
+  active: boolean;
   startedAt: string | null;
   endedAt: string | null;
   createdAt: string;

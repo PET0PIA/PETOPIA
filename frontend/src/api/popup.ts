@@ -13,7 +13,8 @@ export interface Popup {
   bgColor: string | null;
   width: number | null;
   height: number | null;
-  isActive: boolean;
+  /** banner.ts의 Banner.active와 동일한 이유(Jackson의 isActive() -> "active" 직렬화)로 active를 쓴다. */
+  active: boolean;
   startedAt: string | null;
   endedAt: string | null;
   createdAt: string;
