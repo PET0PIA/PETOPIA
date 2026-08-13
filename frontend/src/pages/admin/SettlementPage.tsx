@@ -1,9 +1,10 @@
-import { AlertCircle, Calculator, Check, RefreshCw, Search } from "lucide-react";
+import { AlertCircle, Calculator, Check, Download, RefreshCw, Search } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   calculateSettlement,
   confirmSettlement,
+  downloadSettlementsExcel,
   getSettlementsByFair,
   getVendorSettlement,
   recalculateSettlement,
@@ -147,6 +148,9 @@ export function SettlementPage() {
   const [calcSubmitting, setCalcSubmitting] = useState(false);
   const [calcError, setCalcError] = useState<string | null>(null);
 
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const [actionError, setActionError] = useState<string | null>(null);
   // 행마다 독립적으로 처리 중인지 추적한다(값 하나만 저장하면 동시에 다른 행을 처리할 때
   // 서로 상태를 덮어써서 버튼이 실제 완료 전에 풀리거나 중복 요청이 나갈 수 있다).
@@ -182,6 +186,19 @@ export function SettlementPage() {
       setListError(errorMessage(error, "정산 목록을 불러오지 못했어요."));
     } finally {
       if (fairContextVersionRef.current === version) setListLoading(false);
+    }
+  }
+
+  async function handleExport() {
+    if (loadedFairId === null) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await downloadSettlementsExcel(loadedFairId);
+    } catch (error) {
+      setExportError(errorMessage(error, "엑셀 파일을 내려받지 못했어요."));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -394,6 +411,15 @@ export function SettlementPage() {
 
         {loadedFairId !== null && !listLoading && settlements && (
           <div className="space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-bold text-muted">행사 #{loadedFairId} 정산 목록</p>
+              <Button type="button" variant="outline" onClick={handleExport} disabled={exporting}>
+                <Download size={16} />
+                {exporting ? "내보내는 중..." : "엑셀로 내보내기"}
+              </Button>
+            </div>
+            {exportError && <p className="text-sm text-primary-strong">{exportError}</p>}
+
             <Card className="p-5">
               <h3 className="mb-3 text-sm font-extrabold text-muted">행사 #{loadedFairId} 새 정산 계산</h3>
               <form onSubmit={handleCalcSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
