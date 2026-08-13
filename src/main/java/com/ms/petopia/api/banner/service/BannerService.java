@@ -8,6 +8,8 @@ import com.ms.petopia.api.banner.dto.response.BannerResponse;
 import com.ms.petopia.api.banner.mapper.BannerMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 public class BannerService {
 
     private final BannerMapper bannerMapper;
+    private final StorageService storageService;
 
     // 공개 - 현재 노출 중인 배너 목록
     public List<BannerResponse> getActiveList(){
@@ -50,7 +53,7 @@ public class BannerService {
     public BannerResponse create(Long callerId, BannerCreateRequest request){
         Banner banner = Banner.builder()
                 .title(request.getTitle())
-                .imageKey(request.getImageKey())
+                .imageKey(resolveImageUrl(request.getImageKey()))
                 .linkUrl(request.getLinkUrl())
                 .linkTarget(request.getLinkTarget())
                 .sortOrder(request.getSortOrder())
@@ -77,7 +80,7 @@ public class BannerService {
             Banner patch = Banner.builder()
                     .bannerId(bannerId)
                     .title(request.getTitle())
-                    .imageKey(request.getImageKey())
+                    .imageKey(resolveImageUrl(request.getImageKey()))
                     .linkUrl(request.getLinkUrl())
                     .linkTarget(request.getLinkTarget())
                     .sortOrder(request.getSortOrder())
@@ -133,5 +136,13 @@ public class BannerService {
             throw new CommonException(ErrorCode.BANNER_NOT_FOUND);
         }
         return banner;
+    }
+
+    private String resolveImageUrl(String temporaryObjectKey){
+        if (temporaryObjectKey == null || temporaryObjectKey.isBlank()){
+            return null;
+        }
+        String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
+        return storageService.toPublicUrl(confirmedKey);
     }
 }
