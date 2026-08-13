@@ -5,7 +5,6 @@ import java.time.LocalDateTime;
 public record FairReviewListItemResponse(
         Long reviewId,
         Long fairId,
-        Long userId,
         String nickname,
         Integer rating,
         String content,
@@ -17,7 +16,6 @@ public record FairReviewListItemResponse(
         return new FairReviewListItemResponse(
                 row.getReviewId(),
                 row.getFairId(),
-                row.getUserId(),
                 row.getNickname(),
                 row.getRating(),
                 row.getContent(),
