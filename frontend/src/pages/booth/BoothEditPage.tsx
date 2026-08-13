@@ -1,6 +1,6 @@
 import { AlertCircle, ChevronLeft, ImageIcon, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
