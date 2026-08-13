@@ -1,7 +1,8 @@
-package com.ms.petopia.api.banner.controller;
+package com.ms.petopia.api.popup.controller;
 
-import com.ms.petopia.api.banner.dto.response.BannerResponse;
-import com.ms.petopia.api.banner.service.BannerService;
+import com.ms.petopia.api.popup.dto.request.PopupUpdateRequest;
+import com.ms.petopia.api.popup.dto.response.PopupResponse;
+import com.ms.petopia.api.popup.service.PopupService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -27,25 +29,27 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
-class AdminBannerControllerTest {
+class AdminPopupControllerTest {
 
     @Mock
-    private BannerService bannerService;
+    private PopupService popupService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new AdminBannerController(bannerService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AdminPopupController(popupService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .addFilters(new TestAuthenticationFilter())
@@ -57,148 +61,139 @@ class AdminBannerControllerTest {
         SecurityContextHolder.clearContext();
     }
 
-    // GET /api/admin/banners - 전체 목록 조회
+    // GET /api/admin/popups - 전체 목록 조회
     @Test
-    void getsAllBanners() throws Exception {
-        given(bannerService.getAll()).willReturn(
-                List.of(BannerResponse.builder().bannerId(1L).title("테스트 배너").build()));
+    void getsAllPopups() throws Exception {
+        given(popupService.getAll()).willReturn(
+                List.of(PopupResponse.builder().popupId(1L).title("테스트 팝업").build()));
 
-        mockMvc.perform(get("/api/admin/banners").with(authenticatedAs(1L)))
+        mockMvc.perform(get("/api/admin/popups").with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].bannerId").value(1));
+                .andExpect(jsonPath("$.data[0].popupId").value(1));
     }
 
-    // GET /api/admin/banners/{bannerId} - 단건 조회
+    // GET /api/admin/popups/{popupId} - 단건 조회
     @Test
-    void getsBannerById() throws Exception {
-        given(bannerService.getById(1L)).willReturn(
-                BannerResponse.builder().bannerId(1L).title("테스트 배너").build());
+    void getsPopupById() throws Exception {
+        given(popupService.getById(1L)).willReturn(
+                PopupResponse.builder().popupId(1L).title("테스트 팝업").build());
 
-        mockMvc.perform(get("/api/admin/banners/1").with(authenticatedAs(1L)))
+        mockMvc.perform(get("/api/admin/popups/1").with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.bannerId").value(1));
+                .andExpect(jsonPath("$.data.popupId").value(1));
     }
 
-    // GET /api/admin/banners/{bannerId} - 없는 배너 -> 404 + AD001
+    // GET /api/admin/popups/{popupId} - 없는 팝업 -> 404 + AD002
     @Test
-    void returns404WhenBannerNotFound() throws Exception {
-        willThrow(new CommonException(ErrorCode.BANNER_NOT_FOUND))
-                .given(bannerService).getById(999L);
+    void returns404WhenPopupNotFound() throws Exception {
+        willThrow(new CommonException(ErrorCode.POPUP_NOT_FOUND))
+                .given(popupService).getById(999L);
 
-        mockMvc.perform(get("/api/admin/banners/999").with(authenticatedAs(1L)))
+        mockMvc.perform(get("/api/admin/popups/999").with(authenticatedAs(1L)))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("AD001"));
+                .andExpect(jsonPath("$.code").value("AD002"));
     }
 
-    // POST /api/admin/banners - 정상 등록 (201)
+    // POST /api/admin/popups - 정상 등록 (201)
     @Test
-    void createsBanner() throws Exception {
-        given(bannerService.create(eq(1L), any())).willReturn(
-                BannerResponse.builder().bannerId(1L).title("신규 배너").build());
+    void createsPopup() throws Exception {
+        given(popupService.create(eq(1L), any())).willReturn(
+                PopupResponse.builder().popupId(1L).title("신규 팝업").build());
 
-        mockMvc.perform(post("/api/admin/banners")
+        mockMvc.perform(post("/api/admin/popups")
                         .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                    "title": "신규 배너",
-                                    "imageKey": "uploads/banner/new.jpg",
+                                    "title": "신규 팝업",
+                                    "imageKey": "uploads/image/new.jpg",
                                     "linkTarget": "SELF",
-                                    "sortOrder": 0
+                                    "width": 400,
+                                    "height": 300
                                 }
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.title").value("신규 배너"));
+                .andExpect(jsonPath("$.data.title").value("신규 팝업"));
     }
 
-    // POST /api/admin/banners - title 누락 -> @NotBlank가 400으로 막는지 확인
+    // POST /api/admin/popups - title 누락 -> 400
     @Test
     void returns400WhenTitleBlank() throws Exception {
-        mockMvc.perform(post("/api/admin/banners")
+        mockMvc.perform(post("/api/admin/popups")
                         .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                    "imageKey": "uploads/banner/new.jpg",
+                                    "imageKey": "uploads/image/new.jpg",
                                     "linkTarget": "SELF",
-                                    "sortOrder": 0
+                                    "width": 400,
+                                    "height": 300
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
     }
 
-    // POST /api/admin/banners - linkLabel만 있고 linkUrl 없음 -> 400
+    // PUT /api/admin/popups/{popupId} - 정상 수정
     @Test
-    void returns400WhenLinkLabelWithoutLinkUrl() throws Exception {
-        mockMvc.perform(post("/api/admin/banners")
+    void updatesPopup() throws Exception {
+        given(popupService.update(eq(1L), any())).willReturn(
+                PopupResponse.builder().popupId(1L).title("수정된 팝업").build());
+
+        mockMvc.perform(put("/api/admin/popups/1")
                         .with(authenticatedAs(1L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                    "title": "신규 배너",
-                                    "imageKey": "uploads/banner/new.jpg",
-                                    "linkTarget": "SELF",
-                                    "linkLabel": "자세히 보기",
-                                    "sortOrder": 0
+                                    "title": "수정된 팝업"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("수정된 팝업"));
+
+        ArgumentCaptor<PopupUpdateRequest> captor = ArgumentCaptor.forClass(PopupUpdateRequest.class);
+        verify(popupService).update(eq(1L), captor.capture());
+        assertThat(captor.getValue().getTitle()).isEqualTo("수정된 팝업");
+    }
+
+    // PUT /api/admin/popups/{popupId} - width가 양수가 아니면 -> 400
+    @Test
+    void returns400WhenUpdateWidthNotPositive() throws Exception {
+        mockMvc.perform(put("/api/admin/popups/1")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "width": 0
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
     }
 
-    // POST /api/admin/banners - link2Label만 있고 link2Url 없음 -> 400
+    // DELETE /api/admin/popups/{popupId} - 정상 삭제
     @Test
-    void returns400WhenLink2LabelWithoutLink2Url() throws Exception {
-        mockMvc.perform(post("/api/admin/banners")
-                        .with(authenticatedAs(1L))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                    "title": "신규 배너",
-                                    "imageKey": "uploads/banner/new.jpg",
-                                    "linkTarget": "SELF",
-                                    "link2Label": "더 알아보기",
-                                    "sortOrder": 0
-                                }
-                                """))
-                .andExpect(status().isBadRequest());
-    }
-
-    // DELETE /api/admin/banners/{bannerId} - 정상 삭제
-    @Test
-    void deletesBanner() throws Exception {
-        mockMvc.perform(delete("/api/admin/banners/1").with(authenticatedAs(1L)))
+    void deletesPopup() throws Exception {
+        mockMvc.perform(delete("/api/admin/popups/1").with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
 
-    // DELETE /api/admin/banners/{bannerId} - 없는 배너 -> 404
+    // DELETE /api/admin/popups/{popupId} - 없는 팝업 -> 404
     @Test
     void returns404WhenDeletingNotFound() throws Exception {
-        willThrow(new CommonException(ErrorCode.BANNER_NOT_FOUND))
-                .given(bannerService).delete(999L);
+        willThrow(new CommonException(ErrorCode.POPUP_NOT_FOUND))
+                .given(popupService).delete(999L);
 
-        mockMvc.perform(delete("/api/admin/banners/999").with(authenticatedAs(1L)))
+        mockMvc.perform(delete("/api/admin/popups/999").with(authenticatedAs(1L)))
                 .andExpect(status().isNotFound());
     }
 
-    // PATCH /api/admin/banners/{bannerId}/toggle - 노출 토글
+    // PATCH /api/admin/popups/{popupId}/toggle - 노출 토글
     @Test
     void togglesActive() throws Exception {
-        mockMvc.perform(patch("/api/admin/banners/1/toggle")
+        mockMvc.perform(patch("/api/admin/popups/1/toggle")
                         .with(authenticatedAs(1L))
                         .param("isActive", "false"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-    }
-
-    // PUT /api/admin/banners/order - 순서 변경
-    @Test
-    void updatesOrder() throws Exception {
-        mockMvc.perform(put("/api/admin/banners/order")
-                        .with(authenticatedAs(1L))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"bannerIds\": [3, 1, 2]}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
