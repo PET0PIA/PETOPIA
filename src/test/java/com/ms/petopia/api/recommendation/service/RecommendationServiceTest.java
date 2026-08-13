@@ -171,6 +171,27 @@ class RecommendationServiceTest {
         assertThat(result).hasSize(5);
     }
 
+    @Test
+    void Claude가_같은_boothId를_중복으로_추천하면_한_번만_남긴다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        BoothCandidate candidate = boothCandidate(1L, "A부스");
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(List.of(candidate));
+        //Claude가 같은 부스를 두 번 추천한 상황을 흉내
+        given(claudeBoothRecommender.recommend(null, "장난감 찾아요", List.of(candidate)))
+                .willReturn(List.of(
+                        new ClaudeBoothRecommender.RecommendationEntry(1L, "첫 번째 이유"),
+                        new ClaudeBoothRecommender.RecommendationEntry(1L, "두 번째 이유")
+                ));
+
+        List<BoothRecommendationItem> result = recommendationService.recommend(FAIR_ID, null, request);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).reason()).isEqualTo("첫 번째 이유");
+    }
+
     private BoothCandidate boothCandidate(Long boothId, String name) {
         BoothCandidate candidate = new BoothCandidate();
         candidate.setBoothId(boothId);

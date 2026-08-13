@@ -11,8 +11,10 @@ import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -66,10 +68,13 @@ public class RecommendationService {
     ) {
         Map<Long, String> nameByBoothId = candidates.stream()
                 .collect(Collectors.toMap(BoothCandidate::getBoothId, BoothCandidate::getName));
+        Set<Long> seenBoothIds = new HashSet<>();
 
         return entries.stream()
                 //목록에 없는 boothId는 Claude가 지어낸 것일 수 있으니 걸러낸다
                 .filter(entry -> nameByBoothId.containsKey(entry.boothId()))
+                //같은 boothId를 Claude가 중복으로 반환했을 수 있으니 첫 항목만 남긴다
+                .filter(entry -> seenBoothIds.add(entry.boothId()))
                 .limit(5)
                 .map(entry -> new BoothRecommendationItem(
                         entry.boothId(),
