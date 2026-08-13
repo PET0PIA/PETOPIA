@@ -263,8 +263,38 @@ class RecruitNoticeServiceTest {
 
         }
 
-    }
+        @Test
+        @DisplayName("새 이미지 없이 수정하면 기존 이미지를 그대로 유지한다")
+        void keepsExistingImageWhenNoNewImageProvided() {
 
+            // given: 기존 공고에 이미지가 이미 있고, 이번 요청엔 새 이미지가 없는 상황(제목만 수정)
+            Long fairId = 1L;
+            Long writerId = 1L;
+
+            RecruitNoticeRequest request = createRequest("이미지 안 건드리고 제목만 수정");
+            request.setImageObjectKey(null);
+
+            RecruitNotice existing = createNotice(1L, fairId, writerId, "이전 제목", null);
+            // createNotice가 만드는 imageUrl은 "https://cdn.petopia.kr/notice/1.jpg"로 고정
+
+            given(recruitNoticeMapper.selectAdminUserIdByFairId(fairId)).willReturn(writerId);
+            given(recruitNoticeMapper.selectByFairId(fairId)).willReturn(existing);
+
+            ArgumentCaptor<RecruitNotice> captor = ArgumentCaptor.forClass(RecruitNotice.class);
+
+            // when
+            recruitNoticeService.upsertNotice(fairId, request);
+
+            // then: Mapper에 넘어간 imageUrl이 null로 덮어써지지 않고 기존 값 그대로인지 확인
+            verify(recruitNoticeMapper).upsertNotice(captor.capture());
+            assertThat(captor.getValue().getImageUrl()).isEqualTo("https://cdn.petopia.kr/notice/1.jpg");
+
+            // 새 이미지가 없으니 S3 confirm 흐름은 시도되면 안 됨
+            verify(storageService, never()).confirm(any(), any());
+
+        }
+
+    }
 
     @Nested
     @DisplayName("모집 공고 상세 조회")

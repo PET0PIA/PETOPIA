@@ -74,6 +74,10 @@ class ApplicationControllerTest {
                     + "\"itemsDesc\":\"사료·간식\",\"managerName\":\"김담당\",\"managerPhone\":\"010-1234-5678\","
                     + "\"managerEmail\":\"manager@petopia.com\",\"agreedTerms\":true}";
 
+    private static final String UPDATE_BODY =
+            "{\"purpose\":\"체험 부스 운영(수정)\",\"itemsDesc\":\"사료·간식\","
+                    + "\"managerName\":\"김담당\",\"managerPhone\":\"010-1234-5678\",\"managerEmail\":\"manager@petopia.com\"}";
+
     // GET /api/fairs/{fairId}/booth-slots - 정상 조회 (인증 불필요)
     @Test
     void getsBoothSlots() throws Exception {
@@ -156,6 +160,39 @@ class ApplicationControllerTest {
                         .with(authenticatedAs(1L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("V012"));
+
+    }
+
+    // PUT /api/applications/{applicationId} - 정상 수정
+    @Test
+    void updatesApplication() throws Exception {
+
+        given(applicationService.updateApplication(eq(1L), eq(1L), any())).willReturn(
+                ApplicationDetailResponse.builder().applicationId(1L).status("PENDING_REVIEW")
+                        .purpose("체험 부스 운영(수정)").build());
+
+        mockMvc.perform(put("/api/applications/1")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(UPDATE_BODY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.purpose").value("체험 부스 운영(수정)"));
+
+    }
+
+    // PUT /api/applications/{applicationId} - 심사 대기 상태 아님 -> 409 + V015
+    @Test
+    void returns409WhenUpdatingNonPendingReview() throws Exception {
+
+        willThrow(new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW))
+                .given(applicationService).updateApplication(eq(1L), eq(1L), any());
+
+        mockMvc.perform(put("/api/applications/1")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(UPDATE_BODY))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("V015"));
 
     }
 
