@@ -1,6 +1,7 @@
 package com.ms.petopia.api.banner.dto.request;
 
 import com.ms.petopia.api.banner.domain.Banner;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -51,4 +52,14 @@ public class BannerCreateRequest {
 
     private LocalDateTime startedAt;
     private LocalDateTime endedAt;
+
+    @AssertTrue(message = "linkLabel을 설정하려면 linkUrl도 함께 설정해야 합니다.")
+    public boolean isLinkValid() {
+        return linkLabel == null || linkUrl != null;
+    }
+
+    @AssertTrue(message = "link2Label과 link2Url은 둘 다 설정하거나 둘 다 비워야 합니다.")
+    public boolean isLink2Valid() {
+        return (link2Label == null) == (link2Url == null);
+    }
 }

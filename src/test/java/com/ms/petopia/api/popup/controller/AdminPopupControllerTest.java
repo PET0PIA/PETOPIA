@@ -1,5 +1,6 @@
 package com.ms.petopia.api.popup.controller;
 
+import com.ms.petopia.api.popup.dto.request.PopupUpdateRequest;
 import com.ms.petopia.api.popup.dto.response.PopupResponse;
 import com.ms.petopia.api.popup.service.PopupService;
 import com.ms.petopia.global.exception.CommonException;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -27,10 +29,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -125,6 +129,42 @@ class AdminPopupControllerTest {
                                     "linkTarget": "SELF",
                                     "width": 400,
                                     "height": 300
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    // PUT /api/admin/popups/{popupId} - 정상 수정
+    @Test
+    void updatesPopup() throws Exception {
+        given(popupService.update(eq(1L), any())).willReturn(
+                PopupResponse.builder().popupId(1L).title("수정된 팝업").build());
+
+        mockMvc.perform(put("/api/admin/popups/1")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "수정된 팝업"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.title").value("수정된 팝업"));
+
+        ArgumentCaptor<PopupUpdateRequest> captor = ArgumentCaptor.forClass(PopupUpdateRequest.class);
+        verify(popupService).update(eq(1L), captor.capture());
+        assertThat(captor.getValue().getTitle()).isEqualTo("수정된 팝업");
+    }
+
+    // PUT /api/admin/popups/{popupId} - width가 양수가 아니면 -> 400
+    @Test
+    void returns400WhenUpdateWidthNotPositive() throws Exception {
+        mockMvc.perform(put("/api/admin/popups/1")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "width": 0
                                 }
                                 """))
                 .andExpect(status().isBadRequest());

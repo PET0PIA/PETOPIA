@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -111,7 +112,12 @@ class PopupServiceTest {
 
             PopupResponse result = popupService.create(1L, request);
 
-            verify(popupMapper).insert(any());
+            verify(storageService).confirm("tmp/image/new.jpg", UploadPolicy.IMAGE);
+            verify(storageService).toPublicUrl("uploads/image/new.jpg");
+
+            ArgumentCaptor<Popup> captor = ArgumentCaptor.forClass(Popup.class);
+            verify(popupMapper).insert(captor.capture());
+            assertThat(captor.getValue().getImageKey()).isEqualTo("https://s3.example.com/uploads/image/new.jpg");
             assertThat(result).isNotNull();
         }
     }

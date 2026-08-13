@@ -128,6 +128,42 @@ class AdminBannerControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // POST /api/admin/banners - linkLabel만 있고 linkUrl 없음 -> 400
+    @Test
+    void returns400WhenLinkLabelWithoutLinkUrl() throws Exception {
+        mockMvc.perform(post("/api/admin/banners")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "신규 배너",
+                                    "imageKey": "uploads/banner/new.jpg",
+                                    "linkTarget": "SELF",
+                                    "linkLabel": "자세히 보기",
+                                    "sortOrder": 0
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    // POST /api/admin/banners - link2Label만 있고 link2Url 없음 -> 400
+    @Test
+    void returns400WhenLink2LabelWithoutLink2Url() throws Exception {
+        mockMvc.perform(post("/api/admin/banners")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "신규 배너",
+                                    "imageKey": "uploads/banner/new.jpg",
+                                    "linkTarget": "SELF",
+                                    "link2Label": "더 알아보기",
+                                    "sortOrder": 0
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
     // DELETE /api/admin/banners/{bannerId} - 정상 삭제
     @Test
     void deletesBanner() throws Exception {

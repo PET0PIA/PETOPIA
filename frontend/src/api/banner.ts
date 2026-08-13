@@ -45,6 +45,11 @@ export interface BannerInput {
   endedAt?: string;
 }
 
+/** 등록 시에는 imageKey가 필수다. */
+export interface BannerCreateInput extends Omit<BannerInput, "imageKey"> {
+  imageKey: string;
+}
+
 // 공개 - 노출 중인 배너 목록 (기간 유효, sort_order 오름차순)
 export async function getActiveBanners(): Promise<Banner[]> {
   const response = await apiClient.get<ApiEnvelope<Banner[]>>("/api/banners/active");
@@ -58,7 +63,7 @@ export async function getAdminBanners(): Promise<Banner[]> {
 }
 
 // 관리자 - 등록
-export async function createBanner(payload: BannerInput): Promise<Banner> {
+export async function createBanner(payload: BannerCreateInput): Promise<Banner> {
   const response = await apiClient.post<ApiEnvelope<Banner>>("/api/admin/banners", payload);
   return response.data;
 }
