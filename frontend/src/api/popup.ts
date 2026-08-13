@@ -5,9 +5,12 @@ import type { LinkTarget } from "./banner";
 export interface Popup {
   popupId: number;
   title: string;
-  imageKey: string;
+  subtitle: string | null;
+  imageKey: string | null;
   linkUrl: string | null;
   linkTarget: LinkTarget;
+  linkLabel: string | null;
+  bgColor: string | null;
   width: number | null;
   height: number | null;
   isActive: boolean;
@@ -18,15 +21,22 @@ export interface Popup {
 
 export interface PopupInput {
   title: string;
+  subtitle?: string;
   /** ImageUploadField가 돌려주는 presigned objectKey. 수정 시 생략하면 기존 이미지 유지. */
   imageKey?: string;
   linkUrl?: string;
   linkTarget: LinkTarget;
+  linkLabel?: string;
+  bgColor?: string;
   width?: number;
   height?: number;
   startedAt?: string;
   endedAt?: string;
 }
+
+/** 등록 시에는 imageKey와 subtitle 중 최소 하나가 있어야 한다. */
+export type PopupCreateInput = Omit<PopupInput, "imageKey" | "subtitle"> &
+  ({ imageKey: string; subtitle?: string } | { imageKey?: string; subtitle: string });
 
 // 공개 - 노출 중인 팝업 목록 (기간 유효)
 export async function getActivePopups(): Promise<Popup[]> {
@@ -41,7 +51,7 @@ export async function getAdminPopups(): Promise<Popup[]> {
 }
 
 // 관리자 - 등록
-export async function createPopup(payload: PopupInput): Promise<Popup> {
+export async function createPopup(payload: PopupCreateInput): Promise<Popup> {
   const response = await apiClient.post<ApiEnvelope<Popup>>("/api/admin/popups", payload);
   return response.data;
 }

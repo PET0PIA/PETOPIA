@@ -11,9 +11,12 @@ public class PopupResponse {
 
     private Long popupId;
     private String title;
+    private String subtitle;
     private String imageKey;
     private String linkUrl;
     private String linkTarget;
+    private String linkLabel;
+    private String bgColor;
     private Integer width;
     private Integer height;
     private boolean isActive;
@@ -25,9 +28,12 @@ public class PopupResponse {
         return PopupResponse.builder()
                 .popupId(popup.getPopupId())
                 .title(popup.getTitle())
+                .subtitle(popup.getSubtitle())
                 .imageKey(popup.getImageKey())
                 .linkUrl(popup.getLinkUrl())
                 .linkTarget(popup.getLinkTarget() != null ? popup.getLinkTarget().name() : null)
+                .linkLabel(popup.getLinkLabel())
+                .bgColor(popup.getBgColor())
                 .width(popup.getWidth())
                 .height(popup.getHeight())
                 .isActive(popup.isActive())
