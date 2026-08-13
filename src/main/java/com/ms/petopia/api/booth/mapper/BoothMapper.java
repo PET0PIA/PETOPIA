@@ -2,6 +2,7 @@ package com.ms.petopia.api.booth.mapper;
 
 import com.ms.petopia.api.booth.domain.Booth;
 import com.ms.petopia.api.booth.domain.BoothItem;
+import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
 import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -46,5 +47,23 @@ public interface BoothMapper {
 
     // 신청 ID 기준으로 그 부스에 딸린 판매상품·이벤트 전부 삭제 (부스 삭제 전 자식 레코드 정리용)
     void deleteBoothItemsByApplicationId(@Param("applicationId") Long applicationId);
+
+    // 즐겨찾기 여부 확인 (부스 상세 조회 시 favorited 계산용)
+    boolean existsFavorite(@Param("userId") Long userId,
+                           @Param("boothId") Long boothId);
+
+    // 내 즐겨찾기 목록 (부스명·이미지·소속 행사명까지 조인해서 한 번에 조회)
+    List<BoothFavoriteResponse> selectFavoritesByUserId(@Param("userId") Long userId);
+
+    // 신청 ID 기준으로 그 부스를 즐겨찾기한 행 전부 삭제 (부스 삭제 전 정리용)
+    void deleteFavoritesByApplicationId(@Param("applicationId") Long applicationId);
+
+    // 즐겨찾기 추가 (INSERT IGNORE로 멱등 처리 — 중복 클릭 방어)
+    void insertFavorite(@Param("userId") Long userId,
+                        @Param("boothId") Long boothId);
+
+    // 즐겨찾기 삭제 (없는 걸 지워도 0행, 에러 아님)
+    void deleteFavorite(@Param("userId") Long userId,
+                        @Param("boothId") Long boothId);
 
 }

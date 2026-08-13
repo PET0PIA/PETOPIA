@@ -85,30 +85,41 @@ export function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
   const { user, status } = useAuth();
 
-  // 토스가 붙여주는 값: paymentKey·orderId·amount. paymentId·reservationId(예약금 결제)
-  // 또는 fairId(개설비 결제)는 결제창을 띄울 때 successUrl에 우리가 직접 실어보낸 값이다.
-  // 두 흐름은 toss.ts에서 서로 다른 쿼리 파라미터를 붙이므로 한쪽만 채워진다.
+  // 토스가 붙여주는 값: paymentKey·orderId·amount. paymentId·reservationId(예약금 결제)·
+  // fairId(개설비 결제) 또는 applicationId(참가비 결제)는 결제창을 띄울 때 successUrl에
+  // 우리가 직접 실어보낸 값이다. 세 흐름은 toss.ts에서 서로 다른 쿼리 파라미터를 붙이므로
+  // 한쪽만 채워진다.
   const paymentId = parsePositiveInt(searchParams.get("paymentId"));
   const reservationId = parsePositiveInt(searchParams.get("reservationId"));
   const fairId = parsePositiveInt(searchParams.get("fairId"));
+  const applicationId = parsePositiveInt(searchParams.get("applicationId"));
   const paymentKey = searchParams.get("paymentKey");
   const orderId = searchParams.get("orderId");
   const isFairOpeningFee = reservationId === null && fairId !== null;
-  // 확정 실패·이탈 시 되돌아갈 곳. 예약금 결제는 "내 예약 목록", 개설비 결제는 마땅한
-  // 전용 목록이 없어(A.4가 fairId 단위 페이지라) 홈으로 보낸다.
-  const backLink = isFairOpeningFee ? { to: "/", label: "홈으로" } : { to: "/reservations/me", label: "내 예약 목록으로" };
+  const isVendorFee = reservationId === null && fairId === null && applicationId !== null;
+  // 확정 실패·이탈 시 되돌아갈 곳. 예약금은 "내 예약 목록", 참가비는 "참가 신청 현황",
+  // 개설비는 마땅한 전용 목록이 없어(fairId 단위 페이지라) 홈으로 보낸다.
+  const backLink = isFairOpeningFee
+    ? { to: "/", label: "홈으로" }
+    : isVendorFee
+      ? { to: "/participations/me", label: "참가 신청 현황으로" }
+      : { to: "/reservations/me", label: "내 예약 목록으로" };
 
   // 파라미터 검증은 렌더 입력만으로 결정되는 순수 계산이라 이펙트에 둘 이유가 없다.
   let blockedReason: string | null = null;
-  if (paymentId === null || (reservationId === null && fairId === null) || !paymentKey) {
+  if (paymentId === null || (reservationId === null && fairId === null && applicationId === null) || !paymentKey) {
     blockedReason = isFairOpeningFee
       ? "결제 결과 주소에 필요한 정보가 없어요. 결제 상태를 확인해 주세요."
-      : "결제 결과 주소에 필요한 정보가 없어요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
+      : isVendorFee
+        ? "결제 결과 주소에 필요한 정보가 없어요. 참가 신청 현황에서 결제 상태를 확인해 주세요."
+        : "결제 결과 주소에 필요한 정보가 없어요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
   } else if (orderId !== null && orderId !== `PAYMENT_${paymentId}`) {
     // 백엔드가 "PAYMENT_" + paymentId로 orderId를 만든다. 어긋나면 어차피 토스가 거절한다.
     blockedReason = isFairOpeningFee
       ? "결제 주문번호가 이 결제와 맞지 않아요. 결제 상태를 확인해 주세요."
-      : "결제 주문번호가 이 결제와 맞지 않아요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
+      : isVendorFee
+        ? "결제 주문번호가 이 결제와 맞지 않아요. 참가 신청 현황에서 결제 상태를 확인해 주세요."
+        : "결제 주문번호가 이 결제와 맞지 않아요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
   }
   const blocked = blockedReason !== null;
 
@@ -123,7 +134,7 @@ export function PaymentSuccessPage() {
     // 토큰 재발급이 끝날 때까지 기다린다. status가 확정되기 전에 부르면 401로 실패한다.
     if (status !== "authenticated" || !user) return;
     if (blocked || paymentId === null || paymentKey === null) return;
-    if (reservationId === null && fairId === null) return;
+    if (reservationId === null && fairId === null && applicationId === null) return;
     if (confirmStarted.current) return;
     confirmStarted.current = true;
 
@@ -167,7 +178,7 @@ export function PaymentSuccessPage() {
       }
       setPhase("done");
     })();
-  }, [status, user, blocked, paymentId, reservationId, fairId, paymentKey]);
+  }, [status, user, blocked, paymentId, reservationId, fairId, applicationId, paymentKey]);
 
   if (blockedReason) {
     return (
@@ -209,6 +220,12 @@ export function PaymentSuccessPage() {
             <br />
             다시 로그인한 뒤 결제 상태를 꼭 확인해 주세요.
           </>
+        ) : isVendorFee ? (
+          <>
+            결제는 승인됐을 수 있지만 참가 신청 확정을 마치지 못했어요.
+            <br />
+            다시 로그인한 뒤 참가 신청 현황에서 상태를 꼭 확인해 주세요.
+          </>
         ) : (
           <>
             결제는 승인됐을 수 있지만 예약 확정을 마치지 못했어요.
@@ -240,7 +257,9 @@ export function PaymentSuccessPage() {
         <br />
         {isFairOpeningFee
           ? "결제가 이미 승인된 상태일 수 있어요. 관리자에게 문의해 상태를 확인해 주세요."
-          : "결제가 이미 승인된 상태일 수 있어요. 내 예약 목록에서 상태를 확인해 주세요."}
+          : isVendorFee
+            ? "결제가 이미 승인된 상태일 수 있어요. 참가 신청 현황에서 상태를 확인해 주세요."
+            : "결제가 이미 승인된 상태일 수 있어요. 내 예약 목록에서 상태를 확인해 주세요."}
       </ResultShell>
     );
   }
@@ -256,6 +275,20 @@ export function PaymentSuccessPage() {
         actions={<PrimaryLink to="/">홈으로</PrimaryLink>}
       >
         행사 개설비 결제가 정상적으로 승인·확정됐어요.
+      </ResultShell>
+    );
+  }
+
+  // 참가비 결제도 개설비와 마찬가지로 QR이 없다 - 신청 확정으로 끝난다.
+  if (isVendorFee) {
+    return (
+      <ResultShell
+        tone="success"
+        icon={<CheckCircle2 size={28} />}
+        title="참가비 결제가 완료됐어요"
+        actions={<PrimaryLink to="/participations/me">참가 신청 현황으로</PrimaryLink>}
+      >
+        참가 신청이 확정됐어요.
       </ResultShell>
     );
   }
@@ -300,8 +333,9 @@ export function PaymentFailPage() {
   // 토스가 실패 리다이렉트에 붙여주는 값.
   const code = searchParams.get("code");
   const message = searchParams.get("message");
-  // 성공 착지와 마찬가지로 개설비 결제는 fairId가 실려온다(toss.ts 참고).
+  // 성공 착지와 마찬가지로 개설비 결제는 fairId, 참가비 결제는 applicationId가 실려온다(toss.ts 참고).
   const fairId = parsePositiveInt(searchParams.get("fairId"));
+  const applicationId = parsePositiveInt(searchParams.get("applicationId"));
 
   if (fairId !== null) {
     return (
@@ -320,6 +354,28 @@ export function PaymentFailPage() {
         {code && <span className="ml-1 text-xs text-muted">({code})</span>}
         <br />
         개설비 결제가 아직 완료되지 않았어요. 결제 기한 전까지 다시 시도할 수 있어요.
+      </ResultShell>
+    );
+  }
+
+  if (applicationId !== null) {
+    return (
+      <ResultShell
+        tone="error"
+        icon={<AlertCircle size={28} />}
+        title="결제가 완료되지 않았어요"
+        actions={
+          <>
+            <PrimaryLink to="/participations/me">참가 신청 현황으로</PrimaryLink>
+            <SecondaryLink to="/fairs/upcoming">다른 행사 모집 보기</SecondaryLink>
+          </>
+        }
+      >
+        {message ?? "결제가 취소되었거나 승인되지 않았어요."}
+        {code && <span className="ml-1 text-xs text-muted">({code})</span>}
+        <br />
+        신청은 결제 대기 상태로 남아 있어요. 참가 신청 현황에서 다시 결제를 시도해 주세요.
+        계속 안 되면 담당자에게 문의해 주세요.
       </ResultShell>
     );
   }

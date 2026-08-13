@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -111,6 +112,22 @@ public class RecruitNoticeService {
         String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
 
         return storageService.toPublicUrl(confirmedKey);
+    }
+
+    /*
+     * 여러 행사 중 지금 참가업체 모집중인 행사 ID만 골라 반환한다. isClosed()와 정확히
+     * 반대 기준(모집공고 존재 + 마감 전 + 행사 취소/종료 아님)이라, "모집중" 판단 기준이
+     * 이 도메인 한 곳에만 있도록 유지한다 - 여러 행사를 한 번에 다뤄야 하는 곳(행사 목록 등)은
+     * 직접 판정하지 말고 이 메서드를 재사용해야 기준이 어긋나지 않는다.
+     */
+    public Set<Long> getRecruitingFairIds(List<Long> fairIds) {
+
+        if (fairIds == null || fairIds.isEmpty()) {
+            return Set.of();
+        }
+
+        return recruitNoticeMapper.selectRecruitingFairIds(fairIds, LocalDateTime.now());
+
     }
 
 }

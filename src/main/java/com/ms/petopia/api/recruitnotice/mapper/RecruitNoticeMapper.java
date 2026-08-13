@@ -6,7 +6,9 @@ import com.ms.petopia.api.recruitnotice.dto.response.BoothSlotStatusResponse;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Mapper
 public interface RecruitNoticeMapper {
@@ -25,5 +27,8 @@ public interface RecruitNoticeMapper {
 
     // 특정 행사의 부스 슬롯 현황(AVAILABLE/PENDING/CONFIRMED) + 확정 업체명 조회
     List<BoothSlotStatusResponse> selectBoothSlotStatusesByFairId(@Param("fairId") Long fairId);
+
+    // 넘긴 fairId들 중 모집중(isClosed 반대 기준)인 것만 반환
+    Set<Long> selectRecruitingFairIds(@Param("fairIds") List<Long> fairIds, @Param("now") LocalDateTime now);
 
 }
