@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, Search, Send } from "lucide-react";
+import { AlertCircle, ArrowLeft, Send } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
@@ -12,6 +12,8 @@ import { ApiError } from "../../api/client";
 import { getRecruitNotice, upsertRecruitNotice, type RecruitNoticeUpsertRequest } from "../../api/recruitNotice";
 import { useAuth } from "../../contexts/AuthContext";
 import { EmptyState } from "../../components/common/EmptyState";
+import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
+import { useFairSelector } from "../../hooks/useFairSelector";
 
 interface FormState {
   title: string;
@@ -43,12 +45,11 @@ export function RecruitNoticeFormPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // 사이드바(운영 메뉴)에서 fairId 없이 들어온 경우에만 쓰는 수동 입력 - 다른 fair-admin 페이지와
-  // 동일한 임시 패턴(TODO: 관리자 세션에 담당 행사가 연결되면 이 입력을 없앤다).
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [manualFairId, setManualFairId] = useState<number | null>(null);
+  // 사이드바(운영 메뉴)에서 fairId 없이 들어온 경우, 담당 행사 드롭다운으로 고른다
+  // (다른 fair-admin 페이지와 동일한 useFairSelector 패턴).
+  const { fairId: selectedFairId, setFairId: setSelectedFairId, selectableFairs } = useFairSelector();
 
-  const fairId = fairIdParam ?? (manualFairId !== null ? String(manualFairId) : undefined);
+  const fairId = fairIdParam ?? (selectedFairId !== null ? String(selectedFairId) : undefined);
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
@@ -66,6 +67,14 @@ export function RecruitNoticeFormPage() {
     if (!fairId) return;
     let ignore = false;
 
+    // fairId가 바뀔 때마다 이전 행사의 폼 데이터가 남지 않도록 먼저 초기화한다.
+    // (없는 경우 404로 조용히 빠지는 아래 catch 분기 때문에, 초기화 안 하면 이전 행사
+    // 내용이 그대로 남아있는 채로 새 행사에 저장해버릴 위험이 있다.)
+    setForm(initialForm);
+    setLoadedForm(initialForm);
+    setExistingImageUrl(null);
+    setImageObjectKey(null);
+
     setLoading(true);
     setLoadError(null);
     getRecruitNotice(Number(fairId))
@@ -82,29 +91,13 @@ export function RecruitNoticeFormPage() {
       })
       .catch((error) => {
         if (ignore) return;
-        // 404(V004, 아직 작성된 공고 없음)면 작성 모드로 정상 진행 - 빈 폼 그대로 둔다
         if (error instanceof ApiError && error.status === 404) return;
-        // 그 외 에러는 기존 공고를 실수로 덮어쓸 수 있으니 화면에 보여주고 폼 자체를 막는다
         setLoadError(error instanceof ApiError ? error.message : "모집 공고를 불러오지 못했어요.");
       })
       .finally(() => { if (!ignore) setLoading(false); });
 
     return () => { ignore = true; };
   }, [fairId]);
-
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-    setLoadError(null);
-    setForm(initialForm);
-    setLoadedForm(initialForm);
-    setExistingImageUrl(null);
-    setManualFairId(parsed);
-  }
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -143,91 +136,77 @@ export function RecruitNoticeFormPage() {
     form.recruitDeadline !== loadedForm.recruitDeadline ||
     imageObjectKey !== null;
 
-  // 사이드바로 들어와서 아직 행사 ID를 안 넣은 상태 - 입력 폼만 보여준다
-  if (!fairIdParam && manualFairId === null) {
-    return (
-      <PageContainer className="py-10">
-        <PageHeader eyebrow="행사 관리자" title="참가업체 모집 공고 작성/수정" description="관리할 행사 ID를 입력해 주세요." />
-        <Card className="p-6">
-          <form onSubmit={handleLoadFair} className="flex items-end gap-3">
-            <div className="flex-1">
-              {label("행사 ID", true)}
-              <Input value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" required />
-            </div>
-            <Button type="submit"><Search size={16} />불러오기</Button>
-          </form>
-          {loadError && <p className="mt-3 text-sm text-primary-strong">{loadError}</p>}
-        </Card>
-      </PageContainer>
-    );
-  }
-
-  if (loading) {
-    return <PageContainer className="py-10"><p className="text-sm text-muted">불러오는 중...</p></PageContainer>;
-  }
-
-  if (loadError) {
-    return (
-      <PageContainer className="py-10">
-        <EmptyState title="모집 공고 정보를 불러올 수 없어요" description={loadError} />
-      </PageContainer>
-    );
-  }
-
-  
   return (
     <PageContainer className="py-10">
-      <Link to={`/fairs/${fairId}/recruit-notice`} className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-ink">
-        <ArrowLeft size={16} />공고로 돌아가기
-      </Link>
+      {fairIdParam && (
+        <Link to={`/fairs/${fairId}/recruit-notice`} className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-ink">
+          <ArrowLeft size={16} />공고로 돌아가기
+        </Link>
+      )}
+
       <PageHeader
         eyebrow="행사 관리자"
         title="참가업체 모집 공고 작성/수정"
-        description="*는 필수 입력이에요."
+        description={fairIdParam ? "*는 필수 입력이에요." : "관리할 행사를 선택하면 아래에 작성 화면이 나와요."}
       />
 
-      {errors.length > 0 && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <ul className="space-y-1">{errors.map((message) => <li key={message}>{message}</li>)}</ul>
-        </div>
-      )}
-      {submitError && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <p>{submitError}</p>
-        </div>
+      {!fairIdParam && (
+        <FairSelectorBar selectableFairs={selectableFairs} fairId={selectedFairId} onFairIdChange={setSelectedFairId} />
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <Card className="space-y-5 p-6">
-          <div>
-            {label("공고 제목", true)}
-            <Input value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="예: 2026 멍냥페스타 참가업체 모집" required />
-          </div>
-          <div>
-            {label("공고 본문", true)}
-            <Textarea value={form.content} onChange={(event) => update("content", event.target.value)} placeholder="모집 대상, 참가 조건 등을 안내해 주세요." />
-          </div>
-          <div>
-            {label("모집 마감일시", true)}
-            <Input type="datetime-local" value={form.recruitDeadline} onChange={(event) => update("recruitDeadline", event.target.value)} required />
-          </div>
-          <ImageUploadField
-            label="공고 이미지"
-            initialImageUrl={existingImageUrl}
-            onObjectKeyChange={setImageObjectKey}
-            onUploadingChange={setImageUploading}
-          />
-        </Card>
+      {fairId && loading && <p className="text-sm text-muted">불러오는 중...</p>}
 
-        <div className="flex justify-end">
-          <Button type="submit" disabled={submitting || imageUploading || !user || !isDirty}>
-            <Send size={16} />
-            {submitting ? "저장 중..." : "저장"}
-          </Button>
-        </div>
-      </form>
+      {fairId && !loading && loadError && (
+        <EmptyState title="모집 공고 정보를 불러올 수 없어요" description={loadError} />
+      )}
+
+      {fairId && !loading && !loadError && (
+        <>
+          {errors.length > 0 && (
+            <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <ul className="space-y-1">{errors.map((message) => <li key={message}>{message}</li>)}</ul>
+            </div>
+          )}
+          {submitError && (
+            <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <p>{submitError}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <Card className="space-y-5 p-6">
+              <div>
+                {label("공고 제목", true)}
+                <Input value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="예: 2026 멍냥페스타 참가업체 모집" required />
+              </div>
+              <div>
+                {label("공고 본문", true)}
+                <Textarea value={form.content} onChange={(event) => update("content", event.target.value)} placeholder="모집 대상, 참가 조건 등을 안내해 주세요." />
+              </div>
+              <div>
+                {label("모집 마감일시", true)}
+                <Input type="datetime-local" value={form.recruitDeadline} onChange={(event) => update("recruitDeadline", event.target.value)} required />
+              </div>
+              <ImageUploadField
+                key={fairId}
+                label="공고 이미지"
+                initialImageUrl={existingImageUrl}
+                onObjectKeyChange={setImageObjectKey}
+                onUploadingChange={setImageUploading}
+              />
+            </Card>
+
+            <div className="flex justify-end">
+              <Button type="submit" disabled={submitting || imageUploading || !user || !isDirty}>
+                <Send size={16} />
+                {submitting ? "저장 중..." : "저장"}
+              </Button>
+            </div>
+          </form>
+        </>
+      )}
     </PageContainer>
   );
 }

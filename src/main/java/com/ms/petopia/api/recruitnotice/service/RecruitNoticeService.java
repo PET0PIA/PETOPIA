@@ -40,12 +40,22 @@ public class RecruitNoticeService {
             throw new CommonException(ErrorCode.RECRUIT_NOTICE_ACCESS_DENIED, "담당자가 배정되지 않은 행사입니다.");
         }
 
+        /*
+         * 새 이미지가 안 왔으면(제목/본문만 수정하는 등 이미지는 안 건드린 경우) 기존 이미지를
+         * 그대로 유지한다 - 안 그러면 image_url이 매번 null로 덮어써져서 이미지가 사라진다.
+         */
+        RecruitNotice existing = recruitNoticeMapper.selectByFairId(fairId);
+
+        String imageUrl = (request.getImageObjectKey() != null && !request.getImageObjectKey().isBlank())
+                ? resolveImageUrl(request.getImageObjectKey())
+                : (existing != null ? existing.getImageUrl() : null);
+
         RecruitNotice notice = RecruitNotice.builder()
                 .fairId(fairId)
                 .writerId(fairAdminUserId)
                 .title(request.getTitle())
                 .content(request.getContent())
-                .imageUrl(resolveImageUrl(request.getImageObjectKey()))
+                .imageUrl(imageUrl)
                 .recruitDeadline(request.getRecruitDeadline())
                 .build();
 

@@ -138,7 +138,11 @@ export function ApplicationSubmitPage() {
       })
       .catch((error) => {
         if (ignore) return;
-        setLoadError(error instanceof ApiError ? error.message : "신청 정보를 불러오지 못했어요.");
+        if (error instanceof ApiError && error.status === 401) {
+          setLoadError("LOGIN_REQUIRED");
+        } else {
+          setLoadError(error instanceof ApiError ? error.message : "신청 정보를 불러오지 못했어요.");
+        }
       })
       .finally(() => { if (!ignore) setLoading(false); });
 
@@ -187,7 +191,16 @@ export function ApplicationSubmitPage() {
   if (loadError) {
     return (
       <PageContainer className="py-10">
-        <EmptyState title="신청 정보를 불러오지 못했어요" description={loadError} />
+        {loadError === "LOGIN_REQUIRED" ? (
+          <EmptyState
+            title="로그인이 필요해요"
+            description="참가 신청을 하려면 먼저 로그인해 주세요."
+            actionTo="/login"
+            actionLabel="로그인하러 가기"
+          />
+        ) : (
+          <EmptyState title="신청 정보를 불러오지 못했어요" description={loadError} />
+        )}
       </PageContainer>
     );
   }

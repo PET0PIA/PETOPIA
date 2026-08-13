@@ -58,6 +58,9 @@ dependencies {
     // Excel(.xlsx)
     implementation 'org.apache.poi:poi-ooxml:5.3.0'
 
+    // 부스 추천 기능 - Claude API 공식 SDK
+    implementation 'com.anthropic:anthropic-java:2.52.0'
+
 }
 
 tasks.named('test') {

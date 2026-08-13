@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronLeft, Paperclip, XCircle } from "lucide-react";
+import { AlertCircle, ChevronLeft, Paperclip, Pencil, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useEffect } from "react";
@@ -13,7 +13,8 @@ import { ApiError } from "../../api/client";
 import { createVendorFeePayment } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
 import { getApplicationDetail, submitCancelRequest, type ApplicationDetail, type ApplicationStatus } from "../../api/application";
-import { requestVendorFeePayment } from "../../payments/toss";
+import { isTossConfigured, requestVendorFeePayment, type PaymentMethodOption } from "../../payments/toss";
+import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 
 const statusLabels: Record<ApplicationStatus, string> = {
   PENDING_REVIEW: "심사 대기",
@@ -92,11 +93,14 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [canceling, setCanceling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const tossReady = isTossConfigured();
 
   useEffect(() => {
     let alive = true;
@@ -140,6 +144,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
         orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
         amount: created.amount,
         orderName: `참가비 결제 (행사 #${detail.fairId})`,
+        method: paymentMethod,
       });
       // 리다이렉트가 시작됐으므로 paying을 되돌리지 않는다(예약금 쪽과 동일 패턴).
     } catch (err) {
@@ -223,6 +228,15 @@ function ApplicationDetailContent({ id }: { id: number }) {
             <XCircle size={16} />취소 요청하기
           </Button>
         )}
+        {detail.status === "PENDING_REVIEW" && (
+          <Link
+            to={`/participations/me/${detail.applicationId}/edit`}
+            className="inline-flex min-h-11 items-center gap-2 rounded-button border border-line bg-card px-4 text-sm font-bold text-ink hover:bg-page"
+          >
+            <Pencil size={16} />
+            수정하기
+          </Link>
+        )}
       </div>
 
       <div className="space-y-6">
@@ -243,14 +257,21 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
           {detail.status === "PAYMENT_PENDING" && detail.cancelRequestStatus !== "REQUESTED" && (
             <div className="border-t border-line pt-4">
+              {tossReady ? (
+                <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+              ) : (
+                <p className="rounded-button border border-dashed border-line bg-page p-4 text-center text-sm text-muted">
+                  결제 설정이 없어요. 결제 클라이언트 키가 주입되지 않았어요.
+                </p>
+              )}
               {payError && (
-                <div className="mb-3 flex items-start gap-2 text-sm text-primary-strong">
+                <div className="mt-3 flex items-start gap-2 text-sm text-primary-strong">
                   <AlertCircle size={16} className="mt-0.5 shrink-0" />
                   <p>{payError}</p>
                 </div>
               )}
-              <div className="flex justify-end">
-                <Button type="button" onClick={handlePay} disabled={paying}>
+              <div className="mt-3 flex justify-end">
+                <Button type="button" onClick={handlePay} disabled={paying || !tossReady}>
                   {paying ? "결제창을 여는 중..." : "결제하기"}
                 </Button>
               </div>
@@ -261,6 +282,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
         <Card className="space-y-4 p-6">
           <h3 className="text-sm font-extrabold text-muted">신청 내용</h3>
           <dl className="space-y-4">
+            <Field label="신청 사업자" value={detail.businessName} />
             <Field label="참가 목적" value={detail.purpose} />
             <Field label="판매·전시 품목" value={detail.itemsDesc} />
             {detail.attachmentUrl && (
@@ -303,6 +325,10 @@ function ApplicationDetailContent({ id }: { id: number }) {
       <Dialog open={cancelDialogOpen} onClose={() => setCancelDialogOpen(false)} title="참가 취소 요청">
         <form onSubmit={handleCancelSubmit} className="space-y-4">
           <p className="text-sm text-muted">취소 요청을 보내면 행사 담당자가 확인 후 승인/반려를 결정해요.</p>
+          <div className="flex items-start gap-2 rounded-button bg-primary-soft p-3 text-sm text-primary-strong">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <p>한 번 제출한 취소 요청은 철회할 수 없어요. 신중하게 결정해 주세요.</p>
+          </div>
           <div>
             <label htmlFor="cancelReason" className="mb-1.5 block text-sm font-bold text-ink">취소 사유<span className="ml-1 text-primary-strong">*</span></label>
             <Textarea id="cancelReason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="취소하려는 이유를 입력해 주세요." required />

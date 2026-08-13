@@ -61,15 +61,20 @@ import { MyApplicationsPage } from "../pages/application/MyApplicationsPage";
 import { ApplicationDetailPage } from "../pages/application/ApplicationDetailPage";
 import { ParticipationReviewPage } from "../pages/fair-admin/ParticipationReviewPage";
 import { CancelRequestReviewPage } from "../pages/fair-admin/CancelRequestReviewPage";
+import { BoothDetailPage } from "../pages/booth/BoothDetailPage";
+import { BoothEditPage } from "../pages/booth/BoothEditPage";
+import { BoothFavoritesPage } from "../pages/booth/BoothFavoritesPage";
 import { ProtectedRoute } from "./ProtectedRoute";
+import { BusinessesByFairPage } from "../pages/business/BusinessesByFairPage";
+import { FairBoothsPage } from "../pages/fair/FairBoothsPage";
+import { MyBoothsPage } from "../pages/booth/MyBoothsPage";
+import { ApplicationEditPage } from "../pages/application/ApplicationEditPage";
+import { ParticipationNewPage } from "../pages/application/ParticipationNewPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
-  "/businesses": "행사별 참여 기업",
   "/businesses/status": "사업자 등록 현황",
-  "/participations/new": "참여 부스 신청",
-  "/booths/me": "내 부스 관리",
   "/about": "서비스 소개",
   "/terms": "이용약관",
   "/privacy": "개인정보 처리방침",
@@ -133,6 +138,9 @@ export function AppRouter() {
             <Route path="/mypage/password" element={<PasswordChangePage />} />
             <Route path="/mypage/pets/new" element={<PetFormPage />} />
             <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
+            <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
+            <Route path="/booths/favorites/me" element={<BoothFavoritesPage />} />
+            <Route path="/booths/me" element={<MyBoothsPage />} />
           </Route>
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
@@ -148,13 +156,18 @@ export function AppRouter() {
             <Route path="/payments/fair-opening-fee/:fairId" element={<FairOpeningFeePaymentPage />} />
           </Route>
           <Route path="/booths/scan" element={<BoothVisitScanPage />} />
+          <Route path="/businesses" element={<BusinessesByFairPage />} />
+          <Route path="/fairs/:fairId/booths" element={<FairBoothsPage />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
           <Route path="/businesses/me" element={<MyBusinessesPage />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
+          <Route path="/participations/new" element={<ParticipationNewPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
           <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
           <Route path="/participations/me" element={<MyApplicationsPage />} />
           <Route path="/participations/me/:applicationId" element={<ApplicationDetailPage />} />
+          <Route path="/participations/me/:applicationId/edit" element={<ApplicationEditPage />} />
+          <Route path="/booths/:boothId" element={<BoothDetailPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
           ))}

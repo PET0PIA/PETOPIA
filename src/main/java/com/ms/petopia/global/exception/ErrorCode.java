@@ -175,6 +175,10 @@ public enum ErrorCode {
     REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "RV003", "존재하지 않는 리뷰이거나 해당 행사의 리뷰가 아닙니다."),
     REVIEW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "RV004", "본인이 작성한 리뷰만 수정·삭제할 수 있습니다."),
     REVIEW_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "RV005", "리뷰 내용은 1000자를 초과할 수 없습니다."),
+
+    // ===== Recommendation (AI 부스 추천) =====
+    RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),
+    AI_RECOMMENDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "RC002", "지금은 추천 기능을 사용할 수 없습니다. 잠시 후 다시 시도해주세요."),
     ;
 
     private final HttpStatus httpStatus;
