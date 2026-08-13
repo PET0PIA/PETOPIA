@@ -50,7 +50,10 @@ public class BannerCreateRequest {
     @NotNull
     private Integer sortOrder;
 
+    @NotNull
     private LocalDateTime startedAt;
+
+    @NotNull
     private LocalDateTime endedAt;
 
     @AssertTrue(message = "linkLabel을 설정하려면 linkUrl도 함께 설정해야 합니다.")

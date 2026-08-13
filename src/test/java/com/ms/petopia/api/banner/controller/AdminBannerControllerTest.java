@@ -105,7 +105,9 @@ class AdminBannerControllerTest {
                                     "title": "신규 배너",
                                     "imageKey": "uploads/banner/new.jpg",
                                     "linkTarget": "SELF",
-                                    "sortOrder": 0
+                                    "sortOrder": 0,
+                                    "startedAt": "2026-08-13T00:00:00",
+                                    "endedAt": "2026-08-20T00:00:00"
                                 }
                                 """))
                 .andExpect(status().isCreated())
@@ -122,7 +124,27 @@ class AdminBannerControllerTest {
                                 {
                                     "imageKey": "uploads/banner/new.jpg",
                                     "linkTarget": "SELF",
-                                    "sortOrder": 0
+                                    "sortOrder": 0,
+                                    "startedAt": "2026-08-13T00:00:00",
+                                    "endedAt": "2026-08-20T00:00:00"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    // POST /api/admin/banners - endedAt 누락 -> 필수값이라 400
+    @Test
+    void returns400WhenEndedAtMissing() throws Exception {
+        mockMvc.perform(post("/api/admin/banners")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "신규 배너",
+                                    "imageKey": "uploads/banner/new.jpg",
+                                    "linkTarget": "SELF",
+                                    "sortOrder": 0,
+                                    "startedAt": "2026-08-13T00:00:00"
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
