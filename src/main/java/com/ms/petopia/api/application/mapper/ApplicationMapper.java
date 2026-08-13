@@ -43,6 +43,9 @@ public interface ApplicationMapper {
     // 신청 상세 조회 (application + application_form 조인, slots는 별도 조회)
     ApplicationDetailResponse selectApplicationDetail(@Param("applicationId") Long applicationId);
 
+    // 신청서 내용 수정 (PENDING_REVIEW 상태에서만, 서비스 계층에서 상태 검증)
+    int updateApplicationForm(ApplicationForm form);
+
     // 신청 상세의 선택 슬롯 목록 조회
     List<ApplicationSlotDetailResponse> selectApplicationSlotDetails(@Param("applicationId") Long applicationId);
 

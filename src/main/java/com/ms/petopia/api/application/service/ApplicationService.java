@@ -1,10 +1,7 @@
 package com.ms.petopia.api.application.service;
 
 import com.ms.petopia.api.application.domain.*;
-import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
+import com.ms.petopia.api.application.dto.request.*;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
 import com.ms.petopia.api.booth.domain.Booth;
@@ -329,6 +326,64 @@ public class ApplicationService {
         }
 
         return detail;
+
+    }
+
+    /*
+     * 참가 신청서 내용 수정(본인 소유만, 심사 대기 상태에서만). 부스 슬롯은 수정 범위 밖 —
+     * 슬롯을 바꾸려면 취소 요청 후 재신청해야 한다(잠금/가격스냅샷 로직을 여기서 다시 타지 않기 위함).
+     */
+    @Transactional
+    public ApplicationDetailResponse updateApplication(Long ownerId, Long applicationId,
+                                                       ApplicationUpdateRequest request) {
+
+        // 신청 존재 확인
+        Application application = applicationMapper.selectById(applicationId);
+
+        if(application == null) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
+        }
+
+        // 본인 소유 사업자의 신청인지 확인
+        Business business = businessMapper.selectById(application.getBusinessId());
+
+        if(business == null || !business.getOwnerId().equals(ownerId)) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 신청만 수정할 수 있습니다.");
+        }
+
+        // 심사 대기 상태에서만 수정 가능 (이미 승인/결제/확정된 건은 수정 불가)
+        if(application.getStatus() != Application.Status.PENDING_REVIEW) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW, "심사 대기 중인 신청서만 수정할 수 있습니다.");
+        }
+
+        /*
+         * 새 첨부파일이 안 왔으면(제출 필드만 수정하는 등 첨부는 안 건드린 경우) 기존 첨부파일을
+         * 그대로 유지한다 - 안 그러면 attachment_url이 매번 null로 덮어써져서 첨부파일이 사라진다.
+         */
+        ApplicationDetailResponse existing = applicationMapper.selectApplicationDetail(applicationId);
+
+        String attachmentUrl = (request.getAttachmentObjectKey() != null && !request.getAttachmentObjectKey().isBlank())
+                ? resolveAttachmentUrl(request.getAttachmentObjectKey())
+                : (existing != null ? existing.getAttachmentUrl() : null);
+
+        ApplicationForm form = ApplicationForm.builder()
+                .applicationId(applicationId)
+                .purpose(request.getPurpose())
+                .itemsDesc(request.getItemsDesc())
+                .managerName(request.getManagerName())
+                .managerPhone(request.getManagerPhone())
+                .managerEmail(request.getManagerEmail())
+                .attachmentUrl(attachmentUrl)
+                .build();
+
+        int updatedRows = applicationMapper.updateApplicationForm(form);
+
+        if (updatedRows == 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW, "심사 대기 중인 신청서만 수정할 수 있습니다.");
+        }
+
+        // 수정된 최신 상태로 재조회해서 응답 (기존 상세 조회 로직 재사용)
+        return getApplicationDetail(ownerId, applicationId);
 
     }
 

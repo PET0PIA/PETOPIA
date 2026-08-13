@@ -8,11 +8,10 @@ import {
   type QrIssuanceSummary,
   type ReservationDateSummary,
 } from "../../api/statistics";
-import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Table } from "../../components/ui/Table";
-import { useFairSelector } from "../../hooks/useFairSelector";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 
 function formatTime(time: string) {
   return time.slice(0, 5);
@@ -26,7 +25,7 @@ function entryRate(row: ReservationDateSummary): string {
 }
 
 export function ReservationStatusPage() {
-  const { fairId, setFairId, selectableFairs } = useFairSelector();
+  const { fairId } = useFairSelector();
 
   const [summary, setSummary] = useState<ReservationDateSummary[]>([]);
   const [qrSummary, setQrSummary] = useState<QrIssuanceSummary[]>([]);
@@ -81,12 +80,6 @@ export function ReservationStatusPage() {
         description="운영일마다 예약 상태별 건수와 QR 발급 현황을 확인해요. 예약 상태가 바뀌면 화면이 실시간으로 갱신돼요."
       />
 
-      <FairSelectorBar
-        selectableFairs={selectableFairs}
-        fairId={fairId}
-        onFairIdChange={(id) => setFairId(id)}
-      />
-
       {fairId !== null && (
         <div className="mb-6 flex justify-end">
           <span className={`inline-flex min-h-11 items-center gap-1.5 rounded-button px-3 text-xs font-bold ${liveConnected ? "bg-leaf-soft text-ink" : "bg-page text-muted"}`}>
@@ -103,8 +96,8 @@ export function ReservationStatusPage() {
         </div>
       )}
 
-      {fairId === null && selectableFairs.length > 0 && (
-        <EmptyState title="행사를 선택해 주세요." description="위 드롭다운에서 행사를 고르면 운영일별 예약 현황이 표시돼요." />
+      {fairId === null && (
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 운영일별 예약 현황이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       )}
 
       {fairId !== null && loading && (

@@ -19,8 +19,7 @@ import { Table } from "../../components/ui/Table";
 import { Textarea } from "../../components/ui/Textarea";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
-import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
-import { useFairSelector } from "../../hooks/useFairSelector";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 import { useConfirm } from "../../components/ui/useConfirm";
 
 const statusLabels: Record<ApplicationStatus, string> = {
@@ -61,7 +60,7 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 export function ParticipationReviewPage() {
-  const { fairId, setFairId, selectableFairs } = useFairSelector();
+  const { fairId } = useFairSelector();
   const { confirm, confirmDialog } = useConfirm();
 
   const [activeStatus, setActiveStatus] = useState<ApplicationStatus>("PENDING_REVIEW");
@@ -223,7 +222,9 @@ export function ParticipationReviewPage() {
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader eyebrow="참가업체 관리" title="참가 신청 심사" description="신청서를 확인하고 승인 또는 반려해요." />
 
-      <FairSelectorBar selectableFairs={selectableFairs} fairId={fairId} onFairIdChange={setFairId} />
+      {fairId === null && (
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 참가 신청 목록이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
+      )}
 
       {fairId !== null && (
         <div className="mb-6">
