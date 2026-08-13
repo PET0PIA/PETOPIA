@@ -52,6 +52,6 @@ public class PopupCreateRequest {
 
     @AssertTrue(message = "linkLabel을 설정하려면 linkUrl도 함께 설정해야 합니다.")
     public boolean isLinkValid() {
-        return linkLabel == null || linkUrl != null;
+        return linkLabel == null || linkLabel.isBlank() || (linkUrl != null && !linkUrl.isBlank());
     }
 }

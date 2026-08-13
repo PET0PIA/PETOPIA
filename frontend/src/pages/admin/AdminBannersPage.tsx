@@ -1,4 +1,4 @@
-import { AlertCircle, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronUp, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -113,6 +113,7 @@ export function AdminBannersPage() {
   function fetchBanners() {
     getAdminBanners()
       .then((data) => {
+        setLoadError(null);
         setBanners(data);
         setActiveOrder(data.filter((b) => b.active).sort((a, b) => a.sortOrder - b.sortOrder));
       })
@@ -212,6 +213,9 @@ export function AdminBannersPage() {
           endedAt: toIsoDateTime(form.endedAt),
         });
       } else {
+        // 비노출 배너가 이미 쓰고 있는 sortOrder와 겹치지 않도록, 활성 배너 개수가 아니라
+        // 현재 존재하는 모든 배너의 최댓값+1로 매긴다(나중에 그 배너가 다시 노출돼도 충돌 안 함).
+        const nextSortOrder = (banners ?? []).reduce((max, b) => Math.max(max, b.sortOrder), -1) + 1;
         const payload: BannerCreateInput = {
           title: form.title.trim(),
           eyebrow: form.eyebrow.trim() || undefined,
@@ -224,7 +228,7 @@ export function AdminBannersPage() {
           link2Url: form.link2Url.trim() || undefined,
           link2Target: form.link2Label.trim() ? form.link2Target : undefined,
           bgColor: form.bgColor.trim() || undefined,
-          sortOrder: activeOrder.length,
+          sortOrder: nextSortOrder,
           startedAt: toIsoDateTime(form.startedAt),
           endedAt: toIsoDateTime(form.endedAt),
         };
@@ -282,6 +286,17 @@ export function AdminBannersPage() {
       const next = [...previous];
       const [moved] = next.splice(from, 1);
       next.splice(index, 0, moved);
+      return next;
+    });
+  }
+
+  // 드래그는 마우스로만 가능해서, 키보드·스크린리더로도 순서를 바꿀 수 있게 위/아래 버튼을 함께 둔다.
+  function moveActiveBanner(index: number, direction: -1 | 1) {
+    setActiveOrder((previous) => {
+      const target = index + direction;
+      if (target < 0 || target >= previous.length) return previous;
+      const next = [...previous];
+      [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
   }
@@ -352,6 +367,26 @@ export function AdminBannersPage() {
                     className="surface flex items-center gap-3 p-3"
                   >
                     <span className="cursor-grab text-muted" aria-hidden="true"><GripVertical size={18} /></span>
+                    <div className="flex shrink-0 flex-col">
+                      <button
+                        type="button"
+                        aria-label={`${banner.title.split("\n")[0]} 위로 이동`}
+                        disabled={index === 0}
+                        onClick={() => moveActiveBanner(index, -1)}
+                        className="rounded-button p-1 text-muted hover:bg-page hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <ChevronUp size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`${banner.title.split("\n")[0]} 아래로 이동`}
+                        disabled={index === activeOrder.length - 1}
+                        onClick={() => moveActiveBanner(index, 1)}
+                        className="rounded-button p-1 text-muted hover:bg-page hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <ChevronDown size={16} />
+                      </button>
+                    </div>
                     <img src={banner.imageKey} alt="" className="h-12 w-20 shrink-0 rounded-button object-cover" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-ink">{banner.title.split("\n")[0]}</p>
@@ -416,7 +451,7 @@ export function AdminBannersPage() {
 
           <div>
             {label("제목", true)}
-            <Input value={form.title} onChange={(event) => update("title", event.target.value)} placeholder={"예: 2026 서울 펫페어\\n지금 예매하세요 (줄바꿈은 두 줄 헤드라인용)"} required />
+            <Textarea value={form.title} onChange={(event) => update("title", event.target.value)} placeholder={"예: 2026 서울 펫페어\n지금 예매하세요 (줄바꿈하면 두 줄 헤드라인이 돼요)"} required />
           </div>
           <div>
             {label("상단 라벨 (eyebrow)")}

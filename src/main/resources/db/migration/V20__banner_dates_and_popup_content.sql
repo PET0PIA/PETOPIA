@@ -10,7 +10,10 @@
 -- =========================================================
 
 UPDATE `banner` SET `started_at` = COALESCE(`started_at`, `created_at`) WHERE `started_at` IS NULL;
-UPDATE `banner` SET `ended_at` = COALESCE(`ended_at`, DATE_ADD(`created_at`, INTERVAL 30 DAY)) WHERE `ended_at` IS NULL;
+-- created_at 기준으로 30일 뒤를 잡으면, 오래전에 만든 배너는 이 마이그레이션 실행 시점에 이미
+-- 지난 날짜가 되어 배포 직후 갑자기 노출에서 빠질 수 있다. 배포 시점(NOW()) 기준 30일로 잡아서
+-- 기존에 노출 중이던 배너가 마이그레이션만으로 사라지는 일이 없게 한다.
+UPDATE `banner` SET `ended_at` = COALESCE(`ended_at`, DATE_ADD(NOW(), INTERVAL 30 DAY)) WHERE `ended_at` IS NULL;
 
 ALTER TABLE `banner`
     MODIFY COLUMN `started_at` DATETIME NOT NULL COMMENT '노출 시작일시',

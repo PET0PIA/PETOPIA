@@ -162,7 +162,9 @@ class AdminBannerControllerTest {
                                     "imageKey": "uploads/banner/new.jpg",
                                     "linkTarget": "SELF",
                                     "linkLabel": "자세히 보기",
-                                    "sortOrder": 0
+                                    "sortOrder": 0,
+                                    "startedAt": "2026-08-13T00:00:00",
+                                    "endedAt": "2026-08-20T00:00:00"
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
@@ -180,7 +182,9 @@ class AdminBannerControllerTest {
                                     "imageKey": "uploads/banner/new.jpg",
                                     "linkTarget": "SELF",
                                     "link2Label": "더 알아보기",
-                                    "sortOrder": 0
+                                    "sortOrder": 0,
+                                    "startedAt": "2026-08-13T00:00:00",
+                                    "endedAt": "2026-08-20T00:00:00"
                                 }
                                 """))
                 .andExpect(status().isBadRequest());

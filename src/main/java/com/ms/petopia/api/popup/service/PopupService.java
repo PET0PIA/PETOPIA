@@ -83,14 +83,20 @@ public class PopupService {
                 throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
             }
 
+            String linkUrl = clearable(request.getLinkUrl());
+            String linkLabel = clearable(request.getLinkLabel());
+            if (hasContent(linkLabel, existing.getLinkLabel()) && !hasContent(linkUrl, existing.getLinkUrl())) {
+                throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+            }
+
             Popup patch = Popup.builder()
                     .popupId(popupId)
                     .title(request.getTitle())
                     .subtitle(subtitle)
                     .imageKey(imageKey)
-                    .linkUrl(clearable(request.getLinkUrl()))
+                    .linkUrl(linkUrl)
                     .linkTarget(request.getLinkTarget())
-                    .linkLabel(clearable(request.getLinkLabel()))
+                    .linkLabel(linkLabel)
                     .bgColor(clearable(request.getBgColor()))
                     .width(request.getWidth())
                     .height(request.getHeight())

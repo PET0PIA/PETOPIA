@@ -6,22 +6,30 @@ import { getActiveBanners, type Banner, type LinkTarget } from "../../api/banner
 const SLIDE_MS = 3000;
 const prefersReducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** linkUrl이 외부 절대 URL이면 일반 <a>, 앱 내부 경로(/로 시작)면 SPA 라우팅(<Link>)으로 이동한다. */
+// 앱 내부 경로: "/"로 시작하되 "//"(프로토콜 상대 URL, 예: //evil.com)는 제외.
+const INTERNAL_PATH_PATTERN = /^\/(?!\/)/;
+// 지원하는 외부 URL: http/https 뿐. 그 외(프로토콜 상대, javascript: 등 미지원 스킴)는 링크를 만들지 않는다.
+const EXTERNAL_URL_PATTERN = /^https?:\/\//;
+
+/** linkUrl이 내부 경로면 SPA 라우팅(<Link>), http/https 외부 URL이면 일반 <a>, 그 외(프로토콜 상대 등)는 렌더링하지 않는다. */
 function CtaLink({ to, target, className, children }: { to: string; target: LinkTarget | null; className: string; children: React.ReactNode }) {
-  const isExternal = /^https?:\/\//.test(to);
   const openInNewTab = target === "BLANK";
-  if (isExternal) {
+  if (INTERNAL_PATH_PATTERN.test(to)) {
+    return (
+      <Link to={to} target={openInNewTab ? "_blank" : undefined} className={className}>
+        {children}
+      </Link>
+    );
+  }
+  if (EXTERNAL_URL_PATTERN.test(to)) {
     return (
       <a href={to} target={openInNewTab ? "_blank" : undefined} rel={openInNewTab ? "noopener noreferrer" : undefined} className={className}>
         {children}
       </a>
     );
   }
-  return (
-    <Link to={to} target={openInNewTab ? "_blank" : undefined} className={className}>
-      {children}
-    </Link>
-  );
+  // 지원하지 않는 형식(프로토콜 상대 URL, javascript: 등)은 클릭 가능한 링크로 만들지 않는다.
+  return null;
 }
 
 export function HeroSection() {
@@ -54,8 +62,10 @@ export function HeroSection() {
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  // 로딩 중이거나 노출 중인 배너가 없으면 섹션 자체를 그리지 않는다.
-  if (!banners || banners.length === 0) return null;
+  // 로딩 중에는 실제 히어로와 비슷한 높이의 빈 영역을 잡아둬서, 데이터가 도착했을 때
+  // 레이아웃이 출렁이지 않게 한다. 노출 중인 배너가 0개로 확정되면 섹션 자체를 그리지 않는다.
+  if (!banners) return <section className="h-[26rem]" aria-hidden="true" />;
+  if (banners.length === 0) return null;
 
   const slide = banners[Math.min(index, banners.length - 1)];
   const hasPrimaryCta = Boolean(slide.linkLabel && slide.linkUrl);
