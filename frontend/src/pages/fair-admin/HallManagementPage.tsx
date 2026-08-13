@@ -3,7 +3,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { createHall, deleteHall, getHalls, updateHall, type Hall, type HallInput } from "../../api/fair";
-import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
@@ -12,11 +11,11 @@ import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { Input } from "../../components/ui/Input";
 import { Table } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/useConfirm";
-import { useFairSelector } from "../../hooks/useFairSelector";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 
 export function HallManagementPage() {
   const { confirm, confirmDialog } = useConfirm();
-  const { fairId, setFairId, selectableFairs } = useFairSelector();
+  const { fairId, selectableFairs } = useFairSelector();
 
   const [halls, setHalls] = useState<Hall[]>([]);
   const [loading, setLoading] = useState(false);
@@ -118,12 +117,6 @@ export function HallManagementPage() {
         action={fairId !== null ? <Button onClick={openCreateDialog}><Plus size={16} />홀 추가</Button> : undefined}
       />
 
-      <FairSelectorBar
-        selectableFairs={selectableFairs}
-        fairId={fairId}
-        onFairIdChange={(id) => setFairId(id)}
-      />
-
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -132,7 +125,7 @@ export function HallManagementPage() {
       )}
 
       {fairId === null && selectableFairs.length > 0 && (
-        <EmptyState title="행사를 선택해 주세요." description="위 드롭다운에서 행사를 고르면 홀 목록이 표시돼요." />
+        <EmptyState title="행사를 선택해 주세요." description="상단 바에서 행사를 고르면 홀 목록이 표시돼요." />
       )}
 
       {fairId !== null && loading && (

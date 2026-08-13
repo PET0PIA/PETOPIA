@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, Search, Send } from "lucide-react";
+import { AlertCircle, ArrowLeft, Send } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
@@ -11,6 +11,7 @@ import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { ApiError } from "../../api/client";
 import { getRecruitNotice, upsertRecruitNotice, type RecruitNoticeUpsertRequest } from "../../api/recruitNotice";
 import { useAuth } from "../../contexts/AuthContext";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 import { EmptyState } from "../../components/common/EmptyState";
 
 interface FormState {
@@ -41,14 +42,12 @@ function toIsoDateTime(value: string): string {
 export function RecruitNoticeFormPage() {
   const { fairId: fairIdParam } = useParams<{ fairId: string }>();
   const { user } = useAuth();
+  const { fairId: selectorFairId } = useFairSelector();
   const navigate = useNavigate();
 
-  // 사이드바(운영 메뉴)에서 fairId 없이 들어온 경우에만 쓰는 수동 입력 - 다른 fair-admin 페이지와
-  // 동일한 임시 패턴(TODO: 관리자 세션에 담당 행사가 연결되면 이 입력을 없앤다).
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [manualFairId, setManualFairId] = useState<number | null>(null);
-
-  const fairId = fairIdParam ?? (manualFairId !== null ? String(manualFairId) : undefined);
+  // URL 파라미터(공고 상세의 '수정'으로 진입)가 있으면 그 행사를, 없으면(사이드바로 진입)
+  // 콘솔 상단 바의 "관리 행사" 선택기가 정한 행사를 쓴다.
+  const fairId = fairIdParam ?? (selectorFairId !== null ? String(selectorFairId) : undefined);
 
   const [form, setForm] = useState<FormState>(initialForm);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
@@ -66,8 +65,14 @@ export function RecruitNoticeFormPage() {
     if (!fairId) return;
     let ignore = false;
 
+    // 행사가 바뀌면 이전 행사의 공고 내용이 폼에 남지 않도록 먼저 초기화한다.
     setLoading(true);
     setLoadError(null);
+    setErrors([]);
+    setSubmitError(null);
+    setForm(initialForm);
+    setLoadedForm(initialForm);
+    setExistingImageUrl(null);
     getRecruitNotice(Number(fairId))
       .then((notice) => {
         if (ignore) return;
@@ -91,20 +96,6 @@ export function RecruitNoticeFormPage() {
 
     return () => { ignore = true; };
   }, [fairId]);
-
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-    setLoadError(null);
-    setForm(initialForm);
-    setLoadedForm(initialForm);
-    setExistingImageUrl(null);
-    setManualFairId(parsed);
-  }
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -143,20 +134,13 @@ export function RecruitNoticeFormPage() {
     form.recruitDeadline !== loadedForm.recruitDeadline ||
     imageObjectKey !== null;
 
-  // 사이드바로 들어와서 아직 행사 ID를 안 넣은 상태 - 입력 폼만 보여준다
-  if (!fairIdParam && manualFairId === null) {
+  // 사이드바로 들어왔는데 상단 선택기에 행사가 없는 상태(배정 0개) - 안내만 보여준다.
+  if (!fairId) {
     return (
       <PageContainer className="py-10">
-        <PageHeader eyebrow="행사 관리자" title="참가업체 모집 공고 작성/수정" description="관리할 행사 ID를 입력해 주세요." />
+        <PageHeader eyebrow="행사 관리자" title="참가업체 모집 공고 작성/수정" description="상단 바에서 행사를 선택해 주세요." />
         <Card className="p-6">
-          <form onSubmit={handleLoadFair} className="flex items-end gap-3">
-            <div className="flex-1">
-              {label("행사 ID", true)}
-              <Input value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" required />
-            </div>
-            <Button type="submit"><Search size={16} />불러오기</Button>
-          </form>
-          {loadError && <p className="mt-3 text-sm text-primary-strong">{loadError}</p>}
+          <p className="text-sm text-muted">상단 바에서 행사를 선택하면 모집 공고를 작성·수정할 수 있어요. 배정된 행사가 없다면 관리자에게 문의해 주세요.</p>
         </Card>
       </PageContainer>
     );

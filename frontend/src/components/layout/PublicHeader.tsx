@@ -62,8 +62,12 @@ function ProfileMenu({ role, name, onLogout }: { role: UserRole; name: string; o
   const items: { label: string; onSelect: () => void }[] = [
     { label: "마이페이지", onSelect: () => navigate("/mypage") },
     { label: "내 예약 목록", onSelect: () => navigate("/reservations/me") },
+    { label: "내 행사 신청 목록", onSelect: () => navigate("/fair-applications/me") },
   ];
-  if (role === "VENDOR") items.push({ label: "내 사업자 목록", onSelect: () => navigate("/businesses/me") });
+  if (role === "VENDOR") {
+    items.push({ label: "내 사업자 목록", onSelect: () => navigate("/businesses/me") });
+    items.push({ label: "부스 방문 스캔", onSelect: () => navigate("/booths/scan") });
+  }
   if (role === "EVENT_ADMIN") items.push({ label: "박람회 관리자 콘솔", onSelect: () => navigate("/fair-admin/fair") });
   if (role === "SUPER_ADMIN") items.push({ label: "최고 관리자 콘솔", onSelect: () => navigate("/admin") });
   items.push({ label: "로그아웃", onSelect: onLogout });
@@ -225,6 +229,22 @@ export function PublicHeader() {
                     {unreadCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}
                   </button>
                 </div>
+                <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/reservations/me")}>
+                  내 예약 목록
+                </button>
+                <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/fair-applications/me")}>
+                  내 행사 신청 목록
+                </button>
+                {role === "VENDOR" && (
+                  <>
+                    <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/businesses/me")}>
+                      내 사업자 목록
+                    </button>
+                    <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/booths/scan")}>
+                      부스 방문 스캔
+                    </button>
+                  </>
+                )}
                 {role === "EVENT_ADMIN" && (
                   <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/fair-admin/fair")}>
                     박람회 관리자 콘솔

@@ -4,7 +4,6 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { getFairDates, type FairDate } from "../../api/fair";
 import { downloadVisitStatsExcel, getBoothVisitStats, getHourlyEntryTrend, getVisitStats, type BoothVisitStat, type HourlyEntryTrend, type VisitStats } from "../../api/statistics";
-import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
 import { BoothVisitRanking } from "../../components/fair-admin/BoothVisitRanking";
 import { DonutChart } from "../../components/fair-admin/DonutChart";
 import { HourlyEntryTrendChart } from "../../components/fair-admin/HourlyEntryTrendChart";
@@ -15,7 +14,7 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Select } from "../../components/ui/Select";
-import { useFairSelector } from "../../hooks/useFairSelector";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 
 const BOOTH_RANKING_PREVIEW_COUNT = 3;
 
@@ -31,7 +30,7 @@ export function VisitStatisticsPage() {
   // SUPER_ADMIN이 /admin/dashboard/fairs/:fairId 경로로 들어온 경우 경로 파라미터를 우선 사용한다.
   const fromAdminDashboard = fairIdParam !== undefined;
 
-  const { fairId: selectorFairId, setFairId: setSelectorFairId, selectableFairs } = useFairSelector();
+  const { fairId: selectorFairId, selectableFairs } = useFairSelector();
 
   // 경로 파라미터(SUPER_ADMIN → 대시보드 클릭)나 훅(EVENT_ADMIN 자동 선택)에서 fairId를 결정한다.
   const [overrideFairId, setOverrideFairId] = useState<number | null>(
@@ -49,10 +48,6 @@ export function VisitStatisticsPage() {
   // 최종 fairId: 대시보드에서 들어온 경우 경로 파라미터만 신뢰한다(무효면 다른 행사로 새지 않도록
   // selectorFairId로 대체하지 않는다). 그 외에는 훅(EVENT_ADMIN 자동 선택 / SUPER_ADMIN 수동 선택)을 쓴다.
   const fairId = fromAdminDashboard ? overrideFairId : selectorFairId;
-  function setFairId(id: number) {
-    setOverrideFairId(null);
-    setSelectorFairId(id);
-  }
 
   const [fairDates, setFairDates] = useState<FairDate[]>([]);
   const [boothStats, setBoothStats] = useState<BoothVisitStat[]>([]);
@@ -158,16 +153,6 @@ export function VisitStatisticsPage() {
         </div>
       )}
 
-      {/* SUPER_ADMIN이 경로 파라미터 없이 직접 접근하거나 EVENT_ADMIN인 경우에만 선택 바를 표시한다.
-          SUPER_ADMIN이 대시보드에서 행사명 클릭으로 들어온 경우(fromAdminDashboard)는 이미 fairId가 있어 불필요. */}
-      {!fromAdminDashboard && (
-        <FairSelectorBar
-          selectableFairs={selectableFairs}
-          fairId={fairId}
-          onFairIdChange={(id) => { setExportError(null); setFairId(id); }}
-        />
-      )}
-
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -180,7 +165,7 @@ export function VisitStatisticsPage() {
       )}
 
       {!fromAdminDashboard && fairId === null && selectableFairs.length > 0 && (
-        <EmptyState title="행사를 선택해 주세요." description="위 드롭다운에서 행사를 고르면 방문 통계가 표시돼요." />
+        <EmptyState title="행사를 선택해 주세요." description="상단 바에서 행사를 고르면 방문 통계가 표시돼요." />
       )}
 
       {fairId !== null && loading && (
