@@ -14,6 +14,7 @@ public class ConfirmedBoothResponse {
 
     private Long boothId;
     private String businessName;
+    private String imageUrl; // 부스 대표 이미지
     private String slotNumber; // 슬롯 번호
     private BigDecimal posX; // 슬롯 좌표
     private BigDecimal posY; // 슬롯 좌표
