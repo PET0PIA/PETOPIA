@@ -168,6 +168,10 @@ public enum ErrorCode {
     // ===== Banner & Popup =====
     BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "AD001", "존재하지 않는 배너입니다."),
     POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "AD002", "존재하지 않는 팝업입니다."),
+
+    // ===== Review (페어 리뷰) =====
+    REVIEW_INVALID_RATING(HttpStatus.BAD_REQUEST, "RV001", "평점은 1~5 사이여야 합니다."),
+    REVIEW_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "RV002", "리뷰 내용을 입력해야 합니다."),
     ;
 
     private final HttpStatus httpStatus;
