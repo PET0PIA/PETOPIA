@@ -16,6 +16,12 @@ public class BannerCreateRequest {
     @Size(max = 100)
     private String title;
 
+    @Size(max = 50)
+    private String eyebrow;
+
+    @Size(max = 300)
+    private String subtitle;
+
     @NotBlank
     @Size(max = 500)
     private String imageKey;
@@ -25,6 +31,20 @@ public class BannerCreateRequest {
 
     @NotNull
     private Banner.LinkTarget linkTarget;
+
+    @Size(max = 50)
+    private String linkLabel;
+
+    @Size(max = 50)
+    private String link2Label;
+
+    @Size(max = 2000)
+    private String link2Url;
+
+    private Banner.LinkTarget link2Target;
+
+    @Size(max = 10)
+    private String bgColor;
 
     @NotNull
     private Integer sortOrder;

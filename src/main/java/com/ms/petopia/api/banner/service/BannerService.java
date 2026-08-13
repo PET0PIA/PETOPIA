@@ -53,9 +53,16 @@ public class BannerService {
     public BannerResponse create(Long callerId, BannerCreateRequest request){
         Banner banner = Banner.builder()
                 .title(request.getTitle())
+                .eyebrow(request.getEyebrow())
+                .subtitle(request.getSubtitle())
                 .imageKey(resolveImageUrl(request.getImageKey()))
                 .linkUrl(request.getLinkUrl())
                 .linkTarget(request.getLinkTarget())
+                .linkLabel(request.getLinkLabel())
+                .link2Label(request.getLink2Label())
+                .link2Url(request.getLink2Url())
+                .link2Target(request.getLink2Target())
+                .bgColor(request.getBgColor())
                 .sortOrder(request.getSortOrder())
                 .isActive(true)
                 .startedAt(request.getStartedAt())
@@ -72,17 +79,28 @@ public class BannerService {
     public BannerResponse update(Long bannerId, BannerUpdateRequest request){
         findOrThrow(bannerId);
 
-        boolean hasChanges = request.getTitle() != null || request.getImageKey() != null
+        boolean hasChanges = request.getTitle() != null || request.getEyebrow() != null
+                || request.getSubtitle() != null || request.getImageKey() != null
                 || request.getLinkUrl() != null || request.getLinkTarget() != null
+                || request.getLinkLabel() != null || request.getLink2Label() != null
+                || request.getLink2Url() != null || request.getLink2Target() != null
+                || request.getBgColor() != null
                 || request.getSortOrder() != null || request.getStartedAt() != null
                 || request.getEndedAt() != null;
         if (hasChanges){
             Banner patch = Banner.builder()
                     .bannerId(bannerId)
                     .title(request.getTitle())
+                    .eyebrow(request.getEyebrow())
+                    .subtitle(request.getSubtitle())
                     .imageKey(resolveImageUrl(request.getImageKey()))
                     .linkUrl(request.getLinkUrl())
                     .linkTarget(request.getLinkTarget())
+                    .linkLabel(request.getLinkLabel())
+                    .link2Label(request.getLink2Label())
+                    .link2Url(request.getLink2Url())
+                    .link2Target(request.getLink2Target())
+                    .bgColor(request.getBgColor())
                     .sortOrder(request.getSortOrder())
                     .startedAt(request.getStartedAt())
                     .endedAt(request.getEndedAt())

@@ -13,6 +13,12 @@ public class BannerUpdateRequest {
     @Size(max = 100)
     private String title;
 
+    @Size(max = 50)
+    private String eyebrow;
+
+    @Size(max = 300)
+    private String subtitle;
+
     @Size(max = 500)
     private String imageKey;
 
@@ -20,6 +26,20 @@ public class BannerUpdateRequest {
     private String linkUrl;
 
     private Banner.LinkTarget linkTarget;
+
+    @Size(max = 50)
+    private String linkLabel;
+
+    @Size(max = 50)
+    private String link2Label;
+
+    @Size(max = 2000)
+    private String link2Url;
+
+    private Banner.LinkTarget link2Target;
+
+    @Size(max = 10)
+    private String bgColor;
 
     private Integer sortOrder;
 
