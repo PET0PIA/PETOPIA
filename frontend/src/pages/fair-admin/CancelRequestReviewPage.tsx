@@ -151,6 +151,10 @@ export function CancelRequestReviewPage() {
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader eyebrow="참가업체 관리" title="참가 취소 요청 심사" description="신청자가 보낸 취소 요청을 확인하고 승인 또는 반려해요." />
 
+      {fairId === null && (
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 취소 요청 목록이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
+      )}
+
       {fairId !== null && (
         <div className="mb-6">
           <div className="mb-3 flex gap-1 border-b border-line">

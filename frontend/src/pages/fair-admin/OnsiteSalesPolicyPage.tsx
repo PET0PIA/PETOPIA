@@ -144,7 +144,7 @@ export function OnsiteSalesPolicyPage() {
       {fairId === null && !loadError && (
         <EmptyState
           title="관리할 행사가 없어요."
-          description="상단 바에서 행사를 선택하면 운영일별 현장예매 정책이 표시돼요."
+          description="상단 바에서 행사를 선택하면 운영일별 현장예매 정책이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요."
         />
       )}
 

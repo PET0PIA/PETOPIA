@@ -66,6 +66,7 @@ function ProfileMenu({ role, name, onLogout }: { role: UserRole; name: string; o
   ];
   if (role === "VENDOR") {
     items.push({ label: "내 사업자 목록", onSelect: () => navigate("/businesses/me") });
+    items.push({ label: "내 부스 참가 신청 목록", onSelect: () => navigate("/participations/me") });
     items.push({ label: "부스 방문 스캔", onSelect: () => navigate("/booths/scan") });
   }
   if (role === "EVENT_ADMIN") items.push({ label: "박람회 관리자 콘솔", onSelect: () => navigate("/fair-admin/fair") });
@@ -239,6 +240,9 @@ export function PublicHeader() {
                   <>
                     <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/businesses/me")}>
                       내 사업자 목록
+                    </button>
+                    <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/participations/me")}>
+                      내 부스 참가 신청 목록
                     </button>
                     <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/booths/scan")}>
                       부스 방문 스캔

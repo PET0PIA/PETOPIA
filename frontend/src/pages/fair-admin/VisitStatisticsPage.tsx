@@ -30,7 +30,7 @@ export function VisitStatisticsPage() {
   // SUPER_ADMIN이 /admin/dashboard/fairs/:fairId 경로로 들어온 경우 경로 파라미터를 우선 사용한다.
   const fromAdminDashboard = fairIdParam !== undefined;
 
-  const { fairId: selectorFairId, selectableFairs } = useFairSelector();
+  const { fairId: selectorFairId } = useFairSelector();
 
   // 경로 파라미터(SUPER_ADMIN → 대시보드 클릭)나 훅(EVENT_ADMIN 자동 선택)에서 fairId를 결정한다.
   const [overrideFairId, setOverrideFairId] = useState<number | null>(
@@ -164,8 +164,8 @@ export function VisitStatisticsPage() {
         <EmptyState title="잘못된 행사 경로예요." description="전체 운영 대시보드에서 다시 시도해 주세요." />
       )}
 
-      {!fromAdminDashboard && fairId === null && selectableFairs.length > 0 && (
-        <EmptyState title="행사를 선택해 주세요." description="상단 바에서 행사를 고르면 방문 통계가 표시돼요." />
+      {!fromAdminDashboard && fairId === null && (
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 방문 통계가 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       )}
 
       {fairId !== null && loading && (

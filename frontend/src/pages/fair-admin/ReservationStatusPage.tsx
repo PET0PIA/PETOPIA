@@ -25,7 +25,7 @@ function entryRate(row: ReservationDateSummary): string {
 }
 
 export function ReservationStatusPage() {
-  const { fairId, selectableFairs } = useFairSelector();
+  const { fairId } = useFairSelector();
 
   const [summary, setSummary] = useState<ReservationDateSummary[]>([]);
   const [qrSummary, setQrSummary] = useState<QrIssuanceSummary[]>([]);
@@ -96,8 +96,8 @@ export function ReservationStatusPage() {
         </div>
       )}
 
-      {fairId === null && selectableFairs.length > 0 && (
-        <EmptyState title="행사를 선택해 주세요." description="상단 바에서 행사를 고르면 운영일별 예약 현황이 표시돼요." />
+      {fairId === null && (
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 운영일별 예약 현황이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       )}
 
       {fairId !== null && loading && (

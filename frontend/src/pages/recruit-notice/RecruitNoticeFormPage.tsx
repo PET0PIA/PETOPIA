@@ -73,6 +73,7 @@ export function RecruitNoticeFormPage() {
     setForm(initialForm);
     setLoadedForm(initialForm);
     setExistingImageUrl(null);
+    setImageObjectKey(null); // 이전 행사에서 업로드한 이미지 키가 새 행사 공고에 붙지 않도록 함께 비운다.
     getRecruitNotice(Number(fairId))
       .then((notice) => {
         if (ignore) return;

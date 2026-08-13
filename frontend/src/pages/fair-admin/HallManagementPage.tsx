@@ -15,7 +15,7 @@ import { useFairSelector } from "../../contexts/FairSelectorContext";
 
 export function HallManagementPage() {
   const { confirm, confirmDialog } = useConfirm();
-  const { fairId, selectableFairs } = useFairSelector();
+  const { fairId } = useFairSelector();
 
   const [halls, setHalls] = useState<Hall[]>([]);
   const [loading, setLoading] = useState(false);
@@ -124,8 +124,8 @@ export function HallManagementPage() {
         </div>
       )}
 
-      {fairId === null && selectableFairs.length > 0 && (
-        <EmptyState title="행사를 선택해 주세요." description="상단 바에서 행사를 고르면 홀 목록이 표시돼요." />
+      {fairId === null && (
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 홀 목록이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       )}
 
       {fairId !== null && loading && (
