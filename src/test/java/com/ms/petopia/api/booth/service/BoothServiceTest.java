@@ -5,6 +5,7 @@ import com.ms.petopia.api.booth.domain.BoothItem;
 import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
+import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
 import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
@@ -565,5 +566,56 @@ class BoothServiceTest {
 
     }
 
+    @Nested
+    @DisplayName("내 즐겨찾기 목록 조회")
+    class GetMyFavorites {
+
+        @Test
+        @DisplayName("즐겨찾기한 부스 목록을 그대로 반환한다")
+        void returnsFavorites() {
+
+            // given
+            Long userId = 1L;
+            BoothFavoriteResponse favorite = BoothFavoriteResponse.builder()
+                    .boothId(1L).name("멍냥사료 부스").fairId(1L).fairName("멍냥페스타 2026").build();
+
+            given(boothMapper.selectFavoritesByUserId(userId)).willReturn(List.of(favorite));
+
+            // when
+            List<BoothFavoriteResponse> result = boothService.getMyFavorites(userId);
+
+            // then
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getBoothId()).isEqualTo(1L);
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("내가 소유한 부스 목록 조회")
+    class GetMyBooths {
+
+        @Test
+        @DisplayName("소유한 부스 목록을 그대로 반환한다")
+        void returnsOwnedBooths() {
+
+            // given
+            Long userId = 1L;
+            BoothFavoriteResponse owned = BoothFavoriteResponse.builder()
+                    .boothId(1L).name("멍냥사료 부스").fairId(1L).fairName("멍냥페스타 2026").build();
+
+            given(boothMapper.selectByOwnerId(userId)).willReturn(List.of(owned));
+
+            // when
+            List<BoothFavoriteResponse> result = boothService.getMyBooths(userId);
+
+            // then
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getBoothId()).isEqualTo(1L);
+
+        }
+
+    }
 
 }

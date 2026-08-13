@@ -158,4 +158,21 @@
         WHERE user_id = #{userId} AND booth_id = #{boothId}
     </delete>
 
+    <!-- 내가 소유한 부스 목록. business.owner_id 기준으로 조회 -->
+    <select id="selectByOwnerId" resultType="com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse">
+        SELECT b.booth_id AS boothId,
+            b.name AS name,
+            b.image_url AS imageUrl,
+            b.category AS category,
+            b.target_animal AS targetAnimal,
+            a.fair_id AS fairId,
+            f.name AS fairName
+        FROM booth b
+        JOIN application a ON a.application_id = b.application_id
+        JOIN fairs f ON f.fair_id = a.fair_id
+        JOIN business biz ON biz.business_id = b.business_id
+        WHERE biz.owner_id = #{userId}
+        ORDER BY b.confirmed_at DESC
+    </select>
+
 </mapper>

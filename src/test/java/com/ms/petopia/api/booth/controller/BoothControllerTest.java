@@ -1,5 +1,6 @@
 package com.ms.petopia.api.booth.controller;
 
+import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
 import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
@@ -255,6 +256,36 @@ class BoothControllerTest {
                         .with(authenticatedAs(1L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+
+    }
+
+    // GET /api/booths/favorites - 정상 조회
+    @Test
+    void getsMyFavorites() throws Exception {
+
+        given(boothService.getMyFavorites(1L)).willReturn(
+                List.of(BoothFavoriteResponse.builder().boothId(1L).name("멍냥사료 부스").build()));
+
+        mockMvc.perform(get("/api/booths/favorites")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("멍냥사료 부스"));
+
+    }
+
+    // GET /api/booths/me - 정상 조회
+    @Test
+    void getsMyBooths() throws Exception {
+
+        given(boothService.getMyBooths(1L)).willReturn(
+                List.of(BoothFavoriteResponse.builder().boothId(1L).name("멍냥사료 부스").build()));
+
+        mockMvc.perform(get("/api/booths/me")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("멍냥사료 부스"));
 
     }
 

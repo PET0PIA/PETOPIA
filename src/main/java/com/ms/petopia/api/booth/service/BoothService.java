@@ -51,7 +51,30 @@ public class BoothService {
         // 즐겨찾기 여부
         boolean favorited = viewerId != null && boothMapper.existsFavorite(viewerId, boothId);
 
-        return BoothResponse.from(booth, items, favorited);
+        // 소유 여부(관리 버튼 노출용) - 부스가 속한 사업자의 owner가 요청자 본인인지
+        boolean owner = viewerId != null && isOwner(viewerId, booth);
+
+        return BoothResponse.from(booth, items, favorited, owner);
+
+    }
+
+    /*
+     * 내가 소유한 부스 목록 조회("내 부스 관리" 화면용). 응답 모양이 즐겨찾기 목록과
+     * 완전히 같아서(boothId/name/imageUrl/category/targetAnimal/fairId/fairName)
+     * BoothFavoriteResponse를 그대로 재사용한다.
+     */
+    public List<BoothFavoriteResponse> getMyBooths(Long userId) {
+
+        return boothMapper.selectByOwnerId(userId);
+
+    }
+
+    // 부스가 속한 사업자의 owner가 viewerId 본인인지 확인 (예외를 던지지 않는 조회 전용 버전)
+    private boolean isOwner(Long viewerId, Booth booth) {
+
+        Business business = businessMapper.selectById(booth.getBusinessId());
+
+        return business != null && business.getOwnerId().equals(viewerId);
 
     }
 
