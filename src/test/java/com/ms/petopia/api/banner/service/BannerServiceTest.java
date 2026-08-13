@@ -7,6 +7,8 @@ import com.ms.petopia.api.banner.dto.request.BannerUpdateRequest;
 import com.ms.petopia.api.banner.dto.response.BannerResponse;
 import com.ms.petopia.api.banner.mapper.BannerMapper;
 import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,9 @@ class BannerServiceTest {
 
     @Mock
     private BannerMapper bannerMapper;
+
+    @Mock
+    private StorageService storageService;
 
     @InjectMocks
     private BannerService bannerService;
@@ -97,6 +102,10 @@ class BannerServiceTest {
             request.setLinkTarget(Banner.LinkTarget.SELF);
             request.setSortOrder(0);
 
+            given(storageService.confirm("uploads/banner/new.jpg", UploadPolicy.IMAGE))
+                    .willReturn("banner/new.jpg");
+            given(storageService.toPublicUrl("banner/new.jpg"))
+                    .willReturn("https://cdn.example.com/banner/new.jpg");
             given(bannerMapper.selectById(any())).willReturn(createBanner(1L));
 
             BannerResponse result = bannerService.create(1L, request);
