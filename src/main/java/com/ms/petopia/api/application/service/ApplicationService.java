@@ -356,6 +356,15 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PENDING_REVIEW, "심사 대기 중인 신청서만 수정할 수 있습니다.");
         }
 
+        /*
+         * 새 첨부파일이 안 왔으면(제출 필드만 수정하는 등 첨부는 안 건드린 경우) 기존 첨부파일을
+         * 그대로 유지한다 - 안 그러면 attachment_url이 매번 null로 덮어써져서 첨부파일이 사라진다.
+         */
+        ApplicationDetailResponse existing = applicationMapper.selectApplicationDetail(applicationId);
+        String attachmentUrl = request.getAttachmentObjectKey() != null
+                ? resolveAttachmentUrl(request.getAttachmentObjectKey())
+                : (existing != null ? existing.getAttachmentUrl() : null);
+
         ApplicationForm form = ApplicationForm.builder()
                 .applicationId(applicationId)
                 .purpose(request.getPurpose())
@@ -363,7 +372,7 @@ public class ApplicationService {
                 .managerName(request.getManagerName())
                 .managerPhone(request.getManagerPhone())
                 .managerEmail(request.getManagerEmail())
-                .attachmentUrl(resolveAttachmentUrl(request.getAttachmentObjectKey()))
+                .attachmentUrl(attachmentUrl)
                 .build();
 
         int updatedRows = applicationMapper.updateApplicationForm(form);
