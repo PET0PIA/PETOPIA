@@ -21,6 +21,7 @@ export interface BoothResponse {
   imageUrl: string | null;
   items: BoothItemResponse[];
   favorited: boolean;
+  owner: boolean;
 }
 
 export interface BoothFavoriteResponse {
@@ -114,8 +115,14 @@ export async function deleteBoothItem(boothItemId: number): Promise<void> {
   await apiClient.delete<ApiEnvelope<null>>(`/api/booth-items/${boothItemId}`);
 }
 
-// 행사의 확정 부스 안내판 조회 (공개, 인증 불필요)
+// 행사의 확정 부스 안내 조회 (공개, 인증 불필요)
 export async function getConfirmedBooths(fairId: number): Promise<ConfirmedBoothResponse[]> {
   const response = await apiClient.get<ApiEnvelope<ConfirmedBoothResponse[]>>(`/api/fairs/${fairId}/confirmed-booths`);
+  return response.data;
+}
+
+// 내가 소유한 부스 목록 조회
+export async function getMyBooths(): Promise<BoothFavoriteResponse[]> {
+  const response = await apiClient.get<ApiEnvelope<BoothFavoriteResponse[]>>("/api/booths/me");
   return response.data;
 }

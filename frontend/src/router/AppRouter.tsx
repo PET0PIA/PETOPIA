@@ -67,13 +67,13 @@ import { BoothFavoritesPage } from "../pages/booth/BoothFavoritesPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { BusinessesByFairPage } from "../pages/business/BusinessesByFairPage";
 import { FairBoothsPage } from "../pages/fair/FairBoothsPage";
+import { MyBoothsPage } from "../pages/booth/MyBoothsPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
   "/businesses/status": "사업자 등록 현황",
   "/participations/new": "참여 부스 신청",
-  "/booths/me": "내 부스 관리",
   "/about": "서비스 소개",
   "/terms": "이용약관",
   "/privacy": "개인정보 처리방침",
@@ -139,6 +139,7 @@ export function AppRouter() {
             <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
             <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
             <Route path="/booths/favorites/me" element={<BoothFavoritesPage />} />
+            <Route path="/booths/me" element={<MyBoothsPage />} />
           </Route>
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />

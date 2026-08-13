@@ -167,7 +167,7 @@ function BoothDetailContent({ id }: { id: number }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {user && (
+          {booth.owner && (
             <Link
               to={`/booths/${id}/edit`}
               className="inline-flex min-h-11 items-center gap-2 rounded-button border border-line bg-card px-4 text-sm font-bold text-ink hover:bg-page"
