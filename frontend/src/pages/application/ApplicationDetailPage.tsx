@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronLeft, Paperclip, XCircle } from "lucide-react";
+import { AlertCircle, ChevronLeft, Paperclip, Pencil, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useEffect } from "react";
@@ -228,6 +228,15 @@ function ApplicationDetailContent({ id }: { id: number }) {
             <XCircle size={16} />취소 요청하기
           </Button>
         )}
+        {detail.status === "PENDING_REVIEW" && (
+          <Link
+            to={`/participations/me/${detail.applicationId}/edit`}
+            className="inline-flex min-h-11 items-center gap-2 rounded-button border border-line bg-card px-4 text-sm font-bold text-ink hover:bg-page"
+          >
+            <Pencil size={16} />
+            수정하기
+          </Link>
+        )}
       </div>
 
       <div className="space-y-6">
@@ -273,6 +282,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
         <Card className="space-y-4 p-6">
           <h3 className="text-sm font-extrabold text-muted">신청 내용</h3>
           <dl className="space-y-4">
+            <Field label="신청 사업자" value={detail.businessName} />
             <Field label="참가 목적" value={detail.purpose} />
             <Field label="판매·전시 품목" value={detail.itemsDesc} />
             {detail.attachmentUrl && (
