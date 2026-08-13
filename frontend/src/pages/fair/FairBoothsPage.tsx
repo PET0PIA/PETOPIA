@@ -12,6 +12,7 @@ import { getConfirmedBooths, type ConfirmedBoothResponse } from "../../api/booth
 interface BoothGroup {
   boothId: number;
   businessName: string;
+  imageUrl: string | null;
   hallName: string;
   slotNumbers: string[];
 }
@@ -65,6 +66,7 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
       boothGroups.push({
         boothId: booth.boothId,
         businessName: booth.businessName,
+        imageUrl: booth.imageUrl,
         hallName: booth.hallName,
         slotNumbers: [booth.slotNumber],
       });
@@ -98,8 +100,12 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
               to={`/booths/${group.boothId}`}
               className="surface flex items-center gap-3 p-5 transition hover:bg-page"
             >
-              <div className="grid size-12 shrink-0 place-items-center rounded-full bg-primary-soft text-primary-strong">
-                <ImageOff size={18} />
+              <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-primary-soft text-primary-strong">
+                {group.imageUrl ? (
+                  <img src={group.imageUrl} alt="" className="size-full object-cover" />
+                ) : (
+                  <ImageOff size={18} />
+                )}
               </div>
               <div className="min-w-0">
                 <p className="truncate font-bold text-ink">{group.businessName}</p>

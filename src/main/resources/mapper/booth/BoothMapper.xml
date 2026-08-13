@@ -86,6 +86,7 @@
     <select id="selectConfirmedBooths" resultType="com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse">
         SELECT bt.booth_id AS boothId,
             biz.name AS businessName,
+            bt.image_url AS imageUrl,
             bs.slot_number AS slotNumber,
             bs.pos_x AS posX,
             bs.pos_y AS posY,

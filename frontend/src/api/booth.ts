@@ -58,6 +58,7 @@ export interface BoothItemUpdateRequest {
 export interface ConfirmedBoothResponse {
   boothId: number;
   businessName: string;
+  imageUrl: string | null;
   slotNumber: string;
   posX: number | null;
   posY: number | null;
