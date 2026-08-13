@@ -1,5 +1,6 @@
 package com.ms.petopia.api.booth.controller;
 
+import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
 import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
 import com.ms.petopia.api.booth.dto.response.BoothResponse;
 import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
@@ -198,7 +199,9 @@ class BoothControllerTest {
     void getsConfirmedBooths() throws Exception {
 
         given(boothService.getConfirmedBooths(1L)).willReturn(
-                List.of(new ConfirmedBoothResponse(1L, "멍냥사료", "A-01", null, null, null, null, null, null, null)));
+                List.of(new ConfirmedBoothResponse(1L, "멍냥사료", null,
+                        "A-01", null, null, null, null, null,
+                        null, null)));
 
         mockMvc.perform(get("/api/fairs/1/confirmed-booths"))
                 .andExpect(status().isOk())
@@ -217,6 +220,72 @@ class BoothControllerTest {
         mockMvc.perform(get("/api/fairs/999/confirmed-booths"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("F004"));
+
+    }
+
+    // POST /api/booths/{boothId}/favorites - 정상 추가 (201)
+    @Test
+    void addsFavorite() throws Exception {
+
+        mockMvc.perform(post("/api/booths/1/favorites")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true));
+
+    }
+
+    // POST /api/booths/{boothId}/favorites - 존재하지 않는 부스 -> 404 + V024
+    @Test
+    void returns404WhenFavoritingMissingBooth() throws Exception {
+
+        willThrow(new CommonException(ErrorCode.BOOTH_NOT_FOUND))
+                .given(boothService).addFavorite(eq(1L), eq(999L));
+
+        mockMvc.perform(post("/api/booths/999/favorites")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("V024"));
+
+    }
+
+    // DELETE /api/booths/{boothId}/favorites - 정상 삭제 (200)
+    @Test
+    void removesFavorite() throws Exception {
+
+        mockMvc.perform(delete("/api/booths/1/favorites")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+    }
+
+    // GET /api/booths/favorites - 정상 조회
+    @Test
+    void getsMyFavorites() throws Exception {
+
+        given(boothService.getMyFavorites(1L)).willReturn(
+                List.of(BoothFavoriteResponse.builder().boothId(1L).name("멍냥사료 부스").build()));
+
+        mockMvc.perform(get("/api/booths/favorites")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("멍냥사료 부스"));
+
+    }
+
+    // GET /api/booths/me - 정상 조회
+    @Test
+    void getsMyBooths() throws Exception {
+
+        given(boothService.getMyBooths(1L)).willReturn(
+                List.of(BoothFavoriteResponse.builder().boothId(1L).name("멍냥사료 부스").build()));
+
+        mockMvc.perform(get("/api/booths/me")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("멍냥사료 부스"));
 
     }
 
