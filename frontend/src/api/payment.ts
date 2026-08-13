@@ -18,7 +18,9 @@ export const TEMP_USER_ID_HEADER = "X-User-Id";
 export const TEMP_PAYER_USER_ID = 1;
 
 export type PaymentType = "RESERVATION_DEPOSIT" | "VENDOR_FEE" | "FAIR_OPENING_FEE";
-export type PaymentStatus = "PENDING" | "COMPLETED" | "FAILED" | "CANCELED" | "EXPIRED";
+// WAITING_FOR_DEPOSIT: 가상계좌가 발급됐지만 아직 입금 전 상태. 이 상태에서는 COMPLETED가 아니므로
+// 도메인 완료통지(QR 발급·참가확정 등)도 아직 안 일어난 상태다 - 실제 입금은 토스 웹훅으로 별도 확정된다.
+export type PaymentStatus = "PENDING" | "WAITING_FOR_DEPOSIT" | "COMPLETED" | "FAILED" | "CANCELED" | "EXPIRED";
 
 export interface PaymentDetail {
   paymentId: number;
@@ -28,6 +30,12 @@ export interface PaymentDetail {
   amount: number;
   status: PaymentStatus;
   method: string;
+  // 간편결제(네이버페이 등)로 결제됐을 때만 값이 있다. method 자체는 "카드"로 내려오므로 이 필드로 구분한다.
+  easyPayProvider: string | null;
+  // 가상계좌 결제일 때만 값이 있다 - status가 WAITING_FOR_DEPOSIT일 때 입금 안내용.
+  virtualAccountBankCode: string | null;
+  virtualAccountNumber: string | null;
+  virtualAccountDueDate: string | null;
   paidAt: string | null;
   createdAt: string;
   fairId: number;

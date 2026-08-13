@@ -79,7 +79,15 @@ function SecondaryLink({ to, children }: { to: string; children: ReactNode }) {
   );
 }
 
-type ConfirmPhase = "confirming" | "done" | "error";
+// waitingDeposit: confirm은 성공했지만 가상계좌 입금 전(status !== "COMPLETED")이라 아직
+// 결제완료가 아닌 상태 - "done"과 분리해서 성공 화면을 잘못 보여주지 않게 한다.
+type ConfirmPhase = "confirming" | "done" | "waitingDeposit" | "error";
+
+interface DepositInfo {
+  bankCode: string | null;
+  accountNumber: string | null;
+  dueDate: string | null;
+}
 
 export function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
@@ -126,6 +134,7 @@ export function PaymentSuccessPage() {
   const [phase, setPhase] = useState<ConfirmPhase>("confirming");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [entryQrToken, setEntryQrToken] = useState<string | null>(null);
+  const [depositInfo, setDepositInfo] = useState<DepositInfo | null>(null);
   // 결제당 딱 한 번만 confirm한다. 백엔드는 PENDING이 아닌 결제를 409로 막으므로, 가드가
   // 없으면 StrictMode의 이펙트 2회 실행이 그대로 중복 호출이 된다.
   const confirmStarted = useRef(false);
@@ -141,13 +150,33 @@ export function PaymentSuccessPage() {
     const userId = user.userId;
     void (async () => {
       try {
-        await confirmPayment(paymentId, paymentKey, userId);
+        const confirmed = await confirmPayment(paymentId, paymentKey, userId);
+        // 가상계좌는 confirm이 성공해도 아직 입금 전(WAITING_FOR_DEPOSIT)일 수 있다 - 이땐
+        // QR 발급·참가확정 같은 도메인 완료통지가 아직 안 일어난 상태라 성공 화면을 보여주면 안 된다.
+        if (confirmed.status !== "COMPLETED") {
+          setDepositInfo({
+            bankCode: confirmed.virtualAccountBankCode,
+            accountNumber: confirmed.virtualAccountNumber,
+            dueDate: confirmed.virtualAccountDueDate,
+          });
+          setPhase("waitingDeposit");
+          return;
+        }
       } catch (err) {
         // 새로고침 등으로 이미 확정된 결제를 다시 확정하려 하면 409(P002)가 온다.
         // 실제 상태를 되물어서, 이미 성공한 결제를 실패 화면으로 보여주지 않는다.
         if (err instanceof ApiError && err.code === NOT_PAYABLE_CODE) {
           try {
             const payment = await getPayment(paymentId, userId);
+            if (payment.status === "WAITING_FOR_DEPOSIT") {
+              setDepositInfo({
+                bankCode: payment.virtualAccountBankCode,
+                accountNumber: payment.virtualAccountNumber,
+                dueDate: payment.virtualAccountDueDate,
+              });
+              setPhase("waitingDeposit");
+              return;
+            }
             if (payment.status !== "COMPLETED") {
               setErrorMessage(err.message);
               setPhase("error");
@@ -241,6 +270,39 @@ export function PaymentSuccessPage() {
     return (
       <ResultShell tone="neutral" icon={<Clock3 size={28} />} title="결제를 확정하는 중이에요">
         창을 닫거나 새로고침하지 말고 잠시만 기다려 주세요.
+      </ResultShell>
+    );
+  }
+
+  if (phase === "waitingDeposit") {
+    return (
+      <ResultShell
+        tone="neutral"
+        icon={<Clock3 size={28} />}
+        title="입금을 기다리고 있어요"
+        actions={<PrimaryLink to={backLink.to}>{backLink.label}</PrimaryLink>}
+      >
+        가상계좌가 발급됐어요. 아래 계좌로 입금하면 자동으로 결제가 완료돼요.
+        {depositInfo?.bankCode && depositInfo?.accountNumber && (
+          <>
+            <br />
+            <span className="font-bold text-ink">
+              {depositInfo.bankCode} {depositInfo.accountNumber}
+            </span>
+          </>
+        )}
+        {depositInfo?.dueDate && (
+          <>
+            <br />
+            입금기한: {new Date(depositInfo.dueDate).toLocaleString("ko-KR")}까지
+          </>
+        )}
+        <br />
+        {isFairOpeningFee
+          ? "입금이 확인되면 개설비 결제가 자동으로 완료돼요."
+          : isVendorFee
+            ? "입금이 확인되면 참가 신청이 자동으로 확정돼요."
+            : "입금이 확인되면 예약이 자동으로 확정되고 입장 QR도 발급돼요."}
       </ResultShell>
     );
   }
