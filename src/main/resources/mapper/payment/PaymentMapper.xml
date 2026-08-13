@@ -14,6 +14,11 @@
       , amount
       , status
       , method
+      , easy_pay_provider
+      , virtual_account_bank_code
+      , virtual_account_number
+      , virtual_account_due_date
+      , virtual_account_secret
       , paid_at
       , created_at
       , fair_id
@@ -90,6 +95,41 @@
         updated_at = #{updatedAt}
         WHERE payment_id = #{paymentId}
         AND status = 'PROCESSING'
+    </update>
+
+    <!-- 가상계좌 발급 - 아직 입금 전이라 paid_at은 안 건드린다. -->
+    <update id="markWaitingForDeposit" parameterType="PaymentRow">
+        UPDATE payment
+        SET status = 'WAITING_FOR_DEPOSIT',
+        method = #{method},
+        toss_payment_key = #{tossPaymentKey},
+        virtual_account_bank_code = #{virtualAccountBankCode},
+        virtual_account_number = #{virtualAccountNumber},
+        virtual_account_due_date = #{virtualAccountDueDate},
+        virtual_account_secret = #{virtualAccountSecret},
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'PROCESSING'
+    </update>
+
+    <!-- 가상계좌 입금통지 웹훅(DEPOSIT_CALLBACK, status=DONE) 처리. method/toss_payment_key는
+         발급 시점(markWaitingForDeposit)에 이미 저장돼 있어 여기선 안 건드린다. -->
+    <update id="markVirtualAccountCompleted" parameterType="PaymentRow">
+        UPDATE payment
+        SET status = 'COMPLETED',
+        paid_at = #{paidAt},
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'WAITING_FOR_DEPOSIT'
+    </update>
+
+    <!-- 가상계좌 입금기한 만료/취소 웹훅(DEPOSIT_CALLBACK, status=CANCELED) 처리. -->
+    <update id="markVirtualAccountDepositFailed">
+        UPDATE payment
+        SET status = 'FAILED',
+        updated_at = #{updatedAt}
+        WHERE payment_id = #{paymentId}
+        AND status = 'WAITING_FOR_DEPOSIT'
     </update>
 
     <update id="markFailed">

@@ -5,11 +5,17 @@ import com.ms.petopia.api.settlement.service.SettlementService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -35,9 +41,24 @@ class SettlementControllerTest {
 
     @BeforeEach
     void setUp() {
+        authenticateAs(99L);
+
         mockMvc = MockMvcBuilders.standaloneSetup(new SettlementController(settlementService))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
+    }
+
+    @AfterEach
+    void clearContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateAs(Long userId) {
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(new UsernamePasswordAuthenticationToken(
+                userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+        SecurityContextHolder.setContext(ctx);
     }
 
     private SettlementResponse sampleResponse(String status) {
@@ -71,8 +92,7 @@ class SettlementControllerTest {
     void confirmsSettlement() throws Exception {
         given(settlementService.confirm(eq(1L), eq(99L))).willReturn(sampleResponse("CONFIRMED"));
 
-        mockMvc.perform(put("/api/settlements/1/confirm")
-                        .header(SettlementTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(put("/api/settlements/1/confirm"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CONFIRMED"));
     }
@@ -82,8 +102,7 @@ class SettlementControllerTest {
         willThrow(new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND))
                 .given(settlementService).confirm(eq(999L), eq(99L));
 
-        mockMvc.perform(put("/api/settlements/999/confirm")
-                        .header(SettlementTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(put("/api/settlements/999/confirm"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ST001"));
     }
@@ -93,8 +112,7 @@ class SettlementControllerTest {
         willThrow(new CommonException(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE))
                 .given(settlementService).confirm(eq(1L), eq(99L));
 
-        mockMvc.perform(put("/api/settlements/1/confirm")
-                        .header(SettlementTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(put("/api/settlements/1/confirm"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ST003"));
     }

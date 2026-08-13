@@ -159,6 +159,26 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/booths/*/favorites").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/booths/*/favorites").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/booths/me").authenticated()
+                        // Payment 도메인 - 결제 상세/생성/확정/마이페이지는 로그인만 필요(본인 소유 검증은
+                        // 서비스 계층 몫). 목록 조회(GET /api/payments)는 컨트롤러 주석대로 관리자용.
+                        .requestMatchers(HttpMethod.GET, "/api/payments").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/api/payments/**", "/api/me/payments",
+                                "/api/vendor-applications/*/payment",
+                                "/api/reservations/*/payment", "/api/fairs/*/opening-payment")
+                        .authenticated()
+                        // Refund 도메인 - 환불 생성/조회 로그인만 필요(세밀한 권한 검증은 TODO로 남아있는 상태 그대로)
+                        .requestMatchers("/api/payments/*/refunds", "/api/refunds/**").authenticated()
+                        // Settlement 도메인 - 계산/확정은 관리자만(컨트롤러 주석 기준), 조회는 로그인만
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/vendors/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/*/confirm", "/api/settlements/*/recalculate").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").authenticated()
+                        // CommissionRate 도메인 - 요율 조회는 로그인만, 설정은 컨트롤러 주석대로 SUPER_ADMIN 전용
+                        .requestMatchers(HttpMethod.GET, "/api/settlements/commission-rate").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/commission-rate").hasRole("SUPER_ADMIN")
+                        // Payment 도메인 - 토스 결제서버가 직접 호출하는 웹훅(가상계좌 입금통지).
+                        // 우리 서비스 JWT를 가질 수 없어 의도적으로 permitAll - 위조 방지는
+                        // PaymentService.handleTossDepositCallback 내부의 secret 대조로 한다.
+                        .requestMatchers("/webhooks/toss/**").permitAll()
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->

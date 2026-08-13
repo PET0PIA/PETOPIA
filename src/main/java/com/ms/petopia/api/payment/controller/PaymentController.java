@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 // @RestController = @Controller + @ResponseBody 합친 것.
@@ -29,7 +30,7 @@ public class PaymentController {
     @GetMapping("/payments/{paymentId}")
     public PaymentResponse getPayment(
             @PathVariable Long paymentId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userID
+            @AuthenticationPrincipal Long userId
             ) {
         // TODO 인증 도메인 완성 후: 조회한 결제가 이 userId 소유(또는 관리자 권한)인지
         // 검증하는 로직 추가. 지금은 헤더 존재를 강제하는 수준까지만
@@ -49,7 +50,7 @@ public class PaymentController {
     @PostMapping("/vendor-applications/{applicationId}/payment")
     public ResponseEntity<PaymentResponse>payVendorFee(
             @PathVariable Long applicationId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @Valid
             @RequestBody VendorFeePaymentRequest request
             ) {
@@ -67,7 +68,7 @@ public class PaymentController {
     @PostMapping("/payments/{paymentId}/confirm")
     public PaymentResponse confirmPayment(
             @PathVariable Long paymentId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @Valid @RequestBody ConfirmPaymentRequest request
     ) {
         return paymentService.confirmPayment(paymentId, userId, request);
@@ -78,7 +79,7 @@ public class PaymentController {
     @PostMapping("/reservations/{reservationId}/payment")
     public ResponseEntity<PaymentResponse> payReservationDeposit(
             @PathVariable Long reservationId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(paymentService.payReservationDeposit(reservationId, userId));
@@ -90,7 +91,7 @@ public class PaymentController {
     @PostMapping("/fairs/{fairId}/opening-payment")
     public ResponseEntity<PaymentResponse> payFairOpeningFee(
             @PathVariable Long fairId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(paymentService.payFairOpeningFee(fairId, userId));
@@ -116,7 +117,7 @@ public class PaymentController {
     // 로그인 사용자 본인의 결제 내역(마이페이지). page/size 검증은 위와 동일하게 서비스 계층에서.
     @GetMapping("/me/payments")
     public PaymentListResponse getMyPayments(
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {

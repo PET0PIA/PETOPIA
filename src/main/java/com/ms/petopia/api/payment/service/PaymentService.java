@@ -357,11 +357,40 @@ public class PaymentService {
             throw e;
         }
         LocalDateTime now = LocalDateTime.now();
-        row.setStatus("COMPLETED");
         row.setMethod(tossResponse.method());
         row.setTossPaymentKey(tossResponse.paymentKey());
-        row.setPaidAt(now);
         row.setUpdatedAt(now);
+        if (tossResponse.easyPay() != null) {
+            // 간편결제(네이버페이 등)로 결제된 경우만 값이 있다 - method 자체는 "카드"로 내려오므로
+            // 이 필드가 없으면 결제상세/목록에서 일반 카드결제와 구분할 방법이 없다.
+            row.setEasyPayProvider(tossResponse.easyPay().provider());
+        }
+
+        // 가상계좌는 발급 시점엔 입금 전이라 토스가 status="WAITING_FOR_DEPOSIT"을 준다 - 이걸
+        // 무시하고 그냥 COMPLETED로 확정하면 실제 입금 전에 결제완료 처리되는 것과 같다(PR #120
+        // CodeRabbit 지적). 진짜 입금 완료는 나중에 토스 웹훅(DEPOSIT_CALLBACK)으로 따로 온다.
+        if ("WAITING_FOR_DEPOSIT".equals(tossResponse.status())) {
+            TossPaymentResponse.VirtualAccount va = tossResponse.virtualAccount();
+            if (va != null) {
+                row.setVirtualAccountBankCode(va.bankCode());
+                row.setVirtualAccountNumber(va.accountNumber());
+                row.setVirtualAccountDueDate(va.dueDate() == null ? null : va.dueDate().toLocalDateTime());
+                row.setVirtualAccountSecret(va.secret());
+            }
+
+            int waiting = paymentMapper.markWaitingForDeposit(row);
+            if (waiting == 0) {
+                // markProcessing으로 선점에 성공한 요청만 여기 도달하므로 이론상 발생하지 않는다.
+                throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+            }
+            row.setStatus("WAITING_FOR_DEPOSIT");
+            // 아직 입금 전이라 도메인 완료통지·정산반영은 하지 않는다 - 웹훅에서 입금 확인되면
+            // handleTossDepositCallback이 completePaymentAndNotify를 대신 호출한다.
+            return PaymentResponse.from(row);
+        }
+
+        row.setStatus("COMPLETED");
+        row.setPaidAt(now);
 
         int updated = paymentMapper.markCompleted(row);
         if (updated == 0) {
@@ -370,6 +399,18 @@ public class PaymentService {
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
         }
 
+        completePaymentAndNotify(row, userId);
+
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 결제가 실제로 완료된 시점(카드 승인 직후, 또는 가상계좌 입금통지 웹훅 수신 시점)에
+     * 공통으로 실행하는 후속처리. confirmPayment의 일반 결제 경로와
+     * handleTossDepositCallback의 가상계좌 입금완료 경로가 이 메서드를 공유한다 —
+     * 두 곳에서 "참가비 자동환불 폴백" 같은 로직을 따로 유지하면 한쪽만 고치는 실수가 나기 쉽다.
+     */
+    private void completePaymentAndNotify(PaymentRow row, Long actingUserId) {
         if ("RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
             notifyReservationDomain(row);
         }
@@ -396,10 +437,74 @@ public class PaymentService {
             }
         }
 
-        recordPaymentCompletionAudit(row, userId);
+        recordPaymentCompletionAudit(row, actingUserId);
         notifyPaymentCompleted(row);
+    }
 
-        return PaymentResponse.from(row);
+    /**
+     * 토스 가상계좌 입금통지 웹훅(eventType="DEPOSIT_CALLBACK") 처리. 토스 결제서버가 우리
+     * JWT 없이 직접 호출하므로(PaymentWebhookController가 SecurityConfig에서 permitAll)
+     * 위조 방지는 여기서 secret 대조로만 한다 — 토스 문서 기준 가상계좌 웹훅 공식 검증 방식.
+     *
+     * <p>10초 안에 응답해야 한다는 토스 제약 때문에 컨트롤러가 이 메서드를 부르고 바로 200을
+     * 준다 - 그래서 이 메서드는 예외를 던지지 않고 이상 상황은 로그만 남기고 조용히 리턴한다
+     * (예외를 던지면 GlobalExceptionHandler가 4xx/5xx로 응답하고, 토스가 계속 재시도하게 된다 —
+     * 위조/중복 웹훅은 재시도해도 똑같이 무시돼야 하므로 굳이 에러 응답을 줄 이유가 없다).
+     */
+    public void handleTossDepositCallback(TossWebhookEvent event) {
+        if (event.data() == null || !"DEPOSIT_CALLBACK".equals(event.eventType())) {
+            return; // 관심 없는 이벤트 타입 - 그냥 무시
+        }
+
+        TossWebhookEvent.Data data = event.data();
+        Long paymentId = parsePaymentIdFromOrderId(data.orderId());
+        if (paymentId == null) {
+            log.warn("가상계좌 웹훅 orderId 형식이 예상과 다름: {}", data.orderId());
+            return;
+        }
+
+        PaymentRow row = paymentMapper.selectById(paymentId);
+        if (row == null) {
+            log.warn("가상계좌 웹훅 대상 결제 없음: paymentId={}", paymentId);
+            return;
+        }
+        if (!"WAITING_FOR_DEPOSIT".equals(row.getStatus())) {
+            // 이미 처리됐거나(토스 재전송)애초에 가상계좌 결제가 아니었던 경우 - 멱등 처리로
+            // 조용히 무시한다.
+            return;
+        }
+        if (row.getVirtualAccountSecret() == null || !row.getVirtualAccountSecret().equals(data.secret())) {
+            log.warn("가상계좌 웹훅 secret 불일치 - 위조 의심. paymentId={}", paymentId);
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if ("DONE".equals(data.status())) {
+            row.setPaidAt(now);
+            row.setUpdatedAt(now);
+            int updated = paymentMapper.markVirtualAccountCompleted(row);
+            if (updated == 0) {
+                return; // 동시에 들어온 재전송 웹훅 등 - 이미 다른 요청이 처리함
+            }
+            row.setStatus("COMPLETED");
+            completePaymentAndNotify(row, SYSTEM_ACTOR_USER_ID);
+        } else if ("CANCELED".equals(data.status())) {
+            // 입금기한 만료 등으로 토스가 가상계좌를 취소한 경우 - FAILED로 종료.
+            paymentMapper.markVirtualAccountDepositFailed(paymentId, now);
+        }
+        // 그 외 status 값은 우리가 아직 처리할 이유가 없어 무시한다.
+    }
+
+    /** orderId는 confirmPayment에서 우리가 직접 만든 "PAYMENT_{paymentId}" 형식뿐이라 파싱으로 충분하다. */
+    private Long parsePaymentIdFromOrderId(String orderId) {
+        if (orderId == null || !orderId.startsWith("PAYMENT_")) {
+            return null;
+        }
+        try {
+            return Long.parseLong(orderId.substring("PAYMENT_".length()));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private void recordPaymentCompletionAudit(PaymentRow row, Long userId) {

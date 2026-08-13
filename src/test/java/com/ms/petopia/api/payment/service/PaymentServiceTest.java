@@ -14,6 +14,7 @@ import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.dto.ReservationPaymentCompletionResult;
 import com.ms.petopia.api.payment.dto.ReservationPaymentContext;
 import com.ms.petopia.api.payment.dto.TossPaymentResponse;
+import com.ms.petopia.api.payment.dto.TossWebhookEvent;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
@@ -115,7 +116,9 @@ class PaymentServiceTest {
         PaymentResponse expected = new PaymentResponse(
                 row.getPaymentId(), "PAYMENT_"+ row.getPaymentId(), row.getPaymentType(), row.getAmount(), row.getStatus(), row.getMethod(),
                 row.getPaidAt(), row.getCreatedAt(), row.getFairId(), row.getBusinessId(),
-                row.getPayerUserId(), row.getReservationId(), row.getApplicationId()
+                row.getPayerUserId(), row.getReservationId(), row.getApplicationId(),
+                row.getEasyPayProvider(), row.getVirtualAccountBankCode(),
+                row.getVirtualAccountNumber(), row.getVirtualAccountDueDate()
         );
 
         // Act
@@ -535,7 +538,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
 
@@ -877,7 +880,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
 
@@ -902,7 +905,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
 
@@ -922,7 +925,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
         // 예약 도메인 통지 자체가 터지는 상황(네트워크 장애 등)을 흉내냄
@@ -947,7 +950,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
         // 첫 번째 시도만 실패하고 두 번째 시도부터는 성공하는 상황(일시적 네트워크 장애를 흉내냄).
@@ -964,6 +967,149 @@ class PaymentServiceTest {
         // Assert: 결제는 정상 완료되고, 통지는 재시도 끝에 두 번째 시도에서 성공해서 멈췄는지
         assertThat(result.status()).isEqualTo("COMPLETED");
         verify(reservationPaymentContractClient, times(2)).completePayment(any(), any(), any(), any(), any());
+    }
+
+    private PaymentRow waitingForDepositRow() {
+        PaymentRow row = pendingRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setMethod("가상계좌");
+        row.setVirtualAccountSecret("secret-abc");
+        return row;
+    }
+
+    @Test
+    @DisplayName("가상계좌로 결제하면 토스가 WAITING_FOR_DEPOSIT을 줄 때 COMPLETED 대신 WAITING_FOR_DEPOSIT으로 남고 도메인 완료통지는 하지 않는다")
+    void confirmPayment_가상계좌_입금전이면_WAITING_FOR_DEPOSIT으로_전환된다() {
+        // Arrange
+        PaymentRow row = pendingRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_1", "WAITING_FOR_DEPOSIT", 50000L, "가상계좌",
+                        OffsetDateTime.now(), null,
+                        new TossPaymentResponse.VirtualAccount(
+                                "020", "1234567890", OffsetDateTime.now().plusHours(24), "secret-abc")
+                ));
+        given(paymentMapper.markWaitingForDeposit(any(PaymentRow.class))).willReturn(1);
+
+        // Act
+        PaymentResponse result = paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        // Assert: 아직 입금 전이라 COMPLETED가 아니라 WAITING_FOR_DEPOSIT, 계좌정보는 응답에 실림
+        assertThat(result.status()).isEqualTo("WAITING_FOR_DEPOSIT");
+        assertThat(result.virtualAccountBankCode()).isEqualTo("020");
+        assertThat(result.virtualAccountNumber()).isEqualTo("1234567890");
+        // 입금 전이니 결제완료 처리(markCompleted)도, 참가비 확정 통지도 아직 일어나면 안 된다
+        verify(paymentMapper, never()).markCompleted(any(PaymentRow.class));
+        verify(applicationService, never()).confirmVendorPayment(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("간편결제(네이버페이 등)로 결제하면 easyPay 제공사를 저장한다")
+    void confirmPayment_간편결제_제공사를_저장한다() {
+        // Arrange
+        PaymentRow row = pendingRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now(),
+                        new TossPaymentResponse.EasyPay("네이버페이"), null
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+
+        // Act
+        PaymentResponse result = paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        // Assert: method 자체는 "카드"로 내려오지만(토스 SDK 특성), easyPayProvider로 네이버페이임을 구분할 수 있어야 함
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(result.method()).isEqualTo("카드");
+        assertThat(result.easyPayProvider()).isEqualTo("네이버페이");
+    }
+
+    @Test
+    @DisplayName("가상계좌 입금통지 웹훅(DONE)을 받으면 결제를 COMPLETED로 전환하고 도메인 완료통지까지 한다")
+    void handleTossDepositCallback_입금완료_COMPLETED로전환하고도메인통지한다() {
+        // Arrange
+        PaymentRow row = waitingForDepositRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markVirtualAccountCompleted(any(PaymentRow.class))).willReturn(1);
+
+        TossWebhookEvent event = new TossWebhookEvent("DEPOSIT_CALLBACK",
+                new TossWebhookEvent.Data("PAYMENT_1", "DONE", "secret-abc", "txKey"));
+
+        // Act
+        paymentService.handleTossDepositCallback(event);
+
+        // Assert: COMPLETED 전환 + confirmPayment의 일반경로와 동일한 완료통지(participation fee 확정)까지 탄다
+        verify(paymentMapper).markVirtualAccountCompleted(any(PaymentRow.class));
+        verify(applicationService).confirmVendorPayment(eq(40L), eq(1L), eq(50000L));
+    }
+
+    @Test
+    @DisplayName("웹훅 secret이 저장된 값과 다르면 위조로 간주해 무시한다")
+    void handleTossDepositCallback_secret불일치면_무시한다() {
+        PaymentRow row = waitingForDepositRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        TossWebhookEvent event = new TossWebhookEvent("DEPOSIT_CALLBACK",
+                new TossWebhookEvent.Data("PAYMENT_1", "DONE", "wrong-secret", "txKey"));
+
+        paymentService.handleTossDepositCallback(event);
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any());
+    }
+
+    @Test
+    @DisplayName("가상계좌 입금기한 만료 웹훅(CANCELED)을 받으면 결제를 FAILED로 전환한다")
+    void handleTossDepositCallback_입금기한만료면_FAILED로전환한다() {
+        PaymentRow row = waitingForDepositRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        TossWebhookEvent event = new TossWebhookEvent("DEPOSIT_CALLBACK",
+                new TossWebhookEvent.Data("PAYMENT_1", "CANCELED", "secret-abc", "txKey"));
+
+        paymentService.handleTossDepositCallback(event);
+
+        verify(paymentMapper).markVirtualAccountDepositFailed(eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("DEPOSIT_CALLBACK이 아닌 이벤트 타입은 무시한다")
+    void handleTossDepositCallback_관심없는이벤트타입은무시한다() {
+        TossWebhookEvent event = new TossWebhookEvent("PAYMENT_STATUS_CHANGED",
+                new TossWebhookEvent.Data("PAYMENT_1", "DONE", "secret-abc", "txKey"));
+
+        paymentService.handleTossDepositCallback(event);
+
+        verify(paymentMapper, never()).selectById(any());
+    }
+
+    @Test
+    @DisplayName("이미 COMPLETED로 처리된 결제에 웹훅이 다시 오면(토스 재전송 등) 중복 처리하지 않는다")
+    void handleTossDepositCallback_이미완료된결제는_중복처리하지않는다() {
+        PaymentRow row = waitingForDepositRow();
+        row.setStatus("COMPLETED");
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        TossWebhookEvent event = new TossWebhookEvent("DEPOSIT_CALLBACK",
+                new TossWebhookEvent.Data("PAYMENT_1", "DONE", "secret-abc", "txKey"));
+
+        paymentService.handleTossDepositCallback(event);
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any());
+    }
+
+    @Test
+    @DisplayName("orderId 형식이 예상과 다르면 무시한다")
+    void handleTossDepositCallback_orderId형식이상하면_무시한다() {
+        TossWebhookEvent event = new TossWebhookEvent("DEPOSIT_CALLBACK",
+                new TossWebhookEvent.Data("garbage", "DONE", "secret-abc", "txKey"));
+
+        paymentService.handleTossDepositCallback(event);
+
+        verify(paymentMapper, never()).selectById(any());
     }
 
     @Test

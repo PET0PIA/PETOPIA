@@ -6,16 +6,23 @@ import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -36,9 +43,24 @@ class RefundControllerTest {
 
     @BeforeEach
     void setUp() {
+        authenticateAs(99L);
+
         mockMvc = MockMvcBuilders.standaloneSetup(new RefundController(refundService))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
+    }
+
+    @AfterEach
+    void clearContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateAs(Long userId) {
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(new UsernamePasswordAuthenticationToken(
+                userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+        SecurityContextHolder.setContext(ctx);
     }
 
     @Test
@@ -52,7 +74,6 @@ class RefundControllerTest {
         );
 
         mockMvc.perform(post("/api/payments/1/refunds")
-                        .header(RefundTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refundReason\":\"USER_CANCEL\",\"requestedByDomain\":\"RESERVATION\"}"))
                 .andExpect(status().isCreated())
@@ -66,7 +87,6 @@ class RefundControllerTest {
                 .given(refundService).refund(eq(999L), eq(99L), any());
 
         mockMvc.perform(post("/api/payments/999/refunds")
-                        .header(RefundTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refundReason\":\"USER_CANCEL\",\"requestedByDomain\":\"RESERVATION\"}"))
                 .andExpect(status().isNotFound())
@@ -79,7 +99,6 @@ class RefundControllerTest {
                 .given(refundService).refund(eq(1L), eq(99L), any());
 
         mockMvc.perform(post("/api/payments/1/refunds")
-                        .header(RefundTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refundReason\":\"USER_CANCEL\",\"requestedByDomain\":\"RESERVATION\"}"))
                 .andExpect(status().isConflict())
@@ -89,7 +108,6 @@ class RefundControllerTest {
     @Test
     void returns400WhenRefundReasonIsBlank() throws Exception {
         mockMvc.perform(post("/api/payments/1/refunds")
-                        .header(RefundTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refundReason\":\"\",\"requestedByDomain\":\"RESERVATION\"}"))
                 .andExpect(status().isBadRequest());

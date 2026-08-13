@@ -5,6 +5,7 @@ import com.ms.petopia.api.settlement.service.SettlementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -32,7 +33,7 @@ public class SettlementController {
     @PutMapping("/settlements/{settlementId}/confirm")
     public SettlementResponse confirm(
             @PathVariable Long settlementId,
-            @RequestHeader(SettlementTemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         return settlementService.confirm(settlementId, userId);
     }

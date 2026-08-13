@@ -8,12 +8,18 @@ import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -44,6 +50,11 @@ class PaymentControllerTest {
 
     @BeforeEach
     void setUp() {
+        // 인증 도메인 연동 후: @AuthenticationPrincipal이 읽을 SecurityContext를
+        // 기본값(userId=99L)으로 미리 채워둔다. 다른 userId가 필요한 테스트는
+        // 본문에서 authenticateAs(...)로 덮어쓴다.
+        authenticateAs(99L);
+
         // standaloneSetup: 테스트하고 싶은 컨트롤러만 콕 집어서 등록.
         // (전체 스프링 컨텍스트를 안 띄우니까 다른 빈들 신경 안 써도 됨)
         mockMvc = MockMvcBuilders.standaloneSetup(new PaymentController(paymentService))
@@ -51,7 +62,22 @@ class PaymentControllerTest {
                 // 바꿔주니까, 테스트에서도 똑같이 등록해줘야 "예외 던지면 404/409로
                 // 변환되는지"까지 검증할 수 있음. 안 넣으면 그냥 500 에러로 터짐.
                 .setControllerAdvice(new GlobalExceptionHandler())
+                // standaloneSetup은 실제 SecurityFilterChain을 안 타므로 @AuthenticationPrincipal을
+                // 직접 못 풀어낸다 - 이 리졸버를 등록해줘야 위에서 세팅한 SecurityContext에서 꺼내온다.
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
+    }
+
+    @AfterEach
+    void clearContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateAs(Long userId) {
+        SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+        ctx.setAuthentication(new UsernamePasswordAuthenticationToken(
+                userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
+        SecurityContextHolder.setContext(ctx);
     }
 
     @Test
@@ -64,15 +90,15 @@ class PaymentControllerTest {
                         1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "TOSS",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
-                        10L, 20L, null, null, 40L
+                        10L, 20L, null, null, 40L,
+                        null, null, null, null
                 )
         );
 
         // Act + Assert: 실제 HTTP GET 요청처럼 "/api/payments/1"을 호출하고
         // jsonPath("$.필드명")로 응답 JSON 안의 값을 하나씩 꺼내서 검증함.
         // ($는 JSON 최상위를 가리키는 표기법 — jQuery 셀렉터 비슷한 느낌)
-        mockMvc.perform(get("/api/payments/1")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(get("/api/payments/1"))
                 .andExpect(status().isOk()) // HTTP 200인지
                 .andExpect(jsonPath("$.paymentId").value(1))
                 .andExpect(jsonPath("$.paymentType").value("VENDOR_FEE"))
@@ -91,7 +117,8 @@ class PaymentControllerTest {
                         2L, "PAYMENT_2", "RESERVATION_DEPOSIT", 30000L, "COMPLETED", "TOSS",
                         LocalDateTime.of(2026, 8, 5, 10, 0),
                         LocalDateTime.of(2026, 8, 5, 10, 0),
-                        10L, null, 90L, 500L, null
+                        10L, null, 90L, 500L, null,
+                        null, null, null, null
                 )
         );
 
@@ -119,8 +146,7 @@ class PaymentControllerTest {
         willThrow(new CommonException(ErrorCode.PAYMENT_NOT_FOUND))
                 .given(paymentService).getPayment(999L);
 
-        mockMvc.perform(get("/api/payments/999")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(get("/api/payments/999"))
                 .andExpect(status().isNotFound()) // ErrorCode.PAYMENT_NOT_FOUND가 HttpStatus.NOT_FOUND라서 404 기대
                 .andExpect(jsonPath("$.code").value("P001")); // ErrorResponse.code는 ErrorCode의 "P001" 문자열
     }
@@ -133,7 +159,8 @@ class PaymentControllerTest {
                         1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "PENDING", "TOSS",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
-                        10L, 20L, null, null, 40L
+                        10L, 20L, null, null, 40L,
+                        null, null, null, null
                 )
         );
 
@@ -141,7 +168,6 @@ class PaymentControllerTest {
         // 여기 JSON 키(fairId/businessId/amount)는 VendorFeePaymentRequest 필드명과
         // 정확히 일치해야 Jackson이 자동으로 객체로 바꿔줌(대소문자도 그대로 맞춰야 함).
         mockMvc.perform(post("/api/vendor-applications/40/payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"fairId\":10,\"businessId\":20,\"amount\":50000}"))
                 .andExpect(status().isCreated()) // 컨트롤러가 201로 응답하는지
@@ -159,7 +185,6 @@ class PaymentControllerTest {
                 .given(paymentService).payVendorFee(eq(40L), eq(99L), any(VendorFeePaymentRequest.class));
 
         mockMvc.perform(post("/api/vendor-applications/40/payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"fairId\":10,\"businessId\":20,\"amount\":50000}"))
                 .andExpect(status().isConflict()) // ErrorCode.PAYMENT_TARGET_NOT_PAYABLE이 HttpStatus.CONFLICT라서 409
@@ -173,12 +198,12 @@ class PaymentControllerTest {
                         1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "카드",
                         LocalDateTime.of(2026, 8, 4, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
-                        10L, 20L, 99L, null, 40L
+                        10L, 20L, 99L, null, 40L,
+                        null, null, null, null
                 )
         );
 
         mockMvc.perform(post("/api/payments/1/confirm")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"paymentKey\":\"5EnNZRJGvxNa2mzq\"}"))
                 .andExpect(status().isOk())
@@ -195,7 +220,6 @@ class PaymentControllerTest {
                 .given(paymentService).confirmPayment(eq(1L), eq(99L), any(ConfirmPaymentRequest.class));
 
         mockMvc.perform(post("/api/payments/1/confirm")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"paymentKey\":\"5EnNZRJGvxNa2mzq\"}"))
                 .andExpect(status().isForbidden())
@@ -206,7 +230,6 @@ class PaymentControllerTest {
     void returns400WhenPaymentKeyIsBlank() throws Exception {
         // @NotBlank 검증 — 서비스까지 안 가고 컨트롤러 바인딩 단계에서 걸러져야 함
         mockMvc.perform(post("/api/payments/1/confirm")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"paymentKey\":\"\"}"))
                 .andExpect(status().isBadRequest());
@@ -216,18 +239,18 @@ class PaymentControllerTest {
     void createsReservationDepositPayment() throws Exception {
         // Arrange: 예약금 결제는 요청 바디가 없음(금액을 클라이언트가 안 보냄 —
         // 서비스가 예약 도메인 컨텍스트로 진짜 금액을 받아온다는 걸 컨트롤러 테스트에서는
-        // 그냥 신뢰하고, 여기선 "path variable/header가 잘 넘어가서 201로 응답하는지"만 본다).
+        // 그냥 신뢰하고, 여기선 "path variable/인증정보가 잘 넘어가서 201로 응답하는지"만 본다).
         given(paymentService.payReservationDeposit(eq(500L), eq(99L))).willReturn(
                 new PaymentResponse(
                         2L, "PAYMENT_2", "RESERVATION_DEPOSIT", 30000L, "PENDING", "TOSS",
                         null,
                         LocalDateTime.of(2026, 8, 5, 10, 0),
-                        10L, null, 99L, 500L, null
+                        10L, null, 99L, 500L, null,
+                        null, null, null, null
                 )
         );
 
-        mockMvc.perform(post("/api/reservations/500/payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(post("/api/reservations/500/payment"))
                 .andExpect(status().isCreated()) // 컨트롤러가 201로 응답하는지
                 .andExpect(jsonPath("$.paymentType").value("RESERVATION_DEPOSIT"))
                 .andExpect(jsonPath("$.amount").value(30000))
@@ -242,8 +265,7 @@ class PaymentControllerTest {
         willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
                 .given(paymentService).payReservationDeposit(eq(500L), eq(99L));
 
-        mockMvc.perform(post("/api/reservations/500/payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(post("/api/reservations/500/payment"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("A002"));
     }
@@ -254,25 +276,26 @@ class PaymentControllerTest {
         willThrow(new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE))
                 .given(paymentService).payReservationDeposit(eq(500L), eq(99L));
 
-        mockMvc.perform(post("/api/reservations/500/payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(post("/api/reservations/500/payment"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("P002"));
     }
 
     @Test
     void createsFairOpeningFeePayment() throws Exception {
+        authenticateAs(3L); // 이 개설비 결제는 userId=3L(행사담당자)로 검증하는 케이스라 기본값 대신 덮어쓴다
+
         given(paymentService.payFairOpeningFee(eq(10L), eq(3L))).willReturn(
                 new PaymentResponse(
                         3L, "PAYMENT_3", "FAIR_OPENING_FEE", 500000L, "PENDING", "TOSS",
                         null,
                         LocalDateTime.of(2026, 8, 6, 10, 0),
-                        10L, null, 3L, null, null
+                        10L, null, 3L, null, null,
+                        null, null, null, null
                 )
         );
 
-        mockMvc.perform(post("/api/fairs/10/opening-payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3))
+        mockMvc.perform(post("/api/fairs/10/opening-payment"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.paymentType").value("FAIR_OPENING_FEE"))
                 .andExpect(jsonPath("$.fairId").value(10));
@@ -282,11 +305,12 @@ class PaymentControllerTest {
 
     @Test
     void returns409WhenFairOpeningFeeAlreadyPaid() throws Exception {
+        authenticateAs(3L);
+
         willThrow(new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE))
                 .given(paymentService).payFairOpeningFee(eq(10L), eq(3L));
 
-        mockMvc.perform(post("/api/fairs/10/opening-payment")
-                        .header(PaymentTemporaryAuthHeaders.USER_ID, 3))
+        mockMvc.perform(post("/api/fairs/10/opening-payment"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("P002"));
     }
@@ -299,7 +323,8 @@ class PaymentControllerTest {
                                 1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "카드",
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
-                                10L, 20L, 99L, null, 40L
+                                10L, 20L, 99L, null, 40L,
+                                null, null, null, null
                         )
                 ), 0, 20, 1L, 1)
         );
@@ -363,11 +388,12 @@ class PaymentControllerTest {
                                 1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "카드",
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
-                                10L, 20L, 99L, null, 40L
+                                10L, 20L, 99L, null, 40L,
+                                null, null, null, null
                         )
                 ), 0, 20, 1L, 1));
 
-        mockMvc.perform(get("/api/me/payments").header(PaymentTemporaryAuthHeaders.USER_ID, 99))
+        mockMvc.perform(get("/api/me/payments"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].payerUserId").value(99));
 

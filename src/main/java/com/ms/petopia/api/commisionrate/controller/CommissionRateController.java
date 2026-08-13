@@ -3,13 +3,12 @@ package com.ms.petopia.api.commisionrate.controller;
 import com.ms.petopia.api.commisionrate.dto.CommissionRateResponse;
 import com.ms.petopia.api.commisionrate.dto.UpdateCommissionRateRequest;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
-import com.ms.petopia.api.settlement.controller.SettlementTemporaryAuthHeaders;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -32,7 +31,7 @@ public class CommissionRateController {
     @PutMapping("/settlements/commission-rate")
     public CommissionRateResponse setRate(
             @RequestBody @Valid UpdateCommissionRateRequest request,
-            @RequestHeader(SettlementTemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         return commissionRateService.setRate(request.scope(), request.fairId(), request.rate(), userId);
     }

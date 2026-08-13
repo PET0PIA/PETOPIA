@@ -23,6 +23,11 @@ public class PaymentRow {
     private Long amount;
     private String status;
     private String method;
+    private String easyPayProvider;
+    private String virtualAccountBankCode;
+    private String virtualAccountNumber;
+    private LocalDateTime virtualAccountDueDate;
+    private String virtualAccountSecret;
     private LocalDateTime paidAt;
     private LocalDateTime createdAt;
     private Long fairId;

@@ -128,7 +128,8 @@ class FairCancelPendingPaymentServiceTest {
     private PaymentResponse payment(Long paymentId, String paymentType) {
         return new PaymentResponse(
                 paymentId, "PAYMENT_" + paymentId, paymentType, 10_000L, "PENDING",
-                "MOCK", null, NOW.minusMinutes(5), FAIR_ID, null, 1L, null, null
+                "MOCK", null, NOW.minusMinutes(5), FAIR_ID, null, 1L, null, null,
+                null, null, null, null
         );
     }
 

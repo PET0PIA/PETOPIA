@@ -74,6 +74,26 @@ public interface PaymentMapper {
     int markCompleted(PaymentRow row);
 
     /**
+     * PROCESSING -> WAITING_FOR_DEPOSIT. 가상계좌가 발급됐지만 아직 입금 전인 상태 —
+     * 토스 confirm 응답이 status="WAITING_FOR_DEPOSIT"를 줄 때만 호출한다(markCompleted 대신).
+     * 실제 입금 완료는 이 상태에서 markVirtualAccountCompleted로 한 번 더 전이한다.
+     */
+    int markWaitingForDeposit(PaymentRow row);
+
+    /**
+     * WAITING_FOR_DEPOSIT -> COMPLETED. 가상계좌 입금통지 웹훅(DEPOSIT_CALLBACK, status="DONE")을
+     * 받았을 때만 호출한다. {@code WHERE status='WAITING_FOR_DEPOSIT'} 가드가 원자적이라, 토스가
+     * 같은 웹훅을 중복 전송해도(재시도) 두 번째부터는 0을 받아 완료 후속처리가 중복 실행되지 않는다.
+     */
+    int markVirtualAccountCompleted(PaymentRow row);
+
+    /**
+     * WAITING_FOR_DEPOSIT -> FAILED. 입금기한 만료 등으로 웹훅이 status="CANCELED"를 줬을 때 호출한다.
+     * 가드 방식은 markVirtualAccountCompleted와 동일.
+     */
+    int markVirtualAccountDepositFailed(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
      * 토스가 확정적으로 승인을 거부했을 때(4xx) PROCESSING -> FAILED로 전이한다.
      * markProcessing으로 선점에 성공한 요청만 호출하므로, 정상 흐름에서는 항상 1을 반환한다.
      */
