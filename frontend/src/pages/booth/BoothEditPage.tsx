@@ -118,6 +118,10 @@ function BoothEditContent({ id }: { id: number }) {
       .then((res) => {
         if (!alive) return;
         setBooth(res);
+        if (!res.owner) {
+          setAccessDenied(true);
+          return;
+        }
         setItems(res.items);
         setName(res.name);
         setIntro(res.intro ?? "");
@@ -323,7 +327,11 @@ function BoothEditContent({ id }: { id: number }) {
             <div>
               <label className="mb-1.5 block text-sm font-bold text-ink">대상 동물</label>
               <Select value={targetAnimal} onChange={(e) => setTargetAnimal(e.target.value as BoothTargetAnimal | "")}>
-                <option value="">선택 안 함</option>
+                {targetAnimal === "" && (
+                  <option value="" disabled>
+                    선택해 주세요
+                  </option>
+                )}
                 {(Object.keys(targetAnimalLabels) as BoothTargetAnimal[]).map((value) => (
                   <option key={value} value={value}>
                     {targetAnimalLabels[value]}
