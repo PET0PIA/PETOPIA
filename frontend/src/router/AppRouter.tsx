@@ -68,12 +68,13 @@ import { ProtectedRoute } from "./ProtectedRoute";
 import { BusinessesByFairPage } from "../pages/business/BusinessesByFairPage";
 import { FairBoothsPage } from "../pages/fair/FairBoothsPage";
 import { MyBoothsPage } from "../pages/booth/MyBoothsPage";
+import { ApplicationEditPage } from "../pages/application/ApplicationEditPage";
+import { ParticipationNewPage } from "../pages/application/ParticipationNewPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
   "/businesses/status": "사업자 등록 현황",
-  "/participations/new": "참여 부스 신청",
   "/news": "소식·이벤트",
   "/advertising": "광고 문의",
   "/about": "서비스 소개",
@@ -175,10 +176,12 @@ export function AppRouter() {
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
           <Route path="/businesses/me" element={<MyBusinessesPage />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
+          <Route path="/participations/new" element={<ParticipationNewPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
           <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
           <Route path="/participations/me" element={<MyApplicationsPage />} />
           <Route path="/participations/me/:applicationId" element={<ApplicationDetailPage />} />
+          <Route path="/participations/me/:applicationId/edit" element={<ApplicationEditPage />} />
           <Route path="/booths/:boothId" element={<BoothDetailPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />

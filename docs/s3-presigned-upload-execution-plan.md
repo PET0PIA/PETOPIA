@@ -269,3 +269,6 @@ src/main/java/com/ms/petopia/global/logging/HttpLoggingFilter.java
 3. S3 확정 성공 뒤 DB 갱신·커밋이 실패하면 보상 삭제를 시도하고, 실패한 정리는 별도 재시도 작업으로 남긴다. DB 트랜잭션과 함께 롤백되는 outbox만으로는 이 보상을 보장할 수 없다.
 4. 교체/삭제 시 이전 객체 삭제를 도메인 규칙에 맞게 추가한다.
 5. 비공개 파일 정책과 presigned GET은 별도 설계/구현한다.
+6. **`DOCUMENT` 정책 추가됨(2026-08-06)**: `pdf`, `docx`, `xlsx`, `pptx`(신형만) / 최대 50MB / 디렉토리 `document/`. `UploadPolicy` enum 상수 추가로 처리했고, 발급·확정 로직은 기존 공통 흐름을 그대로 탄다. (§3-1의 "PDF 제외"는 이 시점부터 무효)
+7. **tmp 접두사 라이프사이클 규칙은 운영에서 필수(코드 아님)**: presigned **PUT**은 본문 크기(Content-Length)를 서명에 묶지 못하므로, 발급 요청의 `size`보다 큰 파일이 tmp 키에 업로드될 수 있다. `confirm`이 `HeadObject`의 실제 용량으로 재검증해 **정식 승격은 막지만**, tmp에 올라간 뒤 `confirm`되지 않은 객체는 그대로 남아 비용이 든다. `tmp/` 접두사에 만료(예: 1일) 라이프사이클 규칙을 걸어 버려진 임시 객체를 자동 청소한다. `uploads/`(정식) 접두사에는 걸지 않는다.
+8. **업로드 시점 하드 크기 제한은 보류**: 코드래빗 지적대로 크기를 업로드 순간에 강제하려면 presigned **POST + `content-length-range`** 조건으로 전환해야 한다. PUT→POST는 프론트 업로드 방식·백엔드 발급 로직·응답 DTO가 모두 바뀌는 큰 변경이라, 현 MVP 범위에서는 7번(라이프사이클 + `confirm` 재검증)으로 대체하고 별도 작업으로 미룬다.
