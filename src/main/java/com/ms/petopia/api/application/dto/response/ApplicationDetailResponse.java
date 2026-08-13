@@ -16,6 +16,7 @@ public class ApplicationDetailResponse {
     private Long applicationId;
     private Long fairId;
     private Long businessId;
+    private String businessName; // 어떤 사업자로 신청했는지
     private String status; // 신청 처리 상태
     private String purpose; // 참가 목적
     private String itemsDesc; // 판매·전시 품목
