@@ -301,7 +301,7 @@ export function PaymentSuccessPage() {
       actions={
         <>
           <PrimaryLink to="/reservations/me">내 예약 목록으로</PrimaryLink>
-          <SecondaryLink to="/tickets">다른 행사 보기</SecondaryLink>
+          <SecondaryLink to="/fairs/upcoming">다른 행사 보기</SecondaryLink>
         </>
       }
     >
@@ -388,7 +388,7 @@ export function PaymentFailPage() {
       actions={
         <>
           <PrimaryLink to="/reservations/me">내 예약 목록으로</PrimaryLink>
-          <SecondaryLink to="/tickets">예매 가능한 행사 보기</SecondaryLink>
+          <SecondaryLink to="/fairs/upcoming">예매 가능한 행사 보기</SecondaryLink>
         </>
       }
     >

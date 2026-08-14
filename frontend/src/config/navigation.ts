@@ -12,15 +12,9 @@ export interface NavigationItem {
 }
 
 export const publicNavigation: NavigationItem[] = [
-  {
-    // 관람객 구역: 행사를 둘러보고(행사 목록) 예매(티켓 예매)까지. 둘 다 같은 공개 행사를 쓰지만
-    // "둘러보기 vs 바로 예매"로 성격이 달라 한 드롭다운에 나눠 담는다.
-    label: "행사·티켓",
-    children: [
-      { label: "행사 목록", path: "/fairs/upcoming" },
-      { label: "티켓 예매", path: "/tickets" },
-    ],
-  },
+  // 관람객 구역: 행사를 둘러보고 예매까지 한 목록에서. 예전엔 '행사 목록'+'티켓 예매'로 나눴지만,
+  // 티켓 예매 목록이 행사 목록과 중복이라(목록의 '사전예약 중' 탭이 그 역할) 하나로 합쳤다.
+  { label: "행사", path: "/fairs/upcoming" },
   { label: "소식·이벤트", path: "/news" },
   {
     // 비즈니스 구역: "일하러 온 사람"(주최자·업체·광고주)의 신청/문의 창구 3개.

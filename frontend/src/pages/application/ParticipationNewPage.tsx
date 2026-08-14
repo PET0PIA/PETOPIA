@@ -47,7 +47,7 @@ export function ParticipationNewPage() {
       {!loading && !error && fairs.length > 0 && (
         <div className="grid gap-5 md:grid-cols-3">
           {fairs.map((fair) => (
-            <FairPublicCard key={fair.fairId} fair={fair} to={`/fairs/${fair.fairId}/apply`} />
+            <FairPublicCard key={fair.fairId} fair={fair} to={`/fairs/${fair.fairId}/apply`} action={{ to: `/fairs/${fair.fairId}/apply`, label: "신청하기" }} />
           ))}
         </div>
       )}

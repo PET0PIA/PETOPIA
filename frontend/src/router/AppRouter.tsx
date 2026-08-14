@@ -10,7 +10,7 @@ import { MyFairApplicationsPage } from "../pages/fair/MyFairApplicationsPage";
 import { MyFairApplicationDetailPage } from "../pages/fair/MyFairApplicationDetailPage";
 import { FairUpcomingPage } from "../pages/fair/FairUpcomingPage";
 import { FairPastPage } from "../pages/fair/FairPastPage";
-import { TicketFairListPage } from "../pages/reservation/TicketFairListPage";
+import { FairDetailPage } from "../pages/fair/FairDetailPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
 import { BoothLayoutEditPage } from "../pages/fair-admin/BoothLayoutEditPage";
 import { FairDateManagementPage } from "../pages/fair-admin/FairDateManagementPage";
@@ -148,6 +148,9 @@ export function AppRouter() {
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
           <Route path="/fairs/upcoming" element={<FairUpcomingPage />} />
           <Route path="/fairs/past" element={<FairPastPage />} />
+          {/* 행사 상세(공개). 목록 카드가 여기로 오고, '예매하기'는 /tickets/:fairId로 넘긴다.
+              정적 경로(/fairs/upcoming 등)가 :fairId보다 우선 매칭되므로 충돌 없다. */}
+          <Route path="/fairs/:fairId" element={<FairDetailPage />} />
           {/* 비즈니스 ▾ "부스 참가 신청" 입구. 실제 목록(모집 중 행사)·미등록 유도 로직은 후속.
               지금은 준비중 화면에서 사업자 등록으로만 안내한다. */}
           <Route
@@ -161,7 +164,6 @@ export function AppRouter() {
               />
             }
           />
-          <Route path="/tickets" element={<TicketFairListPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}
           <Route path="/payments/success" element={<PaymentSuccessPage />} />
