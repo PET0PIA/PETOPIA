@@ -105,6 +105,7 @@ export function MyVisitedBoothsPage() {
           <select
             value={selectedFairId ?? ""}
             onChange={(event) => setSelectedFairId(Number(event.target.value))}
+            aria-label="방문한 행사 선택"
             className="mb-6 min-h-11 rounded-button border border-line bg-card px-4 text-sm font-bold"
           >
             {fairs.map((fair) => (
