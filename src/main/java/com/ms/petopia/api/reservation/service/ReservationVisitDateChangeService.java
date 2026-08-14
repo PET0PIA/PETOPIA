@@ -95,8 +95,9 @@ public class ReservationVisitDateChangeService {
         // 다른 사람이 채워버리면 되돌아갈 자리가 없어진다.
         //
         // 이 경로만 fair_dates 두 행을 동시에 만진다. 바로 위 selectFairDatesForUpdate가
-        // 두 행을 날짜 오름차순으로 이미 잠갔으므로, 반대 방향(A→B와 B→A)의 동시 변경도
-        // 같은 순서로 대기해 교착되지 않는다. 저빈도 경로라 이 잠금은 처리량에 영향이 없다.
+        // FORCE INDEX (UK_FAIR_DATE_FAIR_DATE)로 스캔 순서를 날짜 오름차순에 고정해 두 행을
+        // 이미 잠갔으므로, 반대 방향(A→B와 B→A)의 동시 변경도 같은 순서로 대기해 교착되지
+        // 않는다. 저빈도 경로라 이 잠금은 처리량에 영향이 없다.
         if (capacityMapper.occupy(reservation.getFairId(), request.visitDate()) != 1) {
             throw new CommonException(ErrorCode.RESERVATION_SOLD_OUT);
         }

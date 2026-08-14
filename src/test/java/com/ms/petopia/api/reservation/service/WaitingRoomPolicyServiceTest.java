@@ -147,6 +147,20 @@ class WaitingRoomPolicyServiceTest {
         verify(policyMapper, never()).insertPolicy(anyLong(), anyBoolean(), anyInt(), anyLong(), any());
     }
 
+    /** 생략을 허용하면 조회 없이 쓴 요청이 낙관적 잠금을 우회한다. 최초 생성도 예외가 아니다. */
+    @Test
+    @DisplayName("정책이 없는데 expectedVersion을 생략하면 충돌로 거절한다")
+    void save_정책없음_버전생략이면충돌이다() {
+        given(reservationMapper.existsFair(FAIR_ID)).willReturn(true);
+        given(policyMapper.selectByFairId(FAIR_ID)).willReturn(null);
+
+        assertErrorCode(
+                () -> service.save(FAIR_ID, ADMIN_ID, new UpdateWaitingRoomPolicyRequest(true, 300, null)),
+                ErrorCode.WAITING_ROOM_POLICY_CONFLICT
+        );
+        verify(policyMapper, never()).insertPolicy(anyLong(), anyBoolean(), anyInt(), anyLong(), any());
+    }
+
     /**
      * 최초 생성은 "조회했더니 없어서 INSERT"라 조회와 쓰기가 갈라져 있다. version 조건이
      * 지켜주는 UPDATE 경로와 달리 이 구간에만 창이 남는데, UK가 그 창을 막는다.

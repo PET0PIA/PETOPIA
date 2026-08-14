@@ -19,8 +19,10 @@
     </update>
 
     <!--
-        reserved_count > 0 이 CK_FAIR_DATE_RESERVED_COUNT 위반을 막고, 동시에
-        같은 예약을 두 번 반납하는 사고도 막는다(두 번째 호출은 0을 반환하고 끝난다).
+        reserved_count > 0 은 CK_FAIR_DATE_RESERVED_COUNT 위반(음수)을 막을 뿐이다.
+        이 문장은 어떤 예약의 반납인지 알지 못하므로 멱등하지 않다 — 다른 예약이 자리를
+        점유한 상태에서 같은 예약을 두 번 반납하면 남의 자리가 깎인다. 중복 반납은
+        release 앞의 상태 전이(조건부 UPDATE)에서 막아야 한다.
     -->
     <update id="release">
         UPDATE fair_dates

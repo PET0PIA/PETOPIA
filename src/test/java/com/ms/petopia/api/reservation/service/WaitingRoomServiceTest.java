@@ -118,6 +118,24 @@ class WaitingRoomServiceTest {
             assertThat(service.issue(FAIR_ID, USER_ID).status())
                     .isEqualTo(WaitingTicketResponse.BYPASSED);
         }
+
+        /** Redis뿐 아니라 정책 저장소가 흔들려도 예약을 막아서는 안 된다. */
+        @Test
+        @DisplayName("정책 조회가 실패해도 막지 않고 통과시킨다")
+        void admit_정책조회예외_통과시킨다() {
+            given(policyService.resolve(FAIR_ID)).willThrow(new QueryTimeoutException("db down"));
+
+            assertThat(service.admit(FAIR_ID, TOKEN, USER_ID)).isTrue();
+        }
+
+        @Test
+        @DisplayName("정책 조회가 실패하면 토큰 발급도 대기 없이 통과시킨다")
+        void issue_정책조회예외_BYPASSED를반환한다() {
+            given(policyService.resolve(FAIR_ID)).willThrow(new QueryTimeoutException("db down"));
+
+            assertThat(service.issue(FAIR_ID, USER_ID).status())
+                    .isEqualTo(WaitingTicketResponse.BYPASSED);
+        }
     }
 
     @Nested

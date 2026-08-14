@@ -151,12 +151,12 @@ public class WaitingRoomService {
      * sessionStorage에 보관해 새로고침으로 순번을 잃지 않게 한다.
      */
     public WaitingTicketResponse issue(Long fairId, Long userId) {
-        WaitingRoomPolicy policy = policyService.resolve(fairId);
-        if (!policy.enabled()) {
-            return WaitingTicketResponse.bypassed();
-        }
         String token = UUID.randomUUID().toString().replace("-", "");
         try {
+            WaitingRoomPolicy policy = policyService.resolve(fairId);
+            if (!policy.enabled()) {
+                return WaitingTicketResponse.bypassed();
+            }
             redis.opsForValue().set(tokenKey(fairId, token), String.valueOf(userId), properties.ticketTtl());
             return promoteAndDescribe(fairId, policy, token, true);
         } catch (RuntimeException e) {
@@ -171,11 +171,11 @@ public class WaitingRoomService {
      * @throws com.ms.petopia.global.exception.CommonException 토큰이 이 사용자의 것이 아닐 때
      */
     public WaitingTicketResponse status(Long fairId, String token, Long userId) {
-        WaitingRoomPolicy policy = policyService.resolve(fairId);
-        if (!policy.enabled()) {
-            return WaitingTicketResponse.bypassed();
-        }
         try {
+            WaitingRoomPolicy policy = policyService.resolve(fairId);
+            if (!policy.enabled()) {
+                return WaitingTicketResponse.bypassed();
+            }
             if (!isTokenOwnedBy(fairId, token, userId)) {
                 // 만료됐거나 남의 토큰. 새로 발급받아 다시 줄을 서야 한다.
                 return new WaitingTicketResponse(token, WaitingTicketResponse.WAITING, 0, 0, null, null);
@@ -189,10 +189,13 @@ public class WaitingRoomService {
 
     /** 사용자가 대기를 포기했을 때 슬롯을 즉시 반납한다. TTL을 기다리지 않아 뒷사람이 빨리 들어온다. */
     public void leave(Long fairId, String token) {
-        if (!policyService.resolve(fairId).enabled() || token == null || token.isBlank()) {
+        if (token == null || token.isBlank()) {
             return;
         }
         try {
+            if (!policyService.resolve(fairId).enabled()) {
+                return;
+            }
             redis.execute(LEAVE, List.of(queueKey(fairId), activeKey(fairId)), token);
             redis.delete(tokenKey(fairId, token));
         } catch (RuntimeException e) {
@@ -206,13 +209,15 @@ public class WaitingRoomService {
      * <p>Redis 장애 시 {@code true}를 반환한다(fail-open).
      */
     public boolean admit(Long fairId, String token, Long userId) {
-        if (!policyService.resolve(fairId).enabled()) {
-            return true;
-        }
-        if (token == null || token.isBlank()) {
-            return false;
-        }
         try {
+            // 정책 조회도 try 안에 둔다. DB가 흔들려 여기서 예외가 나면 대기열이 예약을
+            // 막아버리는데, 그건 이 계층이 절대 하면 안 되는 일이다.
+            if (!policyService.resolve(fairId).enabled()) {
+                return true;
+            }
+            if (token == null || token.isBlank()) {
+                return false;
+            }
             if (!isTokenOwnedBy(fairId, token, userId)) {
                 return false;
             }

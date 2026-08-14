@@ -29,7 +29,7 @@ public class OnsiteReservationService {
     public static final String ONSITE_TERMS_VERSION = "onsite-no-refund-v1";
     private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final String CONFIRMED = "CONFIRMED";
-    private static final long PAYMENT_WAIT_MINUTES = 10;
+    private static final long PAYMENT_WAIT_MINUTES = ReservationPaymentPolicy.PAYMENT_WAIT_MINUTES;
 
     private final OnsiteReservationMapper onsiteReservationMapper;
     private final ReservationMapper reservationMapper;

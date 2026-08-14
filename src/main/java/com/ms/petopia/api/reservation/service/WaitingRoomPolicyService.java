@@ -114,7 +114,9 @@ public class WaitingRoomPolicyService {
         LocalDateTime now = timeProvider.now();
         WaitingRoomPolicyRow current = policyMapper.selectByFairId(fairId);
         if (current == null) {
-            if (request.expectedVersion() != null && request.expectedVersion() != 0) {
+            // 정책 행이 아직 없을 때 기대하는 값은 0 하나뿐이다. 생략(null)도 거절한다 —
+            // 조회 없이 쓴 요청을 통과시키면 낙관적 잠금을 우회하는 구멍이 된다.
+            if (request.expectedVersion() == null || request.expectedVersion() != 0) {
                 throw new CommonException(ErrorCode.WAITING_ROOM_POLICY_CONFLICT);
             }
             try {

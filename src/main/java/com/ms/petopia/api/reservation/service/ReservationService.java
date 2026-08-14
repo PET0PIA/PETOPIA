@@ -26,7 +26,7 @@ public class ReservationService {
 
     private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final String CONFIRMED = "CONFIRMED";
-    private static final long PAYMENT_WAIT_MINUTES = 10;
+    private static final long PAYMENT_WAIT_MINUTES = ReservationPaymentPolicy.PAYMENT_WAIT_MINUTES;
 
     private final ReservationMapper reservationMapper;
     private final ReservationCapacityMapper capacityMapper;
