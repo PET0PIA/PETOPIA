@@ -1,6 +1,7 @@
 package com.ms.petopia.api.settlement.controller;
 
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
+import com.ms.petopia.api.settlement.service.SettlementExportService;
 import com.ms.petopia.api.settlement.service.SettlementService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -22,6 +23,7 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -31,11 +33,14 @@ class SettlementControllerTest {
     @Mock
     private SettlementService settlementService;
 
+    @Mock
+    private SettlementExportService settlementExportService;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new SettlementController(settlementService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new SettlementController(settlementService, settlementExportService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -153,5 +158,17 @@ class SettlementControllerTest {
         mockMvc.perform(get("/api/fairs/10/settlements"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void exportsSettlementsAsExcel() throws Exception {
+        byte[] fakeExcelBytes = {1, 2, 3};
+        given(settlementExportService.exportAsExcel(10L)).willReturn(fakeExcelBytes);
+
+        mockMvc.perform(get("/api/fairs/10/settlements/export"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"settlements-10.xlsx\""))
+                .andExpect(header().string("Content-Type",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
     }
 }
