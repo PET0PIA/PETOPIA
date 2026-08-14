@@ -18,10 +18,12 @@ interface FairPublicCardProps {
   to?: string;
   /** 하단 CTA 버튼(예매하기·신청하기·부스 보기). 없으면 버튼을 그리지 않는다. */
   action?: FairCardAction;
+  /** 표시 형태. "card"(기본)=세로 포스터 카드, "list"=가로 리스트 행. */
+  layout?: "card" | "list";
 }
 
 /** 공개 행사 카드(세로 포스터 + 이름·기간·장소 + 하단 CTA). 목록·참가신청·업체목록에서 공유한다. */
-export function FairPublicCard({ fair, ended = false, to, action }: FairPublicCardProps) {
+export function FairPublicCard({ fair, ended = false, to, action, layout = "card" }: FairPublicCardProps) {
   const poster = fair.posterImageUrl ? (
     <img
       src={fair.posterImageUrl}
@@ -45,6 +47,66 @@ export function FairPublicCard({ fair, ended = false, to, action }: FairPublicCa
       )}
     </div>
   );
+
+  // 리스트형: 작은 포스터(가로) + 이름·기간·장소 + 오른쪽 CTA. 한 행에 하나씩 쌓는다.
+  if (layout === "list") {
+    return (
+      <article
+        className={`flex items-center gap-4 rounded-card border border-line bg-card p-3 transition-colors hover:border-muted ${ended ? "opacity-60" : ""}`}
+      >
+        {to ? (
+          <Link
+            to={to}
+            aria-label={`${fair.name} 자세히 보기`}
+            className="group relative block h-24 w-20 shrink-0 overflow-hidden rounded-card bg-surface-alt"
+          >
+            {poster}
+          </Link>
+        ) : (
+          <div className="relative block h-24 w-20 shrink-0 overflow-hidden rounded-card bg-surface-alt">{poster}</div>
+        )}
+
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-base font-extrabold leading-snug">
+              {to ? (
+                <Link to={to} className="hover:underline">
+                  {fair.name}
+                </Link>
+              ) : (
+                fair.name
+              )}
+            </h3>
+            {fair.category && (
+              <Badge tone="ink" className="shrink-0">
+                {fairCategoryLabels[fair.category] ?? fair.category}
+              </Badge>
+            )}
+          </div>
+          <p className="truncate text-sm text-muted">{formatFairPeriodDow(fair.operationStartDate, fair.operationEndDate)}</p>
+          <p className="truncate text-sm text-muted">{fair.placeName ?? "장소 미정"}</p>
+        </div>
+
+        {action &&
+          (action.to ? (
+            <Link
+              to={action.to}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1 rounded-pill bg-primary-strong px-4 text-sm font-bold text-white transition hover:opacity-90"
+            >
+              {action.label}
+              <ChevronRight size={16} aria-hidden="true" />
+            </Link>
+          ) : (
+            <span
+              className="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center justify-center rounded-pill bg-surface-alt px-4 text-sm font-bold text-muted"
+              aria-disabled="true"
+            >
+              {action.label}
+            </span>
+          ))}
+      </article>
+    );
+  }
 
   return (
     <article className={`flex flex-col gap-3 ${ended ? "opacity-60" : ""}`}>

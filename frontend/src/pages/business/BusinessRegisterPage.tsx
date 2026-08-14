@@ -1,6 +1,6 @@
 import { AlertCircle, Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
@@ -60,6 +60,9 @@ function toRequest(form: FormState): BusinessRegisterRequest {
 export function BusinessRegisterPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  // 다른 화면(예: 참가 신청서에서 사업자 미등록)에서 넘어왔으면 등록 후 그 화면으로 돌려보낼 경로.
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from ?? null;
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -83,8 +86,14 @@ export function BusinessRegisterPage() {
     setSubmitError(null);
     try {
       const response = await registerBusiness(toRequest(form));
-      // 등록 성공 시 바로 상세 페이지로 이동해서 진위확인 결과를 보여준다.
-      navigate(`/businesses/${response.businessId}`, { state: { justRegistered: true } });
+      if (from) {
+        // 참가 신청 등에서 넘어온 경우: 등록을 마쳤으니 원래 화면(신청서)으로 돌려보낸다.
+        // 신청서가 다시 마운트되며 사업자 목록을 새로 불러오므로 방금 등록한 사업자로 바로 신청할 수 있다.
+        navigate(from, { replace: true });
+      } else {
+        // 일반 진입: 등록 성공 시 바로 상세 페이지로 이동해서 진위확인 결과를 보여준다.
+        navigate(`/businesses/${response.businessId}`, { state: { justRegistered: true } });
+      }
     } catch (error) {
       setSubmitError(error instanceof ApiError ? error.message : "사업자 등록에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
