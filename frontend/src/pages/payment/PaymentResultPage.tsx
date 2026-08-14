@@ -339,10 +339,24 @@ export function PaymentFailPage() {
   const code = searchParams.get("code");
   const message = searchParams.get("message");
   // 성공 착지와 마찬가지로 개설비 결제는 fairId, 참가비 결제는 applicationId가 실려온다(toss.ts 참고).
+  // 예약금 결제는 reservationId와 함께 fairId도 실려온다 - 슬롯 반납에 필요하다.
+  const reservationId = parsePositiveInt(searchParams.get("reservationId"));
   const fairId = parsePositiveInt(searchParams.get("fairId"));
   const applicationId = parsePositiveInt(searchParams.get("applicationId"));
 
-  if (fairId !== null) {
+  /**
+   * 이 주소로 되돌아왔다는 것은 이번 결제 시도가 끝났다는 뜻이다 — 사용자가 취소했거나
+   * 승인이 거절됐다. 승인 결과가 불확실한 상태(확정 실패)와 달리 슬롯을 붙들 이유가 없다.
+   * 놔두면 12분 TTL이 끝날 때까지 그 자리가 묶여 뒷사람 유입이 늦어진다.
+   *
+   * 재결제는 대기열 게이트를 다시 통과할 필요가 없다 - 게이트는 예약 생성 경로에만 걸려 있다.
+   */
+  useEffect(() => {
+    if (reservationId !== null) releaseWaitingSlot(fairId);
+  }, [reservationId, fairId]);
+
+  // 개설비 결제는 reservationId 없이 fairId만 실려온다(예약금 결제는 둘 다 실려온다).
+  if (reservationId === null && fairId !== null) {
     return (
       <ResultShell
         tone="error"

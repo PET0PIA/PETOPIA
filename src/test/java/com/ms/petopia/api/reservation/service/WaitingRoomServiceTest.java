@@ -169,6 +169,32 @@ class WaitingRoomServiceTest {
 
             assertThat(service.admit(FAIR_ID, TOKEN, USER_ID)).isFalse();
         }
+
+        /**
+         * 토큰은 URL에 실려 다니는 값이다. 확인 없이 지우면 남의 토큰 하나로 그 사람의
+         * 순번과 활성 슬롯을 날릴 수 있다.
+         */
+        @Test
+        @DisplayName("남의 토큰은 반납해 주지 않는다")
+        void leave_다른사용자의토큰_지우지않는다() {
+            given(valueOperations.get("waiting:" + FAIR_ID + ":token:" + TOKEN)).willReturn("999");
+
+            service.leave(FAIR_ID, TOKEN, USER_ID);
+
+            verify(redis, never()).execute(any(RedisScript.class), any(), any());
+            verify(redis, never()).delete(anyString());
+        }
+
+        @Test
+        @DisplayName("내 토큰이면 줄과 활성 슬롯에서 모두 지운다")
+        void leave_내토큰_반납한다() {
+            givenTokenOwner(USER_ID);
+
+            service.leave(FAIR_ID, TOKEN, USER_ID);
+
+            verify(redis).execute(any(RedisScript.class), any(), any());
+            verify(redis).delete("waiting:" + FAIR_ID + ":token:" + TOKEN);
+        }
     }
 
     @Nested

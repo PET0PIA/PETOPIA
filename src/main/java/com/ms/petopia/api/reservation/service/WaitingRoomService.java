@@ -187,13 +187,22 @@ public class WaitingRoomService {
         }
     }
 
-    /** 사용자가 대기를 포기했을 때 슬롯을 즉시 반납한다. TTL을 기다리지 않아 뒷사람이 빨리 들어온다. */
-    public void leave(Long fairId, String token) {
+    /**
+     * 사용자가 대기를 포기했을 때 슬롯을 즉시 반납한다. TTL을 기다리지 않아 뒷사람이 빨리 들어온다.
+     *
+     * <p>토큰 소유자만 반납할 수 있다. 토큰은 URL에 실려 다니는 값이라, 확인 없이 지우면
+     * 남의 토큰 하나로 그 사람의 순번과 활성 슬롯을 날릴 수 있다.
+     */
+    public void leave(Long fairId, String token, Long userId) {
         if (token == null || token.isBlank()) {
             return;
         }
         try {
             if (!policyService.resolve(fairId).enabled()) {
+                return;
+            }
+            if (!isTokenOwnedBy(fairId, token, userId)) {
+                // 남의 토큰이거나 이미 만료됐다. 어느 쪽이든 지울 것이 없다.
                 return;
             }
             redis.execute(LEAVE, List.of(queueKey(fairId), activeKey(fairId)), token);

@@ -83,6 +83,20 @@ export function WaitingRoomPanel({ fairId, fairName, onAdmitted, onCancel }: Pro
       timer = window.setTimeout(poll, pollIntervalMs(next.ahead));
     }
 
+    /**
+     * 발급 응답 전용 처리.
+     *
+     * 화면을 떠난 뒤 응답이 도착하면 그냥 버릴 수 없다 — 서버에는 이미 내 이름으로 토큰이
+     * 만들어져 있어서, 버리고 가면 그 자리(줄 순번이나 활성 슬롯)가 TTL이 끝날 때까지 묶인다.
+     */
+    function applyIssued(next: WaitingTicket) {
+      if (!alive) {
+        if (next.token) leaveWaitingRoom(fairId, next.token).catch(() => {});
+        return;
+      }
+      apply(next);
+    }
+
     function fail(err: unknown) {
       if (!alive) return;
       // 폴링이 한 번 실패했다고 대기를 깨지 않는다. 순번을 잃는 것보다 재시도가 낫다.
@@ -94,7 +108,7 @@ export function WaitingRoomPanel({ fairId, fairName, onAdmitted, onCancel }: Pro
     function poll() {
       const token = getStoredWaitingToken(fairId);
       if (!token) {
-        issueWaitingTicket(fairId).then(apply).catch(fail);
+        issueWaitingTicket(fairId).then(applyIssued).catch(fail);
         return;
       }
       getWaitingTicket(fairId, token)
@@ -103,7 +117,7 @@ export function WaitingRoomPanel({ fairId, fairName, onAdmitted, onCancel }: Pro
           // 서버가 토큰을 모르면(만료·재시작) 새로 줄을 선다.
           if (next.status === "WAITING" && next.position === 0) {
             storeWaitingToken(fairId, null);
-            issueWaitingTicket(fairId).then(apply).catch(fail);
+            issueWaitingTicket(fairId).then(applyIssued).catch(fail);
             return;
           }
           apply(next);

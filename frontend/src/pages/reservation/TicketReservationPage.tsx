@@ -331,6 +331,8 @@ export function TicketReservationPage() {
       await requestReservationPayment({
         paymentId: created.paymentId,
         reservationId: paymentInfo.reservationId,
+        // 결제 실패로 되돌아왔을 때 대기 슬롯을 반납할 수 있게 같이 실어 보낸다.
+        fairId: id,
         // 서버가 만든 orderId·amount를 가공 없이 넘긴다 - 다르면 토스가 승인을 거절한다.
         orderId: created.orderId,
         amount: created.amount,

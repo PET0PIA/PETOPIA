@@ -49,13 +49,18 @@ public class WaitingRoomController {
         return waitingRoomService.status(fairId, token, userId);
     }
 
-    /** 대기를 포기한다. 슬롯을 즉시 반납해 뒷사람이 TTL을 기다리지 않아도 되게 한다. */
+    /**
+     * 대기를 포기한다. 슬롯을 즉시 반납해 뒷사람이 TTL을 기다리지 않아도 되게 한다.
+     *
+     * <p>토큰만으로 지우지 않는다 — 인증 주체가 그 토큰의 주인일 때만 반납한다.
+     */
     @DeleteMapping("/tickets/{token}")
     public ResponseEntity<Void> leave(
             @PathVariable Long fairId,
-            @PathVariable String token
+            @PathVariable String token,
+            @AuthenticationPrincipal Long userId
     ) {
-        waitingRoomService.leave(fairId, token);
+        waitingRoomService.leave(fairId, token, userId);
         return ResponseEntity.noContent().build();
     }
 }

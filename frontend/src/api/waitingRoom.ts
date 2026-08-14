@@ -39,21 +39,33 @@ function tokenKey(fairId: number) {
   return `waiting-token:${fairId}`;
 }
 
+/**
+ * sessionStorage가 막혀 있을 때(시크릿 모드·서드파티 컨텍스트 차단 등) 쓰는 대비책.
+ *
+ * 이게 없으면 저장이 조용히 실패하고, 예약 요청에 토큰이 안 붙어 R022로 영원히 막힌다 —
+ * 대기열을 켠 행사에서는 예약 자체가 불가능해진다. 새로고침에는 못 살아남지만
+ * (그건 sessionStorage가 하던 일이다) 최소한 이번 페이지에서는 예약을 끝낼 수 있다.
+ */
+const memoryTokens = new Map<number, string>();
+
 export function getStoredWaitingToken(fairId: number): string | null {
   try {
-    return window.sessionStorage.getItem(tokenKey(fairId));
+    const stored = window.sessionStorage.getItem(tokenKey(fairId));
+    if (stored) return stored;
   } catch {
-    // 시크릿 모드 등에서 sessionStorage가 막혀 있어도 대기열 자체는 동작해야 한다.
-    return null;
+    // 막혀 있어도 대기열 자체는 동작해야 한다. 아래 메모리 값으로 이어간다.
   }
+  return memoryTokens.get(fairId) ?? null;
 }
 
 export function storeWaitingToken(fairId: number, token: string | null) {
+  if (token) memoryTokens.set(fairId, token);
+  else memoryTokens.delete(fairId);
   try {
     if (token) window.sessionStorage.setItem(tokenKey(fairId), token);
     else window.sessionStorage.removeItem(tokenKey(fairId));
   } catch {
-    /* 저장 못 해도 이번 세션 동안 메모리로는 흐른다. */
+    /* 저장은 못 했지만 memoryTokens에는 담겼다. 새로고침까지는 못 버틴다. */
   }
 }
 
