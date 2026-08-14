@@ -1,6 +1,7 @@
 package com.ms.petopia.api.reservation.service;
 
 import com.ms.petopia.api.reservation.dto.ExpiringReservationRow;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationExpirationMapper;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실시간 통계 확인용
 import lombok.RequiredArgsConstructor;
@@ -17,7 +18,10 @@ import java.util.Set; // 실시간 통계 확인용
 @RequiredArgsConstructor
 public class ReservationExpirationService {
 
+    private static final String ADVANCE = "ADVANCE";
+
     private final ReservationExpirationMapper expirationMapper;
+    private final ReservationCapacityMapper capacityMapper;
     private final ReservationTimeProvider timeProvider;
     private final ApplicationEventPublisher eventPublisher; // 실시간 통계 확인용
 
@@ -37,6 +41,11 @@ public class ReservationExpirationService {
             int updated = expirationMapper.expirePendingReservation(row.getReservationId(), now);
             if (updated == 1) {
                 expirationMapper.insertExpiredHistory(row.getReservationId(), now);
+                // 결제하지 않아 만료된 좌석을 정원에 돌려준다. 건별로 상태 전이가 성사된
+                // 경우에만 반납해야 중복 반납이 생기지 않는다.
+                if (ADVANCE.equals(row.getReservationType())) {
+                    capacityMapper.release(row.getFairId(), row.getVisitDate());
+                }
                 changedFairIds.add(row.getFairId()); // 실시간 통계 확인용
                 expired++;
             }

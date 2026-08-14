@@ -44,7 +44,10 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/reservations/**",
                                 "/api/v1/fairs/*/reservations",
-                                "/api/v1/fairs/*/onsite-reservations"
+                                "/api/v1/fairs/*/onsite-reservations",
+                                // 대기열 - 토큰을 발급받은 본인인지 대조해야 하므로 로그인이 필요하다.
+                                // 미인증으로 통과시키면 토큰 하나로 여러 계정이 게이트를 넘을 수 있다.
+                                "/api/v1/fairs/*/waiting-room/**"
                         ).authenticated()
                         .requestMatchers("/api/v1/admin/fairs/**")
                         .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")

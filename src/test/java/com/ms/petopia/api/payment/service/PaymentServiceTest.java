@@ -23,6 +23,7 @@ import com.ms.petopia.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -108,12 +109,13 @@ class PaymentServiceTest {
         row.setPayerUserId(30L);
         row.setReservationId(null);
         row.setApplicationId(40L);
+        row.setOrderId("PAYMENT_1");
         given(paymentMapper.selectById(1L)).willReturn(row);
 
         // row에서 값을 그대로 가져와서 expected를 만듦 (따로 값을 또 타이핑하면
         // paidAt/createdAt 같은 시간값이 미묘하게 달라질 수 있어서, row 기준으로 통일).
         PaymentResponse expected = new PaymentResponse(
-                row.getPaymentId(), "PAYMENT_"+ row.getPaymentId(), row.getPaymentType(), row.getAmount(), row.getStatus(), row.getMethod(),
+                row.getPaymentId(), row.getOrderId(), row.getPaymentType(), row.getAmount(), row.getStatus(), row.getMethod(),
                 row.getPaidAt(), row.getCreatedAt(), row.getFairId(), row.getBusinessId(),
                 row.getPayerUserId(), row.getReservationId(), row.getApplicationId()
         );
@@ -372,7 +374,7 @@ class PaymentServiceTest {
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(1L), eq(60000L), any())).willReturn(1);
+        given(paymentMapper.resetFailedToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
 
         VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
 
@@ -386,6 +388,65 @@ class PaymentServiceTest {
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
     }
 
+    /**
+     * 결제 행은 재사용해도 주문번호는 재사용하면 안 된다.
+     *
+     * <p>실패한 시도의 주문번호에는 토스 쪽에 이미 승인 건이 잡혀 있을 수 있다(사용자는
+     * 결제창에서 승인까지 갔는데 우리 confirm이 네트워크 문제로 실패한 경우). 그 값으로
+     * 다시 승인을 요청하면 "이미 처리된 주문번호"로 거부당하고, 결제 행을 계속 재사용하는
+     * 구조상 그 예약은 재시도할수록 같은 벽에 부딪혀 영영 결제할 수 없게 된다.
+     */
+    @Test
+    @DisplayName("FAILED 재시도는 이전 주문번호를 재사용하지 않고 새로 발급한다")
+    void payVendorFee_FAILED재시도_주문번호를새로발급한다() {
+        PaymentRow failedRow = new PaymentRow();
+        failedRow.setPaymentId(1L);
+        failedRow.setStatus("FAILED");
+        failedRow.setPayerUserId(90L);
+        failedRow.setOrderId("PAYMENT_이전시도에서쓴값");
+        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
+        given(paymentMapper.resetFailedToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
+
+        PaymentResponse result = paymentService.payVendorFee(
+                40L, 90L, new VendorFeePaymentRequest(10L, 20L, 60000L));
+
+        // 응답으로 나가는 값(프론트가 결제창에 넘길 값)이 이전 시도와 달라야 한다.
+        assertThat(result.orderId()).isNotEqualTo("PAYMENT_이전시도에서쓴값");
+        assertThat(result.orderId()).isNotBlank();
+
+        // DB에도 그 새 값이 저장돼야 한다. 응답만 바뀌고 저장이 안 되면 승인 단계에서 어긋난다.
+        ArgumentCaptor<String> savedOrderId = ArgumentCaptor.forClass(String.class);
+        verify(paymentMapper).resetFailedToPending(
+                eq(1L), eq(60000L), savedOrderId.capture(), any());
+        assertThat(savedOrderId.getValue()).isEqualTo(result.orderId());
+    }
+
+    /**
+     * 프론트가 결제창에 넘긴 주문번호와 서버가 승인에 쓰는 주문번호는 반드시 같아야 한다.
+     * 예전처럼 승인 시점에 다시 만들면 시도마다 값이 갈려 승인이 통째로 실패한다.
+     */
+    @Test
+    @DisplayName("승인은 저장된 주문번호를 그대로 토스에 보낸다")
+    void confirmPayment_저장된주문번호를사용한다() {
+        PaymentRow pending = new PaymentRow();
+        pending.setPaymentId(7L);
+        pending.setStatus("PENDING");
+        pending.setPayerUserId(90L);
+        pending.setAmount(60000L);
+        pending.setPaymentType("VENDOR_FEE");
+        pending.setApplicationId(40L);
+        pending.setOrderId("PAYMENT_저장된주문번호");
+        given(paymentMapper.selectById(7L)).willReturn(pending);
+        given(paymentMapper.markProcessing(eq(7L), any())).willReturn(1);
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(any(), any(), any()))
+                .willReturn(new TossPaymentResponse("toss-key", "PAYMENT_저장된주문번호", "DONE", 60000L, "CARD", null));
+
+        paymentService.confirmPayment(7L, 90L, new ConfirmPaymentRequest("toss-key"));
+
+        verify(tossPaymentClient).confirmPayment("toss-key", "PAYMENT_저장된주문번호", 60000L);
+    }
+
     @Test
     @DisplayName("FAILED 재시도 중 다른 요청이 먼저 선점하면(재시도 경쟁) 예외를 던진다")
     void payVendorFee_FAILED재시도경쟁_선점실패시예외를던진다() {
@@ -395,7 +456,7 @@ class PaymentServiceTest {
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(1L), any(), any())).willReturn(0);
+        given(paymentMapper.resetFailedToPending(eq(1L), any(), any(), any())).willReturn(0);
 
         VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
 
@@ -424,7 +485,7 @@ class PaymentServiceTest {
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
 
         // 결제자가 아니면 재시도 자체(선점 시도)를 하면 안 됨
-        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any());
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
     }
 
     @Test
@@ -441,7 +502,7 @@ class PaymentServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
-        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any());
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
     }
 
@@ -458,7 +519,7 @@ class PaymentServiceTest {
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("RESERVATION_DEPOSIT_500")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(2L), eq(30000L), any())).willReturn(1);
+        given(paymentMapper.resetFailedToPending(eq(2L), eq(30000L), any(), any())).willReturn(1);
 
         PaymentResponse result = paymentService.payReservationDeposit(500L, 90L);
 
@@ -480,7 +541,7 @@ class PaymentServiceTest {
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(3L);
         given(paymentMapper.selectByIdempotencyKey("FAIR_OPENING_FEE_10")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(3L), eq(500000L), any())).willReturn(1);
+        given(paymentMapper.resetFailedToPending(eq(3L), eq(500000L), any(), any())).willReturn(1);
 
         PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L);
 
@@ -507,7 +568,7 @@ class PaymentServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
-        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any());
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
     }
 
     // PENDING 상태의 결제 하나를 미리 만들어두는 헬퍼. confirmPayment 테스트들이
@@ -515,6 +576,9 @@ class PaymentServiceTest {
     private PaymentRow pendingRow() {
         PaymentRow row = new PaymentRow();
         row.setPaymentId(1L);
+        // 주문번호는 이제 DB에 저장된 값을 쓴다. 발급 규칙이 아니라 "저장된 값이 그대로 나간다"가
+        // 검증 대상이라, 픽스처에서는 읽기 쉬운 값을 넣는다.
+        row.setOrderId("PAYMENT_1");
         row.setPaymentType("VENDOR_FEE");
         row.setAmount(50000L);
         row.setStatus("PENDING");
@@ -844,6 +908,9 @@ class PaymentServiceTest {
     private PaymentRow pendingReservationDepositRow() {
         PaymentRow row = new PaymentRow();
         row.setPaymentId(2L);
+        // 주문번호는 이제 DB에 저장된 값을 쓴다. 발급 규칙이 아니라 "저장된 값이 그대로 나간다"가
+        // 검증 대상이라, 픽스처에서는 읽기 쉬운 값을 넣는다.
+        row.setOrderId("PAYMENT_2");
         row.setPaymentType("RESERVATION_DEPOSIT");
         row.setAmount(30000L);
         row.setStatus("PENDING");
@@ -859,6 +926,9 @@ class PaymentServiceTest {
     private PaymentRow pendingOpeningFeeRow() {
         PaymentRow row = new PaymentRow();
         row.setPaymentId(3L);
+        // 주문번호는 이제 DB에 저장된 값을 쓴다. 발급 규칙이 아니라 "저장된 값이 그대로 나간다"가
+        // 검증 대상이라, 픽스처에서는 읽기 쉬운 값을 넣는다.
+        row.setOrderId("PAYMENT_3");
         row.setPaymentType("FAIR_OPENING_FEE");
         row.setAmount(100000L);
         row.setStatus("PENDING");

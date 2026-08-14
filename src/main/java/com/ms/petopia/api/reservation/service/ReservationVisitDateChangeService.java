@@ -10,6 +10,7 @@ import com.ms.petopia.api.reservation.dto.ReservationChangeReservationRow;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateRequest;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateResponse;
 import com.ms.petopia.api.reservation.mapper.EntryMapper;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationChangeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -34,6 +35,7 @@ public class ReservationVisitDateChangeService {
     private static final long CHANGE_DEADLINE_HOURS = 12;
 
     private final ReservationChangeMapper changeMapper;
+    private final ReservationCapacityMapper capacityMapper;
     private final EntryMapper entryMapper;
     private final ReservationTimeProvider timeProvider;
     private final NotificationService notificationService;
@@ -88,11 +90,14 @@ public class ReservationVisitDateChangeService {
                 || targetDate.getEntryEndTime().isBefore(targetDate.getEntryStartTime())) {
             throw new CommonException(ErrorCode.RESERVATION_DATE_NOT_AVAILABLE);
         }
-        int occupied = changeMapper.countCapacityOccupyingAdvanceReservations(
-                reservation.getFairId(),
-                request.visitDate()
-        );
-        if (occupied >= targetDate.getCapacity()) {
+        // 옮겨갈 날짜의 정원을 먼저 점유하고, 성공했을 때만 원래 날짜를 반납한다.
+        // 순서를 뒤집으면 반납은 됐는데 점유에 실패하는 창이 생겨, 그 사이 원래 좌석을
+        // 다른 사람이 채워버리면 되돌아갈 자리가 없어진다.
+        //
+        // 이 경로만 fair_dates 두 행을 동시에 만진다. 바로 위 selectFairDatesForUpdate가
+        // 두 행을 날짜 오름차순으로 이미 잠갔으므로, 반대 방향(A→B와 B→A)의 동시 변경도
+        // 같은 순서로 대기해 교착되지 않는다. 저빈도 경로라 이 잠금은 처리량에 영향이 없다.
+        if (capacityMapper.occupy(reservation.getFairId(), request.visitDate()) != 1) {
             throw new CommonException(ErrorCode.RESERVATION_SOLD_OUT);
         }
 
@@ -100,6 +105,7 @@ public class ReservationVisitDateChangeService {
         if (updated != 1) {
             throw new CommonException(ErrorCode.RESERVATION_STATUS_CONFLICT);
         }
+        capacityMapper.release(reservation.getFairId(), reservation.getVisitDate());
         entryMapper.updateEntryQrAvailability(
                 reservationId,
                 LocalDateTime.of(targetDate.getOperationDate(), targetDate.getEntryStartTime()),

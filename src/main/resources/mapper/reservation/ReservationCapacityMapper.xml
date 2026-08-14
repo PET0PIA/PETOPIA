@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper">
+
+    <!--
+        정원 판정과 증가가 한 문장이라 그 사이에 다른 트랜잭션이 끼어들 수 없다.
+        영향 행수 0 = 매진. 애플리케이션에서 미리 세어보고 분기하면 안 된다 -
+        조회와 UPDATE 사이에 창이 생겨 정원이 초과된다.
+    -->
+    <update id="occupy">
+        UPDATE fair_dates
+           SET reserved_count = reserved_count + 1
+             , updated_at = NOW()
+         WHERE fair_id = #{fairId}
+           AND operation_date = #{visitDate}
+           AND reserved_count &lt; capacity
+    </update>
+
+    <!--
+        reserved_count > 0 이 CK_FAIR_DATE_RESERVED_COUNT 위반을 막고, 동시에
+        같은 예약을 두 번 반납하는 사고도 막는다(두 번째 호출은 0을 반환하고 끝난다).
+    -->
+    <update id="release">
+        UPDATE fair_dates
+           SET reserved_count = reserved_count - 1
+             , updated_at = NOW()
+         WHERE fair_id = #{fairId}
+           AND operation_date = #{visitDate}
+           AND reserved_count &gt; 0
+    </update>
+
+</mapper>

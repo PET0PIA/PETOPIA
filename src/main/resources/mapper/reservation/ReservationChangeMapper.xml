@@ -33,15 +33,6 @@
          FOR UPDATE
     </select>
 
-    <select id="countCapacityOccupyingAdvanceReservations" resultType="int">
-        SELECT COUNT(*)
-          FROM reservations
-         WHERE fair_id = #{fairId}
-           AND visit_date = #{visitDate}
-           AND reservation_type = 'ADVANCE'
-           AND status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
-    </select>
-
     <update id="updateVisitDate">
         UPDATE reservations
            SET visit_date = #{visitDate}

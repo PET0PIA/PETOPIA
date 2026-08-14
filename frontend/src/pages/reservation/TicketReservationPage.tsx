@@ -18,12 +18,15 @@ import {
   ONSITE_TERMS_VERSION,
   type ReservationAvailability,
 } from "../../api/reservation";
+import { releaseWaitingSlot, WAITING_ROOM_REQUIRED_CODE } from "../../api/waitingRoom";
 import { useAuth } from "../../contexts/AuthContext";
+import { WaitingRoomPanel } from "./WaitingRoomPanel";
 import { isTossConfigured, requestReservationPayment, type PaymentMethodOption } from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 
-type ReservationType = "ADVANCE" | "ONSITE";
-type Phase = "form" | "payment" | "done";
+type ReservationType= "ADVANCE" | "ONSITE";
+/** waiting: 대기열에 막혀 순번을 기다리는 중. 통과하면 곧바로 예약을 재시도한다. */
+type Phase = "form" | "waiting" | "payment" | "done";
 
 interface DoneInfo {
   visitDate: string;
@@ -211,6 +214,17 @@ export function TicketReservationPage() {
       confirmLabel: isPaid ? "다음" : "예약하기",
     });
     if (!proceed) return;
+    await submitAdvance();
+  }
+
+  /**
+   * 확인 절차 없이 예약 생성만 수행한다.
+   *
+   * 대기열을 통과한 뒤 자동 재시도할 때도 이 함수를 쓴다 - 이미 동의를 받아둔 요청이라
+   * 순서를 기다렸다고 확인 창을 다시 띄우면 사용자가 그 사이 자리를 잃는다.
+   */
+  async function submitAdvance() {
+    if (!advanceVisitDate) return;
 
     setSubmitError(null);
     setSubmitting(true);
@@ -223,6 +237,8 @@ export function TicketReservationPage() {
       });
 
       if (created.paymentRequired) {
+        // 대기 슬롯을 여기서 놓지 않는다. 결제 API도 같은 슬롯으로 통과해야 하고,
+        // 슬롯 수명(12분)이 결제 제한시간(10분)보다 길게 잡혀 있는 이유가 이것이다.
         setPaymentInfo({
           reservationId: created.reservationId,
           visitDate: advanceVisitDate,
@@ -237,10 +253,21 @@ export function TicketReservationPage() {
       }
 
       // 무료: 서버가 한 트랜잭션에서 CONFIRMED + QR까지 끝낸다.
+      // 결제가 없어 여기서 흐름이 끝나므로 슬롯을 바로 돌려준다. 안 그러면 이미 볼일이
+      // 끝난 사람이 12분간 자리를 묶어 뒷사람 유입을 늦춘다.
+      releaseWaitingSlot(id);
       setDoneInfo({ visitDate: advanceVisitDate, typeLabel: "사전예약", entryQrToken: created.entryQrToken });
       setPhase("done");
     } catch (err) {
+      // 대기열에 막힌 경우(429/R022)는 실패가 아니라 "순서를 기다려야 한다"는 뜻이다.
+      // 대기 화면으로 넘기고, 통과하면 이 요청을 그대로 재시도한다.
+      if (err instanceof ApiError && err.code === WAITING_ROOM_REQUIRED_CODE) {
+        setPhase("waiting");
+        return;
+      }
       // R001 행사없음 / R002 날짜불가 / R003 접수아님 / R004 마감 / R005 중복 / R006 약관
+      // 여기까지 온 건 재시도해도 결과가 같은 실패들이다. 쓰지 않을 슬롯은 돌려준다.
+      releaseWaitingSlot(id);
       setSubmitError(err instanceof ApiError ? err.message : "예약에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
@@ -305,7 +332,7 @@ export function TicketReservationPage() {
         paymentId: created.paymentId,
         reservationId: paymentInfo.reservationId,
         // 서버가 만든 orderId·amount를 가공 없이 넘긴다 - 다르면 토스가 승인을 거절한다.
-        orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
+        orderId: created.orderId,
         amount: created.amount,
         orderName: `${fairName} 예약금`,
         method: paymentMethod,
@@ -316,6 +343,21 @@ export function TicketReservationPage() {
       setPayError(err instanceof ApiError ? err.message : "결제를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");
       setPaying(false);
     }
+  }
+
+  // 대기 화면. 통과하면 기다리게 만든 그 예약 요청을 그대로 이어서 보낸다.
+  if (phase === "waiting") {
+    return (
+      <WaitingRoomPanel
+        fairId={id}
+        fairName={fairName}
+        onAdmitted={() => {
+          setPhase("form");
+          void submitAdvance();
+        }}
+        onCancel={() => setPhase("form")}
+      />
+    );
   }
 
   // 완료 화면

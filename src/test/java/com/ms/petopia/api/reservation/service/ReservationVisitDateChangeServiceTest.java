@@ -7,6 +7,7 @@ import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateResponse;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.mapper.EntryMapper;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationChangeMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -44,6 +45,8 @@ class ReservationVisitDateChangeServiceTest {
     @Mock
     private ReservationChangeMapper changeMapper;
     @Mock
+    private ReservationCapacityMapper capacityMapper;
+    @Mock
     private EntryMapper entryMapper;
     @Mock
     private ReservationTimeProvider timeProvider;
@@ -70,7 +73,7 @@ class ReservationVisitDateChangeServiceTest {
         ));
         given(timeProvider.now()).willReturn(NOW);
         given(timeProvider.today()).willReturn(LocalDate.of(2026, 8, 4));
-        given(changeMapper.countCapacityOccupyingAdvanceReservations(FAIR_ID, TARGET_DATE)).willReturn(99);
+        given(capacityMapper.occupy(FAIR_ID, TARGET_DATE)).willReturn(1);
         given(changeMapper.updateVisitDate(RESERVATION_ID, TARGET_DATE, NOW)).willReturn(1);
 
         UpdateReservationVisitDateResponse response = service.changeVisitDate(

@@ -109,7 +109,7 @@ async function openTossCheckout(params: CheckoutParams): Promise<void> {
 export interface ReservationPaymentRequest {
   paymentId: number;
   reservationId: number;
-  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다("PAYMENT_{paymentId}"). */
+  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다. 서버가 시도마다 발급한 값이다. */
   orderId: string;
   /** 화면에 보여준 예약금이 아니라 서버가 계산한 금액. */
   amount: number;
@@ -146,7 +146,7 @@ export async function requestReservationPayment(request: ReservationPaymentReque
 export interface VendorFeePaymentRequest {
   paymentId: number;
   applicationId: number;
-  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다("PAYMENT_{paymentId}"). */
+  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다. 서버가 시도마다 발급한 값이다. */
   orderId: string;
   /** 화면에 보여준 금액이 아니라 서버가 확정한 금액(승인 시 finalPrice). */
   amount: number;
@@ -182,7 +182,7 @@ export async function requestVendorFeePayment(request: VendorFeePaymentRequest):
 export interface FairOpeningFeePaymentRequest {
   paymentId: number;
   fairId: number;
-  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다("PAYMENT_{paymentId}"). */
+  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다. 서버가 시도마다 발급한 값이다. */
   orderId: string;
   /** 화면에 보여준 개설비가 아니라 서버가 승인 시 확정해 저장해둔 금액. */
   amount: number;

@@ -22,8 +22,9 @@ export type PaymentStatus = "PENDING" | "COMPLETED" | "FAILED" | "CANCELED" | "E
 
 export interface PaymentDetail {
   paymentId: number;
-  // 참가비 결제(토스 실연동)만 채워짐. "PAYMENT_{paymentId}" 형식, 토스 결제위젯 orderId로 쓰인다.
-  orderId: string | null;
+  // 토스 결제위젯에 넘길 주문번호. 결제 시도마다 서버가 새로 발급해 저장하므로
+  // 화면에서 유추하거나 가공하지 말고 받은 값을 그대로 넘긴다.
+  orderId: string;
   paymentType: PaymentType;
   amount: number;
   status: PaymentStatus;

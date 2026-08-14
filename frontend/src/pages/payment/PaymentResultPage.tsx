@@ -9,7 +9,8 @@ import { AlertCircle, CheckCircle2, Clock3, QrCode } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
-import { confirmPayment, getPayment } from "../../api/payment";
+import { releaseWaitingSlot } from "../../api/waitingRoom";
+import { confirmPayment, getPayment, type PaymentDetail } from "../../api/payment";
 import { getEntryQr } from "../../api/reservation";
 import { Card } from "../../components/ui/Card";
 import { QrCanvas } from "../../components/ui/QrCanvas";
@@ -85,7 +86,7 @@ export function PaymentSuccessPage() {
   const [searchParams] = useSearchParams();
   const { user, status } = useAuth();
 
-  // 토스가 붙여주는 값: paymentKey·orderId·amount. paymentId·reservationId(예약금 결제)·
+  // 토스가 붙여주는 값: paymentKey·orderId·amount(이 중 paymentKey만 쓴다). paymentId·reservationId(예약금 결제)·
   // fairId(개설비 결제) 또는 applicationId(참가비 결제)는 결제창을 띄울 때 successUrl에
   // 우리가 직접 실어보낸 값이다. 세 흐름은 toss.ts에서 서로 다른 쿼리 파라미터를 붙이므로
   // 한쪽만 채워진다.
@@ -94,7 +95,6 @@ export function PaymentSuccessPage() {
   const fairId = parsePositiveInt(searchParams.get("fairId"));
   const applicationId = parsePositiveInt(searchParams.get("applicationId"));
   const paymentKey = searchParams.get("paymentKey");
-  const orderId = searchParams.get("orderId");
   const isFairOpeningFee = reservationId === null && fairId !== null;
   const isVendorFee = reservationId === null && fairId === null && applicationId !== null;
   // 확정 실패·이탈 시 되돌아갈 곳. 예약금은 "내 예약 목록", 참가비는 "참가 신청 현황",
@@ -113,14 +113,13 @@ export function PaymentSuccessPage() {
       : isVendorFee
         ? "결제 결과 주소에 필요한 정보가 없어요. 참가 신청 현황에서 결제 상태를 확인해 주세요."
         : "결제 결과 주소에 필요한 정보가 없어요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
-  } else if (orderId !== null && orderId !== `PAYMENT_${paymentId}`) {
-    // 백엔드가 "PAYMENT_" + paymentId로 orderId를 만든다. 어긋나면 어차피 토스가 거절한다.
-    blockedReason = isFairOpeningFee
-      ? "결제 주문번호가 이 결제와 맞지 않아요. 결제 상태를 확인해 주세요."
-      : isVendorFee
-        ? "결제 주문번호가 이 결제와 맞지 않아요. 참가 신청 현황에서 결제 상태를 확인해 주세요."
-        : "결제 주문번호가 이 결제와 맞지 않아요. 내 예약 목록에서 결제 상태를 확인해 주세요.";
   }
+  // 주문번호는 여기서 대조하지 않는다. 예전에는 "PAYMENT_" + paymentId 규칙이라 화면에서
+  // 다시 만들어 비교할 수 있었지만, 지금은 결제 시도마다 서버가 발급해 DB에 저장하는
+  // 값이라 프론트가 유추할 수 없다(그래야 재시도 때 주문번호가 새로 나간다).
+  //
+  // 없어도 되는 검사이기도 하다. 승인 요청에 실리는 주문번호는 이 URL의 값이 아니라
+  // 서버가 결제 행에서 읽은 값이고, paymentKey와 짝이 맞는지는 토스가 판정한다.
   const blocked = blockedReason !== null;
 
   const [phase, setPhase] = useState<ConfirmPhase>("confirming");
@@ -140,14 +139,16 @@ export function PaymentSuccessPage() {
 
     const userId = user.userId;
     void (async () => {
+      let confirmed: PaymentDetail;
       try {
-        await confirmPayment(paymentId, paymentKey, userId);
+        confirmed = await confirmPayment(paymentId, paymentKey, userId);
       } catch (err) {
         // 새로고침 등으로 이미 확정된 결제를 다시 확정하려 하면 409(P002)가 온다.
         // 실제 상태를 되물어서, 이미 성공한 결제를 실패 화면으로 보여주지 않는다.
         if (err instanceof ApiError && err.code === NOT_PAYABLE_CODE) {
           try {
             const payment = await getPayment(paymentId, userId);
+            confirmed = payment;
             if (payment.status !== "COMPLETED") {
               setErrorMessage(err.message);
               setPhase("error");
@@ -176,6 +177,10 @@ export function PaymentSuccessPage() {
           // 결제는 이미 성공 - QR 조회 실패를 결제 실패로 보여주지 않는다.
         }
       }
+      // 결제까지 끝났으니 대기 슬롯을 돌려준다. 예약 생성 단계에서 놓지 않고 여기까지
+      // 들고 온 이유는, 결제 API도 같은 슬롯으로 통과해야 하기 때문이다.
+      // fairId는 결제 응답에서 온다 - 이 화면의 URL에는 예약금 결제의 fairId가 없다.
+      releaseWaitingSlot(confirmed.fairId);
       setPhase("done");
     })();
   }, [status, user, blocked, paymentId, reservationId, fairId, applicationId, paymentKey]);
