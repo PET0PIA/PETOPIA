@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, ChevronRight, ImageOff, MapPin } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -12,6 +12,9 @@ import { FairParticipatingBooths } from "./FairParticipatingBooths";
 import { FairReviews } from "./FairReviews";
 
 const INDOOR_OUTDOOR_LABELS: Record<string, string> = { INDOOR: "실내", OUTDOOR: "실외" };
+
+// 사이트 상단 헤더(PublicHeader)의 높이(px). 스크롤 고정 바를 이 아래에 붙이고, 등장 판정 기준선도 여기로 맞춘다.
+const SITE_HEADER_PX = 72;
 
 // 오늘(Asia/Seoul 기준) YYYY-MM-DD. operationEndDate와 문자열 비교로 종료 판정.
 // 브라우저 시간대와 무관하게 KST로 고정한다(해외 기기에서 종료 판정이 하루 밀리는 것 방지).
@@ -83,6 +86,23 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
     };
   }, [id, idValid]);
 
+  // 스크롤로 원래 상단 헤더가 화면 위(사이트 헤더 아래 기준선)로 사라지면 얇은 고정 바를 띄운다.
+  const [showCompact, setShowCompact] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  // 상단 헤더에 붙는 콜백 ref. 헤더가 붙을 때 관찰을 시작하고, 떨어질 때(null) 정리한다.
+  const headerRef = useCallback((node: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    if (!node) return;
+    observerRef.current = new IntersectionObserver(
+      ([entry]) => {
+        // 헤더가 위로 지나갔을 때만 켠다(아직 헤더에 닿기 전엔 top이 양수라 무시).
+        setShowCompact(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+      },
+      { rootMargin: `-${SITE_HEADER_PX}px 0px 0px 0px`, threshold: 0 },
+    );
+    observerRef.current.observe(node);
+  }, []);
+
   if (!idValid || notFound) {
     return (
       <PageContainer className="py-10">
@@ -113,7 +133,26 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
 
   return (
     <PageContainer className="py-7 sm:py-10">
-      <div className="grid gap-6 md:grid-cols-[300px_1fr] md:gap-8">
+      {/* 스크롤로 상단 헤더가 사라지면 나타나는 얇은 고정 바(행사명 + 예매 CTA). fixed라 화면 기준 배치다. */}
+      <div
+        inert={!showCompact}
+        style={{ top: SITE_HEADER_PX }}
+        className={`fixed inset-x-0 z-30 border-b border-line bg-card/95 backdrop-blur transition-all duration-200 ${
+          showCompact ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-full opacity-0"
+        }`}
+      >
+        <div className="page-shell flex items-center gap-3 py-2.5">
+          {fair.posterImageUrl && (
+            <img src={fair.posterImageUrl} alt="" className={`size-10 shrink-0 rounded-lg object-cover ${ended ? "grayscale" : ""}`} />
+          )}
+          <span className="min-w-0 flex-1 truncate text-sm font-extrabold sm:text-base">{fair.name}</span>
+          <div className="shrink-0">
+            <ReserveButton reservable={reservable} ended={ended} fairId={fair.fairId} size="sm" />
+          </div>
+        </div>
+      </div>
+
+      <div ref={headerRef} className="grid gap-6 md:grid-cols-[300px_1fr] md:gap-8">
         {/* 포스터 */}
         <div className="relative mx-auto aspect-[4/5] w-full max-w-[300px] overflow-hidden rounded-card bg-surface-alt">
           {fair.posterImageUrl ? (
@@ -161,25 +200,8 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
               </p>
             )}
             <div>
-              {reservable ? (
-                <Link
-                  to={`/tickets/${fair.fairId}`}
-                  className="inline-flex min-h-12 items-center justify-center gap-1 rounded-button bg-primary-strong px-8 text-base font-bold text-white transition hover:opacity-90"
-                >
-                  예매하기
-                  <ChevronRight size={18} aria-hidden="true" />
-                </Link>
-              ) : (
-                <>
-                  <span
-                    className="inline-flex min-h-12 cursor-not-allowed items-center justify-center rounded-button bg-surface-alt px-8 text-base font-bold text-muted"
-                    aria-disabled="true"
-                  >
-                    {ended ? "종료된 행사" : "예매 준비 중"}
-                  </span>
-                  {!ended && availabilityError && <p className="mt-2 text-sm text-muted">{availabilityError}</p>}
-                </>
-              )}
+              <ReserveButton reservable={reservable} ended={ended} fairId={fair.fairId} size="lg" />
+              {!reservable && !ended && availabilityError && <p className="mt-2 text-sm text-muted">{availabilityError}</p>}
             </div>
           </div>
         </div>
@@ -227,6 +249,30 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
       {/* 리뷰 (리뷰가 없으면 컴포넌트가 null을 반환해 안 보인다) */}
       <FairReviews fairId={fair.fairId} />
     </PageContainer>
+  );
+}
+
+/** 예매 CTA. 상단 헤더(size="lg")와 스크롤 고정 바(size="sm")가 같은 상태 판정을 공유한다. */
+function ReserveButton({ reservable, ended, fairId, size }: { reservable: boolean; ended: boolean; fairId: number; size: "lg" | "sm" }) {
+  const sizeClass = size === "lg" ? "min-h-12 px-8 text-base" : "min-h-10 px-5 text-sm";
+  if (reservable) {
+    return (
+      <Link
+        to={`/tickets/${fairId}`}
+        className={`inline-flex items-center justify-center gap-1 rounded-button bg-primary-strong font-bold text-white transition hover:opacity-90 ${sizeClass}`}
+      >
+        예매하기
+        <ChevronRight size={size === "lg" ? 18 : 16} aria-hidden="true" />
+      </Link>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex cursor-not-allowed items-center justify-center rounded-button bg-surface-alt font-bold text-muted ${sizeClass}`}
+      aria-disabled="true"
+    >
+      {ended ? "종료된 행사" : "예매 준비 중"}
+    </span>
   );
 }
 
