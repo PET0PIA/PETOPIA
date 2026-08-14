@@ -5,10 +5,7 @@ import com.ms.petopia.api.booth.domain.BoothItem;
 import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
-import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
-import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
-import com.ms.petopia.api.booth.dto.response.BoothResponse;
-import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
+import com.ms.petopia.api.booth.dto.response.*;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -279,6 +276,22 @@ public class BoothService {
 
     }
 
+    // 내가 방문한 적 있는 행사 목록 조회
+    public List<VisitedFairResponse> getMyVisitedFairs(Long userId) {
 
+        return boothMapper.selectVisitedFairsByUserId(userId);
+
+    }
+
+    public List<BoothVisitResponse> getMyVisitedBooths(Long userId, Long fairId) {
+
+        // 행사 존재 확인
+        if(!boothMapper.existsFair(fairId)) {
+            throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
+        }
+
+        return boothMapper.selectVisitedBoothsByUserAndFair(userId, fairId);
+
+    }
 
 }
