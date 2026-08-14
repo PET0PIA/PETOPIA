@@ -71,7 +71,7 @@ export function MyReservationsPage() {
         <EmptyState
           title="아직 예약한 행사가 없어요."
           description="티켓 예매에서 관심 있는 행사를 예약하면 이곳에서 확인할 수 있어요."
-          actionTo="/tickets"
+          actionTo="/fairs/upcoming"
           actionLabel="티켓 예매하러 가기"
         />
       ) : (

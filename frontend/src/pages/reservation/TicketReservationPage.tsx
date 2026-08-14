@@ -141,7 +141,7 @@ export function TicketReservationPage() {
         <EmptyState
           title="잘못된 예매 주소예요."
           description="행사 주소가 올바르지 않아요. 예매 가능한 행사에서 다시 선택해 주세요."
-          actionTo="/tickets"
+          actionTo="/fairs/upcoming"
           actionLabel="예매 가능한 행사 보기"
         />
       </div>
@@ -162,7 +162,7 @@ export function TicketReservationPage() {
         <EmptyState
           title="지금은 예매할 수 없어요."
           description={loadError ?? "예매 정보를 불러오지 못했어요."}
-          actionTo="/tickets"
+          actionTo="/fairs/upcoming"
           actionLabel="예매 가능한 행사 보기"
         />
       </div>
@@ -347,7 +347,7 @@ export function TicketReservationPage() {
               내 예약 목록으로
             </Link>
             <Link
-              to="/tickets"
+              to="/fairs/upcoming"
               className="inline-flex min-h-11 items-center rounded-button border border-line bg-card px-4 text-sm font-bold hover:bg-page"
             >
               다른 행사 보기

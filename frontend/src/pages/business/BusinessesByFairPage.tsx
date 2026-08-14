@@ -60,7 +60,7 @@ export function BusinessesByFairPage() {
       {!loading && !error && entries.length > 0 && (
         <div className="grid gap-5 md:grid-cols-3">
           {entries.map(({ fair, ended }) => (
-            <FairPublicCard key={fair.fairId} fair={fair} ended={ended} to={`/fairs/${fair.fairId}/booths`} />
+            <FairPublicCard key={fair.fairId} fair={fair} ended={ended} to={`/fairs/${fair.fairId}/booths`} action={{ to: `/fairs/${fair.fairId}/booths`, label: "부스 보기" }} />
           ))}
         </div>
       )}
