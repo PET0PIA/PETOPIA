@@ -1,6 +1,7 @@
 package com.ms.petopia.api.reservation.service;
 
 import com.ms.petopia.api.reservation.dto.ExpiringReservationRow;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationExpirationMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +26,8 @@ class ReservationExpirationServiceTest {
 
     @Mock
     private ReservationExpirationMapper mapper;
+    @Mock
+    private ReservationCapacityMapper capacityMapper;
     @Mock
     private ReservationTimeProvider timeProvider;
     @Mock

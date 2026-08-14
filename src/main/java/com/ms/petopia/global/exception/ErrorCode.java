@@ -144,6 +144,10 @@ public enum ErrorCode {
     RESERVATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R019", "예약 취소 가능 시간이 지났습니다."),
     RESERVATION_REFUND_PAYMENT_NOT_FOUND(HttpStatus.CONFLICT, "R020", "환불할 예약금 결제 내역을 찾을 수 없습니다."),
     RESERVATION_PAYMENT_IN_PROGRESS(HttpStatus.CONFLICT, "R021", "결제가 진행 중입니다. 잠시 후 다시 시도해 주세요."),
+    // 대기열을 켠 행사에서 유효한 대기 토큰 없이 예약·결제를 시도한 경우.
+    // 프론트는 이 코드를 받으면 대기 화면으로 보내 토큰을 발급받게 한다.
+    WAITING_ROOM_TICKET_REQUIRED(HttpStatus.TOO_MANY_REQUESTS, "R022", "대기열을 통과한 뒤 이용할 수 있습니다."),
+    WAITING_ROOM_POLICY_CONFLICT(HttpStatus.CONFLICT, "R023", "대기열 설정이 다른 관리자에 의해 변경되었습니다."),
 
     // ===== Notification =====
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),

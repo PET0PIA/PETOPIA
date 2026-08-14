@@ -71,7 +71,8 @@ class OnsiteReservationServiceTest {
         assertThat(response.amount()).isZero();
         assertThat(response.paymentExpiresAt()).isNull();
         assertThat(response.entryQrToken()).isEqualTo("qr-token");
-        verify(reservationMapper, never()).countCapacityOccupyingReservations(any(), any());
+        // 현장예매가 사전예약 정원을 건드리지 않는다는 건 이제 구조가 보장한다 -
+        // OnsiteReservationService는 ReservationCapacityMapper에 의존조차 하지 않는다.
 
         ArgumentCaptor<ReservationInsertRow> captor = ArgumentCaptor.forClass(ReservationInsertRow.class);
         verify(reservationMapper).insertReservation(captor.capture());

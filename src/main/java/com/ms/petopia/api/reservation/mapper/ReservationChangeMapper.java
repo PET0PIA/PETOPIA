@@ -19,11 +19,6 @@ public interface ReservationChangeMapper {
             @Param("operationDates") List<LocalDate> operationDates
     );
 
-    int countCapacityOccupyingAdvanceReservations(
-            @Param("fairId") Long fairId,
-            @Param("visitDate") LocalDate visitDate
-    );
-
     int updateVisitDate(
             @Param("reservationId") Long reservationId,
             @Param("visitDate") LocalDate visitDate,
