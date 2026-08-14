@@ -8,7 +8,10 @@ function parseYmd(iso: string): { month: number; day: number; dow: number } | nu
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   if (!m) return null;
   const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  return { month, day, dow: new Date(year, month - 1, day).getDay() };
+  const date = new Date(year, month - 1, day);
+  // 달력에 실제로 존재하는 날짜인지 확인(예: 2026-02-30은 3월로 밀리므로 걸러냄).
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return { month, day, dow: date.getDay() };
 }
 
 // "8.14(금) - 16(일)" 형태. 요일 포함, 같은 달이면 종료일은 일만. 목록 카드용(k-pet 스타일).

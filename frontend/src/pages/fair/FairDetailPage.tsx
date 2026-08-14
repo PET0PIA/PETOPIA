@@ -13,10 +13,15 @@ import { FairReviews } from "./FairReviews";
 
 const INDOOR_OUTDOOR_LABELS: Record<string, string> = { INDOOR: "실내", OUTDOOR: "실외" };
 
-// 오늘(로컬=Asia/Seoul 전제) YYYY-MM-DD. operationEndDate와 문자열 비교로 종료 판정.
+// 오늘(Asia/Seoul 기준) YYYY-MM-DD. operationEndDate와 문자열 비교로 종료 판정.
+// 브라우저 시간대와 무관하게 KST로 고정한다(해외 기기에서 종료 판정이 하루 밀리는 것 방지).
 function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 // 관람료: 0이면 무료, 그 외엔 "N원". reservationFee는 예매 창이 열렸을 때만 온다.
@@ -36,6 +41,13 @@ function formatTime(time: string): string {
  */
 export function FairDetailPage() {
   const { fairId } = useParams();
+  // 라우트는 /fairs/:fairId가 바뀌어도 같은 엘리먼트를 재사용한다(remount 안 됨).
+  // key로 행사마다 통째로 remount시켜 이전 행사의 상태(정보·예매·notFound·에러)가 새 행사로 새지 않게 하고,
+  // 자식(FairReviews 등)도 함께 새 인스턴스로 만들어 이전 행사의 늦은 응답이 섞이지 않게 한다.
+  return <FairDetailView key={fairId ?? ""} fairId={fairId} />;
+}
+
+function FairDetailView({ fairId }: { fairId: string | undefined }) {
   const id = Number(fairId);
   const idValid = Number.isInteger(id) && id > 0;
 

@@ -34,12 +34,15 @@ function toCompanies(rows: ConfirmedBoothResponse[]): Company[] {
  * 참가기업 조회가 비거나 실패하면 섹션 자체를 숨긴다(상세의 부가 정보라 페이지를 막지 않는다).
  */
 export function FairParticipatingBooths({ fairId }: { fairId: number }) {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const loggedIn = status === "authenticated";
+  const userId = user?.userId ?? null;
   const navigate = useNavigate();
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
+  // 요청이 진행 중인 부스. 응답이 올 때까지 그 버튼을 잠가 add/remove 순서가 뒤집히지 않게 한다.
+  const [pendingFavoriteIds, setPendingFavoriteIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
 
   // 참가기업(공개)
@@ -60,7 +63,9 @@ export function FairParticipatingBooths({ fairId }: { fairId: number }) {
     };
   }, [fairId]);
 
-  // 내 즐겨찾기(로그인 시에만) → boothId Set으로 별표 상태 교차
+  // 내 즐겨찾기(로그인 시에만) → boothId Set으로 별표 상태 교차.
+  // 비우기는 cleanup에서 한다: 사용자·행사가 바뀌거나 로그아웃하면 이전 실행의 cleanup이 먼저 돌아
+  // 이전 별표 상태를 지운 뒤 새 실행이 다시 채운다(로그아웃 시엔 아래 early-return이라 그대로 빈 상태 유지).
   useEffect(() => {
     if (!loggedIn) return;
     let alive = true;
@@ -73,14 +78,17 @@ export function FairParticipatingBooths({ fairId }: { fairId: number }) {
       });
     return () => {
       alive = false;
+      setFavoriteIds(new Set());
     };
-  }, [fairId, loggedIn]);
+  }, [fairId, loggedIn, userId]);
 
   function toggleFavorite(boothId: number) {
     if (!loggedIn) {
       navigate("/login");
       return;
     }
+    // 이미 요청 중이면 무시한다(버튼도 잠기지만, 순서 뒤집힘·중복 요청을 이중으로 막는다).
+    if (pendingFavoriteIds.has(boothId)) return;
     const wasFavorite = favoriteIds.has(boothId);
     // 낙관적 갱신: 먼저 UI를 바꾸고, 실패하면 되돌린다.
     setFavoriteIds((prev) => {
@@ -89,15 +97,24 @@ export function FairParticipatingBooths({ fairId }: { fairId: number }) {
       else next.add(boothId);
       return next;
     });
+    setPendingFavoriteIds((prev) => new Set(prev).add(boothId));
     const request = wasFavorite ? removeBoothFavorite(boothId) : addBoothFavorite(boothId);
-    request.catch(() => {
-      setFavoriteIds((prev) => {
-        const next = new Set(prev);
-        if (wasFavorite) next.add(boothId);
-        else next.delete(boothId);
-        return next;
+    request
+      .catch(() => {
+        setFavoriteIds((prev) => {
+          const next = new Set(prev);
+          if (wasFavorite) next.add(boothId);
+          else next.delete(boothId);
+          return next;
+        });
+      })
+      .finally(() => {
+        setPendingFavoriteIds((prev) => {
+          const next = new Set(prev);
+          next.delete(boothId);
+          return next;
+        });
       });
-    });
   }
 
   // 로딩 중이거나 참가기업이 없으면 섹션을 통째로 숨긴다.
@@ -111,6 +128,7 @@ export function FairParticipatingBooths({ fairId }: { fairId: number }) {
       <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
         {companies.map((company) => {
           const favorite = favoriteIds.has(company.boothId);
+          const pending = pendingFavoriteIds.has(company.boothId);
           return (
             <li key={company.boothId} className="relative">
               <Link to={`/booths/${company.boothId}`} className="group block">
@@ -133,9 +151,10 @@ export function FairParticipatingBooths({ fairId }: { fairId: number }) {
               <button
                 type="button"
                 onClick={() => toggleFavorite(company.boothId)}
+                disabled={pending}
                 aria-label={favorite ? `${company.businessName} 즐겨찾기 해제` : `${company.businessName} 즐겨찾기 추가`}
                 aria-pressed={favorite}
-                className="absolute right-2 top-2 grid size-9 place-items-center rounded-full bg-card/90 shadow-sm transition hover:bg-card"
+                className="absolute right-2 top-2 grid size-9 place-items-center rounded-full bg-card/90 shadow-sm transition hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Star size={18} fill={favorite ? "currentColor" : "none"} className={favorite ? "text-sun" : "text-muted"} aria-hidden="true" />
               </button>
