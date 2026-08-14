@@ -48,6 +48,9 @@ public class SecurityConfig {
                         ).authenticated()
                         .requestMatchers("/api/v1/admin/fairs/**")
                         .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // 관리자 로그인 자체는 인증 전 상태에서 호출돼야 하므로 아래 /api/admin/** 규칙보다
+                        // 먼저 permitAll로 열어둔다. 비밀번호/역할 검증은 AdminAccountService.adminLogin()이 담당.
+                        .requestMatchers(HttpMethod.POST, "/api/admin/auth/login").permitAll()
                         // 시스템 전체를 가로지르는 관리자 API(감사 로그, 전체 대시보드) - SUPER_ADMIN 전용.
                         // AuditLogController, AdminDashboardController가 여기 해당한다.
                         .requestMatchers("/api/admin/**")

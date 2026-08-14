@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -132,6 +133,22 @@ class BannerServiceTest {
 
             verify(bannerMapper).update(any());
             assertThat(result).isNotNull();
+        }
+
+        @Test
+        @DisplayName("공백만 입력한 필드는 삭제 신호로 보고 NULL로 반영한다")
+        void clearsFieldWhenBlank() {
+            BannerUpdateRequest request = new BannerUpdateRequest();
+            request.setBgColor("   ");
+
+            given(bannerMapper.selectById(1L))
+                    .willReturn(createBanner(1L), createBanner(1L));
+
+            bannerService.update(1L, request);
+
+            ArgumentCaptor<Banner> captor = ArgumentCaptor.forClass(Banner.class);
+            verify(bannerMapper).update(captor.capture());
+            assertThat(captor.getValue().getBgColor()).isEmpty();
         }
 
         @Test

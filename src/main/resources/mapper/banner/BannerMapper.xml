@@ -10,8 +10,8 @@
             sort_order, is_active, started_at, ended_at, created_at
         FROM banner
         WHERE is_active = 1
-            AND (started_at IS NULL OR started_at &lt;= NOW())
-            AND (ended_at IS NULL OR ended_at &gt;= NOW())
+            AND started_at &lt;= NOW()
+            AND ended_at &gt;= NOW()
         ORDER BY sort_order
     </select>
 
@@ -44,21 +44,21 @@
         )
     </insert>
 
-    <!--수정(null 아닌 필드만 갱신)-->
+    <!--수정(null 아닌 필드만 갱신, 빈 문자열은 명시적 삭제로 취급해 NULL 저장)-->
     <update id="update">
         UPDATE banner
         <set>
             <if test="title != null">title = #{title},</if>
-            <if test="eyebrow != null">eyebrow = #{eyebrow},</if>
-            <if test="subtitle != null">subtitle = #{subtitle},</if>
+            <if test="eyebrow != null">eyebrow = <choose><when test="eyebrow == ''">NULL</when><otherwise>#{eyebrow}</otherwise></choose>,</if>
+            <if test="subtitle != null">subtitle = <choose><when test="subtitle == ''">NULL</when><otherwise>#{subtitle}</otherwise></choose>,</if>
             <if test="imageKey != null">image_key = #{imageKey},</if>
-            <if test="linkUrl != null">link_url = #{linkUrl},</if>
+            <if test="linkUrl != null">link_url = <choose><when test="linkUrl == ''">NULL</when><otherwise>#{linkUrl}</otherwise></choose>,</if>
             <if test="linkTarget != null">link_target = #{linkTarget},</if>
-            <if test="linkLabel != null">link_label = #{linkLabel},</if>
-            <if test="link2Label != null">link2_label = #{link2Label},</if>
-            <if test="link2Url != null">link2_url = #{link2Url},</if>
+            <if test="linkLabel != null">link_label = <choose><when test="linkLabel == ''">NULL</when><otherwise>#{linkLabel}</otherwise></choose>,</if>
+            <if test="link2Label != null">link2_label = <choose><when test="link2Label == ''">NULL</when><otherwise>#{link2Label}</otherwise></choose>,</if>
+            <if test="link2Url != null">link2_url = <choose><when test="link2Url == ''">NULL</when><otherwise>#{link2Url}</otherwise></choose>,</if>
             <if test="link2Target != null">link2_target = #{link2Target},</if>
-            <if test="bgColor != null">bg_color = #{bgColor},</if>
+            <if test="bgColor != null">bg_color = <choose><when test="bgColor == ''">NULL</when><otherwise>#{bgColor}</otherwise></choose>,</if>
             <if test="sortOrder != null">sort_order = #{sortOrder},</if>
             <if test="startedAt != null">started_at = #{startedAt},</if>
             <if test="endedAt != null">ended_at = #{endedAt},</if>

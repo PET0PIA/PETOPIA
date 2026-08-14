@@ -21,7 +21,11 @@ export interface Banner {
   link2Target: LinkTarget | null;
   bgColor: string | null;
   sortOrder: number;
-  isActive: boolean;
+  /**
+   * 백엔드 필드명은 isActive지만, Lombok의 isActive() getter를 Jackson이 직렬화할 때
+   * "is" 접두사를 떼어 JSON 키가 "active"로 나간다. 여기서도 그 실제 응답 키에 맞춘다.
+   */
+  active: boolean;
   startedAt: string | null;
   endedAt: string | null;
   createdAt: string;
@@ -45,9 +49,11 @@ export interface BannerInput {
   endedAt?: string;
 }
 
-/** 등록 시에는 imageKey가 필수다. */
-export interface BannerCreateInput extends Omit<BannerInput, "imageKey"> {
+/** 등록 시에는 imageKey와 노출 기간(startedAt/endedAt)이 필수다. */
+export interface BannerCreateInput extends Omit<BannerInput, "imageKey" | "startedAt" | "endedAt"> {
   imageKey: string;
+  startedAt: string;
+  endedAt: string;
 }
 
 // 공개 - 노출 중인 배너 목록 (기간 유효, sort_order 오름차순)
