@@ -207,8 +207,8 @@ export function FairApplicationNewPage() {
       {/* 스크롤 목표 지점. 검증/서버 오류가 뜨면 위 useEffect가 이 영역으로 데려온다. */}
       <div ref={errorsRef} className="scroll-mt-24">
         {errors.length > 0 && (
-          <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <div role="alert" className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
             <ul className="space-y-1">
               {errors.map((message) => <li key={message}>{message}</li>)}
             </ul>
@@ -216,8 +216,8 @@ export function FairApplicationNewPage() {
         )}
 
         {submitError && (
-          <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <div role="alert" className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
             <p>{submitError}</p>
           </div>
         )}
@@ -324,13 +324,13 @@ export function FairApplicationNewPage() {
           </Card>
         </section>
 
-        {/* 티켓 정책·담당자는 둘 다 짧아 나란히 둔다(높이가 비슷해 깔끔). 좁은 화면에선 위아래로 쌓인다. */}
+        {/* 예약 정책·담당자는 둘 다 짧아 나란히 둔다(높이가 비슷해 깔끔). 좁은 화면에선 위아래로 쌓인다. */}
         <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
           <section>
-            <SectionHeader title="티켓 정책" help="관람객 티켓 비용과 취소·변경 가능 기한이에요." icon={<Ticket size={18} aria-hidden="true" />} />
+            <SectionHeader title="예약 정책" help="관람객 예약금과 취소·변경 가능 기한이에요." icon={<Ticket size={18} aria-hidden="true" />} />
             <Card className="space-y-5 p-6">
               <div>
-                {label("reservationFee", "티켓 비용(원)", false, "관람객이 예매 때 내는 티켓 비용이에요. 무료면 0.")}
+                {label("reservationFee", "예약금(원)", false, "관람객이 예매 때 내는 예약금이에요. 무료면 0.")}
                 <Input id="reservationFee" type="number" min={0} value={form.reservationFee} onChange={(event) => update("reservationFee", event.target.value)} placeholder="0" />
               </div>
               <div className="grid gap-5 sm:grid-cols-2">

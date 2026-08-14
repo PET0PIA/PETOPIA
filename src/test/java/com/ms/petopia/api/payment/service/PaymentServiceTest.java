@@ -428,12 +428,13 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("이미 PENDING/PROCESSING/COMPLETED인 참가비 결제가 있으면 FAILED가 아니라서 여전히 막는다")
-    void payVendorFee_FAILED아닌기존결제있으면_예외를던진다() {
-        PaymentRow pendingRow = new PaymentRow();
-        pendingRow.setPaymentId(1L);
-        pendingRow.setStatus("PENDING");
-        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(pendingRow);
+    @DisplayName("이미 PROCESSING/COMPLETED인 참가비 결제가 있으면 재사용 불가라서 여전히 중복결제로 막는다")
+    void payVendorFee_재사용불가상태기존결제있으면_예외를던진다() {
+        // PROCESSING(승인 진행 중)은 PENDING과 달리 재개 대상이 아니다 — 계속 막아야 한다.
+        PaymentRow processingRow = new PaymentRow();
+        processingRow.setPaymentId(1L);
+        processingRow.setStatus("PROCESSING");
+        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(processingRow);
 
         VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
 
@@ -465,6 +466,31 @@ class PaymentServiceTest {
         assertThat(result.paymentId()).isEqualTo(2L);
         assertThat(result.status()).isEqualTo("PENDING");
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("결제창을 닫아 PENDING으로 남은 예약금 결제를 같은 사용자가 다시 요청하면 그 행을 그대로 돌려준다")
+    void payReservationDeposit_PENDING동일사용자_기존행을그대로재사용한다() {
+        // 사용자가 토스 결제창을 그냥 닫으면 백엔드는 통보를 못 받아 결제가 PENDING으로 남는다.
+        // 다시 "결제 계속하기"를 누르면 새 결제를 만드는 게 아니라 그 PENDING을 그대로 돌려줘 결제창을 다시 열어야 한다.
+        ReservationPaymentContext context = new ReservationPaymentContext(
+                500L, 10L, 90L, "GENERAL", 30000L, LocalDateTime.now().plusMinutes(30)
+        );
+        given(reservationPaymentContractClient.getPaymentContext(500L)).willReturn(context);
+
+        PaymentRow pendingRow = new PaymentRow();
+        pendingRow.setPaymentId(7L);
+        pendingRow.setStatus("PENDING");
+        pendingRow.setPayerUserId(90L);
+        given(paymentMapper.selectByIdempotencyKey("RESERVATION_DEPOSIT_500")).willReturn(pendingRow);
+
+        PaymentResponse result = paymentService.payReservationDeposit(500L, 90L);
+
+        assertThat(result.paymentId()).isEqualTo(7L);
+        assertThat(result.status()).isEqualTo("PENDING");
+        // 기존 PENDING을 그대로 돌려줄 뿐 — 새 결제 insert도, FAILED 재사용(resetFailedToPending)도 하지 않는다.
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any());
     }
 
     @Test

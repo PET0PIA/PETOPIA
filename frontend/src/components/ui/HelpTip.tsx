@@ -1,5 +1,5 @@
 import { HelpCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 /**
  * 라벨·섹션 제목 옆에 붙는 작은 '?' 도움말. 클릭하면 설명 팝오버가 뜨고, 바깥을 누르거나
@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 export function HelpTip({ text, label = "도움말" }: { text: string; label?: string }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement>(null);
+  const tooltipId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -31,6 +32,7 @@ export function HelpTip({ text, label = "도움말" }: { text: string; label?: s
         type="button"
         aria-label={label}
         aria-expanded={open}
+        aria-describedby={open ? tooltipId : undefined}
         onClick={() => setOpen((prev) => !prev)}
         className="inline-grid size-4 place-items-center rounded-full text-muted transition-colors hover:text-ink"
       >
@@ -38,6 +40,7 @@ export function HelpTip({ text, label = "도움말" }: { text: string; label?: s
       </button>
       {open && (
         <span
+          id={tooltipId}
           role="tooltip"
           className="surface absolute left-0 top-6 z-20 w-56 p-3 text-xs font-normal leading-5 text-muted"
         >
