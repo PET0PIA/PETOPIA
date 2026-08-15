@@ -80,17 +80,25 @@
              , COUNT(c.conversation_id) AS conversation_count
              , SUM(c.status IN ('WAITING_AGENT', 'AI_ANSWERED')) AS waiting_count
              , SUM(c.ai_answer_count > 0) AS ai_answered_count
-             , AVG(
-                 (SELECT TIMESTAMPDIFF(SECOND, c.created_at, a.created_at)
-                    FROM chat_message a
-                   WHERE a.conversation_id = c.conversation_id
-                     AND a.sender_type = 'AGENT'
-                   ORDER BY a.message_id LIMIT 1)
-               ) AS avg_first_response_seconds
+             , AVG(TIMESTAMPDIFF(SECOND, c.created_at, first_agent.replied_at))
+                   AS avg_first_response_seconds
           FROM chat_menu m
           LEFT JOIN chat_conversation c
                  ON c.menu_id = m.menu_id
                 AND c.created_at >= #{since}
+          <!--
+            대화별 첫 상담사 응답 시각을 파생 테이블에서 미리 구한 뒤 평균을 낸다.
+            상관 서브쿼리를 AVG() 안에 직접 넣어도 MySQL 8.0에서 동작하지만, 집계 안에
+            서브쿼리가 들어간 형태는 읽는 사람마다 유효성을 다시 따져봐야 해서 풀어 썼다.
+            답변이 없는 대화는 replied_at이 NULL이고 AVG가 NULL을 건너뛰므로,
+            "아직 아무도 답하지 않은 유형은 NULL"이라는 성질은 그대로다.
+          -->
+          LEFT JOIN (
+                SELECT conversation_id, MIN(created_at) AS replied_at
+                  FROM chat_message
+                 WHERE sender_type = 'AGENT'
+                 GROUP BY conversation_id
+          ) first_agent ON first_agent.conversation_id = c.conversation_id
          GROUP BY m.menu_id, m.label
          ORDER BY conversation_count DESC, m.display_order
     </select>
