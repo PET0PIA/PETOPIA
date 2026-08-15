@@ -39,4 +39,25 @@
          ORDER BY b.booth_id
     </select>
 
+    <!-- 부스 동선 추천 부스 위치 -->
+    <select id="selectBoothLocations" resultType="BoothSlotLocation">
+        SELECT b.booth_id
+             , h.hall_id
+             , h.name       AS hall_name
+             , bs.slot_number
+             , bs.pos_x
+             , bs.pos_y
+             , bs.width
+             , bs.height
+          FROM booth b
+          JOIN application_slot aps ON aps.application_id = b.application_id
+          JOIN booth_slots bs ON bs.booth_slot_id = aps.booth_slot_id
+          JOIN halls h ON h.hall_id = bs.hall_id
+         WHERE b.booth_id IN
+        <foreach collection="boothIds" item="boothId" open="(" separator="," close=")">
+            #{boothId}
+        </foreach>
+         ORDER BY b.booth_id, bs.booth_slot_id
+    </select>
+
 </mapper>

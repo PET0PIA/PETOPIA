@@ -3,6 +3,7 @@ package com.ms.petopia.api.recommendation.service;
 import com.ms.petopia.api.pet.dto.PetResponse;
 import com.ms.petopia.api.pet.service.PetService;
 import com.ms.petopia.api.recommendation.domain.BoothCandidate;
+import com.ms.petopia.api.recommendation.domain.BoothSlotLocation;
 import com.ms.petopia.api.recommendation.dto.BoothRecommendationItem;
 import com.ms.petopia.api.recommendation.dto.BoothRecommendationRequest;
 import com.ms.petopia.api.recommendation.mapper.BoothRecommendationMapper;
@@ -190,6 +191,57 @@ class RecommendationServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).reason()).isEqualTo("첫 번째 이유");
+    }
+
+    @Test
+    void 추천된_부스에_홀_슬롯_위치_정보를_합친다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        BoothCandidate candidate = boothCandidate(1L, "A부스");
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(List.of(candidate));
+        given(claudeBoothRecommender.recommend(null, "장난감 찾아요", List.of(candidate)))
+                .willReturn(List.of(new ClaudeBoothRecommender.RecommendationEntry(1L, "장난감 많아요")));
+        given(boothRecommendationMapper.selectBoothLocations(List.of(1L)))
+                .willReturn(List.of(boothSlotLocation(1L, "A홀", "A-01")));
+
+        List<BoothRecommendationItem> result = recommendationService.recommend(FAIR_ID, null, request);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).hallName()).isEqualTo("A홀");
+        assertThat(result.get(0).slotNumber()).isEqualTo("A-01");
+    }
+
+    @Test
+    void 한_부스가_슬롯을_여러_개_차지하면_첫_번째_슬롯만_사용한다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        BoothCandidate candidate = boothCandidate(1L, "A부스");
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(List.of(candidate));
+        given(claudeBoothRecommender.recommend(null, "장난감 찾아요", List.of(candidate)))
+                .willReturn(List.of(new ClaudeBoothRecommender.RecommendationEntry(1L, "장난감 많아요")));
+        //ORDER BY b.booth_id, bs.booth_slot_id로 정렬돼 오므로, 매퍼가 반환하는 리스트 순서상 첫 번째가 booth_slot_id가 가장 작은 슬롯
+        given(boothRecommendationMapper.selectBoothLocations(List.of(1L)))
+                .willReturn(List.of(
+                        boothSlotLocation(1L, "A홀", "A-01"),
+                        boothSlotLocation(1L, "A홀", "A-02")
+                ));
+
+        List<BoothRecommendationItem> result = recommendationService.recommend(FAIR_ID, null, request);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).slotNumber()).isEqualTo("A-01");
+    }
+
+    private BoothSlotLocation boothSlotLocation(Long boothId, String hallName, String slotNumber) {
+        BoothSlotLocation location = new BoothSlotLocation();
+        location.setBoothId(boothId);
+        location.setHallName(hallName);
+        location.setSlotNumber(slotNumber);
+        return location;
     }
 
     private BoothCandidate boothCandidate(Long boothId, String name) {
