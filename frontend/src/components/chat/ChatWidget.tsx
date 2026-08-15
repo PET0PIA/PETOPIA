@@ -47,6 +47,8 @@ export function ChatWidget() {
   const [error, setError] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
+  /** 런처 버튼. 패널을 닫을 때 여기로 포커스를 되돌린다. */
+  const launcherRef = useRef<HTMLButtonElement>(null);
   /**
    * 마지막으로 받은 메시지 ID. 상태가 아니라 ref인 이유는 이 값이 바뀔 때마다 스트림
    * 훅이 재구독되면 안 되기 때문이다(메시지 한 건마다 연결이 끊겼다 붙는다).
@@ -144,6 +146,25 @@ export function ChatWidget() {
     return () => window.clearInterval(timer);
   }, [connected, activeConversationId, syncFromServer]);
 
+  /*
+   * 열고 닫을 때 포커스를 옮긴다.
+   *
+   * 패널이 열리면 런처 버튼이 언마운트되면서 포커스가 document.body로 떨어진다. 그러면
+   * 키보드 사용자는 페이지 맨 앞에서부터 Tab을 눌러 패널까지 와야 한다. 닫을 때도 닫기
+   * 버튼이 사라지며 같은 일이 벌어지므로, 시작 지점이었던 런처로 되돌려준다.
+   */
+  useEffect(() => {
+    if (open) {
+      panelRef.current?.focus();
+      return;
+    }
+    // 첫 렌더(한 번도 연 적 없음)에는 되돌릴 포커스가 없다. 그때 런처를 강제로 잡으면
+    // 페이지에 들어오자마자 상담 버튼에 포커스가 가버린다.
+    if (launcherRef.current && document.activeElement === document.body) {
+      launcherRef.current.focus();
+    }
+  }, [open]);
+
   // Esc로 닫는다. 위젯이 화면을 가리는 상태에서 벗어날 키보드 경로가 필요하다.
   useEffect(() => {
     if (!open) return;
@@ -213,6 +234,7 @@ export function ChatWidget() {
   if (!open) {
     return (
       <button
+        ref={launcherRef}
         type="button"
         onClick={() => setOpen(true)}
         aria-label="상담 문의 열기"
@@ -239,6 +261,9 @@ export function ChatWidget() {
       role="dialog"
       aria-modal={false}
       aria-label="상담 문의"
+      // 패널 자체는 원래 포커스를 받지 못한다. -1을 줘야 열릴 때 프로그램적으로 포커스를
+      // 옮길 수 있고, Tab 순서에는 끼어들지 않는다.
+      tabIndex={-1}
       className="fixed inset-x-0 bottom-0 z-50 flex h-[80vh] flex-col bg-card sm:inset-x-auto sm:bottom-5 sm:right-5 sm:h-[560px] sm:w-[380px] sm:rounded-card sm:border sm:border-line sm:shadow-xl"
     >
       <header className="flex items-center justify-between border-b border-line px-4 py-3">

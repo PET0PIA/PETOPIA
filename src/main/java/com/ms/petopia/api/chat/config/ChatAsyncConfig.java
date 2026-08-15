@@ -4,8 +4,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.util.concurrent.Executor;
-
 /**
  * AI 답변 전용 스레드 풀.
  *
@@ -14,7 +12,11 @@ import java.util.concurrent.Executor;
  * 점유해 다른 비동기 작업이 밀린다.
  *
  * <p>큐를 짧게(50) 두는 것도 의도다. 큐가 길면 5분 전에 들어온 질문에 지금 답이 달리는데,
- * 그건 답이 없느니만 못하다. 넘치면 거부되고, 그 문의는 그냥 상담사 대기열로 간다.
+ * 그건 답이 없느니만 못하다.
+ *
+ * <p><b>거부 정책을 두지 않는다.</b> 기본값인 {@code AbortPolicy}가 그대로 예외를 던지고,
+ * 제출한 쪽({@code ChatAiAnswerListener})이 그 예외를 잡아 선점해 둔 AI 한도를 되돌린다.
+ * 여기서 조용히 버리면 사용자는 답변도 못 받고 한도만 잃으며, 그 사실이 로그에도 남지 않는다.
  */
 @Configuration
 public class ChatAsyncConfig {
@@ -22,15 +24,12 @@ public class ChatAsyncConfig {
     public static final String CHAT_AI_EXECUTOR = "chatAiExecutor";
 
     @Bean(CHAT_AI_EXECUTOR)
-    public Executor chatAiExecutor() {
+    public ThreadPoolTaskExecutor chatAiExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(50);
         executor.setThreadNamePrefix("chat-ai-");
-        // 큐가 가득 차면 호출 스레드에서 실행하지 않고 조용히 버린다. CallerRunsPolicy로 두면
-        // 이벤트 발행 스레드가 Claude 호출에 붙잡혀 상담 흐름 전체가 느려진다.
-        executor.setRejectedExecutionHandler((runnable, threadPoolExecutor) -> { });
         executor.initialize();
         return executor;
     }

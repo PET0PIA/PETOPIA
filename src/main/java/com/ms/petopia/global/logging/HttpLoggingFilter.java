@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -64,29 +65,38 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
             "authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key"
     );
 
-    /** 바디에서 마스킹할 JSON 필드명. */
+    /**
+     * 바디에서 마스킹할 JSON 필드명.
+     *
+     * <p>{@code content}·{@code lastMessagePreview}·{@code lastMessageContent}는 상담 대화
+     * 본문이다. 고객이 환불 사유나 연락처를 적어 보내는 자리라, 그대로 두면 개인정보가 로그
+     * 파일에 영구히 남는다. 필드명이 다른 도메인에서도 쓰일 수 있지만, 본문을 가려서 잃는 것보다
+     * 남겨서 잃는 쪽이 훨씬 크다.
+     */
     private static final String SENSITIVE_FIELD_PATTERN =
-            "(?i)\"(password|passwd|pwd|secret|token|accessToken|refreshToken|authorization|uploadUrl)\"\\s*:\\s*\"[^\"]*\"";
+            "(?i)\"(password|passwd|pwd|secret|token|accessToken|refreshToken|authorization|uploadUrl"
+                    + "|content|lastMessagePreview|lastMessageContent|ticket|guestKey)\"\\s*:\\s*\"[^\"]*\"";
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        if (EXCLUDED_PATHS.stream().anyMatch(uri::startsWith)) {
-            return true;
-        }
-        // SSE는 응답을 감싸면 안 된다. ContentCachingResponseWrapper는 바디를 버퍼에 모았다가
-        // copyBodyToResponse() 시점에야 내보내는데, 스트리밍 응답은 그 시점이 "연결이 끝날 때"라
-        // 이벤트가 실시간으로 전달되지 않는다(연결이 끊길 때까지 아무것도 안 보인다).
-        //
-        // 경로 접두사로는 거를 수 없다 - 스트림 경로가 /api/chat/conversations/{id}/stream처럼
-        // 중간에 변수를 끼고 있어서다. 요청이 SSE를 원하는지로 판단하는 편이 경로 규칙보다
-        // 정확하고, 앞으로 추가될 다른 스트리밍 엔드포인트에도 자동으로 적용된다.
-        return isServerSentEventRequest(request);
+        return EXCLUDED_PATHS.stream().anyMatch(uri::startsWith);
     }
 
+    /**
+     * 스트리밍 응답인지. 응답 <b>래퍼를 씌울지</b>만 결정하고, 필터 자체는 계속 동작한다.
+     *
+     * <p>필터를 통째로 끄면 안 된다. 이 판단은 클라이언트가 보낸 Accept 헤더에 의존하는데,
+     * 아무 요청에나 {@code Accept: text/event-stream}을 붙이면 그 요청은 HTTP 로그도,
+     * requestId도, X-Request-Id 응답 헤더도 남지 않는다 - 모든 엔드포인트에 로그 회피
+     * 경로가 열린다.
+     *
+     * <p>미디어 타입은 대소문자를 가리지 않으므로 소문자로 맞춰 비교한다.
+     */
     private boolean isServerSentEventRequest(HttpServletRequest request) {
         String accept = request.getHeader("Accept");
-        return accept != null && accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE);
+        return accept != null
+                && accept.toLowerCase(Locale.ROOT).contains(MediaType.TEXT_EVENT_STREAM_VALUE);
     }
 
     @Override
@@ -103,7 +113,14 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
         HttpServletRequest requestToUse = shouldCacheRequestBody(request)
                 ? new CachedBodyHttpServletRequest(request)
                 : request;
-        ContentCachingResponseWrapper responseToUse = new ContentCachingResponseWrapper(response);
+
+        // SSE 응답만 래퍼를 씌우지 않는다. ContentCachingResponseWrapper는 바디를 버퍼에
+        // 모았다가 copyBodyToResponse() 시점에야 내보내는데, 스트리밍에서 그 시점은
+        // "연결이 끝날 때"라 이벤트가 실시간으로 전달되지 않는다.
+        // 래퍼만 건너뛰고 요청 로그·requestId·응답 헤더는 그대로 남긴다.
+        ContentCachingResponseWrapper cachingResponse =
+                isServerSentEventRequest(request) ? null : new ContentCachingResponseWrapper(response);
+        HttpServletResponse responseToUse = cachingResponse != null ? cachingResponse : response;
 
         // 요청 로그는 Controller가 실행되기 전에 남긴다.
         // 처리 중 예외로 죽거나 응답이 끝나지 않아도 "요청이 들어왔다"는 사실은 남는다.
@@ -115,11 +132,13 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
         } finally {
             long took = System.currentTimeMillis() - startedAt;
             if (!request.isAsyncStarted()) {
-                logResponse(requestToUse, responseToUse, took);
+                logResponse(requestToUse, responseToUse.getStatus(), cachingResponse, took);
             }
-            // 버퍼에 모아둔 응답 바디를 실제 응답으로 내보낸다.
-            // 이 호출을 빠뜨리면 클라이언트는 빈 바디를 받는다.
-            responseToUse.copyBodyToResponse();
+            if (cachingResponse != null) {
+                // 버퍼에 모아둔 응답 바디를 실제 응답으로 내보낸다.
+                // 이 호출을 빠뜨리면 클라이언트는 빈 바디를 받는다.
+                cachingResponse.copyBodyToResponse();
+            }
             MDC.remove(REQUEST_ID);
         }
     }
@@ -148,13 +167,15 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
      * <p>메서드와 URI를 다시 적는 이유는, 응답 로그 한 줄만 봐도 어떤 요청의 결과인지 알 수 있게
      * 하기 위해서다. (URI로 grep하면 요청/응답 두 줄이 함께 잡힌다)
      */
-    private void logResponse(HttpServletRequest request, ContentCachingResponseWrapper response, long took) {
+    private void logResponse(HttpServletRequest request, int status,
+                             ContentCachingResponseWrapper response, long took) {
         try {
-            int status = response.getStatus();
+            // 스트리밍 응답은 래퍼가 없어 바디를 알 수 없다. 그래도 상태·소요시간은 남긴다.
+            String body = response != null ? responseBody(response) : "(streaming)";
             String message = "\n"
                     + "┌── HTTP RES  " + status + ' ' + request.getMethod() + ' ' + fullUri(request)
                     + " (" + took + "ms)\n"
-                    + "│ BODY : " + responseBody(response) + '\n'
+                    + "│ BODY : " + body + '\n'
                     + "└──";
 
             if (status >= 500) {

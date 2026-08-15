@@ -23,6 +23,8 @@ public class AdminChatConversationRow {
     private Long assignedAdminId;
     private LocalDateTime lastMessageAt;
     private LocalDateTime createdAt;
+    /** 상담 본문 일부. {@link ChatMessage#getContent()}와 같은 이유로 toString에서 제외한다. */
+    @ToString.Exclude
     private String lastMessageContent;
     private ChatSenderType lastMessageSenderType;
 }

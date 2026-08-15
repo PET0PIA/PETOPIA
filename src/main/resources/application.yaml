@@ -81,7 +81,7 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
 
 anthropic:
-  api-key: ${ANTHROPIC_API_KEY}
+  api-key: ${ANTHROPIC_API_KEY:}
 
 oauth:
   google:

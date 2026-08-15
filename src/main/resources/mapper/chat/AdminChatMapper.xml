@@ -43,12 +43,9 @@
          WHERE 1 = 1
         <include refid="statusFilter"/>
         <!--
-          오래 기다린 순. 대기 중인 대화가 위로 오도록 상태를 먼저 정렬한다 -
-          진행 중인 대화가 최근 활동으로 상단을 차지하면 정작 답을 기다리는 사람이 밀린다.
-        -->
-        <!--
-          답해야 할 대화를 위로 올린다. AI_ANSWERED도 함께 올린다 - AI가 한 번 답했을 뿐
-          사람의 답변이 필요한 건 같고, 오히려 그쪽 사용자는 입력이 잠긴 채 기다리는 중이다.
+          답해야 할 대화를 위로 올리고, 그 안에서는 오래 기다린 순이다. AI_ANSWERED도 함께
+          올린다 - AI가 한 번 답했을 뿐 사람의 답변이 필요한 건 같고, 오히려 그쪽 사용자는
+          입력이 잠긴 채 기다리는 중이다.
         -->
          ORDER BY (c.status IN ('WAITING_AGENT', 'AI_ANSWERED')) DESC, c.last_message_at ASC
          LIMIT #{limit} OFFSET #{offset}
@@ -69,6 +66,10 @@
     <!--
       문의 유형별 지표(최근 30일).
 
+      대기 건수는 countWaiting과 같은 정의를 쓴다(WAITING_AGENT + AI_ANSWERED). 한쪽만
+      WAITING_AGENT로 세면 배지 총계와 이 표가 같은 데이터를 두고 다른 숫자를 말하게 되고,
+      잠긴 채 기다리는 대화가 지표에서 빠진다.
+
       평균 첫 응답 시간은 "대화 생성 → 첫 상담사 메시지"로 잰다. 첫 사용자 질문 시각을
       기준으로 삼는 편이 더 정확해 보이지만, 고정 답변 유형은 질문 없이 끝나는 대화가 많아
       비교 가능한 기준이 되지 못한다. 아직 아무도 답하지 않은 유형은 AVG가 NULL로 남는데,
@@ -77,7 +78,7 @@
     <select id="selectMenuStats" resultType="ChatMenuStat">
         SELECT m.label AS menu_label
              , COUNT(c.conversation_id) AS conversation_count
-             , SUM(c.status = 'WAITING_AGENT') AS waiting_count
+             , SUM(c.status IN ('WAITING_AGENT', 'AI_ANSWERED')) AS waiting_count
              , SUM(c.ai_answer_count > 0) AS ai_answered_count
              , AVG(
                  (SELECT TIMESTAMPDIFF(SECOND, c.created_at, a.created_at)

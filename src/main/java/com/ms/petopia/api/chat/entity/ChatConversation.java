@@ -19,6 +19,11 @@ import java.time.LocalDateTime;
 public class ChatConversation {
     private Long conversationId;
     private Long userId;
+    /**
+     * 게스트 소유 증명 값. 이 값을 아는 사람은 그 상담을 열람할 수 있으므로 사실상 자격증명이다.
+     * 로그·예외 메시지에 새어나가면 안 되므로 toString에서 제외한다.
+     */
+    @ToString.Exclude
     private String guestKey;
     private Long menuId;
     private Long fairId;

@@ -22,6 +22,8 @@ public class ChatMessage {
     private ChatSenderType senderType;
     private Long senderId;
     private Long menuId;
+    /** 상담 본문. 개인정보가 담기는 자리라 로그로 새지 않게 toString에서 제외한다. */
+    @ToString.Exclude
     private String content;
     private LocalDateTime createdAt;
 }
