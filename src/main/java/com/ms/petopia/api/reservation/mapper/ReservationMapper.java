@@ -44,7 +44,8 @@ public interface ReservationMapper {
 
     boolean existsActiveReservation(
             @Param("fairId") Long fairId,
-            @Param("userId") Long userId
+            @Param("userId") Long userId,
+            @Param("visitDate") LocalDate visitDate
     );
 
     ReservationUserSnapshot selectUserSnapshot(@Param("userId") Long userId);
