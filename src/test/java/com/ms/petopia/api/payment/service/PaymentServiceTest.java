@@ -489,6 +489,32 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("다른 사용자가 남의 PENDING 참가비 결제를 재개하려 하면 예외를 던진다")
+    void payVendorFee_PENDING재개_결제자아님_예외를던진다() {
+        // 원래 결제자는 90L인데 다른 사용자(999L)가 같은 applicationId로 "결제 계속하기"를 누른 상황.
+        // 예약금(payReservationDeposit)은 앞단에 소유자 검증이 따로 있지만, 참가비에는 없어서
+        // createOrRetryPayment의 PENDING 분기가 유일한 방어선이다 — 남의 진행 중 결제(같은 orderId)를
+        // 넘겨받아 결제창을 열지 못하게 막아야 한다.
+        PaymentRow pendingRow = new PaymentRow();
+        pendingRow.setPaymentId(1L);
+        pendingRow.setStatus("PENDING");
+        pendingRow.setPayerUserId(90L);
+        pendingRow.setOrderId("PAYMENT_original");
+        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(pendingRow);
+
+        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
+
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 999L, request))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        // 남의 결제이므로 새 결제 insert도, FAILED 재사용(resetFailedToPending)도 하면 안 된다.
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("이미 PROCESSING/COMPLETED인 참가비 결제가 있으면 재사용 불가라서 여전히 중복결제로 막는다")
     void payVendorFee_재사용불가상태기존결제있으면_예외를던진다() {
         // PROCESSING(승인 진행 중)은 PENDING과 달리 재개 대상이 아니다 — 계속 막아야 한다.
