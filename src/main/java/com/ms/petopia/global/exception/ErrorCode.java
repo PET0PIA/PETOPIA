@@ -180,6 +180,17 @@ public enum ErrorCode {
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),
     AI_RECOMMENDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "RC002", "지금은 추천 기능을 사용할 수 없습니다. 잠시 후 다시 시도해주세요."),
+
+    // ===== Chat (상담 챗봇) =====
+    CHAT_CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "CH001", "존재하지 않는 상담입니다."),
+    CHAT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CH002", "본인의 상담만 조회할 수 있습니다."),
+    CHAT_MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "CH003", "사용할 수 없는 문의 유형입니다."),
+    // 423 LOCKED: 요청 자체는 올바른데 리소스가 잠겨 있어 거부한다는 뜻이라 이 상황에 맞다.
+    // 400/409로 내리면 프론트가 "입력이 잘못됐다"와 구분하기 어렵다.
+    CHAT_AWAITING_AGENT(HttpStatus.LOCKED, "CH010", "자동 답변을 드렸어요. 상담사가 이어서 답변드릴 때까지 기다려주세요."),
+    CHAT_ALREADY_CLOSED(HttpStatus.CONFLICT, "CH011", "이미 종료된 상담입니다."),
+    CHAT_MENU_CODE_DUPLICATED(HttpStatus.CONFLICT, "CH012", "이미 사용 중인 문의 유형 코드입니다."),
+    CHAT_BUSINESS_HOUR_INVALID(HttpStatus.BAD_REQUEST, "CH013", "운영시간 설정이 올바르지 않습니다."),
     ;
 
     private final HttpStatus httpStatus;

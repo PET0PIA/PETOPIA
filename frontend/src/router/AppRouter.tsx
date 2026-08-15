@@ -21,6 +21,8 @@ import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
 import { FairCancelRequestPage } from "../pages/fair-admin/FairCancelRequestPage";
 import { AdminAccountsPage } from "../pages/admin/AdminAccountsPage";
+import { AdminChatPage } from "../pages/admin/AdminChatPage";
+import { AdminChatSettingsPage } from "../pages/admin/AdminChatSettingsPage";
 import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
@@ -108,7 +110,8 @@ const superAdminFallbackNavigation = superAdminNavigation.filter(
     item.path !== "/admin/refunds" &&
     item.path !== "/admin/settlements" &&
     item.path !== "/admin/cancellations" &&
-    item.path !== "/admin/accounts"
+    item.path !== "/admin/accounts" &&
+    item.path !== "/admin/chat"
 );
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
@@ -223,6 +226,8 @@ export function AppRouter() {
           <Route path="settlements" element={<SettlementPage />} />
           <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
           <Route path="accounts" element={<AdminAccountsPage />} />
+          <Route path="chat" element={<AdminChatPage />} />
+          <Route path="chat/settings" element={<AdminChatSettingsPage />} />
           {superAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
           ))}

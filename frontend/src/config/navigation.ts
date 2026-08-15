@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Ban, BarChart3, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, LayoutDashboard, ListOrdered, Map, Megaphone, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Store, Ticket, UsersRound } from "lucide-react";
+import { Ban, BarChart3, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Store, Ticket, UsersRound } from "lucide-react";
 import type { UserRole } from "../api/auth";
 
 export interface NavigationItem {
@@ -55,6 +55,7 @@ export const superAdminNavigation: NavigationItem[] = [
   { label: "행사 안내 관리", path: "/admin/fairs", icon: Store },
   { label: "장소 관리", path: "/admin/venues", icon: Map },
   { label: "관리자 계정 목록", path: "/admin/accounts", icon: UsersRound },
+  { label: "상담 문의", path: "/admin/chat", icon: MessageSquare },
   { label: "정산·수수료율", path: "/admin/settlements", icon: ReceiptText },
   { label: "감사 로그", path: "/admin/audit-logs", icon: ScrollText },
 ];
