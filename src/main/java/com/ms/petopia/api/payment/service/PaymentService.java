@@ -215,11 +215,9 @@ public class PaymentService {
      * <p>동일 idempotencyKey로 이전 시도가 있었는지 먼저 확인해서:
      * <ul>
      *   <li>없으면 새로 insert(기존과 동일, 동시 첫 시도 경쟁은 DuplicateKeyException으로 처리)</li>
-     *   <li>PENDING(결제창을 띄웠다가 닫은 진행 중 결제)이고 요청자가 원래 결제자면, 그 행을 그대로 돌려줘
-     *       결제창을 다시 열 수 있게 함(멱등 재요청 — 새 결제를 안 만드니 이중청구 없음, 진행 중 금액도 안 바꿈)</li>
-     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용, amount는 이번 값으로 갱신)</li>
-     *   <li>PENDING·FAILED인데 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재개/재시도 금지)</li>
-     *   <li>PROCESSING/COMPLETED면 여전히 중복결제로 막음</li>
+     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용)</li>
+     *   <li>FAILED로 남아있지만 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재시도 금지)</li>
+     *   <li>PENDING/PROCESSING/COMPLETED면 여전히 중복결제로 막음(기존 동작 유지)</li>
      * </ul>
      *
      * @param idempotencyKey 원업무 식별자 기준 키(예: {@code "VENDOR_FEE_" + applicationId})
@@ -237,18 +235,7 @@ public class PaymentService {
     ) {
         PaymentRow existing = paymentMapper.selectByIdempotencyKey(idempotencyKey);
         if (existing != null) {
-            // 이미 PENDING = 결제창을 띄웠다가 닫은(백엔드는 통보를 못 받아 그대로 남은) 진행 중 결제.
-            // 같은 사용자면 그 행을 그대로 돌려줘 결제창을 다시 열 수 있게 한다 — 새 결제를 만들지 않으니
-            // 이중청구가 없고, 결제 제한시간 안 재시도 허용 정책(reservation-entry-api-v3.md)과 idempotencyKey
-            // 설계 의도(같은 키 재요청 = 멱등)에 맞다.
-            if ("PENDING".equals(existing.getStatus())) {
-                if (!userId.equals(existing.getPayerUserId())) {
-                    throw new CommonException(ErrorCode.ACCESS_DENIED);
-                }
-                return existing;
-            }
             if (!"FAILED".equals(existing.getStatus())) {
-                // PROCESSING(승인 진행 중)·COMPLETED(이미 결제됨) 등은 계속 중복결제로 막는다.
                 throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
             }
             if (!userId.equals(existing.getPayerUserId())) {
