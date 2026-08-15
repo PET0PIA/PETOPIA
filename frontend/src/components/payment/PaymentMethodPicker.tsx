@@ -3,7 +3,7 @@ import type { PaymentMethodOption } from "../../payments/toss";
 
 const METHOD_OPTIONS: { value: PaymentMethodOption; label: string; icon: typeof CreditCard }[] = [
   { value: "CARD", label: "카드", icon: CreditCard },
-  { value: "NAVER_PAY", label: "네이버페이", icon: Wallet },
+  { value: "NAVER_PAY", label: "간편결제", icon: Wallet },
   { value: "VIRTUAL_ACCOUNT", label: "가상계좌", icon: Landmark },
 ];
 
