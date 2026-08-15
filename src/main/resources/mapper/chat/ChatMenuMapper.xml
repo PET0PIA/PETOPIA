@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.chat.mapper.ChatMenuMapper">
+
+    <select id="selectActiveMenus" resultType="ChatMenu">
+        SELECT menu_id, parent_menu_id, code, label, display_order,
+               answer_type, fixed_answer, ai_context, is_active, created_at, updated_at
+          FROM chat_menu
+         WHERE is_active = 1
+         ORDER BY display_order, menu_id
+    </select>
+
+    <select id="selectActiveByCode" resultType="ChatMenu">
+        SELECT menu_id, parent_menu_id, code, label, display_order,
+               answer_type, fixed_answer, ai_context, is_active, created_at, updated_at
+          FROM chat_menu
+         WHERE code = #{code}
+           AND is_active = 1
+    </select>
+
+    <select id="selectAllMenus" resultType="ChatMenu">
+        SELECT menu_id, parent_menu_id, code, label, display_order,
+               answer_type, fixed_answer, ai_context, is_active, created_at, updated_at
+          FROM chat_menu
+         ORDER BY display_order, menu_id
+    </select>
+
+    <select id="selectMaxDisplayOrder" resultType="int">
+        SELECT COALESCE(MAX(display_order), 0) FROM chat_menu
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="menuId">
+        INSERT INTO chat_menu (
+            code, label, display_order, answer_type, fixed_answer, ai_context, is_active
+        ) VALUES (
+            #{code}, #{label}, #{displayOrder}, #{answerType}, #{fixedAnswer}, #{aiContext}, #{isActive}
+        )
+    </insert>
+
+    <!-- code는 대화가 참조하는 불변 식별자라 수정 대상에서 뺀다. -->
+    <update id="update">
+        UPDATE chat_menu
+           SET label = #{label}
+             , answer_type = #{answerType}
+             , fixed_answer = #{fixedAnswer}
+             , ai_context = #{aiContext}
+             , display_order = #{displayOrder}
+             , is_active = #{isActive}
+         WHERE menu_id = #{menuId}
+    </update>
+
+    <update id="deactivate">
+        UPDATE chat_menu SET is_active = 0 WHERE menu_id = #{menuId}
+    </update>
+
+    <update id="updateDisplayOrder">
+        UPDATE chat_menu SET display_order = #{displayOrder} WHERE menu_id = #{menuId}
+    </update>
+
+    <select id="selectById" resultType="ChatMenu">
+        SELECT menu_id, parent_menu_id, code, label, display_order,
+               answer_type, fixed_answer, ai_context, is_active, created_at, updated_at
+          FROM chat_menu
+         WHERE menu_id = #{menuId}
+    </select>
+
+</mapper>

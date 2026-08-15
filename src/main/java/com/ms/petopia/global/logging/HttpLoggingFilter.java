@@ -71,7 +71,22 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        return EXCLUDED_PATHS.stream().anyMatch(uri::startsWith);
+        if (EXCLUDED_PATHS.stream().anyMatch(uri::startsWith)) {
+            return true;
+        }
+        // SSE는 응답을 감싸면 안 된다. ContentCachingResponseWrapper는 바디를 버퍼에 모았다가
+        // copyBodyToResponse() 시점에야 내보내는데, 스트리밍 응답은 그 시점이 "연결이 끝날 때"라
+        // 이벤트가 실시간으로 전달되지 않는다(연결이 끊길 때까지 아무것도 안 보인다).
+        //
+        // 경로 접두사로는 거를 수 없다 - 스트림 경로가 /api/chat/conversations/{id}/stream처럼
+        // 중간에 변수를 끼고 있어서다. 요청이 SSE를 원하는지로 판단하는 편이 경로 규칙보다
+        // 정확하고, 앞으로 추가될 다른 스트리밍 엔드포인트에도 자동으로 적용된다.
+        return isServerSentEventRequest(request);
+    }
+
+    private boolean isServerSentEventRequest(HttpServletRequest request) {
+        String accept = request.getHeader("Accept");
+        return accept != null && accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE);
     }
 
     @Override

@@ -56,6 +56,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/admin/auth/login").permitAll()
                         // 시스템 전체를 가로지르는 관리자 API(감사 로그, 전체 대시보드) - SUPER_ADMIN 전용.
                         // AuditLogController, AdminDashboardController가 여기 해당한다.
+                        //
+                        // 상담 콘솔(AdminChatController, /api/admin/chat/**)도 이 규칙에 걸려 SUPER_ADMIN
+                        // 전용이다. 박람회 관리자에게도 상담 답변을 열어주려면 그 규칙을 이 줄 "위에"
+                        // 놓아야 한다 - 아래에 두면 이 매처가 먼저 잡아 도달하지 못한다.
+                        // (박람회 관리자 허용 여부는 미정. 열어줄 때 chat_conversation.fair_id로
+                        //  "자기 행사 문의만" 스코프를 함께 걸어야 한다.)
                         .requestMatchers("/api/admin/**")
                         .hasRole("SUPER_ADMIN")
                         //참가업체 부스 운영 API(부스 방문 스캔 등). 부스 소유 검증은 서비스 계층에서 한 번 더 한다.
@@ -172,6 +178,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/booths/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/booths/visits/fairs").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/booths/visits").authenticated()
+                        // Chat 도메인 - 비로그인 상담이 기본이라 전 구간 permitAll이다.
+                        // 대화 소유는 X-Chat-Guest-Key 헤더로 증명하고, 일치 여부는
+                        // ChatConversationService가 매 요청 검증한다(인증으로 막지 않는다).
+                        // anyRequest().permitAll()에 이미 걸리지만, 기본값이 나중에
+                        // authenticated()로 바뀌어도 위젯이 죽지 않도록 명시해 둔다.
+                        .requestMatchers("/api/chat/**").permitAll()
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->

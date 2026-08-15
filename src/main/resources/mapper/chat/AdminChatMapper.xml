@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.chat.mapper.AdminChatMapper">
+
+    <!--
+      필터는 상태가 아니라 "상담사가 하는 일" 기준이다(AdminChatFilter 참고).
+      NEEDS_REPLY에 BOT을 넣지 않는 것이 핵심 - 고정 답변만 보고 끝난 대화가 섞이면
+      대기 건수가 실제 업무량과 어긋나 지표로도, 우선순위 판단으로도 쓸 수 없다.
+    -->
+    <sql id="statusFilter">
+        <choose>
+            <when test="filter == @com.ms.petopia.api.chat.dto.AdminChatFilter@OPEN">
+                AND c.status IN ('WAITING_AGENT', 'AI_ANSWERED', 'IN_PROGRESS')
+            </when>
+            <when test="filter == @com.ms.petopia.api.chat.dto.AdminChatFilter@CLOSED">
+                AND c.status = 'CLOSED'
+            </when>
+        </choose>
+    </sql>
+
+    <!--
+      마지막 메시지는 상관 서브쿼리로 한 건만 집어온다. chat_message에
+      (conversation_id, message_id) 인덱스가 있어 대화당 인덱스 끝에서 한 행만 읽는다.
+      메시지 테이블 전체를 GROUP BY로 접는 방식보다 목록 페이지 크기에 비례해서만 비용이 든다.
+    -->
+    <select id="selectConversations" resultType="AdminChatConversationRow">
+        SELECT c.conversation_id
+             , c.status
+             , m.label AS menu_label
+             , c.user_id
+             , c.assigned_admin_id
+             , c.last_message_at
+             , c.created_at
+             , (SELECT msg.content FROM chat_message msg
+                 WHERE msg.conversation_id = c.conversation_id
+                 ORDER BY msg.message_id DESC LIMIT 1) AS last_message_content
+             , (SELECT msg.sender_type FROM chat_message msg
+                 WHERE msg.conversation_id = c.conversation_id
+                 ORDER BY msg.message_id DESC LIMIT 1) AS last_message_sender_type
+          FROM chat_conversation c
+          LEFT JOIN chat_menu m ON m.menu_id = c.menu_id
+         WHERE 1 = 1
+        <include refid="statusFilter"/>
+        <!--
+          오래 기다린 순. 대기 중인 대화가 위로 오도록 상태를 먼저 정렬한다 -
+          진행 중인 대화가 최근 활동으로 상단을 차지하면 정작 답을 기다리는 사람이 밀린다.
+        -->
+        <!--
+          답해야 할 대화를 위로 올린다. AI_ANSWERED도 함께 올린다 - AI가 한 번 답했을 뿐
+          사람의 답변이 필요한 건 같고, 오히려 그쪽 사용자는 입력이 잠긴 채 기다리는 중이다.
+        -->
+         ORDER BY (c.status IN ('WAITING_AGENT', 'AI_ANSWERED')) DESC, c.last_message_at ASC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countConversations" resultType="long">
+        SELECT COUNT(*)
+          FROM chat_conversation c
+         WHERE 1 = 1
+        <include refid="statusFilter"/>
+    </select>
+
+    <!-- 상담사가 답해야 할 대화 수. 잠긴 대화(AI_ANSWERED)도 사람 답변을 기다리는 건 같다. -->
+    <select id="countWaiting" resultType="long">
+        SELECT COUNT(*) FROM chat_conversation WHERE status IN ('WAITING_AGENT', 'AI_ANSWERED')
+    </select>
+
+    <!--
+      문의 유형별 지표(최근 30일).
+
+      평균 첫 응답 시간은 "대화 생성 → 첫 상담사 메시지"로 잰다. 첫 사용자 질문 시각을
+      기준으로 삼는 편이 더 정확해 보이지만, 고정 답변 유형은 질문 없이 끝나는 대화가 많아
+      비교 가능한 기준이 되지 못한다. 아직 아무도 답하지 않은 유형은 AVG가 NULL로 남는데,
+      0으로 바꾸지 않는다 - 0은 "즉시 답한다"로 읽혀 정반대의 인상을 준다.
+    -->
+    <select id="selectMenuStats" resultType="ChatMenuStat">
+        SELECT m.label AS menu_label
+             , COUNT(c.conversation_id) AS conversation_count
+             , SUM(c.status = 'WAITING_AGENT') AS waiting_count
+             , SUM(c.ai_answer_count > 0) AS ai_answered_count
+             , AVG(
+                 (SELECT TIMESTAMPDIFF(SECOND, c.created_at, a.created_at)
+                    FROM chat_message a
+                   WHERE a.conversation_id = c.conversation_id
+                     AND a.sender_type = 'AGENT'
+                   ORDER BY a.message_id LIMIT 1)
+               ) AS avg_first_response_seconds
+          FROM chat_menu m
+          LEFT JOIN chat_conversation c
+                 ON c.menu_id = m.menu_id
+                AND c.created_at >= #{since}
+         GROUP BY m.menu_id, m.label
+         ORDER BY conversation_count DESC, m.display_order
+    </select>
+
+    <select id="selectMenuLabel" resultType="string">
+        SELECT m.label
+          FROM chat_conversation c
+          JOIN chat_menu m ON m.menu_id = c.menu_id
+         WHERE c.conversation_id = #{conversationId}
+    </select>
+
+</mapper>
