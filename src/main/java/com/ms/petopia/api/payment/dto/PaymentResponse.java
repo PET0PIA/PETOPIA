@@ -46,7 +46,7 @@ public record PaymentResponse(
     public static PaymentResponse from(PaymentRow row) {
         return new PaymentResponse(
                 row.getPaymentId(),
-                "PAYMENT_" + row.getPaymentId(),
+                row.getOrderId(),
                 row.getPaymentType(),
                 row.getAmount(),
                 row.getStatus(),

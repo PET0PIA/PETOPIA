@@ -18,4 +18,12 @@ public class ReservationTimeProvider {
     public LocalDateTime now() {
         return LocalDateTime.now(SEOUL_ZONE);
     }
+
+    /**
+     * Redis ZSET의 score로 쓸 epoch milli. 대기열이 순번·만료를 숫자 하나로 다루기 위해
+     * 필요하다. {@link #now()}와 같은 시계를 봐야 두 값이 어긋나지 않는다.
+     */
+    public long epochMilli() {
+        return now().atZone(SEOUL_ZONE).toInstant().toEpochMilli();
+    }
 }

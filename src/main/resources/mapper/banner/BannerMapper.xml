@@ -5,18 +5,20 @@
 <mapper namespace="com.ms.petopia.api.banner.mapper.BannerMapper">
     <!--현재 노출 중인 배너 목록(is_active=1, 기간 유효, sort_order 오름차순)-->
     <select id="selectActiveList" resultType="com.ms.petopia.api.banner.domain.Banner">
-        SELECT banner_id, title, image_key, link_url, link_target,
+        SELECT banner_id, title, eyebrow, subtitle, image_key, link_url, link_target,
+            link_label, link2_label, link2_url, link2_target, bg_color,
             sort_order, is_active, started_at, ended_at, created_at
         FROM banner
         WHERE is_active = 1
-            AND (started_at IS NULL OR started_at &lt;= NOW())
-            AND (ended_at IS NULL OR ended_at &gt;= NOW())
+            AND started_at &lt;= NOW()
+            AND ended_at &gt;= NOW()
         ORDER BY sort_order
     </select>
 
     <!--전체 배너 목록(관리자)-->
     <select id="selectAll" resultType="com.ms.petopia.api.banner.domain.Banner">
-        SELECT banner_id, title, image_key, link_url, link_target,
+        SELECT banner_id, title, eyebrow, subtitle, image_key, link_url, link_target,
+            link_label, link2_label, link2_url, link2_target, bg_color,
             sort_order, is_active, started_at, ended_at, created_at
         FROM banner
         ORDER BY sort_order
@@ -24,7 +26,8 @@
 
     <!--단건 조회-->
     <select id="selectById" resultType="com.ms.petopia.api.banner.domain.Banner">
-        SELECT banner_id, title, image_key, link_url, link_target,
+        SELECT banner_id, title, eyebrow, subtitle, image_key, link_url, link_target,
+            link_label, link2_label, link2_url, link2_target, bg_color,
             sort_order, is_active, started_at, ended_at, created_by, created_at, updated_at
         FROM banner
         WHERE banner_id = #{bannerId}
@@ -32,21 +35,30 @@
 
     <!--등록-->
     <insert id="insert" useGeneratedKeys="true" keyProperty="bannerId">
-        INSERT INTO banner(title, image_key, link_url, link_target, sort_order, is_active,
+        INSERT INTO banner(title, eyebrow, subtitle, image_key, link_url, link_target,
+            link_label, link2_label, link2_url, link2_target, bg_color, sort_order, is_active,
             started_at, ended_at, created_by)
-        VALUES( #{title}, #{imageKey}, #{linkUrl}, #{linkTarget}, #{sortOrder},
+        VALUES( #{title}, #{eyebrow}, #{subtitle}, #{imageKey}, #{linkUrl}, #{linkTarget},
+            #{linkLabel}, #{link2Label}, #{link2Url}, #{link2Target}, #{bgColor}, #{sortOrder},
             #{isActive}, #{startedAt}, #{endedAt}, #{createdBy}
         )
     </insert>
 
-    <!--수정(null 아닌 필드만 갱신)-->
+    <!--수정(null 아닌 필드만 갱신, 빈 문자열은 명시적 삭제로 취급해 NULL 저장)-->
     <update id="update">
         UPDATE banner
         <set>
             <if test="title != null">title = #{title},</if>
+            <if test="eyebrow != null">eyebrow = <choose><when test="eyebrow == ''">NULL</when><otherwise>#{eyebrow}</otherwise></choose>,</if>
+            <if test="subtitle != null">subtitle = <choose><when test="subtitle == ''">NULL</when><otherwise>#{subtitle}</otherwise></choose>,</if>
             <if test="imageKey != null">image_key = #{imageKey},</if>
-            <if test="linkUrl != null">link_url = #{linkUrl},</if>
+            <if test="linkUrl != null">link_url = <choose><when test="linkUrl == ''">NULL</when><otherwise>#{linkUrl}</otherwise></choose>,</if>
             <if test="linkTarget != null">link_target = #{linkTarget},</if>
+            <if test="linkLabel != null">link_label = <choose><when test="linkLabel == ''">NULL</when><otherwise>#{linkLabel}</otherwise></choose>,</if>
+            <if test="link2Label != null">link2_label = <choose><when test="link2Label == ''">NULL</when><otherwise>#{link2Label}</otherwise></choose>,</if>
+            <if test="link2Url != null">link2_url = <choose><when test="link2Url == ''">NULL</when><otherwise>#{link2Url}</otherwise></choose>,</if>
+            <if test="link2Target != null">link2_target = #{link2Target},</if>
+            <if test="bgColor != null">bg_color = <choose><when test="bgColor == ''">NULL</when><otherwise>#{bgColor}</otherwise></choose>,</if>
             <if test="sortOrder != null">sort_order = #{sortOrder},</if>
             <if test="startedAt != null">started_at = #{startedAt},</if>
             <if test="endedAt != null">ended_at = #{endedAt},</if>

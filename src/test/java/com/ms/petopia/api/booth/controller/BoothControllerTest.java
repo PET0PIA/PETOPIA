@@ -1,9 +1,6 @@
 package com.ms.petopia.api.booth.controller;
 
-import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
-import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
-import com.ms.petopia.api.booth.dto.response.BoothResponse;
-import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
+import com.ms.petopia.api.booth.dto.response.*;
 import com.ms.petopia.api.booth.service.BoothService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -286,6 +283,50 @@ class BoothControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].name").value("멍냥사료 부스"));
+
+    }
+
+    // GET /api/booths/visits/fairs - 정상 조회
+    @Test
+    void getsMyVisitedFairs() throws Exception {
+
+        given(boothService.getMyVisitedFairs(1L)).willReturn(
+                List.of(new VisitedFairResponse(1L, "멍냥페스타 2026")));
+
+        mockMvc.perform(get("/api/booths/visits/fairs")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].fairName").value("멍냥페스타 2026"));
+
+    }
+
+    // GET /api/booths/visits?fairId= - 정상 조회
+    @Test
+    void getsMyVisitedBooths() throws Exception {
+
+        given(boothService.getMyVisitedBooths(1L, 1L)).willReturn(
+                List.of(new BoothVisitResponse(1L, "멍냥튼튼", null, null, 1)));
+
+        mockMvc.perform(get("/api/booths/visits").param("fairId", "1")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].name").value("멍냥튼튼"));
+
+    }
+
+    // GET /api/booths/visits?fairId= - 존재하지 않는 행사 -> 404 + F004
+    @Test
+    void returns404WhenVisitedBoothsFairNotFound() throws Exception {
+
+        willThrow(new CommonException(ErrorCode.FAIR_NOT_FOUND))
+                .given(boothService).getMyVisitedBooths(eq(1L), eq(999L));
+
+        mockMvc.perform(get("/api/booths/visits").param("fairId", "999")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("F004"));
 
     }
 

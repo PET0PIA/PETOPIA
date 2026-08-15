@@ -23,7 +23,12 @@
              , capacity
              , entry_start_time
              , entry_end_time
-          FROM fair_dates
+        <!--
+            FORCE INDEX로 스캔 순서를 (fair_id, operation_date)에 고정한다. 잠금 순서는
+            ORDER BY가 아니라 실제 스캔 순서로 정해지므로, 옵티마이저가 다른 접근 경로를
+            고르면 A→B와 B→A 동시 변경이 서로 반대 순서로 잠가 교착된다.
+        -->
+          FROM fair_dates FORCE INDEX (UK_FAIR_DATE_FAIR_DATE)
          WHERE fair_id = #{fairId}
            AND operation_date IN
             <foreach collection="operationDates" item="operationDate" open="(" separator="," close=")">
@@ -31,15 +36,6 @@
             </foreach>
          ORDER BY operation_date ASC
          FOR UPDATE
-    </select>
-
-    <select id="countCapacityOccupyingAdvanceReservations" resultType="int">
-        SELECT COUNT(*)
-          FROM reservations
-         WHERE fair_id = #{fairId}
-           AND visit_date = #{visitDate}
-           AND reservation_type = 'ADVANCE'
-           AND status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
     </select>
 
     <update id="updateVisitDate">

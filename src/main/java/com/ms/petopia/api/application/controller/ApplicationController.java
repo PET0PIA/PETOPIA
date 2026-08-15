@@ -1,9 +1,6 @@
 package com.ms.petopia.api.application.controller;
 
-import com.ms.petopia.api.application.dto.request.ApplicationApproveRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationCancelRequestSubmitRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationRejectRequest;
-import com.ms.petopia.api.application.dto.request.ApplicationSubmitRequest;
+import com.ms.petopia.api.application.dto.request.*;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.global.response.ApiResponse;
@@ -68,6 +65,19 @@ public class ApplicationController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(applicationService.getApplicationDetail(userId, applicationId)));
+
+    }
+
+    // 참가 신청서 수정 (본인 소유, 심사 대기 상태에서만)
+    @PutMapping("/applications/{applicationId}")
+    public ResponseEntity<ApiResponse<ApplicationDetailResponse>> updateApplication(
+            @AuthenticationPrincipal Long ownerId,
+            @PathVariable Long applicationId,
+            @Valid @RequestBody ApplicationUpdateRequest request
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(applicationService.updateApplication(ownerId, applicationId, request)));
 
     }
 

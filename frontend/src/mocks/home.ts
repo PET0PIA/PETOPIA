@@ -26,25 +26,6 @@ export const currentUser: CurrentUser = {
   notificationCount: 3,
 };
 
-interface HeroSlide {
-  eyebrow?: string;
-  title: string;
-  subtitle: string;
-  cta: { label: string; to: string };
-  cta2?: { label: string; to: string };
-  image: string;
-  bg: string; // 각 포스터와 어울리는 배경색(hex)
-}
-
-// 배너 슬라이드: 포스터가 3초마다 자동 전환된다. 각 장은 행사 홍보 포스터 + 어울리는 배경색.
-export const heroSlides: HeroSlide[] = [
-  { eyebrow: "예매 오픈", title: "2026 서울 펫페어\n지금 예매하세요", subtitle: "2026. 09. 18 - 09. 20 · 서울 코엑스 C홀", cta: { label: "예매하러 가기", to: "/fairs/upcoming?fair=seoul-autumn" }, cta2: { label: "티켓 예매하기", to: "/tickets" }, image: fairPoster1, bg: "#FBD9BD" },
-  { eyebrow: "곧 만나요", title: "부산 댕냥 산책 페스타\n반려견과 함께 걷다", subtitle: "2026. 10. 03 - 10. 04 · 벡스코 제2전시장", cta: { label: "자세히 보기", to: "/fairs/upcoming?fair=busan-walk" }, image: fairPoster2, bg: "#DCEBC6" },
-  { eyebrow: "가족 나들이", title: "대전 펫 패밀리데이\n온 가족이 즐기는 하루", subtitle: "2026. 11. 14 - 11. 15 · 대전 컨벤션센터", cta: { label: "자세히 보기", to: "/fairs/upcoming?fair=daejeon-family" }, image: fairPoster3, bg: "#BEE3DC" },
-  { eyebrow: "예매 오픈", title: "인천 반려동물 박람회\n지금 예매하세요", subtitle: "2026. 11. 28 - 11. 29 · 송도 컨벤시아", cta: { label: "예매하러 가기", to: "/fairs/upcoming?fair=incheon-expo" }, image: fairPoster4, bg: "#F7D2E1" },
-  { eyebrow: "연말 페스티벌", title: "광주 펫 페스티벌\n한 해의 마지막을 함께", subtitle: "2026. 12. 12 - 12. 13 · 김대중컨벤션센터", cta: { label: "자세히 보기", to: "/fairs/upcoming?fair=gwangju-fest" }, image: fairPoster5, bg: "#F5E1A3" },
-];
-
 // 배너 아래 검정 마퀴 띠에 흐르는 공지 문구
 export const homeNotices: string[] = [
   "제2회 대구 펫 페스티벌이 성황리에 종료되었습니다. 함께해주셔서 감사합니다",

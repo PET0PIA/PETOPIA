@@ -14,6 +14,9 @@ public class PopupUpdateRequest {
     @Size(max = 100)
     private String title;
 
+    @Size(max = 1000)
+    private String subtitle;
+
     @Size(max = 500)
     private String imageKey;
 
@@ -21,6 +24,13 @@ public class PopupUpdateRequest {
     private String linkUrl;
 
     private Popup.LinkTarget linkTarget;
+
+    @Size(max = 50)
+    private String linkLabel;
+
+    @Size(max = 10)
+    private String bgColor;
+
     @Positive
     private Integer width;
 

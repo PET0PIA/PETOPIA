@@ -23,6 +23,10 @@ interface ImageUploadFieldProps {
   /** 삭제 버튼을 누르면 호출된다. 미리보기도 함께 비운다. */
   onRemove?: () => void;
   disabled?: boolean;
+  /** 미리보기 상자의 크기·비율(Tailwind). 기본은 96px 정사각형. 포스터처럼 세로로 긴 이미지엔 aspect를 넘긴다. */
+  previewClassName?: string;
+  /** 미리보기와 버튼 배치. "row"(기본)=미리보기 옆에 버튼, "stacked"=미리보기 아래에 버튼(좁은 칸용). */
+  layout?: "row" | "stacked";
 }
 
 /**
@@ -30,7 +34,7 @@ interface ImageUploadFieldProps {
  * objectKey는 아직 tmp 상태라 폼을 실제로 저장(도메인 API 호출)해야 uploads로 확정된다 -
  * 이 컴포넌트는 파일 선택~objectKey 확보까지만 책임진다.
  */
-export function ImageUploadField({ label, initialImageUrl, onObjectKeyChange, onUploadingChange, removable = false, onRemove, disabled }: ImageUploadFieldProps) {
+export function ImageUploadField({ label, initialImageUrl, onObjectKeyChange, onUploadingChange, removable = false, onRemove, disabled, previewClassName = "size-24", layout = "row" }: ImageUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(initialImageUrl ?? null);
   const [uploading, setUploading] = useState(false);
@@ -74,12 +78,12 @@ export function ImageUploadField({ label, initialImageUrl, onObjectKeyChange, on
   return (
     <div>
       <span className="mb-1.5 block text-sm font-bold text-ink">{label}</span>
-      <div className="flex items-center gap-4">
+      <div className={layout === "stacked" ? "flex flex-col items-start gap-3" : "flex items-center gap-4"}>
         <button
           type="button"
           disabled={disabled || uploading}
           onClick={() => inputRef.current?.click()}
-          className="relative grid size-24 shrink-0 place-items-center overflow-hidden rounded-button border border-dashed border-line bg-page text-muted hover:bg-card disabled:cursor-not-allowed disabled:opacity-60"
+          className={`relative grid shrink-0 place-items-center overflow-hidden rounded-button border border-dashed border-line bg-page text-muted hover:bg-card disabled:cursor-not-allowed disabled:opacity-60 ${previewClassName}`}
         >
           {previewUrl ? (
             <img src={previewUrl} alt="" className="size-full object-cover" />

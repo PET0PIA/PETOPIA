@@ -70,6 +70,19 @@ export interface ConfirmedBoothResponse {
   floorPlanImageUrl: string | null;
 }
 
+export interface VisitedFairResponse {
+  fairId: number;
+  fairName: string;
+}
+
+export interface BoothVisitResponse {
+  boothId: number;
+  name: string;
+  imageUrl: string | null;
+  firstVisitedAt: string;
+  visitCount: number;
+}
+
 // 부스 상세 조회 (공개, 선택적 인증 - 로그인 시 favorited가 실제 값으로 내려옴)
 export async function getBooth(boothId: number): Promise<BoothResponse> {
   const response = await apiClient.get<ApiEnvelope<BoothResponse>>(`/api/booths/${boothId}`);
@@ -124,5 +137,17 @@ export async function getConfirmedBooths(fairId: number): Promise<ConfirmedBooth
 // 내가 소유한 부스 목록 조회
 export async function getMyBooths(): Promise<BoothFavoriteResponse[]> {
   const response = await apiClient.get<ApiEnvelope<BoothFavoriteResponse[]>>("/api/booths/me");
+  return response.data;
+}
+
+// 내가 방문한 적 있는 행사 목록 조회
+export async function getMyVisitedFairs(): Promise<VisitedFairResponse[]> {
+  const response = await apiClient.get<ApiEnvelope<VisitedFairResponse[]>>("/api/booths/visits/fairs");
+  return response.data;
+}
+
+// 특정 행사에서 내가 방문한 부스 목록 조회
+export async function getMyVisitedBooths(fairId: number): Promise<BoothVisitResponse[]> {
+  const response = await apiClient.get<ApiEnvelope<BoothVisitResponse[]>>(`/api/booths/visits?fairId=${fairId}`);
   return response.data;
 }

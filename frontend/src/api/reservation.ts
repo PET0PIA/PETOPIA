@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { waitingTokenHeader } from "./waitingRoom";
 
 /**
  * 예약/입장 도메인 API.
@@ -181,12 +182,17 @@ export function getReservationAvailability(fairId: number) {
   );
 }
 
-/** 사전예약을 생성한다. 무료면 즉시 CONFIRMED+QR, 유료면 PENDING_PAYMENT. */
+/**
+ * 사전예약을 생성한다. 무료면 즉시 CONFIRMED+QR, 유료면 PENDING_PAYMENT.
+ *
+ * 대기열을 켠 행사면 X-Waiting-Token 없이는 429(R022)로 막힌다. 토큰이 없을 때는
+ * 헤더가 아예 붙지 않으므로, 대기열을 끈 평소에는 요청 모양이 그대로다.
+ */
 export function createAdvanceReservation(fairId: number, payload: CreateAdvanceReservationRequest) {
   return apiClient.post<CreateReservationResult>(
     `/api/v1/fairs/${fairId}/reservations`,
     payload,
-    { headers: authHeaders() },
+    { headers: { ...authHeaders(), ...waitingTokenHeader(fairId) } },
   );
 }
 

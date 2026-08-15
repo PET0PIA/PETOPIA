@@ -44,10 +44,16 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/reservations/**",
                                 "/api/v1/fairs/*/reservations",
-                                "/api/v1/fairs/*/onsite-reservations"
+                                "/api/v1/fairs/*/onsite-reservations",
+                                // 대기열 - 토큰을 발급받은 본인인지 대조해야 하므로 로그인이 필요하다.
+                                // 미인증으로 통과시키면 토큰 하나로 여러 계정이 게이트를 넘을 수 있다.
+                                "/api/v1/fairs/*/waiting-room/**"
                         ).authenticated()
                         .requestMatchers("/api/v1/admin/fairs/**")
                         .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // 관리자 로그인 자체는 인증 전 상태에서 호출돼야 하므로 아래 /api/admin/** 규칙보다
+                        // 먼저 permitAll로 열어둔다. 비밀번호/역할 검증은 AdminAccountService.adminLogin()이 담당.
+                        .requestMatchers(HttpMethod.POST, "/api/admin/auth/login").permitAll()
                         // 시스템 전체를 가로지르는 관리자 API(감사 로그, 전체 대시보드) - SUPER_ADMIN 전용.
                         // AuditLogController, AdminDashboardController가 여기 해당한다.
                         .requestMatchers("/api/admin/**")
@@ -130,6 +136,11 @@ public class SecurityConfig {
                                 "/api/fairs/*/visit-stats",
                                 "/api/fairs/*/visit-stats/export"
                         ).hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Settlement 도메인 - 정산내역 엑셀 export는 통계 export(visit-stats/export)와 동일
+                        // 기준으로 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 접근(금액이 포함된 대량 다운로드라
+                        // 개별 조회보다 접근을 좁힘). 계산/확정/조회 등 나머지 정산 API 인증 규칙은 결제 도메인
+                        // 인증 연동 PR(별도 진행 중)에서 함께 들어올 예정 - 아직 이 규칙만 먼저 추가한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // FairPaymentContractController(/internal/api/v1/**)는 사용자 JWT가 아니라
                         // 도메인 간 내부 호출자 헤더(X-Internal-Caller)로 별도 인증하므로 여기서 다루지 않는다.
                         // Business 도메인 - 로그인만 하면 누구나(등록 시 USER->VENDOR 승격은 서비스 계층에서 처리)
@@ -159,6 +170,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/booths/*/favorites").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/booths/*/favorites").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/booths/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/booths/visits/fairs").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/booths/visits").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->

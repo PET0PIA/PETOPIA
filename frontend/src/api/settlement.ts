@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { ApiError, apiClient } from "./client";
 import { TEMP_USER_ID_HEADER } from "./fair";
 
 export const TEMP_SUPER_ADMIN_USER_ID = 1;
@@ -50,4 +50,43 @@ export function confirmSettlement(settlementId: number, userId: number = TEMP_SU
  */
 export function recalculateSettlement(settlementId: number) {
   return apiClient.put<SettlementResponse>(`/api/settlements/${settlementId}/recalculate`);
+}
+
+/** Content-Disposition 헤더의 filename="..."을 뽑아낸다. 없으면 null. (statistics.ts와 동일 패턴) */
+function parseFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+  const match = /filename="?([^";]+)"?/.exec(contentDisposition);
+  return match ? match[1] : null;
+}
+
+/**
+ * 행사 전체 정산내역을 엑셀(.xlsx)로 내려받는다. apiClient는 JSON 응답만 다루므로
+ * 바이너리 응답을 직접 fetch해 Blob으로 받고 브라우저 다운로드를 트리거한다
+ * (statistics.ts의 downloadVisitStatsExcel과 동일 패턴).
+ */
+export async function downloadSettlementsExcel(fairId: number): Promise<void> {
+  const response = await fetch(`/api/fairs/${fairId}/settlements/export`);
+
+  if (!response.ok) {
+    let message = "엑셀 파일을 내려받지 못했어요.";
+    try {
+      const body = await response.json();
+      message = body?.message ?? message;
+    } catch {
+      // 에러 응답이 JSON이 아니면 기본 메시지를 사용한다.
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const blob = await response.blob();
+  const filename = parseFilename(response.headers.get("Content-Disposition")) ?? `settlements-${fairId}.xlsx`;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

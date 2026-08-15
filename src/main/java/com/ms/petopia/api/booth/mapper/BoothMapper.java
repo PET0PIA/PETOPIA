@@ -3,7 +3,9 @@ package com.ms.petopia.api.booth.mapper;
 import com.ms.petopia.api.booth.domain.Booth;
 import com.ms.petopia.api.booth.domain.BoothItem;
 import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
+import com.ms.petopia.api.booth.dto.response.BoothVisitResponse;
 import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
+import com.ms.petopia.api.booth.dto.response.VisitedFairResponse;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -68,5 +70,12 @@ public interface BoothMapper {
 
     // 내가 소유한 부스 목록 (부스명·이미지·소속 행사명까지 조인해서 한 번에 조회)
     List<BoothFavoriteResponse> selectByOwnerId(@Param("userId") Long userId);
+
+    // 내가 방문한 적 있는 행사 목록 (최근 방문 순)
+    List<VisitedFairResponse> selectVisitedFairsByUserId(@Param("userId") Long userId);
+
+    // 특정 행사에서 내가 방문한 부스 목록
+    List<BoothVisitResponse> selectVisitedBoothsByUserAndFair(@Param("userId") Long userId,
+                                                              @Param("fairId") Long fairId);
 
 }

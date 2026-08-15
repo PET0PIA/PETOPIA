@@ -1,7 +1,11 @@
-language: "ko-KR"
-
 reviews:
-  profile: "chill"
   auto_review:
     enabled: true
-  poem: true
+
+    # PR 생성 후 수정 push도 자동 리뷰
+    auto_incremental_review: true
+
+    # 몇 번 수정하면 자동 리뷰 중단
+    auto_pause_after_reviewed_commits: 2
+
+    drafts: false

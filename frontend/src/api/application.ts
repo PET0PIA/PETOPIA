@@ -80,6 +80,7 @@ export interface ApplicationDetail {
   applicationId: number;
   fairId: number;
   businessId: number;
+  businessName: string;
   status: ApplicationStatus;
   purpose: string;
   itemsDesc: string;
@@ -96,6 +97,17 @@ export interface ApplicationDetail {
   cancelReason: string | null;
   cancelDecidedAt: string | null;
   cancelable: boolean; // 취소 요청 가능 여부 (프론트 버튼 활성화 판단용, 서버가 계산해서 내려줌)
+}
+
+// PUT /api/applications/{applicationId} 요청 바디. 심사 대기 상태에서만 반영되고,
+// 부스 슬롯은 수정 범위에 없다(businessId/boothSlotIds/agreedTerms 없음).
+export interface ApplicationUpdateRequest {
+  purpose: string;
+  itemsDesc: string;
+  managerName: string;
+  managerPhone: string;
+  managerEmail: string;
+  attachmentObjectKey?: string;
 }
 
 // GET /api/fairs/{fairId}/applications 응답 항목 하나 (관리자 목록용)
@@ -170,6 +182,18 @@ export async function getMyApplications(businessId?: number): Promise<Applicatio
 // 신청 상세 조회 (사업자 본인 또는 담당 행사 관리자만 조회 가능 — 권한 체크는 서버가 함)
 export async function getApplicationDetail(applicationId: number): Promise<ApplicationDetail> {
   const response = await apiClient.get<ApiEnvelope<ApplicationDetail>>(`/api/applications/${applicationId}`);
+  return response.data;
+}
+
+// 참가 신청서 수정 (본인 소유, 심사 대기 상태에서만 가능 — 서버가 검증)
+export async function updateApplication(
+  applicationId: number,
+  payload: ApplicationUpdateRequest
+): Promise<ApplicationDetail> {
+  const response = await apiClient.put<ApiEnvelope<ApplicationDetail>>(
+    `/api/applications/${applicationId}`,
+    payload
+  );
   return response.data;
 }
 

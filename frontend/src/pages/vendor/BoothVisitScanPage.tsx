@@ -1,11 +1,15 @@
-import { CheckCircle2, Gift, RotateCcw, ScanLine, Search, XCircle } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
+import { CheckCircle2, Gift, RotateCcw, ScanLine, XCircle } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
+import { getMyBooths, type BoothFavoriteResponse } from "../../api/booth";
 import { scanBoothVisit, type BoothScanResultCode } from "../../api/reservation";
+import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
+import { QrScanStation, type ScanFeedback } from "../../components/common/QrScanStation";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Select";
+import { useAuth } from "../../contexts/AuthContext";
 
 // 결과 코드별 표시 규칙. pass=최초 방문(초록) / block=이미 방문·거부(빨강)
 const resultConfig: Record<
@@ -35,43 +39,161 @@ interface ScanLogItem {
   tokenTail: string;
 }
 
-export function BoothVisitScanPage() {
-  // TODO 참가업체 세션에 담당 부스(boothId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
-  const [boothIdInput, setBoothIdInput] = useState("");
-  const [boothId, setBoothId] = useState<number | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
+function boothLabel(booth: BoothFavoriteResponse) {
+  return `${booth.name || `부스 #${booth.boothId}`} · ${booth.fairName}`;
+}
 
-  const [qrInput, setQrInput] = useState("");
-  const [scanning, setScanning] = useState(false);
+export function BoothVisitScanPage() {
+  // 새로고침 직후에는 silent refresh가 끝나기 전까지 user가 null이므로 status도 함께 본다
+  // (안 보면 로그인 상태인데 "로그인이 필요해요"가 잠깐 보인다).
+  const { user, status } = useAuth();
+
+  // 스캔은 내가 소유한 부스에서만 된다(서버도 booth → business.owner_id로 검증한다).
+  // 그래서 부스 번호를 직접 입력받지 않고 내 부스 목록에서 고르게 한다.
+  const [booths, setBooths] = useState<BoothFavoriteResponse[]>([]);
+  const [loadedFor, setLoadedFor] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // draftBoothId=드롭다운에서 고르는 중인 값, boothId=스캔을 시작한 부스
+  const [draftBoothId, setDraftBoothId] = useState("");
+  const [boothId, setBoothId] = useState<number | null>(null);
+
+  // 로딩은 상태로 들고 있지 않고 "이 사용자 것을 이미 받았는지"로 판단한다
+  // (effect 안에서 동기적으로 setState 하지 않기 위함).
+  const loading = status === "loading" || (user !== null && loadedFor !== user.userId);
+
+  useEffect(() => {
+    if (!user) return;
+    let ignore = false;
+
+    getMyBooths()
+      .then((data) => {
+        if (ignore) return;
+        setBooths(data);
+        setLoadError(null);
+        // 부스가 하나면 고를 게 없으니 바로 스캔 화면으로 넘긴다.
+        setDraftBoothId(data.length > 0 ? String(data[0].boothId) : "");
+        setBoothId(data.length === 1 ? data[0].boothId : null);
+      })
+      .catch((error) => {
+        if (ignore) return;
+        setBooths([]);
+        setLoadError(error instanceof ApiError ? error.message : "내 부스 목록을 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (!ignore) setLoadedFor(user.userId);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [user]);
+
+  function handleStart(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Number(draftBoothId);
+    // 드롭다운 값은 항상 내 부스 목록에서 나오지만, 값이 비어 있는 상태로 제출되는 것만 막는다.
+    if (!booths.some((booth) => booth.boothId === parsed)) return;
+    setBoothId(parsed);
+  }
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-3xl py-2">
+        <PageHeader eyebrow="참가업체" title="부스 방문 스캔" description="내 부스 목록을 불러오고 있어요." />
+        <p className="text-sm text-muted">불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (!user || loadError || booths.length === 0) {
+    return (
+      <div className="mx-auto max-w-3xl py-2">
+        <PageHeader
+          eyebrow="참가업체"
+          title="부스 방문 스캔"
+          description="부스를 방문한 관람객의 입장 QR을 스캔해 방문을 기록해요."
+        />
+        {!user ? (
+          <EmptyState
+            title="로그인이 필요해요"
+            description="참가업체 계정으로 로그인하면 내 부스에서 스캔할 수 있어요."
+            actionTo="/login"
+            actionLabel="로그인하러 가기"
+          />
+        ) : loadError ? (
+          <EmptyState title="목록을 불러올 수 없어요" description={loadError} />
+        ) : (
+          <EmptyState
+            title="스캔할 부스가 없어요"
+            description="참가 신청이 확정되면 부스가 만들어지고, 그 부스에서 방문 스캔을 할 수 있어요."
+            actionTo="/participations/me"
+            actionLabel="내 부스 참가 신청 목록"
+          />
+        )}
+      </div>
+    );
+  }
+
+  // 부스가 2개 이상일 때만 고르는 단계를 둔다(사업자를 여러 개 등록하거나 행사가 여러 개인 경우).
+  if (boothId === null) {
+    return (
+      <div className="mx-auto max-w-3xl py-2">
+        <PageHeader
+          eyebrow="참가업체"
+          title="부스 방문 스캔"
+          description="스캔할 부스를 먼저 선택해 주세요. 내가 소유한 부스만 보여요."
+        />
+        <form onSubmit={handleStart} className="surface flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
+          <div className="flex-1">
+            <label htmlFor="booth-select" className="mb-1.5 block text-sm font-bold text-ink">
+              부스
+            </label>
+            <Select
+              id="booth-select"
+              value={draftBoothId}
+              onChange={(event) => setDraftBoothId(event.target.value)}
+            >
+              {booths.map((booth) => (
+                <option key={booth.boothId} value={booth.boothId}>
+                  {boothLabel(booth)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <Button type="submit" variant="outline">
+            <ScanLine size={16} />
+            스캔 시작
+          </Button>
+        </form>
+      </div>
+    );
+  }
+
+  const selectedBooth = booths.find((booth) => booth.boothId === boothId);
+
+  return (
+    <BoothScanStation
+      key={boothId}
+      boothId={boothId}
+      eyebrow={selectedBooth ? boothLabel(selectedBooth) : `부스 #${boothId}`}
+      // 부스가 하나뿐이면 바꿀 대상이 없으므로 변경 버튼을 숨긴다.
+      onChangeBooth={booths.length > 1 ? () => setBoothId(null) : undefined}
+    />
+  );
+}
+
+interface BoothScanStationProps {
+  boothId: number;
+  eyebrow: string;
+  onChangeBooth?: () => void;
+}
+
+function BoothScanStation({ boothId, eyebrow, onChangeBooth }: BoothScanStationProps) {
   const [scanError, setScanError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ code: BoothScanResultCode; visitCount: number } | null>(null);
   const [logs, setLogs] = useState<ScanLogItem[]>([]);
 
-  const qrInputRef = useRef<HTMLInputElement>(null);
-
-  function handleStart(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(boothIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setStartError("부스 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-    setStartError(null);
-    // 이전 부스의 결과·로그·입력이 새 부스 화면에 남지 않도록 초기화한다.
-    setLastResult(null);
-    setLogs([]);
-    setScanError(null);
-    setQrInput("");
-    setBoothId(parsed);
-    setTimeout(() => qrInputRef.current?.focus(), 0);
-  }
-
-  async function handleScan(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const token = qrInput.trim();
-    if (boothId === null || token === "" || scanning) return;
-
-    setScanning(true);
+  async function handleScan(token: string): Promise<ScanFeedback | null> {
     setScanError(null);
     // 이번 스캔 결과만 보이도록 직전 결과를 먼저 지운다(실패 시 이전 결과 오인 방지).
     setLastResult(null);
@@ -84,44 +206,14 @@ export function BoothVisitScanPage() {
           ...previous,
         ].slice(0, 20),
       );
-      setQrInput("");
+      const config = resultConfig[res.resultCode];
+      // 사은품 중복 지급을 막아야 하므로 최초 방문이 아닌 결과는 모두 거부(빨강)로 알린다.
+      return { tone: config.tone === "pass" ? "pass" : "reject", title: config.title };
     } catch (err) {
       // resultCode는 200으로 오므로, 여기 오는 건 네트워크/권한(부스 소유 아님 등) 예외다.
       setScanError(err instanceof ApiError ? err.message : "스캔 처리 중 오류가 났어요.");
-    } finally {
-      setScanning(false);
-      qrInputRef.current?.focus();
+      return { tone: "reject", title: "스캔 오류" };
     }
-  }
-
-  // 시작 전: 부스 ID 입력
-  if (boothId === null) {
-    return (
-      <div className="mx-auto max-w-3xl py-2">
-        <PageHeader
-          eyebrow="참가업체"
-          title="부스 방문 스캔"
-          description="부스를 방문한 관람객의 입장 QR을 스캔해 방문을 기록해요. 먼저 담당 부스 ID를 입력해 주세요."
-        />
-        <form onSubmit={handleStart} className="surface flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <span className="mb-1.5 block text-sm font-bold text-ink">부스 ID</span>
-            <Input
-              type="number"
-              min={1}
-              value={boothIdInput}
-              onChange={(event) => setBoothIdInput(event.target.value)}
-              placeholder="예: 1"
-            />
-          </div>
-          <Button type="submit" variant="outline">
-            <Search size={16} />
-            스캔 시작
-          </Button>
-        </form>
-        {startError && <p className="mt-3 text-sm font-bold text-primary-strong">{startError}</p>}
-      </div>
-    );
   }
 
   const result = lastResult
@@ -132,40 +224,20 @@ export function BoothVisitScanPage() {
   return (
     <div className="mx-auto max-w-3xl py-2">
       <PageHeader
-        eyebrow={`부스 #${boothId}`}
+        eyebrow={eyebrow}
         title="부스 방문 스캔"
-        description="스캐너로 입장 QR을 읽으면 자동으로 처리돼요. 손으로 입력한 뒤 Enter를 눌러도 돼요."
+        description="스캐너로 입장 QR을 읽으면 자동으로 처리돼요. 카메라로 비추거나 손으로 입력해도 돼요."
         action={
-          <Button variant="outline" onClick={() => setBoothId(null)}>
-            <RotateCcw size={16} />
-            부스 변경
-          </Button>
+          onChangeBooth && (
+            <Button variant="outline" onClick={onChangeBooth}>
+              <RotateCcw size={16} />
+              부스 변경
+            </Button>
+          )
         }
       />
 
-      <Card className="mb-4 p-5">
-        <form onSubmit={handleScan}>
-          <label htmlFor="booth-qr-token" className="mb-1.5 block text-sm font-bold text-ink">
-            입장 QR 토큰
-          </label>
-          <div className="flex gap-2">
-            {/* Input 컴포넌트는 ref를 받지 않아(공유 컴포넌트 미변경) 스캔 포커스용으로만 네이티브 input 사용 */}
-            <input
-              id="booth-qr-token"
-              ref={qrInputRef}
-              value={qrInput}
-              onChange={(event) => setQrInput(event.target.value)}
-              placeholder="스캐너로 읽거나 토큰을 붙여넣고 Enter"
-              autoFocus
-              className="h-12 w-full rounded-button border border-line bg-card px-4 text-sm text-ink placeholder:text-muted focus:border-primary"
-            />
-            <Button type="submit" disabled={scanning || qrInput.trim() === ""}>
-              <ScanLine size={16} />
-              {scanning ? "확인 중…" : "스캔"}
-            </Button>
-          </div>
-        </form>
-      </Card>
+      <QrScanStation inputId="booth-qr-token" onScan={handleScan} />
 
       {scanError && <p className="mb-4 text-sm font-bold text-primary-strong">{scanError}</p>}
 
