@@ -1,8 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { fairAdminNavigation, superAdminNavigation } from "../config/navigation";
+import { fairAdminNavigation, superAdminNavigation, vendorNavigation, flattenNavigation } from "../config/navigation";
+import { ConsoleHome } from "../components/layout/ConsoleHome";
 import { FairAdminLayout } from "../layouts/FairAdminLayout";
 import { PublicLayout } from "../layouts/PublicLayout";
 import { SuperAdminLayout } from "../layouts/SuperAdminLayout";
+import { VendorLayout } from "../layouts/VendorLayout";
 import { HomePage } from "../pages/home/HomePage";
 import { FairApplicationNewPage } from "../pages/fair/FairApplicationNewPage";
 import { FairApplicationEditPage } from "../pages/fair/FairApplicationEditPage";
@@ -40,6 +42,9 @@ import { TicketReservationPage } from "../pages/reservation/TicketReservationPag
 import { BoothVisitScanPage } from "../pages/vendor/BoothVisitScanPage";
 import { FairReservationsPage } from "../pages/fair-admin/FairReservationsPage";
 import { NotFoundPage, PlaceholderPage } from "../pages/PlaceholderPage";
+import { NotImplementedPage } from "../pages/NotImplementedPage";
+import { AdminBannersPage } from "../pages/admin/AdminBannersPage";
+import { MyVisitedBoothsPage } from "../pages/booth/MyVisitedBoothsPage";
 import { LoginPage } from "../pages/auth/LoginPage";
 import { SignupPage } from "../pages/auth/SignupPage";
 import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
@@ -76,7 +81,6 @@ import { AdvertisingInquiryPage } from "../pages/advertising/AdvertisingInquiryP
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
   "/businesses/status": "사업자 등록 현황",
-  "/news": "소식·이벤트",
   "/about": "서비스 소개",
   "/terms": "이용약관",
   "/privacy": "개인정보 처리방침",
@@ -96,10 +100,10 @@ const fairAdminImplementedPaths = [
   // 폴백 라우트(AdminFallback)를 만들 필요가 없어서 여기 포함시켜 그 목록에서 뺀다.
   "/payments/fair-opening-fee",
 ];
-const fairAdminFallbackNavigation = fairAdminNavigation.filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
-const superAdminFallbackNavigation = superAdminNavigation.filter(
+const fairAdminFallbackNavigation = flattenNavigation(fairAdminNavigation).filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
+const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).filter(
   (item) =>
-    item.path !== "/admin" &&
+    item.path !== "/admin/dashboard" &&
     item.path !== "/admin/fair-applications" &&
     item.path !== "/admin/audit-logs" &&
     item.path !== "/admin/payments" &&
@@ -108,11 +112,14 @@ const superAdminFallbackNavigation = superAdminNavigation.filter(
     item.path !== "/admin/refunds" &&
     item.path !== "/admin/settlements" &&
     item.path !== "/admin/cancellations" &&
-    item.path !== "/admin/accounts"
+    item.path !== "/admin/accounts" &&
+    item.path !== "/admin/banners" &&
+    item.path !== "/admin/popups" &&
+    item.path !== "/admin/notices"
 );
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
-  const nav = kind === "fair" ? fairAdminNavigation : superAdminNavigation;
+  const nav = kind === "fair" ? flattenNavigation(fairAdminNavigation) : flattenNavigation(superAdminNavigation);
   const title = nav.find((item) => item.path === location.pathname)?.label ?? "관리자 메뉴";
   return <PlaceholderPage title={title} admin />;
 }
@@ -146,7 +153,9 @@ export function AppRouter() {
             <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
             <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
             <Route path="/booths/favorites/me" element={<BoothFavoritesPage />} />
-            <Route path="/booths/me" element={<MyBoothsPage />} />
+            <Route path="/booths/visited/me" element={<MyVisitedBoothsPage />} />
+            {/* 부스 콘솔로 이관: 옛 경로는 콘솔로 리다이렉트(북마크·내부 링크 호환). */}
+            <Route path="/booths/me" element={<Navigate to="/vendor/booths" replace />} />
           </Route>
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
@@ -160,6 +169,8 @@ export function AppRouter() {
           <Route path="/fairs/recruiting" element={<Navigate to="/participations/new" replace />} />
           {/* 비즈니스 ▾ "광고 문의". 문의 전용 백엔드가 없어 이메일 안내(정적) 화면으로 연결한다. */}
           <Route path="/advertising" element={<AdvertisingInquiryPage />} />
+          {/* 소식·이벤트(공지사항). 백엔드(notice)부터 미구현이라 자리표시만 둔다. */}
+          <Route path="/news" element={<NotImplementedPage title="소식·이벤트" />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}
           <Route path="/payments/success" element={<PaymentSuccessPage />} />
@@ -168,11 +179,15 @@ export function AppRouter() {
             <Route path="/payments/fair-opening-fee" element={<FairOpeningFeeSelectPage />} />
             <Route path="/payments/fair-opening-fee/:fairId" element={<FairOpeningFeePaymentPage />} />
           </Route>
-          <Route path="/booths/scan" element={<BoothVisitScanPage />} />
+          <Route path="/booths/scan" element={<Navigate to="/vendor/scan" replace />} />
           <Route path="/businesses" element={<BusinessesByFairPage />} />
           <Route path="/fairs/:fairId/booths" element={<FairBoothsPage />} />
+          {/* 부스 추천(POST /booth-recommendations). 화면 미구현 자리표시. */}
+          <Route path="/fairs/:fairId/booth-recommendations" element={<NotImplementedPage title="부스 추천" />} />
+          {/* 행사 후기 작성(POST /reviews). 조회는 행사 상세에 있고, 작성 화면은 미구현. */}
+          <Route path="/fairs/:fairId/reviews/new" element={<NotImplementedPage title="행사 후기 작성" />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
-          <Route path="/businesses/me" element={<MyBusinessesPage />} />
+          <Route path="/businesses/me" element={<Navigate to="/vendor/businesses" replace />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
           <Route path="/participations/new" element={<ParticipationNewPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
@@ -181,7 +196,7 @@ export function AppRouter() {
           <Route element={<ProtectedRoute />}>
             <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
           </Route>
-          <Route path="/participations/me" element={<MyApplicationsPage />} />
+          <Route path="/participations/me" element={<Navigate to="/vendor/participations" replace />} />
           <Route path="/participations/me/:applicationId" element={<ApplicationDetailPage />} />
           <Route path="/participations/me/:applicationId/edit" element={<ApplicationEditPage />} />
           <Route path="/booths/:boothId" element={<BoothDetailPage />} />
@@ -190,43 +205,91 @@ export function AppRouter() {
           ))}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="fair-admin" element={<FairAdminLayout />}>
-          <Route index element={<PlaceholderPage title="박람회 관리자" admin />} />
-          <Route path="booths" element={<HallManagementPage />} />
-          <Route path="booths/:fairId/:hallId" element={<BoothLayoutEditPage />} />
-          <Route path="fair" element={<FairDateManagementPage />} />
-          <Route path="onsite-sales" element={<OnsiteSalesPolicyPage />} />
-          <Route path="qr" element={<GateEntryScanPage />} />
-          <Route path="reservations" element={<ReservationStatusPage />} />
-          <Route path="reservations/list" element={<FairReservationsPage />} />
-          <Route path="statistics" element={<VisitStatisticsPage />} />
-          <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
-          <Route path="cancellation" element={<FairCancelRequestPage />} />
-          <Route path="recruit-notice" element={<RecruitNoticeFormPage />} />
-          <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
-          <Route path="participations" element={<ParticipationReviewPage />} />
-          <Route path="cancellation-requests" element={<CancelRequestReviewPage />} />
-          {fairAdminFallbackNavigation.map((item) => (
-            <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
-          ))}
-          <Route path="*" element={<AdminFallback kind="fair" />} />
+        {/* 박람회 관리자 콘솔 - EVENT_ADMIN(+ 상위 SUPER_ADMIN) 전용. URL 직접 진입도 role로 가드한다. */}
+        <Route element={<ProtectedRoute roles={["EVENT_ADMIN", "SUPER_ADMIN"]} />}>
+          <Route path="fair-admin" element={<FairAdminLayout />}>
+            <Route
+              index
+              element={
+                <ConsoleHome
+                  consoleLabel="박람회 관리자"
+                  description="담당 행사의 운영·예약·정산을 여기서 관리해요. 상단 '관리 행사'에서 행사를 먼저 골라 주세요."
+                  navigation={fairAdminNavigation}
+                />
+              }
+            />
+            <Route path="booths" element={<HallManagementPage />} />
+            <Route path="booths/:fairId/:hallId" element={<BoothLayoutEditPage />} />
+            <Route path="fair" element={<FairDateManagementPage />} />
+            <Route path="onsite-sales" element={<OnsiteSalesPolicyPage />} />
+            <Route path="qr" element={<GateEntryScanPage />} />
+            <Route path="reservations" element={<ReservationStatusPage />} />
+            <Route path="reservations/list" element={<FairReservationsPage />} />
+            <Route path="statistics" element={<VisitStatisticsPage />} />
+            <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
+            <Route path="cancellation" element={<FairCancelRequestPage />} />
+            <Route path="recruit-notice" element={<RecruitNoticeFormPage />} />
+            <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
+            <Route path="participations" element={<ParticipationReviewPage />} />
+            <Route path="cancellation-requests" element={<CancelRequestReviewPage />} />
+            {fairAdminFallbackNavigation.map((item) => (
+              <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
+            ))}
+            <Route path="*" element={<AdminFallback kind="fair" />} />
+          </Route>
         </Route>
-        <Route path="admin" element={<SuperAdminLayout />}>
-          <Route index element={<AdminDashboardPage />} />
-          <Route path="dashboard/fairs/:fairId" element={<VisitStatisticsPage />} />
-          <Route path="fair-applications" element={<FairApplicationReviewPage />} />
-          <Route path="audit-logs" element={<AuditLogPage />} />
-          <Route path="payments" element={<PaymentDetailPage />} />
-          <Route path="payments/create" element={<PaymentCreatePage />} />
-          <Route path="payments/list" element={<PaymentListPage />} />
-          <Route path="refunds" element={<RefundPage />} />
-          <Route path="settlements" element={<SettlementPage />} />
-          <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
-          <Route path="accounts" element={<AdminAccountsPage />} />
-          {superAdminFallbackNavigation.map((item) => (
-            <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
-          ))}
-          <Route path="*" element={<AdminFallback kind="super" />} />
+        {/* 최고 관리자 콘솔 - SUPER_ADMIN 전용 */}
+        <Route element={<ProtectedRoute roles={["SUPER_ADMIN"]} />}>
+          <Route path="admin" element={<SuperAdminLayout />}>
+            <Route
+              index
+              element={
+                <ConsoleHome
+                  consoleLabel="최고 관리자"
+                  description="전체 행사 운영·결제·정산·시스템을 여기서 관리해요."
+                  navigation={superAdminNavigation}
+                />
+              }
+            />
+            <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route path="dashboard/fairs/:fairId" element={<VisitStatisticsPage />} />
+            <Route path="fair-applications" element={<FairApplicationReviewPage />} />
+            <Route path="audit-logs" element={<AuditLogPage />} />
+            <Route path="payments" element={<PaymentDetailPage />} />
+            <Route path="payments/create" element={<PaymentCreatePage />} />
+            <Route path="payments/list" element={<PaymentListPage />} />
+            <Route path="refunds" element={<RefundPage />} />
+            <Route path="settlements" element={<SettlementPage />} />
+            <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
+            <Route path="accounts" element={<AdminAccountsPage />} />
+            {/* 콘텐츠·홍보: 배너는 실제 화면, 팝업·공지는 미구현 자리표시(백엔드 없음). */}
+            <Route path="banners" element={<AdminBannersPage />} />
+            <Route path="popups" element={<NotImplementedPage title="광고 팝업 관리" admin />} />
+            <Route path="notices" element={<NotImplementedPage title="공지사항 관리" admin />} />
+            {superAdminFallbackNavigation.map((item) => (
+              <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
+            ))}
+            <Route path="*" element={<AdminFallback kind="super" />} />
+          </Route>
+        </Route>
+        {/* 부스(참여기업) 콘솔 - VENDOR 전용. 흩어져 있던 참가업체 기능을 한 콘솔로 모은다. */}
+        <Route element={<ProtectedRoute roles={["VENDOR"]} />}>
+          <Route path="vendor" element={<VendorLayout />}>
+            <Route
+              index
+              element={
+                <ConsoleHome
+                  consoleLabel="부스 관리자"
+                  description="사업자·부스·참가 신청과 부스 방문 스캔을 한곳에서 관리해요."
+                  navigation={vendorNavigation}
+                />
+              }
+            />
+            <Route path="businesses" element={<MyBusinessesPage />} />
+            <Route path="booths" element={<MyBoothsPage />} />
+            <Route path="participations" element={<MyApplicationsPage />} />
+            <Route path="scan" element={<BoothVisitScanPage />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>

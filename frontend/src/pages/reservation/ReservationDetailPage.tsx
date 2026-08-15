@@ -1,6 +1,6 @@
 import { ChevronLeft, CreditCard, QrCode } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -79,6 +79,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export function ReservationDetailPage() {
   const { reservationId } = useParams<{ reservationId: string }>();
+  const navigate = useNavigate();
   const { confirm, confirmDialog } = useConfirm();
   // 결제 이어가기: 결제 생성 API가 예약 소유자 대조에 쓰는 userId를 여기서 넘긴다.
   const { user } = useAuth();
@@ -317,6 +318,8 @@ export function ReservationDetailPage() {
   if (reservation.canCancel) {
     menuItems.push({ label: "예약 취소", onSelect: handleCancel });
   }
+  // 후기 작성 진입(화면은 아직 미구현). 다녀온 행사에 대한 후기를 남기는 자리.
+  menuItems.push({ label: "후기 작성", onSelect: () => navigate(`/fairs/${reservation.fairId}/reviews/new`) });
 
   return (
     <div className="mx-auto max-w-3xl py-2">
