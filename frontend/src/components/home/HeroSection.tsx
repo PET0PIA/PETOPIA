@@ -1,36 +1,10 @@
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
-import { getActiveBanners, type Banner, type LinkTarget } from "../../api/banner";
+import { getActiveBanners, type Banner } from "../../api/banner";
+import { SmartLink } from "../common/SmartLink";
 
 const SLIDE_MS = 3000;
 const prefersReducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-// 앱 내부 경로: "/"로 시작하되 "//"(프로토콜 상대 URL, 예: //evil.com)는 제외.
-const INTERNAL_PATH_PATTERN = /^\/(?!\/)/;
-// 지원하는 외부 URL: http/https 뿐. 그 외(프로토콜 상대, javascript: 등 미지원 스킴)는 링크를 만들지 않는다.
-const EXTERNAL_URL_PATTERN = /^https?:\/\//;
-
-/** linkUrl이 내부 경로면 SPA 라우팅(<Link>), http/https 외부 URL이면 일반 <a>, 그 외(프로토콜 상대 등)는 렌더링하지 않는다. */
-function CtaLink({ to, target, className, children }: { to: string; target: LinkTarget | null; className: string; children: React.ReactNode }) {
-  const openInNewTab = target === "BLANK";
-  if (INTERNAL_PATH_PATTERN.test(to)) {
-    return (
-      <Link to={to} target={openInNewTab ? "_blank" : undefined} className={className}>
-        {children}
-      </Link>
-    );
-  }
-  if (EXTERNAL_URL_PATTERN.test(to)) {
-    return (
-      <a href={to} target={openInNewTab ? "_blank" : undefined} rel={openInNewTab ? "noopener noreferrer" : undefined} className={className}>
-        {children}
-      </a>
-    );
-  }
-  // 지원하지 않는 형식(프로토콜 상대 URL, javascript: 등)은 클릭 가능한 링크로 만들지 않는다.
-  return null;
-}
 
 export function HeroSection() {
   const [banners, setBanners] = useState<Banner[] | null>(null);
@@ -83,15 +57,15 @@ export function HeroSection() {
           {(hasPrimaryCta || hasSecondaryCta) && (
             <div className="pointer-events-auto mt-8 flex flex-wrap gap-3">
               {hasPrimaryCta && (
-                <CtaLink to={slide.linkUrl!} target={slide.linkTarget} className="inline-flex min-h-11 items-center gap-2 rounded-button bg-primary px-5 text-sm font-bold text-white transition hover:opacity-90">
+                <SmartLink to={slide.linkUrl!} target={slide.linkTarget} className="inline-flex min-h-11 items-center gap-2 rounded-button bg-primary px-5 text-sm font-bold text-white transition hover:opacity-90">
                   {slide.linkLabel}
                   <ArrowRight size={16} />
-                </CtaLink>
+                </SmartLink>
               )}
               {hasSecondaryCta && (
-                <CtaLink to={slide.link2Url!} target={slide.link2Target} className="inline-flex min-h-11 items-center gap-2 rounded-button border border-ink/15 bg-card px-5 text-sm font-bold text-ink transition hover:bg-white">
+                <SmartLink to={slide.link2Url!} target={slide.link2Target} className="inline-flex min-h-11 items-center gap-2 rounded-button border border-ink/15 bg-card px-5 text-sm font-bold text-ink transition hover:bg-white">
                   {slide.link2Label}
-                </CtaLink>
+                </SmartLink>
               )}
             </div>
           )}

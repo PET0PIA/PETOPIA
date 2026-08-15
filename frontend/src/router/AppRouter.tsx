@@ -21,6 +21,8 @@ import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
 import { FairCancelRequestPage } from "../pages/fair-admin/FairCancelRequestPage";
 import { AdminAccountsPage } from "../pages/admin/AdminAccountsPage";
+// TEMP: 화면 확인용 임시 라우트. 확인 끝나면 이 import와 아래 <Route path="popups">를 제거한다.
+import { AdminPopupsPage } from "../pages/admin/AdminPopupsPage";
 import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
@@ -221,6 +223,8 @@ export function AppRouter() {
           <Route path="settlements" element={<SettlementPage />} />
           <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
           <Route path="accounts" element={<AdminAccountsPage />} />
+          {/* TEMP: 화면 확인용. 확인 끝나면 제거 */}
+          <Route path="popups" element={<AdminPopupsPage />} />
           {superAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
           ))}
