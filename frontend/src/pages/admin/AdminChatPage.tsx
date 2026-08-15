@@ -168,18 +168,37 @@ export function AdminChatPage() {
     };
   }, [filter]);
 
+  /*
+   * 열어둔 대화도 목록과 같은 주기로 다시 읽는다.
+   *
+   * 선택할 때 한 번만 읽으면, 상담사가 대화를 열어둔 사이 고객이 보낸 메시지가 오른쪽 화면에
+   * 영영 나타나지 않는다. 왼쪽 목록 미리보기만 5초마다 바뀌어서 "뭔가 왔다"는 건 보이는데
+   * 정작 읽으려면 대화를 다시 클릭해야 하는, 눈치채기 어려운 상태가 된다.
+   *
+   * 고객 위젯처럼 SSE로 받지 않는 이유: 상담사 화면은 목록도 폴링으로 갱신하고 동시 접속자도
+   * 소수라, 스트림을 하나 더 여는 것보다 같은 주기에 얹는 편이 단순하다.
+   */
   useEffect(() => {
     if (selectedId == null) return;
     let canceled = false;
-    fetchAdminConversation(selectedId)
-      .then((data) => {
-        if (!canceled) setDetail(data);
-      })
-      .catch(() => {
-        if (!canceled) setError("대화를 불러오지 못했어요.");
-      });
+
+    const run = () =>
+      fetchAdminConversation(selectedId)
+        .then((data) => {
+          if (!canceled) setDetail(data);
+        })
+        .catch(() => {
+          if (!canceled) setError("대화를 불러오지 못했어요.");
+        });
+
+    void run();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void run();
+    }, LIST_REFRESH_MS);
+
     return () => {
       canceled = true;
+      window.clearInterval(timer);
     };
   }, [selectedId]);
 
