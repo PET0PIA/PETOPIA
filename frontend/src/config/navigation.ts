@@ -22,7 +22,7 @@ export const publicNavigation: NavigationItem[] = [
     label: "비즈니스",
     children: [
       { label: "박람회 개최 신청", path: "/fair-applications/new" },
-      { label: "부스 참가 신청", path: "/fairs/recruiting" },
+      { label: "부스 참가 신청", path: "/participations/new" },
       { label: "광고 문의", path: "/advertising" },
     ],
   },
