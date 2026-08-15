@@ -26,6 +26,36 @@ spring:
     # SQL 안의 ${...} 를 Flyway가 치환하려다 깨지는 사고를 막는다.
     placeholder-replacement: false
 
+  # 배포·스케일인 때 SIGTERM을 받으면 진행 중인 요청·SSE를 끊지 않고 마무리한 뒤 종료한다.
+  # ECS는 SIGTERM 30초 후 SIGKILL이므로 이 시간 안에 끝나야 한다.
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+# graceful shutdown 활성화 (spring.lifecycle.timeout-per-shutdown-phase 와 짝).
+server:
+  shutdown: graceful
+
+# ALB/ECS 헬스체크용 actuator. 운영에서는 관리포트를 8081로 분리한다(application-release.yaml).
+management:
+  endpoints:
+    web:
+      exposure:
+        # health 만 노출한다. env/metrics 등 나머지는 공개하지 않는다.
+        include: health
+  endpoint:
+    health:
+      probes:
+        # liveness/readiness 그룹을 켠다.
+        enabled: true
+      group:
+        # liveness = 프로세스 생존만 본다. DB/Redis 상태와 무관해야 한다.
+        # ALB 헬스체크가 이걸 봐야 DB가 흔들려도 무한 재배포 루프에 빠지지 않는다.
+        liveness:
+          include: livenessState
+        # readiness = 트래픽 받을 준비 여부. DB/Redis가 죽으면 이 인스턴스는 잠시 트래픽에서 빠진다.
+        readiness:
+          include: readinessState,db,redis
+
 petopia:
   waiting-room:
     # 대기열을 켤지와 통과 인원(active_limit)은 waiting_room_policies 테이블에 있다.
