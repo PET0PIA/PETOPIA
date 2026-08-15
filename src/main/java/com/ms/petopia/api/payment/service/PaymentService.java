@@ -216,9 +216,12 @@ public class PaymentService {
      * <p>동일 idempotencyKey로 이전 시도가 있었는지 먼저 확인해서:
      * <ul>
      *   <li>없으면 새로 insert(기존과 동일, 동시 첫 시도 경쟁은 DuplicateKeyException으로 처리)</li>
-     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용)</li>
-     *   <li>FAILED로 남아있지만 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재시도 금지)</li>
-     *   <li>PENDING/PROCESSING/COMPLETED면 여전히 중복결제로 막음(기존 동작 유지)</li>
+     *   <li>PENDING(결제창을 띄웠다 닫은 진행 중 결제)이고 요청자가 원래 결제자면, 그 행을 '그대로'
+     *       (같은 orderId·금액) 돌려줘 결제창을 다시 열 수 있게 함. 결과 미상이라 새 orderId를 발급하면
+     *       이미 승인된 건을 재결제할 위험이 있어, 일부러 orderId를 바꾸지 않는다(FAILED 재시도와 다른 점)</li>
+     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용, 새 orderId 발급)</li>
+     *   <li>PENDING·FAILED인데 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재개/재시도 금지)</li>
+     *   <li>PROCESSING/COMPLETED면 여전히 중복결제로 막음</li>
      * </ul>
      *
      * @param idempotencyKey 원업무 식별자 기준 키(예: {@code "VENDOR_FEE_" + applicationId})
@@ -251,7 +254,22 @@ public class PaymentService {
     ) {
         PaymentRow existing = paymentMapper.selectByIdempotencyKey(idempotencyKey);
         if (existing != null) {
+            // PENDING = 결제창을 띄웠다가 닫은, 결과를 아직 모르는 진행 중 결제. 같은 사용자면 그 행을
+            // '그대로'(같은 orderId·금액) 돌려줘 결제창을 다시 열 수 있게 한다(결제 제한시간 내 재개).
+            //
+            // ★ FAILED와 달리 새 orderId를 발급하지 않는다. FAILED는 토스가 '실패'를 확정해준 상태라
+            //   새 주문번호로 재시도해도 안전하지만, PENDING은 결과 미상이다. 결제창에서 이미 승인됐는데
+            //   확정 통보만 못 받아 PENDING으로 남은 것이라면, 새 orderId로 다시 열면 이중결제가 난다.
+            //   같은 orderId를 그대로 쓰면 (1) 미결제였으면 결제창이 다시 열리고, (2) 몰래 승인됐었으면
+            //   토스가 "이미 처리된 주문번호"로 거부해 이중결제를 막는다(그 결제는 완료 통지로 정산).
+            if ("PENDING".equals(existing.getStatus())) {
+                if (!userId.equals(existing.getPayerUserId())) {
+                    throw new CommonException(ErrorCode.ACCESS_DENIED);
+                }
+                return existing;
+            }
             if (!"FAILED".equals(existing.getStatus())) {
+                // PROCESSING(승인 진행 중)·COMPLETED(이미 결제됨) 등은 계속 중복결제로 막는다.
                 throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
             }
             if (!userId.equals(existing.getPayerUserId())) {

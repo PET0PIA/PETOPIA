@@ -489,12 +489,39 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("이미 PENDING/PROCESSING/COMPLETED인 참가비 결제가 있으면 FAILED가 아니라서 여전히 막는다")
-    void payVendorFee_FAILED아닌기존결제있으면_예외를던진다() {
+    @DisplayName("다른 사용자가 남의 PENDING 참가비 결제를 재개하려 하면 예외를 던진다")
+    void payVendorFee_PENDING재개_결제자아님_예외를던진다() {
+        // 원래 결제자는 90L인데 다른 사용자(999L)가 같은 applicationId로 "결제 계속하기"를 누른 상황.
+        // 예약금(payReservationDeposit)은 앞단에 소유자 검증이 따로 있지만, 참가비에는 없어서
+        // createOrRetryPayment의 PENDING 분기가 유일한 방어선이다 — 남의 진행 중 결제(같은 orderId)를
+        // 넘겨받아 결제창을 열지 못하게 막아야 한다.
         PaymentRow pendingRow = new PaymentRow();
         pendingRow.setPaymentId(1L);
         pendingRow.setStatus("PENDING");
+        pendingRow.setPayerUserId(90L);
+        pendingRow.setOrderId("PAYMENT_original");
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(pendingRow);
+
+        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
+
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 999L, request))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        // 남의 결제이므로 새 결제 insert도, FAILED 재사용(resetFailedToPending)도 하면 안 된다.
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("이미 PROCESSING/COMPLETED인 참가비 결제가 있으면 재사용 불가라서 여전히 중복결제로 막는다")
+    void payVendorFee_재사용불가상태기존결제있으면_예외를던진다() {
+        // PROCESSING(승인 진행 중)은 PENDING과 달리 재개 대상이 아니다 — 계속 막아야 한다.
+        PaymentRow processingRow = new PaymentRow();
+        processingRow.setPaymentId(1L);
+        processingRow.setStatus("PROCESSING");
+        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(processingRow);
 
         VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
 
@@ -526,6 +553,35 @@ class PaymentServiceTest {
         assertThat(result.paymentId()).isEqualTo(2L);
         assertThat(result.status()).isEqualTo("PENDING");
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("결제창을 닫아 PENDING으로 남은 예약금 결제를 같은 사용자가 다시 요청하면 orderId를 바꾸지 않고 그대로 돌려준다")
+    void payReservationDeposit_PENDING동일사용자_같은orderId로그대로재사용한다() {
+        // 사용자가 토스 결제창을 그냥 닫으면 백엔드는 통보를 못 받아 결제가 PENDING으로 남는다.
+        // 다시 "결제 계속하기"를 누르면 새 결제도, 새 orderId도 만들지 않고 그 PENDING을 '그대로' 돌려줘야 한다.
+        // (혹시 이미 승인됐는데 통보만 놓친 경우, 새 orderId면 이중결제가 나므로 같은 orderId 유지가 핵심.)
+        ReservationPaymentContext context = new ReservationPaymentContext(
+                500L, 10L, 90L, "GENERAL", 30000L, LocalDateTime.now().plusMinutes(30)
+        );
+        given(reservationPaymentContractClient.getPaymentContext(500L)).willReturn(context);
+
+        PaymentRow pendingRow = new PaymentRow();
+        pendingRow.setPaymentId(7L);
+        pendingRow.setStatus("PENDING");
+        pendingRow.setPayerUserId(90L);
+        pendingRow.setOrderId("PAYMENT_original");
+        given(paymentMapper.selectByIdempotencyKey("RESERVATION_DEPOSIT_500")).willReturn(pendingRow);
+
+        PaymentResponse result = paymentService.payReservationDeposit(500L, 90L);
+
+        assertThat(result.paymentId()).isEqualTo(7L);
+        assertThat(result.status()).isEqualTo("PENDING");
+        // ★ orderId를 새로 발급하지 않고 기존 값을 그대로 유지해야 한다(이중결제 방지 핵심).
+        assertThat(result.orderId()).isEqualTo("PAYMENT_original");
+        // 기존 PENDING을 그대로 돌려줄 뿐 — 새 결제 insert도, FAILED 재사용(resetFailedToPending)도 하지 않는다.
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
     }
 
     @Test
