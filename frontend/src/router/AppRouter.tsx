@@ -53,6 +53,8 @@ import { EditProfilePage } from "../pages/mypage/EditProfilePage";
 import { PasswordChangePage } from "../pages/mypage/PasswordChangePage";
 import { PetFormPage } from "../pages/mypage/PetFormPage";
 import { PetDetailPage } from "../pages/mypage/PetDetailPage";
+import { MyReviewsPage } from "../pages/mypage/MyReviewsPage";
+import { ReviewManagementPage } from "../pages/fair-admin/ReviewManagementPage";
 import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
 import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
 import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
@@ -90,6 +92,7 @@ const fairAdminImplementedPaths = [
   "/fair-admin/onsite-sales",
   "/fair-admin/qr",
   "/fair-admin/reservations",
+  "/fair-admin/reviews",
   "/fair-admin/statistics",
   "/fair-admin/cancellation",
   "/fair-admin/recruit-notice",
@@ -147,6 +150,7 @@ export function AppRouter() {
             <Route path="/mypage/password" element={<PasswordChangePage />} />
             <Route path="/mypage/pets/new" element={<PetFormPage />} />
             <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
+            <Route path="/mypage/reviews" element={<MyReviewsPage />} />
             <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
             <Route path="/booths/favorites/me" element={<BoothFavoritesPage />} />
             <Route path="/booths/me" element={<MyBoothsPage />} />
@@ -202,6 +206,7 @@ export function AppRouter() {
           <Route path="qr" element={<GateEntryScanPage />} />
           <Route path="reservations" element={<ReservationStatusPage />} />
           <Route path="reservations/list" element={<FairReservationsPage />} />
+          <Route path="reviews" element={<ReviewManagementPage />} />
           <Route path="statistics" element={<VisitStatisticsPage />} />
           <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
           <Route path="cancellation" element={<FairCancelRequestPage />} />

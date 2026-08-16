@@ -66,6 +66,17 @@
          WHERE user_id = #{userId}
     </select>
 
+    <select id="selectMyReviews" resultType="MyFairReviewRow">
+        SELECT fr.review_id, fr.fair_id, f.name AS fairName, f.poster_image_url AS fairPosterImageUrl,
+               fr.rating, fr.content, fr.is_verified_visit AS verifiedVisit,
+               fr.created_at, fr.updated_at
+          FROM fair_reviews fr
+          JOIN fairs f ON f.fair_id = fr.fair_id
+         WHERE fr.user_id = #{userId}
+         ORDER BY fr.created_at DESC, fr.review_id DESC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
     <update id="update">
         UPDATE fair_reviews
            SET rating = #{rating},

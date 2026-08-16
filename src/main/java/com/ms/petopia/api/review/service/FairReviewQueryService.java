@@ -6,6 +6,8 @@ import com.ms.petopia.api.review.dto.FairReviewListItemResponse;
 import com.ms.petopia.api.review.dto.FairReviewListResponse;
 import com.ms.petopia.api.review.dto.FairReviewSummaryResponse;
 import com.ms.petopia.api.review.dto.FairReviewSummaryRow;
+import com.ms.petopia.api.review.dto.MyFairReviewListResponse;
+import com.ms.petopia.api.review.dto.MyFairReviewResponse;
 import com.ms.petopia.api.review.mapper.FairReviewMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -52,6 +54,23 @@ public class FairReviewQueryService {
         requireFairExists(fairId);
         FairReviewSummaryRow row = fairReviewMapper.selectSummaryByFairId(fairId);
         return FairReviewSummaryResponse.from(fairId, row);
+    }
+
+    /** 마이페이지 "내 리뷰" 목록(로그인한 본인 것만). 행사 이름·포스터를 함께 내려준다. */
+    @Transactional(readOnly = true)
+    public MyFairReviewListResponse getMyReviews(Long userId, int page, int size) {
+        if (page < 0 || size <= 0 || size > MAX_PAGE_SIZE) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        long totalElements = fairReviewMapper.countByUserId(userId);
+        int totalPages = (int) ((totalElements + size - 1) / size);
+        List<MyFairReviewResponse> items = fairReviewMapper
+                .selectMyReviews(userId, (long) page * size, size)
+                .stream()
+                .map(MyFairReviewResponse::from)
+                .toList();
+        return new MyFairReviewListResponse(items, page, size, totalElements, totalPages, page + 1 < totalPages);
     }
 
     private void requireFairExists(Long fairId) {
