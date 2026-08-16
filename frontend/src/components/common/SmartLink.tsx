@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { LinkTarget } from "../../api/banner";
-
-// 앱 내부 경로: "/"로 시작하되 "//"(프로토콜 상대 URL, 예: //evil.com)는 제외.
-const INTERNAL_PATH_PATTERN = /^\/(?!\/)/;
-// 지원하는 외부 URL: http/https 뿐. 그 외(프로토콜 상대, javascript: 등 미지원 스킴)는 링크를 만들지 않는다.
-const EXTERNAL_URL_PATTERN = /^https?:\/\//;
+import { EXTERNAL_URL_PATTERN, INTERNAL_PATH_PATTERN } from "../../utils/linkClassification";
 
 interface SmartLinkProps {
   to: string;

@@ -1,5 +1,5 @@
 import { AlertCircle, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Badge } from "../../components/ui/Badge";
@@ -92,17 +92,26 @@ export function AdminPopupsPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // 연속으로 토글/저장할 때 나중에 도착한 예전 요청의 응답이 최신 상태를 덮어쓰지 않도록,
+  // 그 시점에 가장 최근에 보낸 요청인지 확인하고 나서만 결과를 반영한다.
+  const fetchRequestIdRef = useRef(0);
+
   function fetchPopups() {
+    const requestId = ++fetchRequestIdRef.current;
     getAdminPopups()
       .then((data) => {
+        if (fetchRequestIdRef.current !== requestId) return;
         setLoadError(null);
         setPopups(data);
       })
       .catch((error) => {
+        if (fetchRequestIdRef.current !== requestId) return;
         setPopups(null);
         setLoadError(error instanceof ApiError ? error.message : "팝업 목록을 불러오지 못했어요.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (fetchRequestIdRef.current === requestId) setLoading(false);
+      });
   }
 
   useEffect(fetchPopups, []);
@@ -145,6 +154,13 @@ export function AdminPopupsPage() {
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
+  }
+
+  // 저장 중이거나 이미지 업로드 중에 닫히면, 그 요청이 늦게 끝났을 때 이미 새로 연 다른
+  // 팝업 세션의 폼(예: imageObjectKey)을 잘못 덮어쓸 수 있다. 끝날 때까지 닫기를 막는다.
+  function closeDialog() {
+    if (saving || imageUploading) return;
+    setDialogOpen(false);
   }
 
   // 새 이미지를 고르면 "삭제했던" 상태는 취소된다.
@@ -331,7 +347,7 @@ export function AdminPopupsPage() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title={editingPopup ? "팝업 수정" : "팝업 추가"}>
+      <Dialog open={dialogOpen} onClose={closeDialog} title={editingPopup ? "팝업 수정" : "팝업 추가"}>
         <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
           {formErrors.length > 0 && (
             <ul className="space-y-1 text-sm font-bold text-primary-strong">
@@ -418,7 +434,7 @@ export function AdminPopupsPage() {
           </div>
 
           <div className="flex justify-end gap-2 border-t border-line pt-4">
-            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>취소</Button>
+            <Button type="button" variant="outline" onClick={closeDialog} disabled={saving || imageUploading}>취소</Button>
             <Button type="submit" disabled={saving || imageUploading}>
               {saving ? "저장 중..." : imageUploading ? "이미지 업로드 중..." : "저장"}
             </Button>

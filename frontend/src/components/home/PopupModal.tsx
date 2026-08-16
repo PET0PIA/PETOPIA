@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
 import { getActivePopups, type Popup } from "../../api/popup";
 import { SmartLink } from "../common/SmartLink";
+import { isSmartLinkable } from "../../utils/linkClassification";
 
 const focusableSelector = [
   "a[href]",
@@ -136,9 +137,10 @@ export function PopupModal() {
         <div className="flex-1 overflow-y-auto" style={{ backgroundColor: popup.bgColor ?? undefined }}>
           {popup.imageKey ? (
             <>
-              {popup.linkUrl ? (
+              {popup.linkUrl && isSmartLinkable(popup.linkUrl) ? (
                 <SmartLink to={popup.linkUrl} target={popup.linkTarget} className="block">
-                  <img src={popup.imageKey} alt="" className="w-full" />
+                  {/* 이미지 자체가 링크라 스크린리더에 링크 목적을 알려줄 이름이 필요하다. */}
+                  <img src={popup.imageKey} alt={popup.title} className="w-full" />
                 </SmartLink>
               ) : (
                 <img src={popup.imageKey} alt="" className="w-full" />
