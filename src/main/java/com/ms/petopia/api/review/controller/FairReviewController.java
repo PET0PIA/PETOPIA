@@ -1,11 +1,14 @@
 package com.ms.petopia.api.review.controller;
 
 import com.ms.petopia.api.review.dto.CreateFairReviewRequest;
+import com.ms.petopia.api.review.dto.CreateFairReviewReportRequest;
 import com.ms.petopia.api.review.dto.FairReviewListResponse;
+import com.ms.petopia.api.review.dto.FairReviewReportResponse;
 import com.ms.petopia.api.review.dto.FairReviewResponse;
 import com.ms.petopia.api.review.dto.FairReviewSummaryResponse;
 import com.ms.petopia.api.review.dto.UpdateFairReviewRequest;
 import com.ms.petopia.api.review.service.FairReviewQueryService;
+import com.ms.petopia.api.review.service.FairReviewReportService;
 import com.ms.petopia.api.review.service.FairReviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -40,6 +43,7 @@ public class FairReviewController {
 
     private final FairReviewService fairReviewService;
     private final FairReviewQueryService fairReviewQueryService;
+    private final FairReviewReportService fairReviewReportService;
 
     @PostMapping
     public ResponseEntity<FairReviewResponse> create(
@@ -82,5 +86,15 @@ public class FairReviewController {
     ) {
         fairReviewService.delete(fairId, reviewId, userId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{reviewId}/reports")
+    public ResponseEntity<FairReviewReportResponse> report(
+            @PathVariable Long fairId,
+            @PathVariable Long reviewId,
+            @AuthenticationPrincipal Long userId,
+            @RequestBody CreateFairReviewReportRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(fairReviewReportService.create(fairId, reviewId, userId, request));
     }
 }

@@ -132,6 +132,15 @@ public class SecurityConfig {
                         // Review 도메인 - 수정/삭제는 로그인만 요구(본인 작성 리뷰인지는 서비스 계층에서 검증).
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/reviews/*").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/fairs/*/reviews/*").authenticated()
+                        // Review 도메인 - 마이페이지 "내 리뷰" 목록(로그인한 본인 것만).
+                        .requestMatchers(HttpMethod.GET, "/api/users/me/reviews").authenticated()
+                        // Review 도메인 - 리뷰 신고는 로그인만 요구(중복 신고 여부는 서비스 계층에서 검증).
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews/*/reports").authenticated()
+                        // Review 도메인 - 답글 조회는 리뷰처럼 공개. 작성·수정은 EVENT_ADMIN/SUPER_ADMIN만,
+                        // "이 행사 담당자인지"는 FairReviewReplyService가 FairAdminAccessGuard로 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/*/reply").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews/*/reply").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/reviews/*/reply").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // Statistics 도메인 - 행사 하나에 대한 예약/방문 통계 대시보드(ReservationDashboardController).
                         // halls/fair-dates와 같은 이유로 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 접근.
                         .requestMatchers(HttpMethod.GET,
