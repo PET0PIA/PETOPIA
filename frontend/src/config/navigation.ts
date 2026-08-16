@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Ban, BarChart3, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, LayoutDashboard, ListOrdered, Map, Megaphone, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Store, Ticket, UsersRound } from "lucide-react";
+import { Ban, BarChart3, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Store, Ticket, UsersRound } from "lucide-react";
 import type { UserRole } from "../api/auth";
 
 export interface NavigationItem {
@@ -12,15 +12,9 @@ export interface NavigationItem {
 }
 
 export const publicNavigation: NavigationItem[] = [
-  {
-    // 관람객 구역: 행사를 둘러보고(행사 목록) 예매(티켓 예매)까지. 둘 다 같은 공개 행사를 쓰지만
-    // "둘러보기 vs 바로 예매"로 성격이 달라 한 드롭다운에 나눠 담는다.
-    label: "행사·티켓",
-    children: [
-      { label: "행사 목록", path: "/fairs/upcoming" },
-      { label: "티켓 예매", path: "/tickets" },
-    ],
-  },
+  // 관람객 구역: 행사를 둘러보고 예매까지 한 목록에서. 예전엔 '행사 목록'+'티켓 예매'로 나눴지만,
+  // 티켓 예매 목록이 행사 목록과 중복이라(목록의 '사전예약 중' 탭이 그 역할) 하나로 합쳤다.
+  { label: "행사", path: "/fairs/upcoming" },
   { label: "소식·이벤트", path: "/news" },
   {
     // 비즈니스 구역: "일하러 온 사람"(주최자·업체·광고주)의 신청/문의 창구 3개.
@@ -28,7 +22,7 @@ export const publicNavigation: NavigationItem[] = [
     label: "비즈니스",
     children: [
       { label: "박람회 개최 신청", path: "/fair-applications/new" },
-      { label: "부스 참가 신청", path: "/fairs/recruiting" },
+      { label: "부스 참가 신청", path: "/participations/new" },
       { label: "광고 문의", path: "/advertising" },
     ],
   },
@@ -61,6 +55,7 @@ export const superAdminNavigation: NavigationItem[] = [
   { label: "행사 안내 관리", path: "/admin/fairs", icon: Store },
   { label: "장소 관리", path: "/admin/venues", icon: Map },
   { label: "관리자 계정 목록", path: "/admin/accounts", icon: UsersRound },
+  { label: "상담 문의", path: "/admin/chat", icon: MessageSquare },
   { label: "정산·수수료율", path: "/admin/settlements", icon: ReceiptText },
   { label: "감사 로그", path: "/admin/audit-logs", icon: ScrollText },
 ];

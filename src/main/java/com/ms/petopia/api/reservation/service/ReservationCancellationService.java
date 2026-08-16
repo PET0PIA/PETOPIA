@@ -17,6 +17,7 @@ import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
 import com.ms.petopia.api.reservation.mapper.ReservationCancellationMapper;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실시간 통계 확인용
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -84,6 +85,7 @@ public class ReservationCancellationService {
     private static final List<String> PAYMENT_IN_FLIGHT_STATUSES = List.of("PROCESSING", "COMPLETED");
 
     private final ReservationCancellationMapper cancellationMapper;
+    private final ReservationCapacityMapper capacityMapper;
     private final ReservationTimeProvider timeProvider;
     private final ApplicationEventPublisher eventPublisher; // 실시간 통계 확인용
     private final PaymentMapper paymentMapper;
@@ -137,6 +139,14 @@ public class ReservationCancellationService {
                 refund == null ? null : refund.refundAmount(),
                 now
         );
+
+        // 취소된 좌석을 정원에 돌려준다. 이 반납을 빼면 좌석이 영구 증발한다.
+        // cancelReservation이 1을 반환한 뒤에만 호출해야 중복 반납이 생기지 않는다 -
+        // 위의 상태 CAS가 이미 "이번 호출이 취소를 성사시킨 유일한 호출"임을 보장한다.
+        // 현장예매(ONSITE_DIRECT)는 애초에 정원을 점유하지 않으므로 반납 대상이 아니다.
+        if (ADVANCE.equals(reservation.getReservationType())) {
+            capacityMapper.release(reservation.getFairId(), reservation.getVisitDate());
+        }
 
         eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
 

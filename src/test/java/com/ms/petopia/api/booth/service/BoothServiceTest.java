@@ -5,10 +5,7 @@ import com.ms.petopia.api.booth.domain.BoothItem;
 import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
-import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
-import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
-import com.ms.petopia.api.booth.dto.response.BoothResponse;
-import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
+import com.ms.petopia.api.booth.dto.response.*;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -613,6 +610,78 @@ class BoothServiceTest {
             // then
             assertThat(result).hasSize(1);
             assertThat(result.get(0).getBoothId()).isEqualTo(1L);
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("내가 방문한 행사 목록 조회")
+    class GetMyVisitedFairs {
+
+        @Test
+        @DisplayName("방문한 행사 목록을 그대로 반환한다")
+        void returnsVisitedFairs() {
+
+            // given
+            Long userId = 2L;
+            VisitedFairResponse fair = new VisitedFairResponse(1L, "멍냥페스타 2026");
+
+            given(boothMapper.selectVisitedFairsByUserId(userId)).willReturn(List.of(fair));
+
+            // when
+            List<VisitedFairResponse> result = boothService.getMyVisitedFairs(userId);
+
+            // then
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getFairId()).isEqualTo(1L);
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("특정 행사에서 내가 방문한 부스 목록 조회")
+    class GetMyVisitedBooths {
+
+        @Test
+        @DisplayName("행사가 존재하면 방문한 부스 목록을 반환한다")
+        void returnsVisitedBooths() {
+
+            // given
+            Long userId = 2L;
+            Long fairId = 1L;
+            BoothVisitResponse visit = new BoothVisitResponse(1L, "멍냥튼튼", null, null, 1);
+
+            given(boothMapper.existsFair(fairId)).willReturn(true);
+            given(boothMapper.selectVisitedBoothsByUserAndFair(userId, fairId)).willReturn(List.of(visit));
+
+            // when
+            List<BoothVisitResponse> result = boothService.getMyVisitedBooths(userId, fairId);
+
+            // then
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getBoothId()).isEqualTo(1L);
+
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 행사면 예외를 던지고 조회를 시도하지 않는다")
+        void throwsWhenFairNotFound() {
+
+            // given: 존재하지 않는 fairId
+            Long userId = 2L;
+            Long fairId = 999L;
+
+            given(boothMapper.existsFair(fairId)).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> boothService.getMyVisitedBooths(userId, fairId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("존재하지 않는 행사");
+
+            // 행사 자체가 없으니, 방문 부스 조회 쿼리는 시도되면 안 됨
+            verify(boothMapper, never()).selectVisitedBoothsByUserAndFair(any(), any());
 
         }
 

@@ -5,32 +5,14 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { ApiError } from "../../api/client";
-import { getMyReservations, type ReservationListItem, type ReservationStatus } from "../../api/reservation";
-
-// 예약 상태 표시 규칙: 초록=확정·입장 완료(정상), 회색=취소·만료(무효/종료),
-// 결제 대기는 "이어서 결제해야 하는 핵심 행동"이라 눈에 띄게(현재 primary, 이후 빨강 토큰으로 교체 예정).
-const statusLabels: Record<ReservationStatus, string> = {
-  PENDING_PAYMENT: "결제 대기",
-  CONFIRMED: "예약 확정",
-  CHECKED_IN: "입장 완료",
-  CANCELED: "취소됨",
-  EXPIRED: "만료됨",
-};
-// 초록=결제 대기(이어서 결제), 검정=예약 확정, 회색=지난/무효(입장 완료·취소·만료).
-const statusTones: Record<ReservationStatus, "leaf" | "ink" | "neutral"> = {
-  PENDING_PAYMENT: "leaf",
-  CONFIRMED: "ink",
-  CHECKED_IN: "neutral",
-  CANCELED: "neutral",
-  EXPIRED: "neutral",
-};
-
-// 카드 전체를 흐릿하게(지난 예약 느낌) 처리할 상태.
-const inactiveStatuses: ReservationStatus[] = ["CHECKED_IN", "CANCELED", "EXPIRED"];
-
-function formatTime(time: string) {
-  return time.slice(0, 5);
-}
+import { getMyReservations, type ReservationListItem } from "../../api/reservation";
+import {
+  formatEntryTime,
+  formatVisitDateDow,
+  inactiveReservationStatuses,
+  reservationStatusLabels,
+  reservationStatusTones,
+} from "./reservationDisplay";
 
 export function MyReservationsPage() {
   const [reservations, setReservations] = useState<ReservationListItem[]>([]);
@@ -71,13 +53,13 @@ export function MyReservationsPage() {
         <EmptyState
           title="아직 예약한 행사가 없어요."
           description="티켓 예매에서 관심 있는 행사를 예약하면 이곳에서 확인할 수 있어요."
-          actionTo="/tickets"
+          actionTo="/fairs/upcoming"
           actionLabel="티켓 예매하러 가기"
         />
       ) : (
         <ul className="flex flex-col gap-3">
           {reservations.map((item) => {
-            const inactive = inactiveStatuses.includes(item.reservationStatus);
+            const inactive = inactiveReservationStatuses.includes(item.reservationStatus);
             return (
               <li key={item.reservationId}>
                 <Link
@@ -100,15 +82,19 @@ export function MyReservationsPage() {
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="truncate font-bold text-ink">{item.fairName}</h3>
-                      <Badge tone={statusTones[item.reservationStatus]} className="shrink-0">
-                        {statusLabels[item.reservationStatus]}
+                      <Badge tone={reservationStatusTones[item.reservationStatus]} className="shrink-0">
+                        {reservationStatusLabels[item.reservationStatus]}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted">
-                      {item.visitDate} · {formatTime(item.entryStartTime)}~{formatTime(item.entryEndTime)}
+                      {formatVisitDateDow(item.visitDate)} · {formatEntryTime(item.entryStartTime)}~{formatEntryTime(item.entryEndTime)}
                     </p>
                     {item.amount > 0 && (
                       <p className="text-sm text-muted">{item.amount.toLocaleString()}원</p>
+                    )}
+                    {/* 결제 대기 예약: 카드를 누르면 상세에서 결제를 이어갈 수 있음을 알린다. */}
+                    {item.paymentAvailable && (
+                      <span className="mt-0.5 text-sm font-bold text-primary-strong">결제 계속하기 ›</span>
                     )}
                   </div>
 

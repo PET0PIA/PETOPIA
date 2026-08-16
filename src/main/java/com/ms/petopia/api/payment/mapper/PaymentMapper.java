@@ -103,6 +103,7 @@ public interface PaymentMapper {
     int resetFailedToPending(
             @Param("paymentId") Long paymentId,
             @Param("amount") Long amount,
+            @Param("orderId") String orderId,
             @Param("updatedAt") LocalDateTime updatedAt);
 
     /**

@@ -141,7 +141,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
       await requestVendorFeePayment({
         paymentId: created.paymentId,
         applicationId: detail.applicationId,
-        orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
+        orderId: created.orderId,
         amount: created.amount,
         orderName: `참가비 결제 (행사 #${detail.fairId})`,
         method: paymentMethod,

@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { fairAdminNavigation, superAdminNavigation } from "../config/navigation";
 import { FairAdminLayout } from "../layouts/FairAdminLayout";
 import { PublicLayout } from "../layouts/PublicLayout";
@@ -10,7 +10,7 @@ import { MyFairApplicationsPage } from "../pages/fair/MyFairApplicationsPage";
 import { MyFairApplicationDetailPage } from "../pages/fair/MyFairApplicationDetailPage";
 import { FairUpcomingPage } from "../pages/fair/FairUpcomingPage";
 import { FairPastPage } from "../pages/fair/FairPastPage";
-import { TicketFairListPage } from "../pages/reservation/TicketFairListPage";
+import { FairDetailPage } from "../pages/fair/FairDetailPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
 import { BoothLayoutEditPage } from "../pages/fair-admin/BoothLayoutEditPage";
 import { FairDateManagementPage } from "../pages/fair-admin/FairDateManagementPage";
@@ -21,8 +21,8 @@ import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
 import { FairCancelRequestPage } from "../pages/fair-admin/FairCancelRequestPage";
 import { AdminAccountsPage } from "../pages/admin/AdminAccountsPage";
-// TEMP: 화면 확인용 임시 라우트. 확인 끝나면 이 import와 아래 <Route path="popups">를 제거한다.
-import { AdminPopupsPage } from "../pages/admin/AdminPopupsPage";
+import { AdminChatPage } from "../pages/admin/AdminChatPage";
+import { AdminChatSettingsPage } from "../pages/admin/AdminChatSettingsPage";
 import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
@@ -72,13 +72,13 @@ import { FairBoothsPage } from "../pages/fair/FairBoothsPage";
 import { MyBoothsPage } from "../pages/booth/MyBoothsPage";
 import { ApplicationEditPage } from "../pages/application/ApplicationEditPage";
 import { ParticipationNewPage } from "../pages/application/ParticipationNewPage";
+import { AdvertisingInquiryPage } from "../pages/advertising/AdvertisingInquiryPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
   "/businesses/status": "사업자 등록 현황",
   "/news": "소식·이벤트",
-  "/advertising": "광고 문의",
   "/about": "서비스 소개",
   "/terms": "이용약관",
   "/privacy": "개인정보 처리방침",
@@ -110,7 +110,8 @@ const superAdminFallbackNavigation = superAdminNavigation.filter(
     item.path !== "/admin/refunds" &&
     item.path !== "/admin/settlements" &&
     item.path !== "/admin/cancellations" &&
-    item.path !== "/admin/accounts"
+    item.path !== "/admin/accounts" &&
+    item.path !== "/admin/chat"
 );
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
@@ -126,7 +127,11 @@ export function AppRouter() {
         <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route element={<PublicLayout />}>
           <Route index element={<HomePage />} />
-          <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />
+          {/* 개최 신청은 로그인 필수(백엔드 POST /api/fairs = authenticated). 미로그인은 /login으로
+              보냈다가 로그인 후 이 화면으로 복귀시킨다(폼을 채우다 제출 단계에서 막히는 걸 방지). */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />
+          </Route>
           <Route path="/fair-applications/me" element={<MyFairApplicationsPage />} />
           <Route path="/fair-applications/me/:fairId" element={<MyFairApplicationDetailPage />} />
           <Route path="/fair-applications/me/:fairId/edit" element={<FairApplicationEditPage />} />
@@ -150,20 +155,14 @@ export function AppRouter() {
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
           <Route path="/fairs/upcoming" element={<FairUpcomingPage />} />
           <Route path="/fairs/past" element={<FairPastPage />} />
-          {/* 비즈니스 ▾ "부스 참가 신청" 입구. 실제 목록(모집 중 행사)·미등록 유도 로직은 후속.
-              지금은 준비중 화면에서 사업자 등록으로만 안내한다. */}
-          <Route
-            path="/fairs/recruiting"
-            element={
-              <PlaceholderPage
-                title="부스 참가 신청"
-                description="박람회에 부스로 참가 신청하는 화면이에요. 참가하려면 먼저 사업자(참가업체) 등록이 필요해요."
-                actionTo="/businesses/new"
-                actionLabel="사업자 등록하러 가기"
-              />
-            }
-          />
-          <Route path="/tickets" element={<TicketFairListPage />} />
+          {/* 행사 상세(공개). 목록 카드가 여기로 오고, '예매하기'는 /tickets/:fairId로 넘긴다.
+              정적 경로(/fairs/upcoming 등)가 :fairId보다 우선 매칭되므로 충돌 없다. */}
+          <Route path="/fairs/:fairId" element={<FairDetailPage />} />
+          {/* 비즈니스 ▾ "부스 참가 신청" 입구. 실제 목록·신청 흐름은 /participations/new에 있어,
+              옛 경로(북마크·외부 링크)로 들어와도 그 화면으로 넘긴다. */}
+          <Route path="/fairs/recruiting" element={<Navigate to="/participations/new" replace />} />
+          {/* 비즈니스 ▾ "광고 문의". 문의 전용 백엔드가 없어 이메일 안내(정적) 화면으로 연결한다. */}
+          <Route path="/advertising" element={<AdvertisingInquiryPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}
           <Route path="/payments/success" element={<PaymentSuccessPage />} />
@@ -180,7 +179,11 @@ export function AppRouter() {
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
           <Route path="/participations/new" element={<ParticipationNewPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
-          <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
+          {/* 참가 신청서도 로그인 필수. 미로그인은 /login으로 보냈다가 복귀. 사업자 미등록은
+              페이지 안에서 /businesses/new로 보내고(returnTo 포함) 등록 후 다시 이 화면으로 돌아온다. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
+          </Route>
           <Route path="/participations/me" element={<MyApplicationsPage />} />
           <Route path="/participations/me/:applicationId" element={<ApplicationDetailPage />} />
           <Route path="/participations/me/:applicationId/edit" element={<ApplicationEditPage />} />
@@ -223,8 +226,8 @@ export function AppRouter() {
           <Route path="settlements" element={<SettlementPage />} />
           <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
           <Route path="accounts" element={<AdminAccountsPage />} />
-          {/* TEMP: 화면 확인용. 확인 끝나면 제거 */}
-          <Route path="popups" element={<AdminPopupsPage />} />
+          <Route path="chat" element={<AdminChatPage />} />
+          <Route path="chat/settings" element={<AdminChatSettingsPage />} />
           {superAdminFallbackNavigation.map((item) => (
             <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
           ))}

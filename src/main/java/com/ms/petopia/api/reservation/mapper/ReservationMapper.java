@@ -35,7 +35,7 @@ public interface ReservationMapper {
             @Param("userId") Long userId
     );
 
-    ReservationCreationContext selectCreationContextForUpdate(
+    ReservationCreationContext selectCreationContext(
             @Param("fairId") Long fairId,
             @Param("visitDate") LocalDate visitDate
     );
@@ -44,11 +44,7 @@ public interface ReservationMapper {
 
     boolean existsActiveReservation(
             @Param("fairId") Long fairId,
-            @Param("userId") Long userId
-    );
-
-    int countCapacityOccupyingReservations(
-            @Param("fairId") Long fairId,
+            @Param("userId") Long userId,
             @Param("visitDate") LocalDate visitDate
     );
 

@@ -1,12 +1,15 @@
 package com.ms.petopia.api.settlement.controller;
 
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
+import com.ms.petopia.api.settlement.service.SettlementExportService;
 import com.ms.petopia.api.settlement.service.SettlementService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -15,6 +18,7 @@ import java.util.List;
 public class SettlementController {
 
     private final SettlementService settlementService;
+    private final SettlementExportService settlementExportService;
 
     // 정산 계산(PENDING 생성). 원래는 "행사 종료 후" 자동 트리거가 목표지만 스케줄러/이벤트
     // 인프라가 아직 없어서 관리자가 수동으로 호출하는 걸로 대신한다(TODO: 자동화).
@@ -58,5 +62,17 @@ public class SettlementController {
     @GetMapping("/fairs/{fairId}/settlements")
     public List<SettlementResponse> getSettlementsByFair(@PathVariable Long fairId) {
         return settlementService.getByFair(fairId);
+    }
+
+    // 행사 전체 정산내역 엑셀(.xlsx) 다운로드. statistics 도메인의 visit-stats/export와 동일 패턴.
+    @GetMapping("/fairs/{fairId}/settlements/export")
+    public ResponseEntity<byte[]> exportSettlements(@PathVariable Long fairId) throws IOException {
+        byte[] body = settlementExportService.exportAsExcel(fairId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"settlements-" + fairId + ".xlsx\"")
+                .header(HttpHeaders.CONTENT_TYPE,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                .body(body);
     }
 }

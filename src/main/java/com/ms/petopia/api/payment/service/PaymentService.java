@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -215,9 +216,12 @@ public class PaymentService {
      * <p>동일 idempotencyKey로 이전 시도가 있었는지 먼저 확인해서:
      * <ul>
      *   <li>없으면 새로 insert(기존과 동일, 동시 첫 시도 경쟁은 DuplicateKeyException으로 처리)</li>
-     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용)</li>
-     *   <li>FAILED로 남아있지만 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재시도 금지)</li>
-     *   <li>PENDING/PROCESSING/COMPLETED면 여전히 중복결제로 막음(기존 동작 유지)</li>
+     *   <li>PENDING(결제창을 띄웠다 닫은 진행 중 결제)이고 요청자가 원래 결제자면, 그 행을 '그대로'
+     *       (같은 orderId·금액) 돌려줘 결제창을 다시 열 수 있게 함. 결과 미상이라 새 orderId를 발급하면
+     *       이미 승인된 건을 재결제할 위험이 있어, 일부러 orderId를 바꾸지 않는다(FAILED 재시도와 다른 점)</li>
+     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용, 새 orderId 발급)</li>
+     *   <li>PENDING·FAILED인데 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재개/재시도 금지)</li>
+     *   <li>PROCESSING/COMPLETED면 여전히 중복결제로 막음</li>
      * </ul>
      *
      * @param idempotencyKey 원업무 식별자 기준 키(예: {@code "VENDOR_FEE_" + applicationId})
@@ -230,12 +234,42 @@ public class PaymentService {
      * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제 진행/완료 중이거나,
      *         다른 요청이 먼저 재시도를 선점했을 때
      */
+    /**
+     * 토스 승인용 주문번호를 발급한다.
+     *
+     * <p>결제 행이 아니라 <b>승인 시도</b> 단위로 유일해야 한다. 결제 행은 예약 1건당
+     * 하나로 고정이라(UK_PAYMENT_IDEMPOTENCY_KEY) payment_id로 만들면 재시도할 때마다
+     * 같은 값이 나오고, 그 주문번호에 이미 승인 건이 잡혀 있으면 영영 결제할 수 없게 된다.
+     *
+     * <p>앞의 {@code PAYMENT_}는 토스 대시보드에서 우리 결제 건임을 알아보기 위한 것이고,
+     * 유일성은 뒤의 UUID가 책임진다. 하이픈을 빼 32자로 만들어 전체 40자 — 토스 주문번호
+     * 제약(6~64자, 영문·숫자·하이픈·언더스코어) 안에 들어간다.
+     */
+    private String newOrderId() {
+        return "PAYMENT_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
     private PaymentRow createOrRetryPayment(
             String idempotencyKey, Long amount, Long userId, Supplier<PaymentRow> newRowSupplier
     ) {
         PaymentRow existing = paymentMapper.selectByIdempotencyKey(idempotencyKey);
         if (existing != null) {
+            // PENDING = 결제창을 띄웠다가 닫은, 결과를 아직 모르는 진행 중 결제. 같은 사용자면 그 행을
+            // '그대로'(같은 orderId·금액) 돌려줘 결제창을 다시 열 수 있게 한다(결제 제한시간 내 재개).
+            //
+            // ★ FAILED와 달리 새 orderId를 발급하지 않는다. FAILED는 토스가 '실패'를 확정해준 상태라
+            //   새 주문번호로 재시도해도 안전하지만, PENDING은 결과 미상이다. 결제창에서 이미 승인됐는데
+            //   확정 통보만 못 받아 PENDING으로 남은 것이라면, 새 orderId로 다시 열면 이중결제가 난다.
+            //   같은 orderId를 그대로 쓰면 (1) 미결제였으면 결제창이 다시 열리고, (2) 몰래 승인됐었으면
+            //   토스가 "이미 처리된 주문번호"로 거부해 이중결제를 막는다(그 결제는 완료 통지로 정산).
+            if ("PENDING".equals(existing.getStatus())) {
+                if (!userId.equals(existing.getPayerUserId())) {
+                    throw new CommonException(ErrorCode.ACCESS_DENIED);
+                }
+                return existing;
+            }
             if (!"FAILED".equals(existing.getStatus())) {
+                // PROCESSING(승인 진행 중)·COMPLETED(이미 결제됨) 등은 계속 중복결제로 막는다.
                 throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
             }
             if (!userId.equals(existing.getPayerUserId())) {
@@ -243,7 +277,11 @@ public class PaymentService {
             }
 
             LocalDateTime now = LocalDateTime.now();
-            int reset = paymentMapper.resetFailedToPending(existing.getPaymentId(), amount, now);
+            // 재시도는 새 주문번호로 나간다. 실패한 시도의 주문번호에는 토스 쪽에 이미
+            // 승인 건이 잡혀 있을 수 있어, 재사용하면 "이미 처리된 주문번호"로 거부당한다.
+            String retryOrderId = newOrderId();
+            int reset = paymentMapper.resetFailedToPending(
+                    existing.getPaymentId(), amount, retryOrderId, now);
             if (reset == 0) {
                 // 우리가 조회한 뒤, 다른 요청이 먼저 재시도를 선점했거나 상태가 바뀐 경우 — 충돌로 처리.
                 throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
@@ -251,6 +289,7 @@ public class PaymentService {
 
             existing.setStatus("PENDING");
             existing.setAmount(amount);
+            existing.setOrderId(retryOrderId);
             existing.setUpdatedAt(now);
             existing.setTossPaymentKey(null);
             existing.setPaidAt(null);
@@ -258,6 +297,7 @@ public class PaymentService {
         }
 
         PaymentRow row = newRowSupplier.get();
+        row.setOrderId(newOrderId());
         try {
             paymentMapper.insert(row);
         } catch (DuplicateKeyException e) {
@@ -343,7 +383,9 @@ public class PaymentService {
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
         }
 
-        String orderId = "PAYMENT_" + row.getPaymentId();
+        // 저장된 주문번호를 그대로 쓴다. 여기서 다시 만들면 프론트가 결제창에 넘긴
+        // 값과 어긋나 승인이 통째로 실패한다.
+        String orderId = row.getOrderId();
         TossPaymentResponse tossResponse;
         try {
             tossResponse = tossPaymentClient.confirmPayment(request.paymentKey(), orderId, row.getAmount());

@@ -1,9 +1,9 @@
-import { CheckCircle2, RotateCcw, ScanLine, XCircle } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { CheckCircle2, RotateCcw, XCircle } from "lucide-react";
+import { useState } from "react";
 import { ApiError } from "../../api/client";
 import { scanGateEntry, type GateScanResultCode } from "../../api/reservation";
 import { PageHeader } from "../../components/common/PageHeader";
-import { Button } from "../../components/ui/Button";
+import { QrScanStation, type ScanFeedback } from "../../components/common/QrScanStation";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { useFairSelector } from "../../contexts/FairSelectorContext";
@@ -51,58 +51,6 @@ export function GateEntryScanPage() {
   // 콘솔 상단 바의 "관리 행사" 선택기가 현재 행사를 정한다.
   const { fairId } = useFairSelector();
 
-  const [deviceInfo, setDeviceInfo] = useState("");
-  const [qrInput, setQrInput] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [lastResult, setLastResult] = useState<
-    { code: GateScanResultCode; entrySource: string | null; firstCheckedInAt: string | null } | null
-  >(null);
-  const [logs, setLogs] = useState<ScanLogItem[]>([]);
-
-  const qrInputRef = useRef<HTMLInputElement>(null);
-
-  // 상단 선택기의 행사가 바뀌면 이전 행사의 스캔 결과·로그·입력을 비우고 QR 입력창에 포커스한다.
-  useEffect(() => {
-    setLastResult(null);
-    setLogs([]);
-    setScanError(null);
-    setQrInput("");
-    if (fairId !== null) setTimeout(() => qrInputRef.current?.focus(), 0);
-  }, [fairId]);
-
-  async function handleScan(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const token = qrInput.trim();
-    if (fairId === null || token === "" || scanning) return;
-
-    setScanning(true);
-    setScanError(null);
-    // 이번 스캔 결과만 보이도록 직전 결과를 먼저 지운다(실패 시 이전 성공 배너 오인 방지).
-    setLastResult(null);
-    try {
-      const res = await scanGateEntry(fairId, token, deviceInfo.trim() || undefined);
-      setLastResult({
-        code: res.resultCode,
-        entrySource: res.entrySource,
-        firstCheckedInAt: res.firstCheckedInAt,
-      });
-      setLogs((previous) =>
-        [
-          { at: new Date().toLocaleTimeString(), resultCode: res.resultCode, tokenTail: token.slice(-6) },
-          ...previous,
-        ].slice(0, 20),
-      );
-      setQrInput("");
-    } catch (err) {
-      // resultCode는 200으로 오므로, 여기 오는 건 네트워크/권한 등 진짜 예외다.
-      setScanError(err instanceof ApiError ? err.message : "스캔 처리 중 오류가 났어요.");
-    } finally {
-      setScanning(false);
-      qrInputRef.current?.focus();
-    }
-  }
-
   // 상단 선택기에 행사가 없으면(배정 0개) 스캔 스테이션 대신 안내를 보여준다.
   if (fairId === null) {
     return (
@@ -119,6 +67,44 @@ export function GateEntryScanPage() {
     );
   }
 
+  // 행사가 바뀌면 이전 행사의 스캔 결과·로그·카메라가 남지 않도록 통째로 다시 마운트한다.
+  return <GateScanStation key={fairId} fairId={fairId} />;
+}
+
+function GateScanStation({ fairId }: { fairId: number }) {
+  const [deviceInfo, setDeviceInfo] = useState("");
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<
+    { code: GateScanResultCode; entrySource: string | null; firstCheckedInAt: string | null } | null
+  >(null);
+  const [logs, setLogs] = useState<ScanLogItem[]>([]);
+
+  async function handleScan(token: string): Promise<ScanFeedback | null> {
+    setScanError(null);
+    // 이번 스캔 결과만 보이도록 직전 결과를 먼저 지운다(실패 시 이전 성공 배너 오인 방지).
+    setLastResult(null);
+    try {
+      const res = await scanGateEntry(fairId, token, deviceInfo.trim() || undefined);
+      setLastResult({
+        code: res.resultCode,
+        entrySource: res.entrySource,
+        firstCheckedInAt: res.firstCheckedInAt,
+      });
+      setLogs((previous) =>
+        [
+          { at: new Date().toLocaleTimeString(), resultCode: res.resultCode, tokenTail: token.slice(-6) },
+          ...previous,
+        ].slice(0, 20),
+      );
+      const config = resultConfig[res.resultCode];
+      return { tone: config.tone, title: config.title };
+    } catch (err) {
+      // resultCode는 200으로 오므로, 여기 오는 건 네트워크/권한 등 진짜 예외다.
+      setScanError(err instanceof ApiError ? err.message : "스캔 처리 중 오류가 났어요.");
+      return { tone: "reject", title: "스캔 오류" };
+    }
+  }
+
   const result = lastResult ? { ...resultConfig[lastResult.code], data: lastResult } : null;
 
   // 스캔 스테이션
@@ -127,32 +113,13 @@ export function GateEntryScanPage() {
       <PageHeader
         eyebrow={`행사 #${fairId}`}
         title="QR 입장 스캔"
-        description="스캐너로 입장 QR을 읽으면 자동으로 처리돼요. 손으로 입력한 뒤 Enter를 눌러도 돼요."
+        description="스캐너로 입장 QR을 읽으면 자동으로 처리돼요. 카메라로 비추거나 손으로 입력해도 돼요."
       />
 
-      <Card className="mb-4 p-5">
-        <form onSubmit={handleScan} className="space-y-4">
-          <div>
-            <label htmlFor="gate-qr-token" className="mb-1.5 block text-sm font-bold text-ink">
-              입장 QR 토큰
-            </label>
-            <div className="flex gap-2">
-              {/* Input 컴포넌트는 ref를 받지 않아(공유 컴포넌트 미변경) 스캔 포커스용으로만 네이티브 input 사용 */}
-              <input
-                id="gate-qr-token"
-                ref={qrInputRef}
-                value={qrInput}
-                onChange={(event) => setQrInput(event.target.value)}
-                placeholder="스캐너로 읽거나 토큰을 붙여넣고 Enter"
-                autoFocus
-                className="h-12 w-full rounded-button border border-line bg-card px-4 text-sm text-ink placeholder:text-muted focus:border-primary"
-              />
-              <Button type="submit" disabled={scanning || qrInput.trim() === ""}>
-                <ScanLine size={16} />
-                {scanning ? "확인 중…" : "스캔"}
-              </Button>
-            </div>
-          </div>
+      <QrScanStation
+        inputId="gate-qr-token"
+        onScan={handleScan}
+        extraFields={
           <div>
             <span className="mb-1.5 block text-sm font-bold text-ink">게이트/기기 정보 (선택)</span>
             <Input
@@ -161,8 +128,8 @@ export function GateEntryScanPage() {
               placeholder="예: GATE-01 / iPad"
             />
           </div>
-        </form>
-      </Card>
+        }
+      />
 
       {scanError && <p className="mb-4 text-sm font-bold text-primary-strong">{scanError}</p>}
 

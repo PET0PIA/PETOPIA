@@ -71,7 +71,8 @@ class OnsiteReservationServiceTest {
         assertThat(response.amount()).isZero();
         assertThat(response.paymentExpiresAt()).isNull();
         assertThat(response.entryQrToken()).isEqualTo("qr-token");
-        verify(reservationMapper, never()).countCapacityOccupyingReservations(any(), any());
+        // 현장예매가 사전예약 정원을 건드리지 않는다는 건 이제 구조가 보장한다 -
+        // OnsiteReservationService는 ReservationCapacityMapper에 의존조차 하지 않는다.
 
         ArgumentCaptor<ReservationInsertRow> captor = ArgumentCaptor.forClass(ReservationInsertRow.class);
         verify(reservationMapper).insertReservation(captor.capture());
@@ -203,7 +204,7 @@ class OnsiteReservationServiceTest {
     void create_existingReservation_rejects() {
         givenOpenContext(0);
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(activeUser());
-        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(true);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, NOW.toLocalDate())).willReturn(true);
 
         assertError(() -> service.create(FAIR_ID, USER_ID, null), ErrorCode.DUPLICATED_RESERVATION);
         verify(reservationMapper, never()).insertReservation(any());
@@ -216,7 +217,7 @@ class OnsiteReservationServiceTest {
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801DUPL0001");
         given(reservationMapper.insertReservation(any()))
-                .willThrow(new DuplicateKeyException("UK_RESERVATION_ACTIVE_USER_FAIR"));
+                .willThrow(new DuplicateKeyException("UK_RESERVATION_ACTIVE_USER_FAIR_DATE"));
 
         assertError(() -> service.create(FAIR_ID, USER_ID, null), ErrorCode.DUPLICATED_RESERVATION);
     }
@@ -233,7 +234,7 @@ class OnsiteReservationServiceTest {
 
     private void givenUserAndNoDuplicate() {
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(activeUser());
-        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(false);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, NOW.toLocalDate())).willReturn(false);
     }
 
     private void assignGeneratedReservationId() {

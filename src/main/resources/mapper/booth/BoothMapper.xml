@@ -175,4 +175,31 @@
         ORDER BY b.confirmed_at DESC
     </select>
 
+    <!--
+         내가 방문한 적 있는 행사 목록. 같은 행사를 여러 부스에서 방문했을 수 있어 fair_id로 묶고,
+         그중 가장 최근 방문 시각 기준으로 정렬한다
+     -->
+    <select id="selectVisitedFairsByUserId" resultType="com.ms.petopia.api.booth.dto.response.VisitedFairResponse">
+        SELECT bv.fair_id AS fairId,
+            f.name AS fairName
+        FROM booth_visits bv
+        JOIN fairs f ON f.fair_id = bv.fair_id
+        WHERE bv.user_id = #{userId}
+        GROUP BY bv.fair_id, f.name
+        ORDER BY MAX(bv.last_visited_at) DESC
+    </select>
+
+    <!-- 특정 행사에서 내가 방문한 부스 목록 -->
+    <select id="selectVisitedBoothsByUserAndFair" resultType="com.ms.petopia.api.booth.dto.response.BoothVisitResponse">
+        SELECT bv.booth_id AS boothId,
+            b.name AS name,
+            b.image_url AS imageUrl,
+            bv.first_visited_at AS firstVisitedAt,
+            bv.visit_count AS visitCount
+        FROM booth_visits bv
+        JOIN booth b ON b.booth_id = bv.booth_id
+        WHERE bv.user_id = #{userId} AND bv.fair_id = #{fairId}
+        ORDER BY bv.first_visited_at DESC
+    </select>
+
 </mapper>

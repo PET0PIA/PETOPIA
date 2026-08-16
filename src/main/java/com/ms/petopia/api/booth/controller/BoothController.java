@@ -3,10 +3,7 @@ package com.ms.petopia.api.booth.controller;
 import com.ms.petopia.api.booth.dto.request.BoothItemCreateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
-import com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse;
-import com.ms.petopia.api.booth.dto.response.BoothItemResponse;
-import com.ms.petopia.api.booth.dto.response.BoothResponse;
-import com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse;
+import com.ms.petopia.api.booth.dto.response.*;
 import com.ms.petopia.api.booth.service.BoothService;
 import com.ms.petopia.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -150,6 +147,29 @@ public class BoothController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(boothService.getConfirmedBooths(fairId)));
+
+    }
+
+    // 내가 방문한 적 있는 행사 목록 조회
+    @GetMapping("/booths/visits/fairs")
+    public ResponseEntity<ApiResponse<List<VisitedFairResponse>>> getMyVisitedFairs(
+            @AuthenticationPrincipal Long callerId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(boothService.getMyVisitedFairs(callerId)));
+
+    }
+
+    // 특정 행사에서 내가 방문한 부스 목록 조회
+    @GetMapping("/booths/visits")
+    public ResponseEntity<ApiResponse<List<BoothVisitResponse>>> getMyVisitedBooths(
+            @AuthenticationPrincipal Long callerId,
+            @RequestParam Long fairId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(boothService.getMyVisitedBooths(callerId, fairId)));
 
     }
 

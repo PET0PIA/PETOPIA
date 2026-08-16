@@ -10,6 +10,7 @@
     -->
     <sql id="paymentColumns">
         payment_id
+      , order_id
       , payment_type
       , amount
       , status
@@ -63,11 +64,11 @@
     <insert id="insert" parameterType="PaymentRow"
             useGeneratedKeys="true" keyProperty="paymentId">
         INSERT INTO payment (
-        payment_type, amount, status, method, idempotency_key,
+        payment_type, amount, status, method, idempotency_key, order_id,
         paid_at, created_at, updated_at,
         fair_id, business_id, payer_user_id, reservation_id, application_id
         ) VALUES (
-        #{paymentType}, #{amount}, #{status}, #{method}, #{idempotencyKey},
+        #{paymentType}, #{amount}, #{status}, #{method}, #{idempotencyKey}, #{orderId},
         #{paidAt}, #{createdAt}, #{updatedAt},
         #{fairId}, #{businessId}, #{payerUserId}, #{reservationId}, #{applicationId}
         )
@@ -120,10 +121,16 @@
 
     <!-- FAILED 행을 PENDING으로 되돌려 재사용한다(재결제 허용). markProcessing과 같은 이유로
          WHERE status = 'FAILED' 가드를 원자적 선점 조건으로 쓴다. -->
+    <!--
+        재시도는 반드시 새 주문번호로 나간다. 실패한 시도의 주문번호에는 토스 쪽에 이미
+        승인 건이 잡혀 있을 수 있어(우리가 confirm에 실패했을 뿐), 같은 값으로 다시
+        승인을 요청하면 "이미 처리된 주문번호"로 거부당한다.
+    -->
     <update id="resetFailedToPending">
         UPDATE payment
         SET status = 'PENDING',
         amount = #{amount},
+        order_id = #{orderId},
         toss_payment_key = NULL,
         paid_at = NULL,
         updated_at = #{updatedAt}

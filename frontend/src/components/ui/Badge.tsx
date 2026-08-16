@@ -1,6 +1,6 @@
 import type { HTMLAttributes } from "react";
 
-type BadgeTone = "primary" | "sun" | "leaf" | "neutral" | "ink";
+export type BadgeTone = "primary" | "sun" | "leaf" | "neutral" | "ink";
 const toneClass: Record<BadgeTone, string> = { primary: "bg-primary-soft text-primary-strong", sun: "bg-sun-soft text-ink", leaf: "bg-leaf-soft text-ink", neutral: "bg-page text-muted", ink: "bg-primary-strong text-white" };
 
 export function Badge({ className = "", children, tone = "neutral", ...props }: HTMLAttributes<HTMLSpanElement> & { tone?: BadgeTone }) {
