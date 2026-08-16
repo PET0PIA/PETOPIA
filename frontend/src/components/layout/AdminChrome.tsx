@@ -5,7 +5,7 @@ import type { NavigationItem } from "../../config/navigation";
 import { useAuth } from "../../contexts/AuthContext";
 import { FairSwitcher } from "../fair-admin/FairSwitcher";
 import { getMe } from "../../api/user";
-import petopiaLogoOriginal from "../../assets/logo/PetopiaLOGO.png";
+import petopiaLogoOriginal from "../../assets/logo/petopiaLOGO.png";
 
 interface AdminChromeProps {
   navigation: NavigationItem[];
