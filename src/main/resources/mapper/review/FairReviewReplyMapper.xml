@@ -24,4 +24,9 @@
          WHERE review_reply_id = #{reviewReplyId}
     </update>
 
+    <delete id="deleteByReviewId">
+        DELETE FROM fair_review_replies
+         WHERE review_id = #{reviewId}
+    </delete>
+
 </mapper>

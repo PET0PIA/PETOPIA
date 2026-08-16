@@ -10,6 +10,7 @@ import com.ms.petopia.api.review.mapper.FairReviewReportMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,8 @@ import java.time.LocalDateTime;
 @Service
 @RequiredArgsConstructor
 public class FairReviewReportService {
+
+    private static final int MAX_REASON_DETAIL_LENGTH = 500;
 
     private final FairReviewReportMapper fairReviewReportMapper;
     private final FairReviewMapper fairReviewMapper;
@@ -48,7 +51,14 @@ public class FairReviewReportService {
         report.setReasonDetail(reasonDetail);
         report.setCreatedAt(LocalDateTime.now());
 
-        fairReviewReportMapper.insert(report);
+        // 위의 existsByReviewIdAndReporterUserId 조회 이후 동시에 같은 사용자가 같은 리뷰를
+        // 중복 신고하면 여기서 unique 제약 위반이 날 수 있다(check-then-insert 경쟁 상태).
+        // ReservationService의 중복 예약 처리와 같은 패턴으로 잡아서 같은 에러 코드로 변환한다.
+        try {
+            fairReviewReportMapper.insert(report);
+        } catch (DuplicateKeyException e) {
+            throw new CommonException(ErrorCode.REVIEW_ALREADY_REPORTED, e);
+        }
         return FairReviewReportResponse.from(report);
     }
 
@@ -64,6 +74,9 @@ public class FairReviewReportService {
         if (reason == FairReviewReportReason.ETC) {
             if (reasonDetail == null || reasonDetail.isBlank()) {
                 throw new CommonException(ErrorCode.REVIEW_REPORT_DETAIL_REQUIRED);
+            }
+            if (reasonDetail.length() > MAX_REASON_DETAIL_LENGTH) {
+                throw new CommonException(ErrorCode.REVIEW_REPORT_DETAIL_TOO_LONG);
             }
             return reasonDetail;
         }

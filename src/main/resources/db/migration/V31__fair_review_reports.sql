@@ -25,5 +25,9 @@ CREATE TABLE `fair_review_reports` (
     CONSTRAINT `PK_FAIR_REVIEW_REPORTS` PRIMARY KEY (`review_report_id`),
     CONSTRAINT `UK_FAIR_REVIEW_REPORT_REVIEW_REPORTER` UNIQUE (`review_id`, `reporter_user_id`),
     CONSTRAINT `CK_FAIR_REVIEW_REPORTS_REASON` CHECK (`reason` IN ('SPAM', 'ABUSE', 'FALSE_INFO', 'ETC')),
+    CONSTRAINT `CK_FAIR_REVIEW_REPORTS_REASON_DETAIL` CHECK (
+        (`reason` = 'ETC' AND `reason_detail` IS NOT NULL) OR
+        (`reason` <> 'ETC' AND `reason_detail` IS NULL)
+    ),
     KEY `idx_fair_review_reports_review` (`review_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

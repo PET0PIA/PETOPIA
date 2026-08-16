@@ -12,6 +12,9 @@ const REASON_OPTIONS: { value: FairReviewReportReason; label: string }[] = [
   { value: "ETC", label: "기타" },
 ];
 
+// 백엔드 fair_review_reports.reason_detail 컬럼(VARCHAR(500))과 맞춘 길이 제한.
+const MAX_REASON_DETAIL_LENGTH = 500;
+
 interface ReportReviewModalProps {
   open: boolean;
   onClose: () => void;
@@ -47,6 +50,10 @@ export function ReportReviewModal({ open, onClose, fairId, reviewId, onReported 
   function handleSubmit() {
     if (reason === "ETC" && detail.trim().length === 0) {
       setError("기타 사유는 상세 내용을 입력해주세요.");
+      return;
+    }
+    if (reason === "ETC" && detail.length > MAX_REASON_DETAIL_LENGTH) {
+      setError(`상세 사유는 ${MAX_REASON_DETAIL_LENGTH}자를 초과할 수 없어요.`);
       return;
     }
     setError(null);
@@ -99,12 +106,18 @@ export function ReportReviewModal({ open, onClose, fairId, reviewId, onReported 
           </div>
 
           {reason === "ETC" && (
-            <Textarea
-              value={detail}
-              onChange={(e) => setDetail(e.target.value)}
-              placeholder="신고 사유를 자세히 적어주세요."
-              disabled={submitting}
-            />
+            <div>
+              <Textarea
+                value={detail}
+                onChange={(e) => setDetail(e.target.value)}
+                placeholder="신고 사유를 자세히 적어주세요."
+                maxLength={MAX_REASON_DETAIL_LENGTH}
+                disabled={submitting}
+              />
+              <p className="mt-1 text-right text-xs text-muted">
+                {detail.length}/{MAX_REASON_DETAIL_LENGTH}
+              </p>
+            </div>
           )}
 
           {error && <p className="text-sm font-bold text-primary-strong">{error}</p>}

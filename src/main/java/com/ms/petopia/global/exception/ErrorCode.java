@@ -184,6 +184,7 @@ public enum ErrorCode {
     REVIEW_ALREADY_REPORTED(HttpStatus.CONFLICT, "RV008", "이미 신고한 리뷰입니다."),
     REVIEW_REPLY_NOT_FOUND(HttpStatus.NOT_FOUND, "RV009", "존재하지 않는 답글이거나 해당 리뷰의 답글이 아닙니다."),
     REVIEW_REPLY_ALREADY_EXISTS(HttpStatus.CONFLICT, "RV010", "이미 답글이 등록된 리뷰입니다. 기존 답글을 수정해주세요."),
+    REVIEW_REPORT_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "RV011", "신고 상세 사유는 500자를 초과할 수 없습니다."),
 
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),

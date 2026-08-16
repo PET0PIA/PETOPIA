@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Flag, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { ApiError } from "../../api/client";
 import { getFairReviewSummary, getFairReviews, type FairReviewListItem, type FairReviewSummary } from "../../api/review";
 import { getFairReviewReply, type FairReviewReply } from "../../api/fairReviewActions";
 import { FairReviewForm } from "../../components/review/FairReviewForm";
@@ -53,13 +54,20 @@ export function FairReviews({ fairId }: { fairId: number }) {
   // 리뷰별 담당자 답글. 아직 안 불러왔으면 키가 없고, 불러왔는데 답글이 없으면 null이다.
   const [replies, setReplies] = useState<Record<number, FairReviewReply | null>>({});
 
-  // 넘겨받은 리뷰들의 답글을 병렬로 채운다. 답글이 없으면(404) null로 기록해서 "다시 안 불러옴"을 표시한다.
+  // 넘겨받은 리뷰들의 답글을 병렬로 채운다. 답글이 없으면(404) null로 기록해서 "다시 안 불러옴"을
+  // 표시한다. 그 외 오류(네트워크·서버 오류)는 기존 값을 그대로 두어 다음 재조회 때 다시 시도되게 한다 -
+  // 안 그러면 네트워크 오류로도 있던 답글이 "없음"으로 캐시돼 사라져 보일 수 있다.
   function loadReplies(reviewIds: number[]) {
     Promise.allSettled(reviewIds.map((reviewId) => getFairReviewReply(fairId, reviewId))).then((results) => {
       setReplies((prev) => {
         const next = { ...prev };
         results.forEach((result, index) => {
-          next[reviewIds[index]] = result.status === "fulfilled" ? result.value : null;
+          const id = reviewIds[index];
+          if (result.status === "fulfilled") {
+            next[id] = result.value;
+          } else if (result.reason instanceof ApiError && result.reason.status === 404) {
+            next[id] = null;
+          }
         });
         return next;
       });

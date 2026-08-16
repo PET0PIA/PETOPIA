@@ -17,4 +17,7 @@ public interface FairReviewReplyMapper {
 
     /** content·updated_at만 갱신한다. review_id·fair_id·admin_user_id는 수정 대상이 아니다. */
     int update(FairReviewReply reply);
+
+    /** 리뷰 삭제 시 이 리뷰의 답글을 함께 지운다(이 프로젝트는 FK를 쓰지 않는다). */
+    int deleteByReviewId(@Param("reviewId") Long reviewId);
 }

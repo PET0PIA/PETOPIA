@@ -10,6 +10,7 @@ import com.ms.petopia.api.review.mapper.FairReviewReplyMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,7 +49,14 @@ public class FairReviewReplyService {
         reply.setCreatedAt(now);
         reply.setUpdatedAt(now);
 
-        fairReviewReplyMapper.insert(reply);
+        // 위의 selectByReviewId 조회 이후 동시에 다른 요청이 먼저 답글을 등록하면 여기서
+        // unique 제약 위반이 날 수 있다(check-then-insert 경쟁 상태). ReservationService의
+        // 중복 예약 처리와 같은 패턴으로 잡아서 같은 에러 코드로 변환한다.
+        try {
+            fairReviewReplyMapper.insert(reply);
+        } catch (DuplicateKeyException e) {
+            throw new CommonException(ErrorCode.REVIEW_REPLY_ALREADY_EXISTS, e);
+        }
         return FairReviewReplyResponse.from(reply);
     }
 

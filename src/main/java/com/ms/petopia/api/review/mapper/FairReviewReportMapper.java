@@ -20,4 +20,7 @@ public interface FairReviewReportMapper {
             @Param("reviewId") Long reviewId,
             @Param("reporterUserId") Long reporterUserId
     );
+
+    /** 리뷰 삭제 시 이 리뷰에 달린 신고를 함께 지운다(이 프로젝트는 FK를 쓰지 않는다). */
+    int deleteByReviewId(@Param("reviewId") Long reviewId);
 }

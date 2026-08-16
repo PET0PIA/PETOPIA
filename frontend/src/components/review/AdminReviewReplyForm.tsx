@@ -22,6 +22,9 @@ interface AdminReviewReplyFormProps {
  */
 export function AdminReviewReplyForm({ fairId, reviewId }: AdminReviewReplyFormProps) {
   const [content, setContent] = useState("");
+  // 마지막으로 저장(조회)된 답글 내용. 수정 취소 시 이 값으로 되돌린다 - content는 입력 중인
+  // 값이라 취소해도 그대로 남으면 아직 저장 안 된 텍스트가 화면에 남는 문제가 있었다.
+  const [savedContent, setSavedContent] = useState("");
   const [existingUpdatedAt, setExistingUpdatedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -34,6 +37,7 @@ export function AdminReviewReplyForm({ fairId, reviewId }: AdminReviewReplyFormP
       .then((reply) => {
         if (!alive) return;
         setContent(reply.content);
+        setSavedContent(reply.content);
         setExistingUpdatedAt(reply.updatedAt);
       })
       .catch((err) => {
@@ -63,6 +67,7 @@ export function AdminReviewReplyForm({ fairId, reviewId }: AdminReviewReplyFormP
     request
       .then((reply) => {
         setContent(reply.content);
+        setSavedContent(reply.content);
         setExistingUpdatedAt(reply.updatedAt);
         setEditing(false);
       })
@@ -99,7 +104,16 @@ export function AdminReviewReplyForm({ fairId, reviewId }: AdminReviewReplyFormP
       {error && <p className="text-sm font-bold text-primary-strong">{error}</p>}
       <div className="flex justify-end gap-2">
         {existingUpdatedAt != null && (
-          <Button type="button" variant="outline" onClick={() => setEditing(false)} disabled={submitting}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setContent(savedContent);
+              setError(null);
+              setEditing(false);
+            }}
+            disabled={submitting}
+          >
             취소
           </Button>
         )}

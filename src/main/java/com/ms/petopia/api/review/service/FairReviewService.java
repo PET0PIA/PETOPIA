@@ -7,6 +7,8 @@ import com.ms.petopia.api.review.dto.FairReview;
 import com.ms.petopia.api.review.dto.FairReviewResponse;
 import com.ms.petopia.api.review.dto.UpdateFairReviewRequest;
 import com.ms.petopia.api.review.mapper.FairReviewMapper;
+import com.ms.petopia.api.review.mapper.FairReviewReplyMapper;
+import com.ms.petopia.api.review.mapper.FairReviewReportMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,8 @@ public class FairReviewService {
 
     private final FairReviewMapper fairReviewMapper;
     private final FairMapper fairMapper;
+    private final FairReviewReportMapper fairReviewReportMapper;
+    private final FairReviewReplyMapper fairReviewReplyMapper;
 
     /**
      * 리뷰를 작성한다. 로그인만 하면 누구나 작성할 수 있다 - 예매·방문 여부로 작성 자체를
@@ -75,10 +79,18 @@ public class FairReviewService {
         return FairReviewResponse.from(review);
     }
 
-    /** 리뷰를 삭제한다. 본인이 작성한 리뷰만 삭제할 수 있다. */
+    /**
+     * 리뷰를 삭제한다. 본인이 작성한 리뷰만 삭제할 수 있다.
+     *
+     * <p>이 프로젝트는 FK 제약을 쓰지 않으므로, 이 리뷰를 참조하는 신고(fair_review_reports)·
+     * 답글(fair_review_replies)을 애플리케이션 레이어에서 같은 트랜잭션 안에 먼저 지운다 -
+     * 안 그러면 리뷰만 사라지고 참조가 끊긴 신고·답글 행이 고아 데이터로 남는다.
+     */
     @Transactional
     public void delete(Long fairId, Long reviewId, Long userId) {
         getOwnedReview(fairId, reviewId, userId);
+        fairReviewReportMapper.deleteByReviewId(reviewId);
+        fairReviewReplyMapper.deleteByReviewId(reviewId);
         fairReviewMapper.deleteById(reviewId);
     }
 
