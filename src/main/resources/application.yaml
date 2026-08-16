@@ -26,6 +26,45 @@ spring:
     # SQL 안의 ${...} 를 Flyway가 치환하려다 깨지는 사고를 막는다.
     placeholder-replacement: false
 
+  # 배포·스케일인 때 SIGTERM을 받으면 진행 중인 요청·SSE를 끊지 않고 마무리한 뒤 종료한다.
+  # Spring은 이 종료 단계를 최대 20초까지 기다린다. 컨테이너 런타임이 그 전에 SIGKILL 하면
+  # 마무리가 잘려 진행 중 요청·SSE가 예고 없이 끊긴다. 그래서 종료 유예를 20초보다 길게 줘야 한다:
+  #   - EC2 docker compose(현재 시연): compose 기본 유예가 10초라 짧다 →
+  #     docker-compose.app.yaml 의 app 에 stop_grace_period: 30s 로 늘려 둔다.
+  #   - ECS(2단계): SIGTERM 후 stopTimeout(기본 30초)에 SIGKILL 하므로 그대로 안전하다.
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+# graceful shutdown 활성화 (spring.lifecycle.timeout-per-shutdown-phase 와 짝).
+server:
+  shutdown: graceful
+
+# ALB/ECS 헬스체크용 actuator. 운영에서는 관리포트를 8081로 분리한다(application-release.yaml).
+management:
+  endpoints:
+    web:
+      exposure:
+        # health 만 노출한다. env/metrics 등 나머지는 공개하지 않는다.
+        include: health
+  endpoint:
+    health:
+      probes:
+        # liveness/readiness 그룹을 켠다.
+        enabled: true
+      group:
+        # liveness = 프로세스 생존만 본다. DB/Redis 상태와 무관해야 한다.
+        # ALB 헬스체크가 이걸 봐야 DB가 흔들려도 무한 재배포 루프에 빠지지 않는다.
+        liveness:
+          include: livenessState
+        # readiness = 트래픽 받을 준비 여부. DB/Redis가 죽으면 503 을 낸다.
+        # 다만 readiness 로 실제 트래픽을 빼려면 로드밸런서가 이 엔드포인트를 물어야 한다.
+        # 현재 ALB 헬스체크는 liveness 만 본다(DB가 흔들려도 무한 재배포 루프에 안 빠지게).
+        # 그래서 지금 이 그룹은 로컬·수동 검증용이다(MySQL 내린 상태에서 readiness 503 확인).
+        # 실제 트래픽 게이팅에 쓸지는 2단계에서 ALB 타깃그룹 헬스체크 대상으로 결정한다.
+        # 자세한 배경: docs/ecs-migration-plan.md
+        readiness:
+          include: readinessState,db,redis
+
 petopia:
   waiting-room:
     # 대기열을 켤지와 통과 인원(active_limit)은 waiting_room_policies 테이블에 있다.
