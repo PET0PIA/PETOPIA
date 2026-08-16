@@ -7,6 +7,8 @@
     <select id="selectDueReservationsForUpdate" resultType="ExpiringReservationRow">
         SELECT reservation_id
              , fair_id          <!-- 실시간 통계 확인용 -->
+             , visit_date       <!-- 만료 시 정원 반납 대상 -->
+             , reservation_type <!-- ADVANCE만 정원을 점유한다 -->
           FROM reservations
          WHERE status = 'PENDING_PAYMENT'
            AND payment_expires_at IS NOT NULL

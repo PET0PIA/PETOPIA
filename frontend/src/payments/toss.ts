@@ -109,7 +109,12 @@ async function openTossCheckout(params: CheckoutParams): Promise<void> {
 export interface ReservationPaymentRequest {
   paymentId: number;
   reservationId: number;
-  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다("PAYMENT_{paymentId}"). */
+  /**
+   * 착지 페이지가 대기 슬롯을 반납할 때 쓴다. 결제 실패 착지에는 결제 정보를 조회할
+   * 근거가 없어서(예약을 되짚어야 한다) 결제창을 띄우는 쪽에서 실어 보낸다.
+   */
+  fairId?: number;
+  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다. 서버가 시도마다 발급한 값이다. */
   orderId: string;
   /** 화면에 보여준 예약금이 아니라 서버가 계산한 금액. */
   amount: number;
@@ -131,7 +136,11 @@ export async function requestReservationPayment(request: ReservationPaymentReque
 
   // 토스가 리다이렉트에 붙여주는 건 paymentKey·orderId·amount뿐이다.
   // confirm API는 paymentId로 대상을 식별하고 QR 조회에는 reservationId가 필요해서 직접 붙인다.
-  const query = `paymentId=${request.paymentId}&reservationId=${request.reservationId}`;
+  // fairId는 착지 페이지의 결제유형 분기(개설비 결제)와 겹치지 않는다 - 그쪽은
+  // reservationId가 없는 경우로 판별하므로, 예약금 결제에 fairId가 함께 실려도 무방하다.
+  const query =
+    `paymentId=${request.paymentId}&reservationId=${request.reservationId}` +
+    (request.fairId != null ? `&fairId=${request.fairId}` : "");
 
   await openTossCheckout({
     method: request.method ?? "CARD",
@@ -146,7 +155,7 @@ export async function requestReservationPayment(request: ReservationPaymentReque
 export interface VendorFeePaymentRequest {
   paymentId: number;
   applicationId: number;
-  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다("PAYMENT_{paymentId}"). */
+  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다. 서버가 시도마다 발급한 값이다. */
   orderId: string;
   /** 화면에 보여준 금액이 아니라 서버가 확정한 금액(승인 시 finalPrice). */
   amount: number;
@@ -182,7 +191,7 @@ export async function requestVendorFeePayment(request: VendorFeePaymentRequest):
 export interface FairOpeningFeePaymentRequest {
   paymentId: number;
   fairId: number;
-  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다("PAYMENT_{paymentId}"). */
+  /** 결제 생성 응답의 orderId를 가공 없이 그대로 넘긴다. 서버가 시도마다 발급한 값이다. */
   orderId: string;
   /** 화면에 보여준 개설비가 아니라 서버가 승인 시 확정해 저장해둔 금액. */
   amount: number;

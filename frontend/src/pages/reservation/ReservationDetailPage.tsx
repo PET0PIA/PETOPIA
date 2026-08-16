@@ -1,4 +1,4 @@
-import { ChevronLeft, QrCode } from "lucide-react";
+import { ChevronLeft, CreditCard, QrCode } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -9,7 +9,9 @@ import { Dialog } from "../../components/ui/Dialog";
 import { DropdownMenu } from "../../components/ui/DropdownMenu";
 import { QrCanvas } from "../../components/ui/QrCanvas";
 import { useConfirm } from "../../components/ui/useConfirm";
+import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 import { ApiError } from "../../api/client";
+import { createReservationDepositPayment } from "../../api/payment";
 import {
   cancelReservation,
   changeVisitDate,
@@ -18,33 +20,16 @@ import {
   getReservationDetail,
   type ReservationAvailabilityDate,
   type ReservationDetail,
-  type ReservationStatus,
-  type ReservationType,
 } from "../../api/reservation";
-
-// 목록 화면과 같은 상태 표시 규칙(색 규칙)을 그대로 쓴다.
-const statusLabels: Record<ReservationStatus, string> = {
-  PENDING_PAYMENT: "결제 대기",
-  CONFIRMED: "예약 확정",
-  CHECKED_IN: "입장 완료",
-  CANCELED: "취소됨",
-  EXPIRED: "만료됨",
-};
-const statusTones: Record<ReservationStatus, "primary" | "leaf" | "neutral"> = {
-  PENDING_PAYMENT: "primary",
-  CONFIRMED: "leaf",
-  CHECKED_IN: "leaf",
-  CANCELED: "neutral",
-  EXPIRED: "neutral",
-};
-const typeLabels: Record<ReservationType, string> = {
-  ADVANCE: "사전예약",
-  ONSITE_DIRECT: "현장예매",
-};
-
-function formatTime(time: string) {
-  return time.slice(0, 5);
-}
+import { useAuth } from "../../contexts/AuthContext";
+import { isTossConfigured, requestReservationPayment, type PaymentMethodOption } from "../../payments/toss";
+import {
+  formatEntryTime,
+  formatVisitDateDow,
+  reservationStatusLabels,
+  reservationStatusTones,
+  reservationTypeLabels,
+} from "./reservationDisplay";
 
 // ISO 일시(2026-08-01T14:00:00)를 "2026-08-01 14:00"으로 다듬는다.
 function formatDateTime(value: string | null) {
@@ -95,10 +80,17 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export function ReservationDetailPage() {
   const { reservationId } = useParams<{ reservationId: string }>();
   const { confirm, confirmDialog } = useConfirm();
+  // 결제 이어가기: 결제 생성 API가 예약 소유자 대조에 쓰는 userId를 여기서 넘긴다.
+  const { user } = useAuth();
 
   const [reservation, setReservation] = useState<ReservationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 결제 대기 예약을 이어서 결제하는 흐름(예매 화면의 결제 단계와 동일).
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
 
   // 입장 QR은 별도 API로 실제 토큰을 받아 그린다.
   const [qrToken, setQrToken] = useState<string | null>(null);
@@ -206,6 +198,37 @@ export function ReservationDetailPage() {
   // 12시간 마감은 플래그에 없어서, 실제 변경·취소 호출 시 R018/R019로 최종 검증된다.
   const target = reservation; // 아래 콜백에서 non-null로 쓰기 위한 지역 별칭
 
+  /**
+   * 결제 대기 예약을 이어서 결제한다. 예매 화면(TicketReservationPage)의 결제 단계와 같은 흐름 —
+   * 결제를 생성한 뒤 토스 결제창을 띄운다. 정상 흐름이면 /payments/success로 리다이렉트되므로
+   * 이 함수가 끝까지 진행되면 페이지는 곧 사라진다(그래서 성공 시 paying을 되돌리지 않는다).
+   */
+  const handleResumePayment = async () => {
+    if (paying) return;
+    if (!user) {
+      setPayError("로그인이 풀렸어요. 다시 로그인한 뒤 결제를 이어가 주세요.");
+      return;
+    }
+    setPayError(null);
+    setPaying(true);
+    try {
+      const created = await createReservationDepositPayment(id, user.userId);
+      await requestReservationPayment({
+        paymentId: created.paymentId,
+        reservationId: id,
+        // 서버가 만든 orderId·amount를 가공 없이 넘긴다 - 다르면 토스가 승인을 거절한다.
+        orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
+        amount: created.amount,
+        orderName: `${target.fairName} 예약금`,
+        method: paymentMethod,
+      });
+    } catch (err) {
+      // 결제창을 사용자가 닫은 경우도 여기로 온다.
+      setPayError(err instanceof ApiError ? err.message : "결제를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      setPaying(false);
+    }
+  };
+
   const openChangeDialog = () => {
     setSelectedNewDate(target.visitDate);
     setChangeError(null);
@@ -302,10 +325,10 @@ export function ReservationDetailPage() {
       <div className="mt-4 mb-6 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <Badge tone={statusTones[reservation.reservationStatus]}>
-              {statusLabels[reservation.reservationStatus]}
+            <Badge tone={reservationStatusTones[reservation.reservationStatus]}>
+              {reservationStatusLabels[reservation.reservationStatus]}
             </Badge>
-            <span className="text-xs font-bold text-muted">{typeLabels[reservation.reservationType]}</span>
+            <span className="text-xs font-bold text-muted">{reservationTypeLabels[reservation.reservationType]}</span>
           </div>
           <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
             {reservation.fairName}
@@ -324,6 +347,39 @@ export function ReservationDetailPage() {
         <p role="status" className="mb-4 rounded-card bg-leaf-soft px-4 py-3 text-sm font-bold text-ink">
           {cancelNotice}
         </p>
+      )}
+
+      {/* 결제 이어가기: 결제 대기 예약에서만(paymentAvailable) 뜬다. 결제를 마쳐야 예약이 확정된다. */}
+      {reservation.paymentAvailable && (
+        <Card className="mb-4 p-6">
+          <div className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
+            <CreditCard size={16} />
+            예약금 결제
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-muted">결제를 마쳐야 예약이 확정돼요.</p>
+            <p className="shrink-0 text-lg font-extrabold text-ink">{reservation.amount.toLocaleString()}원</p>
+          </div>
+          {isTossConfigured() ? (
+            <div className="mt-4">
+              <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+              <div className="mt-4 flex justify-end">
+                <Button disabled={paying} onClick={handleResumePayment}>
+                  {paying ? "결제창을 여는 중…" : "결제 계속하기"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-8 text-center text-sm text-muted">
+              <p className="font-bold text-ink">결제 설정이 없어요</p>
+              <p>결제 클라이언트 키가 주입되지 않았어요. 관리자에게 문의해 주세요.</p>
+            </div>
+          )}
+          {payError && <p className="mt-3 text-sm font-bold text-primary-strong">{payError}</p>}
+          <p className="mt-3 text-xs leading-5 text-muted">
+            제한시각까지 결제하지 않으면 예약이 자동으로 만료돼요.
+          </p>
+        </Card>
       )}
 
       {/* 입장 QR */}
@@ -354,11 +410,11 @@ export function ReservationDetailPage() {
       <Card className="p-6">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
           <DetailRow label="예약번호" value={reservation.reservationNo} />
-          <DetailRow label="예약 유형" value={typeLabels[reservation.reservationType]} />
-          <DetailRow label="방문일" value={reservation.visitDate} />
+          <DetailRow label="예약 유형" value={reservationTypeLabels[reservation.reservationType]} />
+          <DetailRow label="방문일" value={formatVisitDateDow(reservation.visitDate)} />
           <DetailRow
             label="입장 시간"
-            value={`${formatTime(reservation.entryStartTime)} ~ ${formatTime(reservation.entryEndTime)}`}
+            value={`${formatEntryTime(reservation.entryStartTime)} ~ ${formatEntryTime(reservation.entryEndTime)}`}
           />
           <DetailRow
             label="결제 금액"
@@ -394,9 +450,9 @@ export function ReservationDetailPage() {
                       selected ? "border-primary-strong bg-primary-soft" : "border-line bg-card hover:bg-page"
                     } ${soldOut ? "cursor-not-allowed opacity-50 hover:bg-card" : ""}`}
                   >
-                    <p className="font-bold text-ink">{date.visitDate}</p>
+                    <p className="font-bold text-ink">{formatVisitDateDow(date.visitDate)}</p>
                     <p className="mt-1 text-xs text-muted">
-                      {formatTime(date.entryStartTime)} ~ {formatTime(date.entryEndTime)}
+                      {formatEntryTime(date.entryStartTime)} ~ {formatEntryTime(date.entryEndTime)}
                     </p>
                     <p className="mt-1 text-xs font-bold">
                       {soldOut ? (

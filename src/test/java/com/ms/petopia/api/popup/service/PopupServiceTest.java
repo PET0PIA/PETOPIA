@@ -153,6 +153,36 @@ class PopupServiceTest {
         }
 
         @Test
+        @DisplayName("공백만 입력한 필드는 삭제 신호로 보고 NULL로 반영한다")
+        void clearsFieldWhenBlank() {
+            PopupUpdateRequest request = new PopupUpdateRequest();
+            request.setBgColor("   ");
+
+            given(popupMapper.selectById(1L))
+                    .willReturn(createPopup(1L), createPopup(1L));
+
+            popupService.update(1L, request);
+
+            ArgumentCaptor<Popup> captor = ArgumentCaptor.forClass(Popup.class);
+            verify(popupMapper).update(captor.capture());
+            assertThat(captor.getValue().getBgColor()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("이미지와 본문을 모두 비우면 예외를 던지고 UPDATE를 호출하지 않는다")
+        void throwsWhenClearingBothImageAndSubtitle() {
+            PopupUpdateRequest request = new PopupUpdateRequest();
+            request.setImageKey("   ");
+
+            given(popupMapper.selectById(1L)).willReturn(createPopup(1L));
+
+            assertThatThrownBy(() -> popupService.update(1L, request))
+                    .isInstanceOf(CommonException.class);
+
+            verify(popupMapper, never()).update(any());
+        }
+
+        @Test
         @DisplayName("팝업이 없으면 예외를 던진다")
         void throwsWhenNotFound() {
             given(popupMapper.selectById(999L)).willReturn(null);

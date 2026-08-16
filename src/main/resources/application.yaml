@@ -27,6 +27,21 @@ spring:
     placeholder-replacement: false
 
 petopia:
+  waiting-room:
+    # 대기열을 켤지와 통과 인원(active_limit)은 waiting_room_policies 테이블에 있다.
+    # 오픈 직후 지표를 보며 조정해야 하는 값이라 재기동 없이 바꿀 수 있어야 한다.
+    # 관리자 API: PUT /api/v1/admin/fairs/{fairId}/waiting-room-policy
+    #
+    # 여기 남은 값은 행사별로 다를 이유가 없는 것들이다.
+    #
+    # 활성 슬롯 수명. 결제 대기 시간(10분)보다 길어야 예약부터 결제까지 슬롯 하나로 끝난다.
+    # 줄이면 결제 중인 사용자가 슬롯을 잃으므로 함부로 낮추지 않는다.
+    active-ttl: ${WAITING_ROOM_ACTIVE_TTL:12m}
+    # 줄을 선 채 방치된 토큰을 정리하는 기준.
+    ticket-ttl: ${WAITING_ROOM_TICKET_TTL:30m}
+    # 정책을 아직 만들지 않은 행사의 관리자 화면 초기값.
+    default-active-limit: ${WAITING_ROOM_DEFAULT_ACTIVE_LIMIT:1000}
+
   storage:
     # 환경에 따라 달라지지 않는 항목만 여기 둔다.
     # 환경마다 다른 bucket / public-base-url 은 application-local.yaml 과
@@ -66,7 +81,7 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
 
 anthropic:
-  api-key: ${ANTHROPIC_API_KEY}
+  api-key: ${ANTHROPIC_API_KEY:}
 
 oauth:
   google:

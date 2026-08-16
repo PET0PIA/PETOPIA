@@ -134,6 +134,38 @@ class AdminPopupControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // POST /api/admin/popups - imageKey, subtitle 둘 다 없음 -> 400
+    @Test
+    void returns400WhenNoImageAndNoSubtitle() throws Exception {
+        mockMvc.perform(post("/api/admin/popups")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "신규 팝업",
+                                    "linkTarget": "SELF"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    // POST /api/admin/popups - linkLabel만 있고 linkUrl 없음 -> 400
+    @Test
+    void returns400WhenLinkLabelWithoutLinkUrl() throws Exception {
+        mockMvc.perform(post("/api/admin/popups")
+                        .with(authenticatedAs(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "title": "신규 팝업",
+                                    "imageKey": "uploads/image/new.jpg",
+                                    "linkTarget": "SELF",
+                                    "linkLabel": "자세히 보기"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
     // PUT /api/admin/popups/{popupId} - 정상 수정
     @Test
     void updatesPopup() throws Exception {

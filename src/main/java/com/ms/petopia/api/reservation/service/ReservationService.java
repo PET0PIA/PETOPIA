@@ -5,6 +5,7 @@ import com.ms.petopia.api.reservation.dto.CreateReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCreationContext;
 import com.ms.petopia.api.reservation.dto.ReservationInsertRow;
 import com.ms.petopia.api.reservation.dto.ReservationUserSnapshot;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.api.reservation.model.ReservationType;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent;
@@ -25,9 +26,10 @@ public class ReservationService {
 
     private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final String CONFIRMED = "CONFIRMED";
-    private static final long PAYMENT_WAIT_MINUTES = 10;
+    private static final long PAYMENT_WAIT_MINUTES = ReservationPaymentPolicy.PAYMENT_WAIT_MINUTES;
 
     private final ReservationMapper reservationMapper;
+    private final ReservationCapacityMapper capacityMapper;
     private final ReservationNumberGenerator reservationNumberGenerator;
     private final ReservationTimeProvider timeProvider;
     private final EntryQrService entryQrService;
@@ -40,6 +42,11 @@ public class ReservationService {
      *
      * <p>유료 예약은 결제 대기 상태까지만 만든다. 결제 준비·승인과 QR 발급은
      * 결제/입장 도메인의 후속 단계에서 처리한다.
+     *
+     * <p><b>정원 판정</b>은 {@link ReservationCapacityMapper#occupy}의 조건부 UPDATE가 단독으로
+     * 책임진다. 검증을 전부 마친 뒤 마지막에 호출하는 순서가 중요하다 — 점유에 성공한 뒤 검증에서
+     * 떨어지면 그 사이 다른 사람이 못 사는 좌석이 생기기 때문이다. 트랜잭션이 어떤 이유로든
+     * 롤백되면 점유도 함께 롤백되므로 별도 보상 처리는 필요 없다.
      */
     @Transactional
     public CreateReservationResponse create(
@@ -50,7 +57,7 @@ public class ReservationService {
         validateIdentifiersAndRequest(fairId, userId, request);
 
         ReservationCreationContext context =
-                reservationMapper.selectCreationContextForUpdate(fairId, request.visitDate());
+                reservationMapper.selectCreationContext(fairId, request.visitDate());
         if (context == null) {
             if (!reservationMapper.existsFair(fairId)) {
                 throw new CommonException(ErrorCode.RESERVATION_FAIR_NOT_FOUND);
@@ -61,13 +68,8 @@ public class ReservationService {
         LocalDate today = timeProvider.today();
         validateFair(context, today);
 
-        if (reservationMapper.existsActiveReservation(fairId, userId)) {
+        if (reservationMapper.existsActiveReservation(fairId, userId, request.visitDate())) {
             throw new CommonException(ErrorCode.DUPLICATED_RESERVATION);
-        }
-
-        int occupied = reservationMapper.countCapacityOccupyingReservations(fairId, request.visitDate());
-        if (occupied >= context.getCapacity()) {
-            throw new CommonException(ErrorCode.RESERVATION_SOLD_OUT);
         }
 
         ReservationUserSnapshot user = reservationMapper.selectUserSnapshot(userId);
@@ -75,6 +77,15 @@ public class ReservationService {
 
         boolean paymentRequired = context.getReservationFee() > 0;
         validateTerms(paymentRequired, request);
+
+        // 정원 판정. 여기부터 커밋까지가 임계구간이다 - 조건부 UPDATE가 잡는 fair_dates 행
+        // 잠금 하나뿐이고, 위의 검증들은 전부 잠금 밖에서 끝났다.
+        //
+        // 미리 세어보고 분기하지 않는다. 조회와 차감 사이에 창이 생겨 정원이 초과된다.
+        // 영향 행수 0이 곧 매진이다.
+        if (capacityMapper.occupy(fairId, request.visitDate()) != 1) {
+            throw new CommonException(ErrorCode.RESERVATION_SOLD_OUT);
+        }
 
         LocalDateTime now = timeProvider.now();
         String status = paymentRequired ? PENDING_PAYMENT : CONFIRMED;

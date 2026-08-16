@@ -16,6 +16,7 @@ import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
 import com.ms.petopia.api.reservation.mapper.ReservationCancellationMapper;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -55,6 +56,8 @@ class ReservationCancellationServiceTest {
 
     @Mock
     private ReservationCancellationMapper cancellationMapper;
+    @Mock
+    private ReservationCapacityMapper capacityMapper;
     @Mock
     private ReservationTimeProvider timeProvider;
     @Mock

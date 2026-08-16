@@ -1,4 +1,4 @@
-import { AlertCircle, AlertTriangle, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
@@ -17,6 +17,7 @@ import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
 import { Table } from "../../components/ui/Table";
 import { useConfirm } from "../../components/ui/useConfirm";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 
 interface FairDateFormState {
   operationDate: string;
@@ -34,17 +35,12 @@ function formatTime(time: string) {
 export function FairDateManagementPage() {
   const { confirm, confirmDialog } = useConfirm();
 
-  // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [fairId, setFairId] = useState<number | null>(null);
+  // 콘솔 상단 바의 "관리 행사" 선택기가 현재 행사를 정한다(페이지 이동/새로고침에도 유지).
+  const { fairId } = useFairSelector();
 
   const [fairDates, setFairDates] = useState<FairDate[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // fairId가 이전과 같은 값이면 useState 갱신이 리렌더를 안 일으켜서 아래 조회 effect가
-  // 다시 안 돈다. "불러오기"를 다시 눌렀을 때(같은 행사 ID라도) 최신 상태를 다시 받아오도록
-  // 이 값을 강제로 바꿔 effect를 재실행시킨다.
-  const [reloadTick, setReloadTick] = useState(0);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFairDate, setEditingFairDate] = useState<FairDate | null>(null);
@@ -55,6 +51,8 @@ export function FairDateManagementPage() {
   useEffect(() => {
     if (fairId === null) return;
     let ignore = false;
+    setLoading(true);
+    setLoadError(null);
 
     getFairDates(fairId)
       .then((data) => { if (!ignore) setFairDates(data); })
@@ -69,23 +67,7 @@ export function FairDateManagementPage() {
       .finally(() => { if (!ignore) setLoading(false); });
 
     return () => { ignore = true; };
-  }, [fairId, reloadTick]);
-
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-    setLoading(true);
-    setLoadError(null);
-    if (parsed === fairId) {
-      setReloadTick((tick) => tick + 1);
-    } else {
-      setFairId(parsed);
-    }
-  }
+  }, [fairId]);
 
   function openCreateDialog() {
     setEditingFairDate(null);
@@ -201,21 +183,6 @@ export function FairDateManagementPage() {
         action={fairId !== null ? <Button onClick={openCreateDialog}><Plus size={16} />운영일 추가</Button> : undefined}
       />
 
-      <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">관리할 행사 ID</label>
-          <Input
-            id="fairIdInput"
-            type="number"
-            min={1}
-            value={fairIdInput}
-            onChange={(event) => setFairIdInput(event.target.value)}
-            placeholder="예: 1"
-          />
-        </div>
-        <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
-      </form>
-
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -224,7 +191,7 @@ export function FairDateManagementPage() {
       )}
 
       {fairId === null && (
-        <EmptyState title="행사 ID를 먼저 입력해 주세요." description="관리할 행사의 ID를 입력하고 불러오기를 누르면 운영일 목록이 표시돼요." />
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 운영일 목록이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       )}
 
       {fairId !== null && loading && (

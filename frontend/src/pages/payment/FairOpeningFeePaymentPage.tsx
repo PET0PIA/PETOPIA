@@ -127,7 +127,7 @@ export function FairOpeningFeePaymentPage() {
       await requestFairOpeningFeePayment({
         paymentId: created.paymentId,
         fairId: id,
-        orderId: created.orderId ?? `PAYMENT_${created.paymentId}`,
+        orderId: created.orderId,
         amount: created.amount,
         orderName: `${summary!.name} 개설비`,
         method: paymentMethod,

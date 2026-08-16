@@ -1,5 +1,5 @@
-import { AlertCircle, Ban, Search } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { AlertCircle, Ban } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import { createFairCancelRequest, getFairCancelRequests, type FairCancelRequestItem } from "../../api/fair";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -7,10 +7,10 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { Input } from "../../components/ui/Input";
 import { Table } from "../../components/ui/Table";
 import { Textarea } from "../../components/ui/Textarea";
 import { useConfirm } from "../../components/ui/useConfirm";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 
 const statusLabels: Record<string, string> = {
   PENDING: "심사 대기",
@@ -31,9 +31,8 @@ function formatDateTime(value: string | null) {
 export function FairCancelRequestPage() {
   const { confirm, confirmDialog } = useConfirm();
 
-  // TODO 관리자 세션에 현재 담당 행사(fairId)가 연결되면 이 입력을 없애고 세션 값을 바로 쓴다.
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [fairId, setFairId] = useState<number | null>(null);
+  // 콘솔 상단 바의 "관리 행사" 선택기가 현재 행사를 정한다.
+  const { fairId } = useFairSelector();
 
   const [requests, setRequests] = useState<FairCancelRequestItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,35 +42,26 @@ export function FairCancelRequestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // 폼 제출 때마다 직접 호출한다(useEffect(fairId)에 맡기면, 같은 행사 ID를 다시
-  // 조회할 때 fairId 상태가 바뀌지 않아 effect가 재실행되지 않고 로딩 상태만 true로
-  // 남는 문제가 있었다).
-  async function loadRequests(targetFairId: number) {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await getFairCancelRequests(targetFairId);
-      setRequests(data);
-    } catch (error) {
-      setRequests([]);
-      setLoadError(error instanceof ApiError ? error.message : "취소 신청 이력을 불러오지 못했어요.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
+  // 상단 선택기의 행사가 바뀌면 그 행사의 취소 신청 이력을 다시 불러오고 작성 폼을 초기화한다.
+  useEffect(() => {
     setSubmitError(null);
     setReason("");
-    setFairId(parsed);
-    void loadRequests(parsed);
-  }
+    if (fairId === null) return;
+    const currentFairId = fairId;
+    let ignore = false;
+    setLoading(true);
+    setLoadError(null);
+    getFairCancelRequests(currentFairId)
+      .then((data) => { if (!ignore) setRequests(data); })
+      .catch((error) => {
+        if (!ignore) {
+          setRequests([]);
+          setLoadError(error instanceof ApiError ? error.message : "취소 신청 이력을 불러오지 못했어요.");
+        }
+      })
+      .finally(() => { if (!ignore) setLoading(false); });
+    return () => { ignore = true; };
+  }, [fairId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -111,21 +101,6 @@ export function FairCancelRequestPage() {
         description="담당 행사를 더 이상 진행할 수 없을 때 취소를 신청해요. 신청은 SUPER_ADMIN 검토 후 승인되면 확정돼요."
       />
 
-      <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">담당 행사 ID</label>
-          <Input
-            id="fairIdInput"
-            type="number"
-            min={1}
-            value={fairIdInput}
-            onChange={(event) => setFairIdInput(event.target.value)}
-            placeholder="예: 1"
-          />
-        </div>
-        <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
-      </form>
-
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
@@ -134,7 +109,7 @@ export function FairCancelRequestPage() {
       )}
 
       {fairId === null && (
-        <EmptyState title="행사 ID를 먼저 입력해 주세요." description="취소를 신청할 행사의 ID를 입력하고 불러오기를 누르면 신청 이력이 표시돼요." />
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 취소 신청 이력이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       )}
 
       {fairId !== null && loading && (

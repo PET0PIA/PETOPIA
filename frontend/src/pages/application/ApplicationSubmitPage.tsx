@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle2, Send } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
 import { SectionHeader } from "../../components/common/SectionHeader";
@@ -205,17 +205,10 @@ export function ApplicationSubmitPage() {
     );
   }
 
+  // 로그인은 됐지만 참가할 사업자가 없으면 등록 화면으로 보낸다. from을 함께 넘겨,
+  // 사업자 등록을 마치면 BusinessRegisterPage가 이 신청 화면으로 되돌려보낸다.
   if (businesses.length === 0) {
-    return (
-      <PageContainer className="py-10">
-        <EmptyState
-          title="등록된 사업자가 없어요"
-          description="참가 신청을 하려면 사업자 등록이 먼저 필요해요."
-          actionTo="/businesses/new"
-          actionLabel="사업자 등록하기"
-        />
-      </PageContainer>
-    );
+    return <Navigate to="/businesses/new" replace state={{ from: `/fairs/${fairId}/apply` }} />;
   }
 
   if (result) {

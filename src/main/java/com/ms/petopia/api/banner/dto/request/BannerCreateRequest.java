@@ -50,16 +50,21 @@ public class BannerCreateRequest {
     @NotNull
     private Integer sortOrder;
 
+    @NotNull
     private LocalDateTime startedAt;
+
+    @NotNull
     private LocalDateTime endedAt;
 
     @AssertTrue(message = "linkLabel을 설정하려면 linkUrl도 함께 설정해야 합니다.")
     public boolean isLinkValid() {
-        return linkLabel == null || linkUrl != null;
+        return linkLabel == null || linkLabel.isBlank() || (linkUrl != null && !linkUrl.isBlank());
     }
 
     @AssertTrue(message = "link2Label과 link2Url은 둘 다 설정하거나 둘 다 비워야 합니다.")
     public boolean isLink2Valid() {
-        return (link2Label == null) == (link2Url == null);
+        boolean hasLabel = link2Label != null && !link2Label.isBlank();
+        boolean hasUrl = link2Url != null && !link2Url.isBlank();
+        return hasLabel == hasUrl;
     }
 }

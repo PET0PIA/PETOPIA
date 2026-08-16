@@ -34,6 +34,8 @@ public class PaymentRow {
     //멱득성-같은요청을 여러번 보내도 결과가 딱 한 번 처리한 것과 같아야하는
     // 그걸 구현하는 실제컬럼
     private String idempotencyKey;
+    /** 토스 승인용 주문번호. 결제 시도마다 새로 발급해 저장한다. */
+    private String orderId;
     private String tossPaymentKey;
     private LocalDateTime updatedAt;
 }

@@ -12,8 +12,7 @@ import { ApiError } from "../../api/client";
 import { getRecruitNotice, upsertRecruitNotice, type RecruitNoticeUpsertRequest } from "../../api/recruitNotice";
 import { useAuth } from "../../contexts/AuthContext";
 import { EmptyState } from "../../components/common/EmptyState";
-import { FairSelectorBar } from "../../components/fair-admin/FairSelectorBar";
-import { useFairSelector } from "../../hooks/useFairSelector";
+import { useFairSelector } from "../../contexts/FairSelectorContext";
 
 interface FormState {
   title: string;
@@ -45,9 +44,9 @@ export function RecruitNoticeFormPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // 사이드바(운영 메뉴)에서 fairId 없이 들어온 경우, 담당 행사 드롭다운으로 고른다
+  // 사이드바(운영 메뉴)에서 fairId 없이 들어온 경우, 콘솔 상단 바의 "관리 행사" 선택기가 정한 행사를 쓴다
   // (다른 fair-admin 페이지와 동일한 useFairSelector 패턴).
-  const { fairId: selectedFairId, setFairId: setSelectedFairId, selectableFairs } = useFairSelector();
+  const { fairId: selectedFairId } = useFairSelector();
 
   const fairId = fairIdParam ?? (selectedFairId !== null ? String(selectedFairId) : undefined);
 
@@ -147,11 +146,11 @@ export function RecruitNoticeFormPage() {
       <PageHeader
         eyebrow="행사 관리자"
         title="참가업체 모집 공고 작성/수정"
-        description={fairIdParam ? "*는 필수 입력이에요." : "관리할 행사를 선택하면 아래에 작성 화면이 나와요."}
+        description={fairId ? "*는 필수 입력이에요." : "상단 바에서 관리할 행사를 선택해 주세요."}
       />
 
-      {!fairIdParam && (
-        <FairSelectorBar selectableFairs={selectableFairs} fairId={selectedFairId} onFairIdChange={setSelectedFairId} />
+      {!fairId && (
+        <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 모집 공고 작성 화면이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       )}
 
       {fairId && loading && <p className="text-sm text-muted">불러오는 중...</p>}
