@@ -1,6 +1,5 @@
 package com.ms.petopia.api.business.service;
 
-import com.ms.petopia.api.auth.service.UserRoleService;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
