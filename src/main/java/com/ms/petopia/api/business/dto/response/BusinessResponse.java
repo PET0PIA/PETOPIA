@@ -23,6 +23,8 @@ public class BusinessResponse {
     private String phone;
     private String website;
     private String verifyStatus;
+    private String approvalStatus;
+    private String rejectReason;
     private LocalDateTime createdAt;
 
     // Business 도메인 객체를 API 응답용 BusinessResponse로 변환
@@ -39,6 +41,8 @@ public class BusinessResponse {
                 .website(business.getWebsite())
                 // enum 타입이지만 응답 DTO에서는 String으로 내려줘야 하므로 .name()으로 변환
                 .verifyStatus(business.getVerifyStatus().name())
+                .approvalStatus(business.getApprovalStatus().name())
+                .rejectReason(business.getRejectReason())
                 .createdAt(business.getCreatedAt())
                 .build();
 
