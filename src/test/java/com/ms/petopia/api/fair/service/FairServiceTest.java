@@ -679,7 +679,7 @@ class FairServiceTest {
         given(fairMapper.updateReviewResult(any())).willReturn(1);
 
         ReviewFairApplicationResponse response = fairService.review(
-                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null)
+                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null)
         );
 
         assertThat(response.fairId()).isEqualTo(FAIR_ID);
@@ -720,7 +720,7 @@ class FairServiceTest {
         given(fairMapper.updateReviewResult(any())).willReturn(1);
 
         ReviewFairApplicationResponse response = fairService.review(
-                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  서류 미비  ")
+                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  서류 미비  ", null)
         );
 
         assertThat(response.status()).isEqualTo(FairStatus.REJECTED.name());
@@ -740,7 +740,7 @@ class FairServiceTest {
     @Test
     @DisplayName("반려인데 사유가 없으면 FAIR_REJECT_REASON_REQUIRED를 던지고 갱신하지 않는다")
     void review_반려사유없으면_예외를_던진다() {
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  ");
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  ", null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_REJECT_REASON_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
@@ -749,7 +749,7 @@ class FairServiceTest {
     @Test
     @DisplayName("승인인데 개설비 금액이 없으면 FAIR_OPENING_FEE_AMOUNT_REQUIRED를 던지고 갱신하지 않는다")
     void review_승인시금액없으면_예외를_던진다() {
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, null, null);
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, null, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
@@ -758,7 +758,7 @@ class FairServiceTest {
     @Test
     @DisplayName("승인인데 개설비 금액이 0 이하이면 FAIR_OPENING_FEE_AMOUNT_REQUIRED를 던지고 갱신하지 않는다")
     void review_승인시금액이0이하이면_예외를_던진다() {
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 0L, null);
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 0L, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
@@ -770,7 +770,7 @@ class FairServiceTest {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
         given(fairMapper.updateReviewResult(any())).willReturn(0);
 
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null);
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_NOT_PENDING_REVIEW);
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
     }
@@ -780,7 +780,7 @@ class FairServiceTest {
     void review_존재하지않으면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(null);
 
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null);
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_NOT_FOUND);
     }
 
@@ -788,11 +788,11 @@ class FairServiceTest {
     @DisplayName("검토자 ID나 decision이 없으면 INVALID_INPUT_VALUE를 던진다")
     void review_검토자나결정없으면_예외를_던진다() {
         assertErrorCode(
-                () -> fairService.review(FAIR_ID, null, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null)),
+                () -> fairService.review(FAIR_ID, null, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null)),
                 ErrorCode.INVALID_INPUT_VALUE
         );
         assertErrorCode(
-                () -> fairService.review(FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(null, null, null)),
+                () -> fairService.review(FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(null, null, null, null)),
                 ErrorCode.INVALID_INPUT_VALUE
         );
         verify(fairMapper, never()).updateReviewResult(any());
