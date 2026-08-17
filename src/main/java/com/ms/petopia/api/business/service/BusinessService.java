@@ -1,8 +1,11 @@
 package com.ms.petopia.api.business.service;
 
+import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.auth.service.UserRoleService;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
+import com.ms.petopia.api.business.dto.request.BusinessRejectRequest;
+import com.ms.petopia.api.business.dto.request.BusinessRevokeRequest;
 import com.ms.petopia.api.business.dto.response.BusinessResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewDetailResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewResultResponse;
@@ -28,6 +31,7 @@ public class BusinessService {
     private final BusinessRegistrar businessRegistrar;
     private final StorageService storageService;
     private final UserRoleService userRoleService;
+    private final ApplicationService applicationService;
 
     // 사업자 등록(국세청 진위확인 포함)
     public BusinessResponse registerBusiness(Long ownerId, BusinessRegisterRequest request) {
@@ -149,6 +153,79 @@ public class BusinessService {
         return BusinessReviewResultResponse.builder()
                 .businessId(businessId)
                 .approvalStatus(Business.ApprovalStatus.APPROVED.name())
+                .reviewedAt(reviewedAt)
+                .build();
+
+    }
+
+    // 사업자 반려 (관리자용)
+    @Transactional
+    public BusinessReviewResultResponse rejectBusiness(Long reviewerId, Long businessId,
+                                                       BusinessRejectRequest request) {
+
+        Business business = businessMapper.selectByIdForReview(businessId);
+
+        if (business == null) {
+            throw new CommonException(ErrorCode.BUSINESS_NOT_FOUND);
+        }
+
+        // 반려 사유 필수 확인 - DTO에 @NotBlank 대신 여기서 직접 검증(구체적인 에러코드 반환 위해)
+        if (request.getRejectReason() == null || request.getRejectReason().isBlank()) {
+            throw new CommonException(ErrorCode.BUSINESS_REJECT_REASON_REQUIRED);
+        }
+
+        LocalDateTime reviewedAt = LocalDateTime.now();
+
+        int updatedRows = businessMapper.updateApprovalRejected(businessId, reviewerId, request.getRejectReason(), reviewedAt);
+
+        if (updatedRows == 0) {
+            throw new CommonException(ErrorCode.BUSINESS_NOT_PENDING_REVIEW);
+        }
+
+        return BusinessReviewResultResponse.builder()
+                .businessId(businessId)
+                .approvalStatus(Business.ApprovalStatus.REJECTED.name())
+                .rejectReason(request.getRejectReason())
+                .reviewedAt(reviewedAt)
+                .build();
+
+    }
+
+    // 승인된 사업자 취소 처리 (관리자용, 예: 나중에 조작 서류로 밝혀진 경우)
+    @Transactional
+    public BusinessReviewResultResponse revokeBusiness(Long reviewerId, Long businessId, BusinessRevokeRequest request) {
+
+        Business business = businessMapper.selectByIdForReview(businessId);
+
+        if (business == null) {
+            throw new CommonException(ErrorCode.BUSINESS_NOT_FOUND);
+        }
+
+        if (request.getRevokeReason() == null || request.getRevokeReason().isBlank()) {
+            throw new CommonException(ErrorCode.BUSINESS_REVOKE_REASON_REQUIRED);
+        }
+
+        LocalDateTime reviewedAt = LocalDateTime.now();
+
+        // WHERE approval_status='APPROVED' 조건에 안 걸리면(이미 취소됐거나 애초에 승인 안 됨) 0행 -> 예외
+        int updatedRows = businessMapper.updateApprovalRevoked(businessId, reviewerId, request.getRevokeReason(), reviewedAt);
+
+        if (updatedRows == 0) {
+            throw new CommonException(ErrorCode.BUSINESS_NOT_APPROVED);
+        }
+
+        // 이 사업자로 진행 중이던 신청서 전부 취소(+환불)
+        applicationService.cancelApplicationsForRevokedBusiness(businessId, reviewerId);
+
+        // 이 소유자에게 남은 승인된 사업자가 하나도 없으면 VENDOR 권한 회수(다시 USER로)
+        if (!businessMapper.existsApprovedBusinessForOwner(business.getOwnerId())) {
+            userRoleService.revokeVendorRole(business.getOwnerId());
+        }
+
+        return BusinessReviewResultResponse.builder()
+                .businessId(businessId)
+                .approvalStatus(Business.ApprovalStatus.REVOKED.name())
+                .rejectReason(request.getRevokeReason())
                 .reviewedAt(reviewedAt)
                 .build();
 

@@ -104,5 +104,21 @@
             SELECT 1 FROM business WHERE owner_id = #{ownerId} AND approval_status = 'APPROVED'
         )
     </select>
+
+    <!-- 사업자 반려 -->
+    <update id="updateApprovalRejected">
+        UPDATE business
+        SET approval_status = 'REJECTED', reject_reason = #{rejectReason},
+            reviewed_by = #{reviewerId}, reviewed_at = #{reviewedAt}
+        WHERE business_id = #{businessId} AND approval_status = 'PENDING_REVIEW'
+    </update>
+
+    <!-- 승인된 사업자 취소 처리. APPROVED일 때만 반영되는 조건부 UPDATE -->
+    <update id="updateApprovalRevoked">
+        UPDATE business
+        SET approval_status = 'REVOKED', reject_reason = #{revokeReason},
+            reviewed_by = #{reviewerId}, reviewed_at = #{reviewedAt}
+        WHERE business_id = #{businessId} AND approval_status = 'APPROVED'
+    </update>
     
 </mapper>

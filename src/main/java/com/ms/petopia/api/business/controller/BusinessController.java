@@ -2,6 +2,8 @@ package com.ms.petopia.api.business.controller;
 
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
+import com.ms.petopia.api.business.dto.request.BusinessRejectRequest;
+import com.ms.petopia.api.business.dto.request.BusinessRevokeRequest;
 import com.ms.petopia.api.business.dto.response.BusinessResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewDetailResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewResultResponse;
@@ -92,6 +94,32 @@ public class BusinessController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(businessService.approveBusiness(reviewerId, businessId)));
+
+    }
+
+    // 사업자 반려 (관리자용)
+    @PatchMapping("/{businessId}/reject")
+    public ResponseEntity<ApiResponse<BusinessReviewResultResponse>> rejectBusiness(
+            @AuthenticationPrincipal Long reviewerId,
+            @PathVariable Long businessId,
+            @RequestBody BusinessRejectRequest request
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(businessService.rejectBusiness(reviewerId, businessId, request)));
+
+    }
+
+    // 승인된 사업자 취소 처리 (관리자용, 예: 나중에 조작 서류로 밝혀진 경우)
+    @PatchMapping("/{businessId}/revoke")
+    public ResponseEntity<ApiResponse<BusinessReviewResultResponse>> revokeBusiness(
+            @AuthenticationPrincipal Long reviewerId,
+            @PathVariable Long businessId,
+            @RequestBody BusinessRevokeRequest request
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(businessService.revokeBusiness(reviewerId, businessId, request)));
 
     }
 

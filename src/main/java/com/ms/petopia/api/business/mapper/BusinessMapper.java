@@ -46,4 +46,16 @@ public interface BusinessMapper {
     // 이 소유자가 이미 승인된 사업자를 하나라도 갖고 있는지 (VENDOR 재부여 방지용)
     boolean existsApprovedBusinessForOwner(@Param("ownerId") Long ownerId);
 
+    // 사업자 반려. PENDING_REVIEW일 때만 반영되는 조건부 UPDATE
+    int updateApprovalRejected(@Param("businessId") Long businessId,
+                               @Param("reviewerId") Long reviewerId,
+                               @Param("rejectReason") String rejectReason,
+                               @Param("reviewedAt") LocalDateTime reviewedAt);
+
+    // 승인된 사업자 취소 처리. APPROVED일 때만 반영되는 조건부 UPDATE
+    int updateApprovalRevoked(@Param("businessId") Long businessId,
+                              @Param("reviewerId") Long reviewerId,
+                              @Param("revokeReason") String revokeReason,
+                              @Param("reviewedAt") LocalDateTime reviewedAt);
+
 }

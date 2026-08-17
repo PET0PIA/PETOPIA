@@ -830,11 +830,15 @@ public class ApplicationService {
         // 이미 CONFIRMED면 재시도로 온 중복 통지일 가능성 — 같은 결제가 이미 반영된 거라면
         // 재처리하지 않고 조용히 성공 처리한다(멱등). 다른 결제라면 이상 상황이라 막는다.
         if (application.getStatus() == Application.Status.CONFIRMED) {
+
             Long existingPaymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
+
             if (paymentId.equals(existingPaymentId)) {
                 return;
             }
+
             throw new CommonException(ErrorCode.APPLICATION_PAYMENT_EVENT_CONFLICT);
+
         }
 
         if (application.getStatus() != Application.Status.PAYMENT_PENDING) {
@@ -898,6 +902,60 @@ public class ApplicationService {
                 notifyApplicationEvent(recipientUserId, type, title, body);
             }
         });
+
+    }
+
+    /*
+     * 사업자가 취소 처리(REVOKED)됐을 때, 그 사업자로 넣은 진행 중인 신청서를 전부 취소하고
+     * 결제가 있었으면 환불한다. cancelApplicationForCanceledFair와 달리 이 흐름을 대신
+     * 처리해주는 배치 잡이 따로 없어서, 환불까지 여기서 직접 호출한다(approveCancelRequest와 동일한 방식).
+     *
+     * 사유는 VENDOR_CANCEL로 기록되지만, 실제로는 벤더 본인이 아니라 관리자가 사업자를
+     * 취소 처리해서 강제로 취소되는 것이라 이름이 정확히 맞진 않는다.
+     */
+    @Transactional
+    public void cancelApplicationsForRevokedBusiness(Long businessId, Long adminUserId) {
+
+        List<Application> applications = applicationMapper.selectActiveApplicationsByBusinessId(businessId);
+
+        for (Application application : applications) {
+
+            Long applicationId = application.getApplicationId();
+            boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
+
+            // 락 순서를 approveCancelRequest/cancelApplicationForCanceledFair와 통일해서 교착상태 방지
+            applicationMapper.lockPendingCancelRequestIfExists(applicationId);
+
+            int updatedRows = applicationMapper.updateApplicationCanceled(applicationId);
+
+            if (updatedRows == 0) {
+                continue; // 이미 다른 경로로 처리됨(동시성) - 건너뜀
+            }
+
+            unlockSlots(applicationId);
+
+            if (wasConfirmed) {
+
+                boothMapper.deleteFavoritesByApplicationId(applicationId);
+                boothMapper.deleteBoothItemsByApplicationId(applicationId);
+                boothMapper.deleteBoothByApplicationId(applicationId);
+
+            }
+
+            // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
+            applicationMapper.closeRequestedCancelRequestByApplicationId(applicationId, LocalDateTime.now());
+
+            // 결제가 있었다면(CONFIRMED였던 경우) 환불 처리
+            Long paymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
+
+            if (paymentId != null) {
+
+                refundService.refund(paymentId, adminUserId,
+                        new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.VENDOR));
+
+            }
+
+        }
 
     }
 
