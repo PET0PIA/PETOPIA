@@ -1,7 +1,10 @@
 package com.ms.petopia.api.business.controller;
 
+import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.response.BusinessResponse;
+import com.ms.petopia.api.business.dto.response.BusinessReviewDetailResponse;
+import com.ms.petopia.api.business.dto.response.BusinessReviewSummaryResponse;
 import com.ms.petopia.api.business.service.BusinessService;
 import com.ms.petopia.global.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -54,6 +57,28 @@ public class BusinessController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(businessService.getBusiness(ownerId, businessId)));
+
+    }
+
+    // 심사 상태별 사업자 목록 조회 (관리자용, 기본값 심사 대기중)
+    @GetMapping("/review")
+    public ResponseEntity<ApiResponse<List<BusinessReviewSummaryResponse>>> getBusinessesForReview(
+            @RequestParam(defaultValue = "PENDING_REVIEW") Business.ApprovalStatus status
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(businessService.getBusinessesForReview(status)));
+
+    }
+
+    // 사업자 심사 상세 조회 (관리자용, 소유자 체크 없음)
+    @GetMapping("/{businessId}/review")
+    public ResponseEntity<ApiResponse<BusinessReviewDetailResponse>> getBusinessReviewDetail(
+            @PathVariable Long businessId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(businessService.getBusinessReviewDetail(businessId)));
 
     }
 

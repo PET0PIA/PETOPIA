@@ -1,11 +1,16 @@
 package com.ms.petopia.api.business.service;
 
+import com.ms.petopia.api.auth.service.UserRoleService;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.response.BusinessResponse;
+import com.ms.petopia.api.business.dto.response.BusinessReviewDetailResponse;
+import com.ms.petopia.api.business.dto.response.BusinessReviewSummaryResponse;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.storage.StorageService;
+import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +23,8 @@ public class BusinessService {
     private final BusinessMapper businessMapper;
     private final NtsBusinessVerificationClient ntsClient;
     private final BusinessRegistrar businessRegistrar;
+    private final StorageService storageService;
+    private final UserRoleService userRoleService;
 
     // 사업자 등록(국세청 진위확인 포함)
     public BusinessResponse registerBusiness(Long ownerId, BusinessRegisterRequest request) {
@@ -46,8 +53,11 @@ public class BusinessService {
             throw new CommonException(ErrorCode.BUSINESS_VERIFICATION_FAILED);
         }
 
-        // 여기 도달하면 항상 VERIFIED. 저장은 별도 컴포넌트(트랜잭션 안)에서 수행
-        Business saved = businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED);
+        // 첨부서류 확정(tmp -> uploads). S3 I/O라 NTS 호출과 같은 이유로 트랜잭션 밖에서 수행
+        String confirmedDocKey = storageService.confirm(request.getBusinessRegDocKey(), UploadPolicy.DOCUMENT);
+
+        // 여기 도달하면 항상 VERIFIED. 저장은 별도 컴포넌트(트랜잭션 안)에서, 심사 대기 상태로 수행
+        Business saved = businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED, confirmedDocKey);
 
         return BusinessResponse.from(saved);
 
@@ -64,7 +74,7 @@ public class BusinessService {
 
     }
 
-    // 사업자 상세 조회(진위확인 상태 포함)
+    // 사업자 상세 조회(진위확인·심사 상태 포함)
     public BusinessResponse getBusiness(Long ownerId, Long businessId) {
 
         Business business = businessMapper.selectById(businessId);
@@ -78,6 +88,34 @@ public class BusinessService {
         }
 
         return BusinessResponse.from(business);
+
+    }
+
+    // 심사 상태별 사업자 목록 조회 (관리자용, 기본 심사 대기)
+    public List<BusinessReviewSummaryResponse> getBusinessesForReview(Business.ApprovalStatus approvalStatus) {
+
+        return businessMapper.selectByApprovalStatus(approvalStatus.name()).stream()
+                .map(b -> new BusinessReviewSummaryResponse(
+                        b.getBusinessId(), b.getName(), b.getCeoName(), b.getBizRegNo(),
+                        b.getVerifyStatus().name(), b.getCreatedAt()))
+                .toList();
+
+    }
+
+    // 사업자 심사 상세 조회 (관리자용, 소유자 체크 없음)
+    public BusinessReviewDetailResponse getBusinessReviewDetail(Long businessId) {
+
+        Business business = businessMapper.selectByIdForReview(businessId);
+
+        if (business == null) {
+            throw new CommonException(ErrorCode.BUSINESS_NOT_FOUND);
+        }
+
+        String documentUrl = business.getBusinessRegDocKey() != null
+                ? storageService.toPublicUrl(business.getBusinessRegDocKey())
+                : null;
+
+        return BusinessReviewDetailResponse.from(business, documentUrl);
 
     }
 

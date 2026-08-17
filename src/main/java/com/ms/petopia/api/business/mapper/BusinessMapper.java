@@ -4,6 +4,7 @@ import com.ms.petopia.api.business.domain.Business;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -30,5 +31,11 @@ public interface BusinessMapper {
 
     // 같은 사업자의 동시 신청 직렬화용 락 (application 도메인에서 호출)
     Long lockBusinessForApplication(@Param("businessId") Long businessId);
+
+    // 심사 상태별 사업자 목록 조회 (관리자용)
+    List<Business> selectByApprovalStatus(@Param("approvalStatus") String approvalStatus);
+
+    // 사업자 상세 조회 (관리자용, 소유자 필터 없음)
+    Business selectByIdForReview(@Param("businessId") Long businessId);
 
 }
