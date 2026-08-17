@@ -258,6 +258,8 @@ export interface ReviewFairApplicationRequest {
   /** decision이 APPROVE일 때만 필수(개설비 금액, 원). */
   openingFeeAmount?: number;
   rejectReason?: string;
+  /** decision이 APPROVE일 때만 의미 있는 선택 입력. 비우면 서버 기본값(7일)을 쓴다. */
+  paymentDueDays?: number;
 }
 
 export interface ReviewFairApplicationResponse {

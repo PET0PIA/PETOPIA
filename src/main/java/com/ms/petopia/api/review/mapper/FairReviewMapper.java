@@ -56,7 +56,9 @@ public interface FairReviewMapper {
 
     /**
      * rating/content만 갱신한다. fair_id·user_id·verified_visit(작성 시점 스냅샷)은
-     * 수정 대상이 아니다.
+     * 수정 대상이 아니다. {@code review.getVersion()}은 "기대 버전"으로 WHERE 절에 쓰인다
+     * (낙관적 락, V35) - 그 사이 다른 수정이 있었으면 영향받은 행이 0건이 되고, 호출부
+     * (FairReviewService)가 REVIEW_VERSION_CONFLICT로 처리해야 한다.
      */
     int update(FairReview review);
 
