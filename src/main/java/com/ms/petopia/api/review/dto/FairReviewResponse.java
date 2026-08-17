@@ -18,7 +18,8 @@ public record FairReviewResponse(
         String content,
         boolean verifiedVisit,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Long version
 ) {
     public static FairReviewResponse from(FairReview review) {
         return new FairReviewResponse(
@@ -29,7 +30,8 @@ public record FairReviewResponse(
                 review.getContent(),
                 review.isVerifiedVisit(),
                 review.getCreatedAt(),
-                review.getUpdatedAt()
+                review.getUpdatedAt(),
+                review.getVersion()
         );
     }
 }

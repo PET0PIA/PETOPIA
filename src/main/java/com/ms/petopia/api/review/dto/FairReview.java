@@ -38,4 +38,7 @@ public class FairReview {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /** 낙관적 락 버전(V35). 수정 시 이 값이 요청의 기대 버전과 일치할 때만 반영된다. */
+    private Long version;
 }

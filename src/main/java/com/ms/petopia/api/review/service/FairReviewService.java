@@ -56,6 +56,7 @@ public class FairReviewService {
         review.setVerifiedVisit(false); // TODO Reservation 내부 계약 API가 준비되면 실제 방문 이력으로 판단
         review.setCreatedAt(now);
         review.setUpdatedAt(now);
+        review.setVersion(0L); // DB 컬럼 기본값(0)과 맞춘다 - insert 매퍼는 review_id만 채워 돌려주므로 여기서 직접 설정
 
         fairReviewMapper.insert(review);
         return FairReviewResponse.from(review);
@@ -64,18 +65,30 @@ public class FairReviewService {
     /**
      * 리뷰를 수정한다. rating·content만 바뀐다 - fair_id·user_id·verified_visit(작성 시점
      * 스냅샷)은 수정 대상이 아니다. 본인이 작성한 리뷰만 수정할 수 있다.
+     *
+     * <p>낙관적 락(V35): {@code request.version()}은 클라이언트가 조회 시점에 받은 버전이어야
+     * 한다. 같은 리뷰를 두 곳에서 동시에 수정하면 먼저 커밋된 쪽만 반영되고, 나중 요청은
+     * 버전이 이미 바뀐 상태라 REVIEW_VERSION_CONFLICT(409)로 거부된다.
      */
     @Transactional
     public FairReviewResponse update(Long fairId, Long reviewId, Long userId, UpdateFairReviewRequest request) {
         FairReview review = getOwnedReview(fairId, reviewId, userId);
         validateRating(request.rating());
         validateContent(request.content());
+        if (request.version() == null) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
 
         review.setRating(request.rating());
         review.setContent(request.content());
         review.setUpdatedAt(LocalDateTime.now());
+        review.setVersion(request.version()); // WHERE 절에 실릴 기대 버전
 
-        fairReviewMapper.update(review);
+        int updated = fairReviewMapper.update(review);
+        if (updated == 0) {
+            throw new CommonException(ErrorCode.REVIEW_VERSION_CONFLICT);
+        }
+        review.setVersion(request.version() + 1); // 응답에는 반영 후 새 버전을 담아준다
         return FairReviewResponse.from(review);
     }
 

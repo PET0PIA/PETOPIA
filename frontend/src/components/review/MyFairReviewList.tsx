@@ -111,13 +111,14 @@ export function MyFairReviewList() {
               reviewId={review.reviewId}
               initialRating={review.rating}
               initialContent={review.content}
+              initialVersion={review.version}
               submitLabel="수정 완료"
               onCancel={() => setEditingReviewId(null)}
               onSuccess={(result) => {
                 setItems((prev) =>
                   prev.map((item) =>
                     item.reviewId === review.reviewId
-                      ? { ...item, rating: result.rating, content: result.content, updatedAt: result.updatedAt }
+                      ? { ...item, rating: result.rating, content: result.content, updatedAt: result.updatedAt, version: result.version }
                       : item,
                   ),
                 );
