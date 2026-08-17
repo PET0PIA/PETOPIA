@@ -163,6 +163,7 @@ public class SecurityConfig {
                         // Business 도메인 - 로그인만 하면 누구나(등록 시 USER->VENDOR 승격은 서비스 계층에서 처리)
                         .requestMatchers(HttpMethod.GET, "/api/businesses/review").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/businesses/*/review").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/businesses/*/approve").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/businesses", "/api/businesses/*").authenticated()
                         // RecruitNotice 도메인 - 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN. 담당 fair인지는
                         // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.

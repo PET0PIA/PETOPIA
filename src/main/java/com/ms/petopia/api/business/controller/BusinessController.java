@@ -4,6 +4,7 @@ import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.response.BusinessResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewDetailResponse;
+import com.ms.petopia.api.business.dto.response.BusinessReviewResultResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewSummaryResponse;
 import com.ms.petopia.api.business.service.BusinessService;
 import com.ms.petopia.global.response.ApiResponse;
@@ -79,6 +80,18 @@ public class BusinessController {
 
         return ResponseEntity.ok(
                 ApiResponse.success(businessService.getBusinessReviewDetail(businessId)));
+
+    }
+
+    // 사업자 승인 (관리자용)
+    @PatchMapping("/{businessId}/approve")
+    public ResponseEntity<ApiResponse<BusinessReviewResultResponse>> approveBusiness(
+            @AuthenticationPrincipal Long reviewerId,
+            @PathVariable Long businessId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(businessService.approveBusiness(reviewerId, businessId)));
 
     }
 

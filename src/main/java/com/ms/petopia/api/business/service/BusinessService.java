@@ -5,6 +5,7 @@ import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.response.BusinessResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewDetailResponse;
+import com.ms.petopia.api.business.dto.response.BusinessReviewResultResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewSummaryResponse;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.global.exception.CommonException;
@@ -13,7 +14,9 @@ import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -116,6 +119,38 @@ public class BusinessService {
                 : null;
 
         return BusinessReviewDetailResponse.from(business, documentUrl);
+
+    }
+
+    // 사업자 승인 (관리자용)
+    @Transactional
+    public BusinessReviewResultResponse approveBusiness(Long reviewerId, Long businessId) {
+
+        Business business = businessMapper.selectByIdForReview(businessId);
+
+        if (business == null) {
+            throw new CommonException(ErrorCode.BUSINESS_NOT_FOUND);
+        }
+
+        LocalDateTime reviewedAt = LocalDateTime.now();
+
+        // WHERE approval_status='PENDING_REVIEW' 조건에 안 걸리면(동시에 이미 처리됨) 0행 반영 -> 예외
+        int updatedRows = businessMapper.updateApprovalApproved(businessId, reviewerId, reviewedAt);
+
+        if (updatedRows == 0) {
+            throw new CommonException(ErrorCode.BUSINESS_NOT_PENDING_REVIEW);
+        }
+
+        // 이 소유자의 첫 승인 사업자일 때만 VENDOR 권한 부여 (두 번째부턴 이미 VENDOR)
+        if (!businessMapper.existsApprovedBusinessForOwner(business.getOwnerId())) {
+            userRoleService.grantVendorRole(business.getOwnerId());
+        }
+
+        return BusinessReviewResultResponse.builder()
+                .businessId(businessId)
+                .approvalStatus(Business.ApprovalStatus.APPROVED.name())
+                .reviewedAt(reviewedAt)
+                .build();
 
     }
 

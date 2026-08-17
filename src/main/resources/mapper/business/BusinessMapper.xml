@@ -90,5 +90,19 @@
         FROM business
         WHERE business_id = #{businessId}
     </select>
+
+    <!-- 사업자 승인. 동시 처리 방지를 위해 PENDING_REVIEW일 때만 반영되는 조건부 UPDATE -->
+    <update id="updateApprovalApproved">
+        UPDATE business
+        SET approval_status = 'APPROVED', reviewed_by = #{reviewerId}, reviewed_at = #{reviewedAt}
+        WHERE business_id = #{businessId} AND approval_status = 'PENDING_REVIEW'
+    </update>
+
+    <!-- 이 소유자가 이미 승인된 사업자를 하나라도 갖고 있는지 (VENDOR 재부여 방지용) -->
+    <select id="existsApprovedBusinessForOwner" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM business WHERE owner_id = #{ownerId} AND approval_status = 'APPROVED'
+        )
+    </select>
     
 </mapper>
