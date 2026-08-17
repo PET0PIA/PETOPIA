@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ImageOff, Star } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import { PublicBoothLayoutCanvas } from "../../components/booth/PublicBoothLayoutCanvas";
 import {
   addBoothFavorite,
   getConfirmedBooths,
@@ -125,7 +126,15 @@ export function FairParticipatingBooths({ fairId }: { fairId: number }) {
       <h2 className="text-lg font-extrabold">
         참가기업 <span className="text-sm font-normal text-muted">{companies.length}</span>
       </h2>
-      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
+
+      {/* 배치도(읽기 전용) - 부스를 클릭하면 업체 정보 패널이 뜬다. 아래 카드 목록과 같은
+          공개 API(getConfirmedBooths)를 쓰지만 이 컴포넌트가 직접 다시 불러온다 - 독립
+          모듈 원칙(petopia-booth-public-view-idea 스킬 참고). */}
+      <div className="mt-3">
+        <PublicBoothLayoutCanvas fairId={fairId} />
+      </div>
+
+      <ul className="mt-6 grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 lg:grid-cols-4">
         {companies.map((company) => {
           const favorite = favoriteIds.has(company.boothId);
           const pending = pendingFavoriteIds.has(company.boothId);

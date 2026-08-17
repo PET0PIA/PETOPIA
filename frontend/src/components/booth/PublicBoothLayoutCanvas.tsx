@@ -1,0 +1,208 @@
+import { ImageOff, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { getBooth, getConfirmedBooths, type BoothResponse, type ConfirmedBoothResponse } from "../../api/booth";
+
+interface HallGroup {
+  hallId: number;
+  hallName: string;
+  floorPlanImageUrl: string | null;
+  slots: ConfirmedBoothResponse[];
+}
+
+interface BoothSummary {
+  businessName: string;
+  imageUrl: string | null;
+  slotNumbers: string[];
+}
+
+function groupByHall(rows: ConfirmedBoothResponse[]): HallGroup[] {
+  const map = new Map<number, HallGroup>();
+  for (const row of rows) {
+    let group = map.get(row.hallId);
+    if (!group) {
+      group = { hallId: row.hallId, hallName: row.hallName, floorPlanImageUrl: row.floorPlanImageUrl, slots: [] };
+      map.set(row.hallId, group);
+    }
+    group.slots.push(row);
+  }
+  return [...map.values()];
+}
+
+// 부스 하나가 슬롯을 여러 개 쓸 수 있어 boothId 기준으로 업체명·이미지·슬롯번호 목록을 묶는다.
+function buildBoothSummaries(halls: HallGroup[]): Map<number, BoothSummary> {
+  const map = new Map<number, BoothSummary>();
+  for (const hall of halls) {
+    for (const slot of hall.slots) {
+      const existing = map.get(slot.boothId);
+      if (existing) {
+        existing.slotNumbers.push(slot.slotNumber);
+      } else {
+        map.set(slot.boothId, { businessName: slot.businessName, imageUrl: slot.imageUrl, slotNumbers: [slot.slotNumber] });
+      }
+    }
+  }
+  return map;
+}
+
+interface PublicBoothLayoutCanvasProps {
+  fairId: number;
+}
+
+/**
+ * 일반 방문객용 부스 배치도(읽기 전용). 관리자용 BoothCanvas(fair-admin)와 달리 드래그·
+ * 리사이즈가 없고, 이미 공개(permitAll) API인 GET /api/fairs/{fairId}/confirmed-booths
+ * (Booth 도메인, kimchaerin9670 파트)만 그대로 사용한다 - 백엔드 변경이 필요 없다
+ * (petopia-booth-public-view-idea 스킬 참고).
+ *
+ * 부스를 클릭하면 화면 우하단에 업체명·부스번호·한줄소개 패널이 뜬다. 한줄소개(intro)는
+ * confirmed-booths 응답에 없어서, 클릭 시점에 GET /api/booths/{boothId}(역시 이미 공개
+ * API)를 한 번 더 불러온다 - 미리 전부 불러오지 않아 N+1 부담이 없고, 같은 부스를 다시
+ * 클릭하면 캐시된 값을 재사용한다. 도면(캔버스)의 빈 공간을 클릭하면 패널이 사라지고,
+ * 다른 부스를 클릭하면 패널 내용만 교체된다(한 번에 하나만 표시).
+ *
+ * 독립 컴포넌트다 - 아직 어느 페이지에도 연결돼 있지 않다. FairParticipatingBooths.tsx/
+ * FairBoothsPage.tsx(현재 카드 그리드 UX)에 이 캔버스를 실제로 붙이거나 교체하는 건 그
+ * 파일 담당자(kimchaerin9670/binaryrain1219)와 협의해 별도로 진행한다.
+ */
+export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps) {
+  const [halls, setHalls] = useState<HallGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedBoothId, setSelectedBoothId] = useState<number | null>(null);
+  const [detailsCache, setDetailsCache] = useState<Record<number, BoothResponse>>({});
+  const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getConfirmedBooths(fairId)
+      .then((rows) => {
+        if (alive) setHalls(groupByHall(rows));
+      })
+      .catch((err: unknown) => {
+        if (alive) setError(err instanceof Error ? err.message : "부스 배치도를 불러오지 못했어요.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [fairId]);
+
+  const boothSummaries = useMemo(() => buildBoothSummaries(halls), [halls]);
+
+  function selectBooth(boothId: number) {
+    setSelectedBoothId(boothId);
+    if (detailsCache[boothId]) return; // 이미 불러온 적 있으면 재사용
+    setLoadingDetailId(boothId);
+    getBooth(boothId)
+      .then((detail) => {
+        setDetailsCache((prev) => ({ ...prev, [boothId]: detail }));
+      })
+      .catch(() => {
+        /* 한줄소개 로딩 실패는 조용히 무시한다 - 패널의 기본 정보(업체명·부스번호)는 이미 있다 */
+      })
+      .finally(() => {
+        setLoadingDetailId((prev) => (prev === boothId ? null : prev));
+      });
+  }
+
+  if (loading) {
+    return <div className="grid min-h-40 place-items-center text-sm text-muted">배치도를 불러오는 중이에요...</div>;
+  }
+
+  if (error) {
+    return <div className="grid min-h-40 place-items-center text-sm text-muted">{error}</div>;
+  }
+
+  if (halls.length === 0) {
+    return <div className="grid min-h-40 place-items-center text-sm text-muted">아직 공개된 부스 배치가 없어요.</div>;
+  }
+
+  const selectedSummary = selectedBoothId != null ? boothSummaries.get(selectedBoothId) : undefined;
+  const selectedDetail = selectedBoothId != null ? detailsCache[selectedBoothId] : undefined;
+
+  return (
+    <div className="relative flex flex-col gap-6">
+      {halls.map((hall) => (
+        <div key={hall.hallId}>
+          <h3 className="mb-2 text-sm font-bold text-ink">{hall.hallName}</h3>
+          <div
+            role="presentation"
+            onClick={() => setSelectedBoothId(null)}
+            className="relative aspect-[16/10] w-full overflow-hidden rounded-card border border-line bg-page"
+            style={{
+              backgroundImage: hall.floorPlanImageUrl ? `url(${hall.floorPlanImageUrl})` : undefined,
+              backgroundSize: hall.floorPlanImageUrl ? "cover" : undefined,
+            }}
+          >
+            {hall.slots.map((slot) => {
+              const isSelected = selectedBoothId === slot.boothId;
+              return (
+                <button
+                  key={`${slot.boothId}-${slot.slotNumber}`}
+                  type="button"
+                  aria-label={`${slot.businessName} 부스(${slot.slotNumber})`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    selectBooth(slot.boothId);
+                  }}
+                  className={`absolute flex items-center justify-center overflow-hidden rounded-md border-2 px-1 text-center text-[11px] font-bold transition-colors ${
+                    isSelected
+                      ? "border-primary bg-primary-soft text-primary-strong ring-2 ring-primary ring-offset-1 ring-offset-page"
+                      : "border-primary-strong/60 bg-primary-soft/70 text-primary-strong hover:bg-primary-soft"
+                  }`}
+                  style={{
+                    left: `${Number(slot.posX) * 100}%`,
+                    top: `${Number(slot.posY) * 100}%`,
+                    width: `${Number(slot.width) * 100}%`,
+                    height: `${Number(slot.height) * 100}%`,
+                  }}
+                >
+                  <span className="truncate">{slot.slotNumber}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {selectedBoothId != null && selectedSummary && (
+        <div className="absolute bottom-4 right-4 z-10 w-64 max-w-[calc(100%-2rem)] rounded-card border border-line bg-card p-4 shadow-lg">
+          <button
+            type="button"
+            onClick={() => setSelectedBoothId(null)}
+            aria-label="닫기"
+            className="absolute right-2 top-2 grid size-7 place-items-center rounded-full text-muted hover:bg-page hover:text-ink"
+          >
+            <X size={14} />
+          </button>
+          <div className="flex items-center gap-3 pr-6">
+            <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-surface-alt">
+              {selectedSummary.imageUrl ? (
+                <img src={selectedSummary.imageUrl} alt="" className="size-full object-cover" />
+              ) : (
+                <ImageOff size={16} className="text-muted" aria-hidden="true" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <a
+                href={`/booths/${selectedBoothId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block truncate text-sm font-bold text-ink hover:underline"
+              >
+                {selectedSummary.businessName}
+              </a>
+              <p className="truncate text-xs text-muted">부스 {selectedSummary.slotNumbers.join(", ")}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted">
+            {loadingDetailId === selectedBoothId ? "소개 불러오는 중..." : (selectedDetail?.intro ?? "등록된 한줄소개가 없어요.")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
