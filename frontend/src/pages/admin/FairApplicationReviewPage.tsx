@@ -176,8 +176,8 @@ export function FairApplicationReviewPage() {
     let dueDays: number | undefined;
     if (paymentDueDaysInput.trim() !== "") {
       dueDays = Number(paymentDueDaysInput);
-      if (!Number.isInteger(dueDays) || dueDays <= 0) {
-        setReviewError("결제 기한은 1 이상의 숫자로 입력해 주세요.");
+      if (!Number.isInteger(dueDays) || dueDays <= 0 || dueDays > 365) {
+        setReviewError("결제 기한은 1일 이상 365일 이하로 입력해 주세요.");
         return;
       }
     }
@@ -456,6 +456,7 @@ export function FairApplicationReviewPage() {
               id="paymentDueDaysInput"
               type="number"
               min={1}
+              max={365}
               value={paymentDueDaysInput}
               onChange={(event) => setPaymentDueDaysInput(event.target.value)}
               placeholder="비워두면 기본 7일"

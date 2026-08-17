@@ -73,6 +73,21 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
   const [detailsCache, setDetailsCache] = useState<Record<number, BoothResponse>>({});
   const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
 
+  // fairId가 바뀌면 렌더링 중에 즉시 이전 행사의 잔여 상태(에러 메시지, 배치도, 선택된
+  // 부스, 소개 캐시)를 지운다 - useEffect 안에서 리셋하면 effect가 도는 한 프레임 동안
+  // 이전 행사의 배치도·에러가 그대로 보이는 문제가 있어, prop 변경에 따른 state 리셋은
+  // 렌더 단계에서 처리한다(React 공식 문서가 권장하는 방식).
+  const [loadedFairId, setLoadedFairId] = useState<number | null>(null);
+  if (loadedFairId !== fairId) {
+    setLoadedFairId(fairId);
+    setHalls([]);
+    setError(null);
+    setSelectedBoothId(null);
+    setLoading(true);
+    setDetailsCache({});
+    setLoadingDetailId(null);
+  }
+
   useEffect(() => {
     let alive = true;
     getConfirmedBooths(fairId)
@@ -138,6 +153,11 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
             }}
           >
             {hall.slots.map((slot) => {
+              // 배치 좌표가 없는 슬롯은 건너뛴다 - Number(null)이 0이 되어 좌상단에
+              // 크기 0짜리 버튼으로 렌더링되는 걸 막는다.
+              if (slot.posX == null || slot.posY == null || slot.width == null || slot.height == null) {
+                return null;
+              }
               const isSelected = selectedBoothId === slot.boothId;
               return (
                 <button
@@ -169,7 +189,9 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
       ))}
 
       {selectedBoothId != null && selectedSummary && (
-        <div className="absolute bottom-4 right-4 z-10 w-64 max-w-[calc(100%-2rem)] rounded-card border border-line bg-card p-4 shadow-lg">
+        // 뷰포트 기준(fixed)으로 띄운다 - 홀이 여러 개일 때 absolute였다면 부모(컴포넌트
+        // 루트) 기준이라 마지막 홀 아래로 밀려나 스크롤해야 보였다.
+        <div className="fixed bottom-4 right-4 z-10 w-64 max-w-[calc(100%-2rem)] rounded-card border border-line bg-card p-4 shadow-lg">
           <button
             type="button"
             onClick={() => setSelectedBoothId(null)}

@@ -121,7 +121,7 @@ public enum ErrorCode {
     FAIR_APPLICATION_NOT_EDITABLE(HttpStatus.CONFLICT, "F026", "심사 대기 중이거나 반려된 신청서만 수정할 수 있습니다."),
     FAIR_OPENING_FEE_AMOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "F027", "승인 시 개설비 금액을 입력해야 합니다."),
     FAIR_OPENING_FEE_NOT_PAYABLE(HttpStatus.CONFLICT, "F028", "개설비를 결제할 수 없는 상태의 행사입니다."),
-    FAIR_PAYMENT_DUE_DAYS_INVALID(HttpStatus.BAD_REQUEST, "F029", "결제 기한 일수는 1일 이상이어야 합니다."),
+    FAIR_PAYMENT_DUE_DAYS_INVALID(HttpStatus.BAD_REQUEST, "F029", "결제 기한 일수는 1일 이상 365일 이하여야 합니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),

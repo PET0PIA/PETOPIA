@@ -765,6 +765,37 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("승인 시 결제 기한 일수를 지정하면 그 일수로 결제 기한을 설정한다")
+    void review_결제기한을_지정하면_해당일수로_설정한다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateReviewResult(any())).willReturn(1);
+
+        ReviewFairApplicationResponse response = fairService.review(
+                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, 14)
+        );
+
+        assertThat(response.paymentDueAt()).isEqualTo(NOW.plusDays(14));
+    }
+
+    @Test
+    @DisplayName("승인인데 결제 기한 일수가 0 이하이면 FAIR_PAYMENT_DUE_DAYS_INVALID를 던지고 갱신하지 않는다")
+    void review_결제기한이_0이하이면_예외를_던진다() {
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, 0);
+        assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
+        verify(fairMapper, never()).updateReviewResult(any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("승인인데 결제 기한 일수가 상한(365일)을 초과하면 FAIR_PAYMENT_DUE_DAYS_INVALID를 던지고 갱신하지 않는다")
+    void review_결제기한이_상한을_초과하면_예외를_던진다() {
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, 366);
+        assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
+        verify(fairMapper, never()).updateReviewResult(any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("조건부 UPDATE가 영향 행 0건이면(이미 검토됐거나 동시 요청에 밀리면) FAIR_NOT_PENDING_REVIEW를 던지고 계정을 발급하지 않는다")
     void review_조건부갱신이_0건이면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));

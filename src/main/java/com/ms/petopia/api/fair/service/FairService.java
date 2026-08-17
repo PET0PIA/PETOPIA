@@ -58,6 +58,12 @@ public class FairService {
     private static final int DEFAULT_PAYMENT_DUE_DAYS = 7;
 
     /**
+     * paymentDueDays로 허용하는 상한(일). now.plusDays(dueDays)가 DB DATETIME 범위를
+     * 넘지 않도록, 그리고 실무적으로 말이 되는 결제 기한만 받도록 상한을 둔다.
+     */
+    private static final int MAX_PAYMENT_DUE_DAYS = 365;
+
+    /**
      * 공개(publish)를 허용하는 상태. 개설비 결제가 끝난 이후(PREPARING~IN_PROGRESS)에만 공개할 수
      * 있다. PAYMENT_PENDING(개설비 결제 대기 중)은 제외한다 - 개설비를 아직 내지 않은 행사를
      * 공개해 관람객 예약을 받기 시작하면, 그 뒤 개설비 결제 기한이 지나 EXPIRED로 자동 만료돼도
@@ -510,7 +516,8 @@ public class FairService {
             throw new CommonException(ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         }
         if (request.decision() == FairReviewDecision.APPROVE
-                && request.paymentDueDays() != null && request.paymentDueDays() <= 0) {
+                && request.paymentDueDays() != null
+                && (request.paymentDueDays() <= 0 || request.paymentDueDays() > MAX_PAYMENT_DUE_DAYS)) {
             throw new CommonException(ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
         }
     }

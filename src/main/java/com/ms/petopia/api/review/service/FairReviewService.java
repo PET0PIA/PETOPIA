@@ -56,6 +56,7 @@ public class FairReviewService {
         review.setVerifiedVisit(false); // TODO Reservation 내부 계약 API가 준비되면 실제 방문 이력으로 판단
         review.setCreatedAt(now);
         review.setUpdatedAt(now);
+        review.setVersion(0L); // DB 컬럼 기본값(0)과 맞춘다 - insert 매퍼는 review_id만 채워 돌려주므로 여기서 직접 설정
 
         fairReviewMapper.insert(review);
         return FairReviewResponse.from(review);
