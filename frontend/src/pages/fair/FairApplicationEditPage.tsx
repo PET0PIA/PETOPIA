@@ -1,5 +1,5 @@
-import { AlertCircle, Save } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { AlertCircle, CalendarDays, FileText, MapPin, Save, Ticket, UserRound } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -11,6 +11,7 @@ import { Input } from "../../components/ui/Input";
 import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
+import { HelpTip } from "../../components/ui/HelpTip";
 import { ApiError } from "../../api/client";
 import {
   getMyApplicationDetail,
@@ -70,8 +71,35 @@ function formStateFromDetail(detail: FairApplicationDetail): FormState {
   };
 }
 
-function label(htmlFor: string, text: string, required = false) {
-  return <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</label>;
+function label(htmlFor: string, text: string, required = false, help?: string) {
+  return (
+    <div className="mb-1.5 flex items-center gap-1">
+      <label htmlFor={htmlFor} className="text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</label>
+      {help && <HelpTip text={help} />}
+    </div>
+  );
+}
+
+/** 일정의 한 기간: 제목 + [시작] ~ [종료]를 한 줄로. 날짜칸을 넉넉히 두고 반복 라벨을 없애 읽기 쉽게 한다. */
+function PeriodFields({ title, startId, startValue, endId, endValue, onStart, onEnd }: {
+  title: string;
+  startId: string;
+  startValue: string;
+  endId: string;
+  endValue: string;
+  onStart: (value: string) => void;
+  onEnd: (value: string) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-sm font-bold text-ink">{title}</p>
+      <div className="flex max-w-md items-center gap-3">
+        <Input id={startId} type="date" aria-label={`${title} 시작일`} value={startValue} onChange={(event) => onStart(event.target.value)} className="min-w-0 flex-1" />
+        <span className="shrink-0 text-sm text-muted" aria-hidden="true">~</span>
+        <Input id={endId} type="date" aria-label={`${title} 종료일`} value={endValue} onChange={(event) => onEnd(event.target.value)} className="min-w-0 flex-1" />
+      </div>
+    </div>
+  );
 }
 
 function validate(form: FormState): string[] {
@@ -162,6 +190,7 @@ function FairApplicationEditContent({ id }: { id: number }) {
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const errorsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -182,6 +211,14 @@ function FairApplicationEditContent({ id }: { id: number }) {
       alive = false;
     };
   }, [id]);
+
+  // 폼이 길어, 하단 제출 버튼에서 눌렀을 때 위쪽 오류를 놓칠 수 있다.
+  // 검증 오류나 서버 오류가 생기면 오류 박스로 스크롤해 준다(신청 화면과 동일).
+  useEffect(() => {
+    if (errors.length > 0 || submitError) {
+      errorsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [errors, submitError]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => (previous ? { ...previous, [key]: value } : previous));
@@ -243,6 +280,7 @@ function FairApplicationEditContent({ id }: { id: number }) {
 
   return (
     <PageContainer className="py-10">
+     <div className="mx-auto max-w-4xl">
       <PageHeader
         eyebrow="마이페이지"
         title="신청서 수정"
@@ -254,74 +292,86 @@ function FairApplicationEditContent({ id }: { id: number }) {
       />
 
       {detail.status === "REJECTED" && detail.rejectReason && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+        <div role="alert" className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+          <AlertCircle size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
           <p>반려 사유: {detail.rejectReason}</p>
         </div>
       )}
 
-      {errors.length > 0 && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <ul className="space-y-1">
-            {errors.map((message) => <li key={message}>{message}</li>)}
-          </ul>
-        </div>
-      )}
+      {/* 스크롤 목표 지점. 검증/서버 오류가 뜨면 위 useEffect가 이 영역으로 데려온다. */}
+      <div ref={errorsRef} className="scroll-mt-24">
+        {errors.length > 0 && (
+          <div role="alert" className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
+            <ul className="space-y-1">
+              {errors.map((message) => <li key={message}>{message}</li>)}
+            </ul>
+          </div>
+        )}
 
-      {submitError && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <p>{submitError}</p>
-        </div>
-      )}
+        {submitError && (
+          <div role="alert" className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+            <AlertCircle size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
+            <p>{submitError}</p>
+          </div>
+        )}
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-10">
+      <form onSubmit={handleSubmit} className="space-y-6">
         <section>
-          <SectionHeader title="기본 정보" description="행사를 소개하는 내용이에요." />
-          <Card className="space-y-5 p-6">
-            <div>
-              {label("name", "행사명", true)}
-              <Input id="name" value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="예: 2026 서울 펫페어" required />
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                {label("category", "카테고리")}
-                <Select id="category" value={form.category} onChange={(event) => update("category", event.target.value as FormState["category"])}>
-                  <option value="">선택 안 함</option>
-                  <option value="DOG">강아지</option>
-                  <option value="CAT">고양이</option>
-                  <option value="ETC">기타</option>
-                </Select>
+          <SectionHeader title="기본 정보" help="행사를 소개하는 내용이에요." icon={<FileText size={18} aria-hidden="true" />} />
+          <Card className="p-6">
+            <div className="flex flex-col gap-6 sm:flex-row sm:gap-8">
+              {/* 포스터를 크게 왼쪽에 두고, 오른쪽 입력칸은 짧게 묶어 높이를 맞춘다. */}
+              <div className="shrink-0">
+                <ImageUploadField
+                  label="포스터 이미지"
+                  previewClassName="aspect-[4/5] w-56"
+                  layout="stacked"
+                  initialImageUrl={detail.posterImageUrl}
+                  onObjectKeyChange={(key) => {
+                    setPosterImageObjectKey(key);
+                    if (key) setPosterRemoved(false);
+                  }}
+                  onUploadingChange={setPosterImageUploading}
+                  removable
+                  onRemove={() => {
+                    setPosterImageObjectKey(null);
+                    setPosterRemoved(true);
+                  }}
+                />
               </div>
-              <ImageUploadField
-                label="포스터 이미지"
-                initialImageUrl={detail.posterImageUrl}
-                onObjectKeyChange={(key) => {
-                  setPosterImageObjectKey(key);
-                  if (key) setPosterRemoved(false);
-                }}
-                onUploadingChange={setPosterImageUploading}
-                removable
-                onRemove={() => {
-                  setPosterImageObjectKey(null);
-                  setPosterRemoved(true);
-                }}
-              />
-            </div>
-            <div>
-              {label("description", "행사 소개")}
-              <Textarea id="description" value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="행사를 간단히 소개해 주세요." />
-            </div>
-            <div>
-              {label("noticeText", "유의사항")}
-              <Textarea id="noticeText" value={form.noticeText} onChange={(event) => update("noticeText", event.target.value)} placeholder="방문객이 꼭 알아야 할 유의사항을 입력해 주세요." />
+              <div className="flex-1 space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    {label("name", "행사명", true)}
+                    <Input id="name" value={form.name} onChange={(event) => update("name", event.target.value)} placeholder="예: 2026 서울 펫페어" required />
+                  </div>
+                  <div>
+                    {label("category", "카테고리")}
+                    <Select id="category" value={form.category} onChange={(event) => update("category", event.target.value as FormState["category"])}>
+                      <option value="">선택 안 함</option>
+                      <option value="DOG">강아지</option>
+                      <option value="CAT">고양이</option>
+                      <option value="ETC">기타</option>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  {label("description", "행사 소개")}
+                  <Textarea id="description" value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="행사를 소개해 주세요." />
+                </div>
+                <div>
+                  {label("noticeText", "관람 안내사항")}
+                  <Textarea id="noticeText" value={form.noticeText} onChange={(event) => update("noticeText", event.target.value)} placeholder="방문객이 꼭 알아야 할 관람 안내사항을 입력해 주세요." />
+                </div>
+              </div>
             </div>
           </Card>
         </section>
 
         <section>
-          <SectionHeader title="장소" description="행사가 열리는 장소 정보예요." />
+          <SectionHeader title="장소" help="행사가 열리는 장소 정보예요." icon={<MapPin size={18} aria-hidden="true" />} />
           <Card className="space-y-5 p-6">
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
@@ -345,90 +395,102 @@ function FairApplicationEditContent({ id }: { id: number }) {
         </section>
 
         <section>
-          <SectionHeader title="일정" description="모집·예약·운영 기간을 각각 입력해 주세요." />
+          <SectionHeader title="일정" help="아는 기간만 입력해도 돼요. 보통 참가업체 모집 → 관람객 사전예약 → 행사 운영 순서로 진행돼요." icon={<CalendarDays size={18} aria-hidden="true" />} />
           <Card className="space-y-5 p-6">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                {label("vendorRecruitStartDate", "참가업체 모집 시작")}
-                <Input id="vendorRecruitStartDate" type="date" value={form.vendorRecruitStartDate} onChange={(event) => update("vendorRecruitStartDate", event.target.value)} />
-              </div>
-              <div>
-                {label("vendorRecruitEndDate", "참가업체 모집 종료")}
-                <Input id="vendorRecruitEndDate" type="date" value={form.vendorRecruitEndDate} onChange={(event) => update("vendorRecruitEndDate", event.target.value)} />
-              </div>
-              <div>
-                {label("reservationStartDate", "사전예약 시작")}
-                <Input id="reservationStartDate" type="date" value={form.reservationStartDate} onChange={(event) => update("reservationStartDate", event.target.value)} />
-              </div>
-              <div>
-                {label("reservationEndDate", "사전예약 종료")}
-                <Input id="reservationEndDate" type="date" value={form.reservationEndDate} onChange={(event) => update("reservationEndDate", event.target.value)} />
-              </div>
-              <div>
-                {label("operationStartDate", "행사 운영 시작")}
-                <Input id="operationStartDate" type="date" value={form.operationStartDate} onChange={(event) => update("operationStartDate", event.target.value)} />
-              </div>
-              <div>
-                {label("operationEndDate", "행사 운영 종료")}
-                <Input id="operationEndDate" type="date" value={form.operationEndDate} onChange={(event) => update("operationEndDate", event.target.value)} />
-              </div>
-            </div>
+            <PeriodFields
+              title="참가업체 모집"
+              startId="vendorRecruitStartDate"
+              startValue={form.vendorRecruitStartDate}
+              endId="vendorRecruitEndDate"
+              endValue={form.vendorRecruitEndDate}
+              onStart={(value) => update("vendorRecruitStartDate", value)}
+              onEnd={(value) => update("vendorRecruitEndDate", value)}
+            />
+            <PeriodFields
+              title="관람객 사전예약"
+              startId="reservationStartDate"
+              startValue={form.reservationStartDate}
+              endId="reservationEndDate"
+              endValue={form.reservationEndDate}
+              onStart={(value) => update("reservationStartDate", value)}
+              onEnd={(value) => update("reservationEndDate", value)}
+            />
+            <PeriodFields
+              title="행사 운영"
+              startId="operationStartDate"
+              startValue={form.operationStartDate}
+              endId="operationEndDate"
+              endValue={form.operationEndDate}
+              onStart={(value) => update("operationStartDate", value)}
+              onEnd={(value) => update("operationEndDate", value)}
+            />
           </Card>
         </section>
 
-        <section>
-          <SectionHeader title="예약 정책" description="관람객 예약금과 취소·변경 가능 기한이에요." />
-          <Card className="space-y-5 p-6">
-            <div className="grid gap-5 sm:grid-cols-3">
+        {/* 예약 정책·담당자는 둘 다 짧아 나란히 둔다(높이가 비슷해 깔끔). 좁은 화면에선 위아래로 쌓인다. */}
+        <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+          <section>
+            <SectionHeader title="예약 정책" help="관람객 예약금과 취소·변경 가능 기한이에요." icon={<Ticket size={18} aria-hidden="true" />} />
+            <Card className="space-y-5 p-6">
               <div>
-                {label("reservationFee", "예약금(원)")}
+                {label("reservationFee", "예약금(원)", false, "관람객이 예매 때 내는 예약금이에요. 무료면 0.")}
                 <Input id="reservationFee" type="number" min={0} value={form.reservationFee} onChange={(event) => update("reservationFee", event.target.value)} placeholder="0" />
               </div>
-              <div>
-                {label("reservationCancelDeadlineHours", "취소 가능 기한(시간)")}
-                <Input id="reservationCancelDeadlineHours" type="number" min={0} value={form.reservationCancelDeadlineHours} onChange={(event) => update("reservationCancelDeadlineHours", event.target.value)} />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  {label("reservationCancelDeadlineHours", "취소 가능 기한(시간)", false, "방문 몇 시간 전까지 취소를 허용할지. 예: 24 = 하루 전까지.")}
+                  <Input id="reservationCancelDeadlineHours" type="number" min={0} value={form.reservationCancelDeadlineHours} onChange={(event) => update("reservationCancelDeadlineHours", event.target.value)} placeholder="예: 24" />
+                </div>
+                <div>
+                  {label("reservationChangeDeadlineHours", "변경 가능 기한(시간)", false, "방문 몇 시간 전까지 방문일 변경을 허용할지.")}
+                  <Input id="reservationChangeDeadlineHours" type="number" min={0} value={form.reservationChangeDeadlineHours} onChange={(event) => update("reservationChangeDeadlineHours", event.target.value)} placeholder="예: 24" />
+                </div>
               </div>
-              <div>
-                {label("reservationChangeDeadlineHours", "변경 가능 기한(시간)")}
-                <Input id="reservationChangeDeadlineHours" type="number" min={0} value={form.reservationChangeDeadlineHours} onChange={(event) => update("reservationChangeDeadlineHours", event.target.value)} />
-              </div>
-            </div>
-          </Card>
-        </section>
+            </Card>
+          </section>
 
-        <section>
-          <SectionHeader title="담당자 정보" description="심사 결과와 개설비 결제 안내를 받을 연락처예요." />
-          <Card className="space-y-5 p-6">
-            <div className="grid gap-5 sm:grid-cols-3">
-              <div>
-                {label("managerName", "담당자 이름", true)}
-                <Input id="managerName" value={form.managerName} onChange={(event) => update("managerName", event.target.value)} required />
-              </div>
-              <div>
-                {label("managerPhone", "담당자 연락처")}
-                <Input id="managerPhone" value={form.managerPhone} onChange={(event) => update("managerPhone", event.target.value)} placeholder="010-0000-0000" />
+          <section>
+            <SectionHeader title="담당자 정보" help="심사 결과와 개설비 결제 안내를 받을 연락처예요." icon={<UserRound size={18} aria-hidden="true" />} />
+            <Card className="space-y-5 p-6">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  {label("managerName", "담당자 이름", true)}
+                  <Input id="managerName" value={form.managerName} onChange={(event) => update("managerName", event.target.value)} required />
+                </div>
+                <div>
+                  {label("managerPhone", "담당자 연락처")}
+                  <Input id="managerPhone" value={form.managerPhone} onChange={(event) => update("managerPhone", event.target.value)} placeholder="010-0000-0000" />
+                </div>
               </div>
               <div>
                 {label("managerEmail", "담당자 이메일", true)}
                 <Input id="managerEmail" type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} required />
               </div>
-            </div>
-          </Card>
-        </section>
+            </Card>
+          </section>
+        </div>
 
-        <div className="flex justify-end gap-2">
-          <Link
-            to={`/fair-applications/me/${id}`}
-            className="inline-flex min-h-11 items-center justify-center rounded-button border border-line bg-card px-4 text-sm font-bold hover:bg-page"
-          >
-            취소
-          </Link>
-          <Button type="submit" disabled={submitting || posterImageUploading}>
-            <Save size={16} />
-            {submitting ? "저장 중..." : posterImageUploading ? "이미지 업로드 중..." : "수정해서 다시 제출"}
-          </Button>
+        <div className="flex flex-col gap-3 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-5 text-muted">
+            {detail.status === "REJECTED"
+              ? "수정해서 다시 제출하면 심사 대기 상태로 돌아가요."
+              : "수정한 내용은 다시 제출해야 저장돼요."}
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Link
+              to={`/fair-applications/me/${id}`}
+              className="inline-flex min-h-11 items-center justify-center rounded-button border border-line bg-card px-4 text-sm font-bold hover:bg-page"
+            >
+              취소
+            </Link>
+            <Button type="submit" disabled={submitting || posterImageUploading} className="w-full sm:w-auto">
+              <Save size={16} />
+              {submitting ? "저장 중..." : posterImageUploading ? "이미지 업로드 중..." : "수정해서 다시 제출"}
+            </Button>
+          </div>
         </div>
       </form>
+     </div>
     </PageContainer>
   );
 }

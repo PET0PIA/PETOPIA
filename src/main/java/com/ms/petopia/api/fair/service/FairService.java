@@ -273,6 +273,21 @@ public class FairService {
     }
 
     /**
+     * 부스 모집중인 행사 목록을 인증 없이 조회한다(참여 부스 신청 진입점 전용).
+     * {@link #listPublicFairs}와 달리 published_at을 요구하지 않는다 - "전체공개"는 일반
+     * 소비자 노출·사전예약·리뷰 작성 가능 여부만 통제하고, 참가업체 모집 노출은 그와 별개로
+     * 모집공고+부스슬롯만 준비되면(= recruiting 계산식) 시작된 것으로 본다.
+     */
+    @Transactional(readOnly = true)
+    public List<FairPublicListItemResponse> listRecruitingFairs() {
+        LocalDateTime now = timeProvider.now();
+        LocalDate today = now.toLocalDate();
+        return fairMapper.selectRecruitingFairs(today, now).stream()
+                .map(this::toPublicListItemResponse)
+                .toList();
+    }
+
+    /**
      * 신청서를 수정(재제출)한다. RECEIVED(심사 대기) 또는 REJECTED(반려) 상태에서만 가능하고,
      * 본인이 신청한 행사만 수정할 수 있다(신청자 본인 여부는 requesterId가 fairs.applicant_user_id와
      * 같은지로 판단 - requesterId 자체는 JWT로 검증됐지만, "로그인한 누구나"와 "이 신청서의
@@ -479,6 +494,10 @@ public class FairService {
      * {@code fairs.published_at IS NOT NULL}만 보고 예약 가능 여부를 판단하므로(취소·예약기간은
      * reservation 도메인이 별도로 검증) 여기서는 published_at만 채운다.
      *
+     * <p>SUPER_ADMIN뿐 아니라 그 행사 담당 EVENT_ADMIN도 호출할 수 있다(SecurityConfig가
+     * role까지는 걸러주므로, "이 행사" 담당자인지는 여기서 {@link FairAdminAccessGuard}로 한 번
+     * 더 확인한다 - 다른 행사 담당 EVENT_ADMIN이 남의 행사를 공개하는 걸 막기 위해).
+     *
      * <p>이미 공개된 행사를 다시 호출하면 에러 없이 최초 공개 결과를 그대로 반환한다(멱등).
      */
     @Transactional
@@ -486,6 +505,7 @@ public class FairService {
         if (actorId == null || actorId <= 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        fairAdminAccessGuard.checkAssigned(fairId);
         Fair fair = findFairOrThrow(fairId);
 
         if (fair.getPublishedAt() != null) {

@@ -1,5 +1,5 @@
-import { AlertCircle, Check, Globe, Search, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { AlertCircle, Check, Globe, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   getFairApplication,
@@ -14,6 +14,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Select";
 import { Table } from "../../components/ui/Table";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -62,7 +63,12 @@ export function FairApplicationReviewPage() {
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
 
-  const [fairIdInput, setFairIdInput] = useState("");
+  // 행사 ID를 직접 타이핑하지 않고 이름으로 찾도록, 전체 신청서 목록(상태 무관)을 한 번
+  // 받아와서 검색용 드롭다운을 채운다 - 이미 심사된(REJECTED/PREPARING 등) 행사도 포함된다.
+  const [allApplications, setAllApplications] = useState<FairApplicationSummary[]>([]);
+  const [allApplicationsError, setAllApplicationsError] = useState<string | null>(null);
+
+  const [selectedFairId, setSelectedFairId] = useState<number | null>(null);
   const [detail, setDetail] = useState<FairApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -79,6 +85,11 @@ export function FairApplicationReviewPage() {
 
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+
+  // 행사를 빠르게 여러 번 바꿔 선택하면 먼저 보낸 요청의 응답이 나중에 도착할 수 있다 -
+  // 그 응답으로 화면이 덮어써지면 지금 선택과 다른 행사의 상세가 보이게 된다. 매 요청마다
+  // 번호를 매겨서, 응답이 왔을 때 그게 여전히 "지금 선택"에 대한 요청인지 확인한다.
+  const detailRequestIdRef = useRef(0);
 
   // 승인/반려 후 큐를 새로고침할 때 재사용한다(그때는 이미 마운트된 상태라 setQueueLoading(true)를
   // 먼저 불러 로딩 표시를 다시 보여줘도 된다). 최초 마운트 시 큐를 받아오는 아래 useEffect는
@@ -117,35 +128,58 @@ export function FairApplicationReviewPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    getFairApplications()
+      .then((data) => {
+        if (alive) setAllApplications([...data].sort((a, b) => a.name.localeCompare(b.name, "ko")));
+      })
+      .catch((error: unknown) => {
+        if (alive) setAllApplicationsError(error instanceof ApiError ? error.message : "행사 목록을 불러오지 못했어요.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   async function loadDetail(fairId: number) {
+    const requestId = ++detailRequestIdRef.current;
     setLoading(true);
     setLoadError(null);
     setReviewError(null);
     setPublishError(null);
     try {
       const data = await getFairApplication(fairId);
+      if (requestId !== detailRequestIdRef.current) return; // 그 사이 다른 행사를 선택했으면 이 응답은 버린다
       setDetail(data);
     } catch (error) {
+      if (requestId !== detailRequestIdRef.current) return;
       setDetail(null);
       setLoadError(error instanceof ApiError ? error.message : "신청서를 불러오지 못했어요.");
     } finally {
-      setLoading(false);
+      if (requestId === detailRequestIdRef.current) setLoading(false);
     }
   }
 
   function openFair(fairId: number) {
-    setFairIdInput(String(fairId));
+    setSelectedFairId(fairId);
     void loadDetail(fairId);
   }
 
-  function handleLoad(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
+  function handleSelectFair(value: string) {
+    if (value === "") {
+      detailRequestIdRef.current += 1; // 진행 중이던 조회가 있었다면 응답이 와도 버려지도록 무효화한다
+      setSelectedFairId(null);
+      setDetail(null);
       return;
     }
-    void loadDetail(parsed);
+    openFair(Number(value));
+  }
+
+  // 승인/반려 직후 검색 드롭다운의 상태 라벨도 같이 갱신한다 - 안 하면 방금 승인한 행사가
+  // 드롭다운에는 여전히 "심사 대기"로 남아 보인다.
+  function patchAllApplicationsStatus(fairId: number, status: string) {
+    setAllApplications((previous) => previous.map((item) => (item.fairId === fairId ? { ...item, status } : item)));
   }
 
   function openApproveDialog() {
@@ -206,6 +240,7 @@ export function FairApplicationReviewPage() {
       setApproveDialogOpen(false);
       setOpeningFeeAmountInput("");
       setPaymentDueDaysInput("");
+      patchAllApplicationsStatus(detail.fairId, result.status);
       void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
@@ -243,6 +278,7 @@ export function FairApplicationReviewPage() {
       });
       setRejectDialogOpen(false);
       setRejectReason("");
+      patchAllApplicationsStatus(detail.fairId, result.status);
       void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "반려 처리에 실패했어요.");
@@ -316,13 +352,22 @@ export function FairApplicationReviewPage() {
         )}
       </div>
 
-      <form onSubmit={handleLoad} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">검토할 행사(신청서) ID</label>
-          <Input id="fairIdInput" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
-        </div>
-        <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
-      </form>
+      <div className="surface mb-6 p-5">
+        <label htmlFor="fairSelect" className="mb-1.5 block text-sm font-bold text-ink">검토할 행사(신청서)</label>
+        <Select
+          id="fairSelect"
+          value={selectedFairId ?? ""}
+          onChange={(event) => handleSelectFair(event.target.value)}
+        >
+          <option value="">행사명으로 찾기...</option>
+          {allApplications.map((application) => (
+            <option key={application.fairId} value={application.fairId}>
+              {application.name} ({statusLabels[application.status] ?? application.status})
+            </option>
+          ))}
+        </Select>
+        {allApplicationsError && <p className="mt-1.5 text-xs font-bold text-primary-strong">{allApplicationsError}</p>}
+      </div>
 
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -332,7 +377,7 @@ export function FairApplicationReviewPage() {
       )}
 
       {!detail && !loading && (
-        <EmptyState title="신청서 ID를 먼저 입력해 주세요." description="검토할 행사 신청서의 ID를 입력하고 불러오기를 누르면 상세 내용이 표시돼요." />
+        <EmptyState title="행사를 먼저 선택해 주세요." description="위 목록에서 검토할 행사를 선택하면 상세 내용이 표시돼요." />
       )}
 
       {loading && <div className="surface grid min-h-40 place-items-center text-sm text-muted">불러오는 중이에요...</div>}

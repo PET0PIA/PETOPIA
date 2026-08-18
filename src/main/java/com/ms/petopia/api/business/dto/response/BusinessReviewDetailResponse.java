@@ -1,18 +1,16 @@
 package com.ms.petopia.api.business.dto.response;
 
 import com.ms.petopia.api.business.domain.Business;
-import lombok.*;
+import lombok.Builder;
+import lombok.Getter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-// 사업자 조회/등록 응답 공통 DTO
+// GET /api/businesses/{id}/review 응답 - 소유자 체크 없는 관리자용 상세
 @Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
 @Builder
-public class BusinessResponse {
+public class BusinessReviewDetailResponse {
 
     private Long businessId;
     private String name;
@@ -24,13 +22,16 @@ public class BusinessResponse {
     private String website;
     private String verifyStatus;
     private String approvalStatus;
+    private String documentUrl; // 첨부된 사업자등록증 공개 URL (nullable - 구버전 자동승인 행은 첨부 없음)
     private String rejectReason;
+    private Long reviewedBy; // null이면 구버전 자동승인
+    private LocalDateTime reviewedAt;
     private LocalDateTime createdAt;
 
-    // Business 도메인 객체를 API 응답용 BusinessResponse로 변환
-    public static BusinessResponse from(Business business) {
+    // Business 도메인 객체 + 이미 확정된 documentUrl을 받아 응답용으로 조립
+    public static BusinessReviewDetailResponse from(Business business, String documentUrl) {
 
-        return BusinessResponse.builder()
+        return BusinessReviewDetailResponse.builder()
                 .businessId(business.getBusinessId())
                 .name(business.getName())
                 .ceoName(business.getCeoName())
@@ -39,10 +40,12 @@ public class BusinessResponse {
                 .address(business.getAddress())
                 .phone(business.getPhone())
                 .website(business.getWebsite())
-                // enum 타입이지만 응답 DTO에서는 String으로 내려줘야 하므로 .name()으로 변환
                 .verifyStatus(business.getVerifyStatus().name())
                 .approvalStatus(business.getApprovalStatus().name())
+                .documentUrl(documentUrl)
                 .rejectReason(business.getRejectReason())
+                .reviewedBy(business.getReviewedBy())
+                .reviewedAt(business.getReviewedAt())
                 .createdAt(business.getCreatedAt())
                 .build();
 

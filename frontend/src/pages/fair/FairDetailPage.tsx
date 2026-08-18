@@ -7,6 +7,7 @@ import { Badge } from "../../components/ui/Badge";
 import { ApiError } from "../../api/client";
 import { getFairPublicSummary, type FairPublicSummary } from "../../api/fair";
 import { getReservationAvailability, type ReservationAvailability } from "../../api/reservation";
+import { todayInSeoul } from "../../utils/date";
 import { fairCategoryLabels, formatFairPeriodDow } from "./fairCard";
 import { FairParticipatingBooths } from "./FairParticipatingBooths";
 import { FairReviews } from "./FairReviews";
@@ -15,17 +16,6 @@ const INDOOR_OUTDOOR_LABELS: Record<string, string> = { INDOOR: "실내", OUTDOO
 
 // 사이트 상단 헤더(PublicHeader)의 높이(px). 스크롤 고정 바를 이 아래에 붙이고, 등장 판정 기준선도 여기로 맞춘다.
 const SITE_HEADER_PX = 72;
-
-// 오늘(Asia/Seoul 기준) YYYY-MM-DD. operationEndDate와 문자열 비교로 종료 판정.
-// 브라우저 시간대와 무관하게 KST로 고정한다(해외 기기에서 종료 판정이 하루 밀리는 것 방지).
-function todayISO(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
 
 // 관람료: 0이면 무료, 그 외엔 "N원". reservationFee는 예매 창이 열렸을 때만 온다.
 function formatFee(fee: number): string {
@@ -125,7 +115,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
     );
   }
 
-  const ended = !!fair.operationEndDate && fair.operationEndDate < todayISO();
+  const ended = !!fair.operationEndDate && fair.operationEndDate < todayInSeoul();
   const indoorOutdoor = fair.indoorOutdoor ? INDOOR_OUTDOOR_LABELS[fair.indoorOutdoor] ?? null : null;
   // 예매 가능 = 예매 창이 열려(availability 성공) 잔여석 있는 날짜가 하나라도 있음.
   const reservable = !ended && !!availability && availability.dates.some((date) => date.available);
