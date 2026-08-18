@@ -1,4 +1,11 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "*": false,
+      "main": true
+    }
+  },
   "rewrites": [
     {
       "source": "/api/:path*",
