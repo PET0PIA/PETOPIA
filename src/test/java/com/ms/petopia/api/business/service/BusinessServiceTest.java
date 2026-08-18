@@ -391,7 +391,7 @@ class BusinessServiceTest {
 
             given(businessMapper.selectByIdForReview(1L)).willReturn(business);
             given(businessMapper.updateApprovalApproved(eq(1L), eq(2L), any())).willReturn(1);
-            given(businessMapper.existsApprovedBusinessForOwner(10L)).willReturn(false);
+            given(businessMapper.existsApprovedBusinessForOwner(10L, 1L)).willReturn(false);
 
             // when
             BusinessReviewResultResponse result = businessService.approveBusiness(2L, 1L);
@@ -411,7 +411,7 @@ class BusinessServiceTest {
 
             given(businessMapper.selectByIdForReview(1L)).willReturn(business);
             given(businessMapper.updateApprovalApproved(eq(1L), eq(2L), any())).willReturn(1);
-            given(businessMapper.existsApprovedBusinessForOwner(10L)).willReturn(true);
+            given(businessMapper.existsApprovedBusinessForOwner(10L, 1L)).willReturn(true);
 
             // when
             businessService.approveBusiness(2L, 1L);
@@ -437,7 +437,7 @@ class BusinessServiceTest {
                     .hasMessageContaining("심사 대기 중인 사업자만");
 
             // 이미 처리된 거라, 뒤이은 role 관련 로직은 전혀 시도되면 안 됨
-            verify(businessMapper, never()).existsApprovedBusinessForOwner(any());
+            verify(businessMapper, never()).existsApprovedBusinessForOwner(any(), any());
             verify(userRoleService, never()).grantVendorRole(any());
 
         }
@@ -540,7 +540,7 @@ class BusinessServiceTest {
 
             given(businessMapper.selectByIdForReview(1L)).willReturn(business);
             given(businessMapper.updateApprovalRevoked(eq(1L), eq(2L), eq("조작 서류 발각"), any())).willReturn(1);
-            given(businessMapper.existsApprovedBusinessForOwner(10L)).willReturn(false);
+            given(businessMapper.existsApprovedBusinessForOwner(10L, 1L)).willReturn(false);
 
             // when
             BusinessReviewResultResponse result = businessService.revokeBusiness(2L, 1L, request);
@@ -563,7 +563,7 @@ class BusinessServiceTest {
 
             given(businessMapper.selectByIdForReview(1L)).willReturn(business);
             given(businessMapper.updateApprovalRevoked(eq(1L), eq(2L), eq("조작 서류 발각"), any())).willReturn(1);
-            given(businessMapper.existsApprovedBusinessForOwner(10L)).willReturn(true);
+            given(businessMapper.existsApprovedBusinessForOwner(10L, 1L)).willReturn(true);
 
             // when
             businessService.revokeBusiness(2L, 1L, request);

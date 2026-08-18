@@ -16,12 +16,14 @@ import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BusinessService {
@@ -63,8 +65,29 @@ public class BusinessService {
         // 첨부서류 확정(tmp -> uploads). S3 I/O라 NTS 호출과 같은 이유로 트랜잭션 밖에서 수행
         String confirmedDocKey = storageService.confirm(request.getBusinessRegDocKey(), UploadPolicy.DOCUMENT);
 
-        // 여기 도달하면 항상 VERIFIED. 저장은 별도 컴포넌트(트랜잭션 안)에서, 심사 대기 상태로 수행
-        Business saved = businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED, confirmedDocKey);
+        Business saved;
+
+        try {
+
+            // 여기 도달하면 항상 VERIFIED. 저장은 별도 컴포넌트(트랜잭션 안)에서, 심사 대기 상태로 수행
+            saved = businessRegistrar.save(ownerId, request, Business.VerifyStatus.VERIFIED, confirmedDocKey);
+
+        } catch (CommonException e) {
+
+            /*
+             * 저장 실패(중복 사업자등록번호, 동시 등록 락 타임아웃 등) 시 이미 확정해둔 문서가
+             * 사업자 레코드 없이 스토리지에 고아로 남는 것을 방지한다(코드래빗 리뷰 반영).
+             * 삭제 자체가 실패해도 원래 예외를 가려버리면 안 되니 로그만 남기고 그대로 재던진다.
+             */
+            try {
+                storageService.delete(confirmedDocKey);
+            } catch (Exception deleteException) {
+                log.error("사업자 등록 실패 후 고아 문서 삭제 실패: {}", confirmedDocKey, deleteException);
+            }
+
+            throw e;
+
+        }
 
         return BusinessResponse.from(saved);
 
@@ -146,7 +169,7 @@ public class BusinessService {
         }
 
         // 이 소유자의 첫 승인 사업자일 때만 VENDOR 권한 부여 (두 번째부턴 이미 VENDOR)
-        if (!businessMapper.existsApprovedBusinessForOwner(business.getOwnerId())) {
+        if (!businessMapper.existsApprovedBusinessForOwner(business.getOwnerId(), businessId)) {
             userRoleService.grantVendorRole(business.getOwnerId());
         }
 
@@ -218,7 +241,7 @@ public class BusinessService {
         applicationService.cancelApplicationsForRevokedBusiness(businessId, reviewerId);
 
         // 이 소유자에게 남은 승인된 사업자가 하나도 없으면 VENDOR 권한 회수(다시 USER로)
-        if (!businessMapper.existsApprovedBusinessForOwner(business.getOwnerId())) {
+        if (!businessMapper.existsApprovedBusinessForOwner(business.getOwnerId(), businessId)) {
             userRoleService.revokeVendorRole(business.getOwnerId());
         }
 
