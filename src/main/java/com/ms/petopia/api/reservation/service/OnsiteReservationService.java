@@ -68,7 +68,7 @@ public class OnsiteReservationService {
         ReservationUserSnapshot user = reservationMapper.selectUserSnapshot(userId);
         validateUser(user);
 
-        if (reservationMapper.existsActiveReservation(fairId, userId)) {
+        if (reservationMapper.existsActiveReservation(fairId, userId, today)) {
             throw new CommonException(ErrorCode.DUPLICATED_RESERVATION);
         }
 

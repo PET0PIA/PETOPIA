@@ -341,7 +341,7 @@ jobs:
   # needs: backend-ci 로 묶여 있어 테스트가 실패하면 이 job 은 실행되지 않는다.
   # ===========================================================================
   deploy:
-    name: Deploy to EC2
+    name: Deploy to ECS
     needs: backend-ci
     # main 에서만 배포한다. PR 과 dev push 에서는 job 자체가 생성되지 않는다.
     # workflow_dispatch 도 main 으로 제한한다. 다른 브랜치에서 실행하더라도
@@ -364,8 +364,7 @@ jobs:
       # 신규 배포와 롤백을 여기서 가른다.
       #   image_tag 입력 있음 -> 롤백. 이미 ECR 에 있는 이미지를 다시 띄운다.
       #   입력 없음           -> 현재 커밋을 빌드해 새 이미지를 올린다.
-      # 태그가 곧 커밋 SHA 이므로, 롤백 시 compose 와 deploy.sh 도 그 SHA 로
-      # 내려받게 되어 이미지와 배포 스크립트의 세대가 어긋나지 않는다.
+      # 롤백은 그 SHA 이미지로 Task Definition 새 리비전을 등록해 서비스를 되돌리는 것이다.
       #
       # image_tag 는 사람이 입력하는 유일한 값이다. 두 가지를 반드시 지킨다.
       #   1) ${{ }} 로 run 본문에 직접 전개하지 않는다. GitHub Actions 는 스크립트를
@@ -400,8 +399,8 @@ jobs:
             echo "rebuild=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # 체크아웃은 항상 한다. 롤백(빌드 생략) 경로에서도 .aws/task-definition.json 이 필요하다.
       - name: 체크아웃
-        if: steps.target.outputs.rebuild == 'true'
         uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -464,85 +463,38 @@ jobs:
           fi
           echo "확인됨: ${DEPLOY_SHA}"
 
-      # SSM Send-Command 로 인스턴스 A 에서 deploy.sh 를 실행한다.
-      # 인바운드 포트를 열지 않고, 저장된 SSH 키도 없다.
+      # ECS(Fargate) 롤링 배포. (구 방식: SSM Send-Command 로 인스턴스 A 의 deploy.sh 실행 — 제거)
       #
-      # 내장 waiter(aws ssm wait command-executed)를 쓰지 않는 이유:
-      # 최대 대기가 약 100초라 헬스체크 180초를 못 버티고 먼저 포기한다.
-      # 그래서 직접 폴링한다.
-      - name: SSM 배포 실행
-        env:
-          INSTANCE_ID: ${{ vars.APP_INSTANCE_ID }}
-          IMAGE_URI: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.target.outputs.sha }}
-          DEPLOY_SHA: ${{ steps.target.outputs.sha }}
+      # task-definition.json 은 계정 ID 를 public 리포에 남기지 않으려 __AWS_ACCOUNT_ID__
+      # 플레이스홀더로 커밋돼 있다. 배포 시점에 실제 계정 ID 로 치환한다.
+      - name: Task Definition 계정 ID 치환
         run: |
           set -euo pipefail
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          sed -i "s/__AWS_ACCOUNT_ID__/${ACCOUNT_ID}/g" .aws/task-definition.json
 
-          # JSON 을 heredoc 문자열 보간으로 만들지 않는다. 값에 " 가 섞이면 JSON 구조가
-          # 깨지고, 원격 명령의 './deploy.sh '\''...'\''' 인용도 함께 탈출된다.
-          # jq 가 JSON 이스케이프를, @sh 가 EC2 셸 인용을 각각 책임진다.
-          # (jq 는 GitHub 호스팅 ubuntu 러너에 기본 설치되어 있다)
-          jq -n \
-            --arg instance "$INSTANCE_ID" \
-            --arg sha      "$DEPLOY_SHA" \
-            --arg image    "$IMAGE_URI" \
-            --arg repo     "$GITHUB_REPOSITORY" \
-            '{
-              InstanceIds: [$instance],
-              DocumentName: "AWS-RunShellScript",
-              Comment: ("petopia deploy " + $sha),
-              TimeoutSeconds: 600,
-              Parameters: {
-                executionTimeout: ["900"],
-                commands: [
-                  "set -euo pipefail",
-                  "mkdir -p /opt/petopia && cd /opt/petopia",
-                  ("curl -fsSL --retry 3 --retry-delay 5 https://raw.githubusercontent.com/"
-                    + $repo + "/" + $sha + "/deploy/deploy.sh -o deploy.sh"),
-                  "chmod +x deploy.sh",
-                  ("./deploy.sh " + ($image | @sh) + " " + ($sha | @sh))
-                ]
-              }
-            }' > /tmp/ssm.json
+      # 배포할 이미지(커밋 SHA 태그)를 task-def 의 petopia 컨테이너에 주입한다.
+      - name: Task Definition 렌더
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: .aws/task-definition.json
+          container-name: petopia
+          image: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ steps.target.outputs.sha }}
 
-          CMD_ID=$(aws ssm send-command --cli-input-json file:///tmp/ssm.json \
-                    --region "$AWS_REGION" --query 'Command.CommandId' --output text)
-          echo "SSM 명령 ID: $CMD_ID"
-
-          # 종료 상태가 나올 때까지 폴링한다. 최대 15분.
-          deadline=$(( SECONDS + 900 ))
-          STATUS="Pending"
-          while true; do
-            sleep 10
-            STATUS=$(aws ssm get-command-invocation \
-                      --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
-                      --region "$AWS_REGION" --query 'Status' --output text 2>/dev/null || echo "Pending")
-            case "$STATUS" in
-              Success|Failed|Cancelled|TimedOut) break ;;
-            esac
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              STATUS="WorkflowTimeout"
-              break
-            fi
-            echo "진행 중... (${STATUS}, ${SECONDS}s)"
-          done
-
-          echo "----- 인스턴스 표준 출력 -----"
-          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
-            --region "$AWS_REGION" --query 'StandardOutputContent' --output text || true
-          echo "----- 인스턴스 표준 오류 -----"
-          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
-            --region "$AWS_REGION" --query 'StandardErrorContent' --output text || true
-
-          if [ "$STATUS" != "Success" ]; then
-            echo "::error title=배포 실패::SSM 명령 상태 ${STATUS}. 위 인스턴스 로그를 확인한다."
-            exit 1
-          fi
-          echo "배포 성공: ${IMAGE_URI}"
+      # 새 리비전을 등록하고 서비스를 롤링 교체한다. 안정화까지 대기하며,
+      # 서비스에 켜둔 Deployment Circuit Breaker 가 기동 실패 시 이전 리비전으로 자동 롤백한다.
+      # desiredCount 는 지정하지 않는다(오토스케일링이 관리) — 액션 기본 동작이 그렇다.
+      - name: ECS 배포
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ vars.ECS_SERVICE }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          wait-for-service-stability: true
 
       - name: 롤백 안내
         if: failure()
         run: |
-          echo "::warning title=롤백 방법::Actions 탭에서 이 워크플로를 main 브랜치로 workflow_dispatch 실행하고,"
-          echo "::warning::image_tag 에 직전 성공 커밋 SHA 를 넣으면 그 이미지로 되돌린다."
-          echo "자동 롤백은 없다. 헬스체크 실패 시 앱은 이미 내려가 있을 수 있다."
+          echo "::warning title=롤백 방법::기동 실패면 ECS Deployment Circuit Breaker 가 이전 리비전으로 자동 롤백한다."
+          echo "::warning::수동 롤백이 필요하면 Actions 에서 이 워크플로를 main 으로 workflow_dispatch 실행하고 image_tag 에 직전 성공 커밋 SHA 를 넣는다."

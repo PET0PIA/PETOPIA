@@ -138,6 +138,7 @@
               FROM reservations
              WHERE fair_id = #{fairId}
                AND user_id = #{userId}
+               AND visit_date = #{visitDate}
                AND status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
         )
     </select>

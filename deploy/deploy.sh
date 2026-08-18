@@ -23,6 +23,11 @@ APP_DIR="/opt/petopia"
 COMPOSE_FILE="docker-compose.app.yaml"
 SSM_PREFIX="/petopia/prod"
 REGION="ap-northeast-2"
+# 배포 관문 헬스체크. 일부러 8081/actuator/health/liveness 로 바꾸지 않는다.
+# liveness 는 프로세스만 살아 있으면(=DB 연결·Flyway 완료 전에도) 200 을 내므로, 아직
+# 요청을 처리할 수 없는 앱을 "배포 성공"으로 오판한다. 배포 관문은 DB/Redis 까지 확인해야
+# 하니 앱 포트(8080)의 기존 헬스체크를 그대로 쓴다. ALB 헬스체크(8081 liveness, DB가
+# 흔들려도 무한 재배포 루프에 안 빠지게)와는 목적이 다르다. 배경: docs/ecs-migration-plan.md
 HEALTH_URL="http://127.0.0.1:8080/api/reservation/health"
 HEALTH_TIMEOUT=180
 

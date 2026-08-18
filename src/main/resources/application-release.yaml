@@ -84,8 +84,17 @@ jwt:
   refresh-token-expiration: 1209600000
 
 cookie:
-  # 운영은 HTTPS로 서비스하므로 Secure 쿠키로 refreshToken을 보호한다.
-  secure: true
+  # 운영을 HTTPS로 서비스하면 Secure 쿠키로 refreshToken을 보호한다.
+  # 도메인/ACM 없이 ALB(HTTP)로 시연할 때는 COOKIE_SECURE=false 로 내려야
+  # 브라우저가 refreshToken 쿠키를 저장·전송한다. 안 내리면 로그인이 조용히 깨진다.
+  secure: ${COOKIE_SECURE:true}
 
 nts:
   service-key: ${NTS_SERVICE_KEY}
+
+# 운영은 관리 엔드포인트(actuator)를 앱 포트(8080)와 분리한 8081에 노출한다.
+# ALB 헬스체크가 8081/actuator/health/liveness 를 보고, 8081은 ALB 보안그룹에서만 접근하게 막는다.
+# health 그룹·probes 설정은 application.yaml 에 공통으로 있다.
+management:
+  server:
+    port: 8081

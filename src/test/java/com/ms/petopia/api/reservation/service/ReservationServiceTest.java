@@ -154,11 +154,33 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("중복 검사는 행사·사용자에 방문일까지 포함해 조회한다(다른 방문일은 각각 예약 가능)")
+    void create_중복검사에방문일포함_다른방문일은각각예약가능() {
+        givenDefaultCreationData(0);
+        given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260731ABC12345");
+        willAnswer(invocation -> {
+            ReservationInsertRow row = invocation.getArgument(0);
+            row.setReservationId(RESERVATION_ID);
+            return 1;
+        }).given(reservationMapper).insertReservation(any(ReservationInsertRow.class));
+
+        reservationService.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateReservationRequest(VISIT_DATE, null, null)
+        );
+
+        // 정책: 같은 행사라도 방문일이 다르면 각각 예약할 수 있다.
+        // 따라서 활성 예약 중복은 (행사, 사용자, 방문일) 조합으로만 판정한다.
+        verify(reservationMapper).existsActiveReservation(FAIR_ID, USER_ID, VISIT_DATE);
+    }
+
+    @Test
     @DisplayName("이미 활성 예약이 있으면 중복 예약으로 거절한다")
     void create_활성예약존재_중복예약예외를던진다() {
         ReservationCreationContext context = reservableContext(0);
         given(reservationMapper.selectCreationContext(FAIR_ID, VISIT_DATE)).willReturn(context);
-        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(true);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, VISIT_DATE)).willReturn(true);
 
         assertErrorCode(
                 () -> reservationService.create(
@@ -180,7 +202,7 @@ class ReservationServiceTest {
     void create_정원마감_매진예외를던진다() {
         ReservationCreationContext context = reservableContext(0);
         given(reservationMapper.selectCreationContext(FAIR_ID, VISIT_DATE)).willReturn(context);
-        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(false);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, VISIT_DATE)).willReturn(false);
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(activeUser());
         // 정원 판정은 조건부 UPDATE의 영향 행수가 전부다. 0이면 매진.
         given(capacityMapper.occupy(FAIR_ID, VISIT_DATE)).willReturn(0);
@@ -383,7 +405,7 @@ class ReservationServiceTest {
         given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260731ABC12345");
         given(reservationMapper.insertReservation(any(ReservationInsertRow.class)))
                 .willThrow(new DuplicateKeyException(
-                        "Duplicate entry for key 'UK_RESERVATION_ACTIVE_USER_FAIR'"
+                        "Duplicate entry for key 'UK_RESERVATION_ACTIVE_USER_FAIR_DATE'"
                 ));
 
         assertErrorCode(
@@ -408,7 +430,7 @@ class ReservationServiceTest {
                         "could not execute statement",
                         new SQLException(
                                 "Duplicate entry '1-2' for key "
-                                        + "'reservations.uk_reservation_active_user_fair'"
+                                        + "'reservations.uk_reservation_active_user_fair_date'"
                         )
                 ));
 
@@ -469,14 +491,14 @@ class ReservationServiceTest {
     private void givenCreationDataWithUser(ReservationUserSnapshot user) {
         given(reservationMapper.selectCreationContext(FAIR_ID, VISIT_DATE))
                 .willReturn(reservableContext(0));
-        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(false);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, VISIT_DATE)).willReturn(false);
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(user);
     }
 
     private void givenDefaultCreationData(ReservationCreationContext context) {
         given(reservationMapper.selectCreationContext(FAIR_ID, VISIT_DATE))
                 .willReturn(context);
-        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(false);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, VISIT_DATE)).willReturn(false);
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(activeUser());
         // 약관 미동의처럼 정원 점유 전에 걸리는 테스트도 이 헬퍼를 쓰므로 lenient로 둔다.
         org.mockito.Mockito.lenient().when(capacityMapper.occupy(FAIR_ID, VISIT_DATE)).thenReturn(1);

@@ -68,7 +68,7 @@ public class ReservationService {
         LocalDate today = timeProvider.today();
         validateFair(context, today);
 
-        if (reservationMapper.existsActiveReservation(fairId, userId)) {
+        if (reservationMapper.existsActiveReservation(fairId, userId, request.visitDate())) {
             throw new CommonException(ErrorCode.DUPLICATED_RESERVATION);
         }
 

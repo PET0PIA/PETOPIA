@@ -24,6 +24,8 @@ dependencies {
 
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // ECS/ALB 헬스체크용. /actuator/health/{liveness,readiness} 를 제공한다.
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     // MyBatis는 Spring Boot BOM이 버전을 관리하지 않으므로 직접 명시한다. 4.1.0은 Boot 4.1.0 기준으로 빌드됐다.
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.1.0'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'

@@ -1,4 +1,4 @@
-import { CalendarDays, Heart, IdCard, PawPrint, Ticket, User } from "lucide-react";
+import { CalendarDays, Heart, IdCard, PawPrint, Star, Ticket, User } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -210,6 +210,13 @@ export function MyPage() {
             <div>
               <p className="font-bold text-ink">내 행사 신청 목록</p>
               <p className="text-sm text-muted">신청한 행사의 심사 현황을 확인해요.</p>
+            </div>
+          </Link>
+          <Link to="/mypage/reviews" className="surface flex items-center gap-3 p-5 hover:bg-page">
+            <Star size={20} className="shrink-0 text-primary-strong" />
+            <div>
+              <p className="font-bold text-ink">내 리뷰</p>
+              <p className="text-sm text-muted">내가 남긴 리뷰를 확인하고 수정·삭제해요.</p>
             </div>
           </Link>
         </div>
