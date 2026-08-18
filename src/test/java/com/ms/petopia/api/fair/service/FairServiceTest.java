@@ -679,7 +679,7 @@ class FairServiceTest {
         given(fairMapper.updateReviewResult(any())).willReturn(1);
 
         ReviewFairApplicationResponse response = fairService.review(
-                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null)
+                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null)
         );
 
         assertThat(response.fairId()).isEqualTo(FAIR_ID);
@@ -720,7 +720,7 @@ class FairServiceTest {
         given(fairMapper.updateReviewResult(any())).willReturn(1);
 
         ReviewFairApplicationResponse response = fairService.review(
-                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  서류 미비  ")
+                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  서류 미비  ", null)
         );
 
         assertThat(response.status()).isEqualTo(FairStatus.REJECTED.name());
@@ -740,7 +740,7 @@ class FairServiceTest {
     @Test
     @DisplayName("반려인데 사유가 없으면 FAIR_REJECT_REASON_REQUIRED를 던지고 갱신하지 않는다")
     void review_반려사유없으면_예외를_던진다() {
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  ");
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  ", null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_REJECT_REASON_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
@@ -749,7 +749,7 @@ class FairServiceTest {
     @Test
     @DisplayName("승인인데 개설비 금액이 없으면 FAIR_OPENING_FEE_AMOUNT_REQUIRED를 던지고 갱신하지 않는다")
     void review_승인시금액없으면_예외를_던진다() {
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, null, null);
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, null, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
@@ -758,8 +758,39 @@ class FairServiceTest {
     @Test
     @DisplayName("승인인데 개설비 금액이 0 이하이면 FAIR_OPENING_FEE_AMOUNT_REQUIRED를 던지고 갱신하지 않는다")
     void review_승인시금액이0이하이면_예외를_던진다() {
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 0L, null);
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 0L, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
+        verify(fairMapper, never()).updateReviewResult(any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("승인 시 결제 기한 일수를 지정하면 그 일수로 결제 기한을 설정한다")
+    void review_결제기한을_지정하면_해당일수로_설정한다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateReviewResult(any())).willReturn(1);
+
+        ReviewFairApplicationResponse response = fairService.review(
+                FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, 14)
+        );
+
+        assertThat(response.paymentDueAt()).isEqualTo(NOW.plusDays(14));
+    }
+
+    @Test
+    @DisplayName("승인인데 결제 기한 일수가 0 이하이면 FAIR_PAYMENT_DUE_DAYS_INVALID를 던지고 갱신하지 않는다")
+    void review_결제기한이_0이하이면_예외를_던진다() {
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, 0);
+        assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
+        verify(fairMapper, never()).updateReviewResult(any());
+        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("승인인데 결제 기한 일수가 상한(365일)을 초과하면 FAIR_PAYMENT_DUE_DAYS_INVALID를 던지고 갱신하지 않는다")
+    void review_결제기한이_상한을_초과하면_예외를_던진다() {
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, 366);
+        assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
         verify(fairMapper, never()).updateReviewResult(any());
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
     }
@@ -770,7 +801,7 @@ class FairServiceTest {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
         given(fairMapper.updateReviewResult(any())).willReturn(0);
 
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null);
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_NOT_PENDING_REVIEW);
         verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
     }
@@ -780,7 +811,7 @@ class FairServiceTest {
     void review_존재하지않으면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(null);
 
-        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null);
+        ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_NOT_FOUND);
     }
 
@@ -788,11 +819,11 @@ class FairServiceTest {
     @DisplayName("검토자 ID나 decision이 없으면 INVALID_INPUT_VALUE를 던진다")
     void review_검토자나결정없으면_예외를_던진다() {
         assertErrorCode(
-                () -> fairService.review(FAIR_ID, null, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null)),
+                () -> fairService.review(FAIR_ID, null, new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null)),
                 ErrorCode.INVALID_INPUT_VALUE
         );
         assertErrorCode(
-                () -> fairService.review(FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(null, null, null)),
+                () -> fairService.review(FAIR_ID, REVIEWER_ID, new ReviewFairApplicationRequest(null, null, null, null)),
                 ErrorCode.INVALID_INPUT_VALUE
         );
         verify(fairMapper, never()).updateReviewResult(any());
@@ -816,6 +847,19 @@ class FairServiceTest {
         Fair updated = captor.getValue();
         assertThat(updated.getFairId()).isEqualTo(FAIR_ID);
         assertThat(updated.getPublishedAt()).isEqualTo(NOW);
+        verify(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+    }
+
+    @Test
+    @DisplayName("담당 관리자가 아니면 FairAdminAccessGuard가 던지는 예외가 그대로 전파되고 공개하지 않는다")
+    void publish_담당관리자가_아니면_예외가_전파된다() {
+        willAnswer(invocation -> {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }).given(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+
+        assertErrorCode(() -> fairService.publish(FAIR_ID, REVIEWER_ID), ErrorCode.ACCESS_DENIED);
+        verify(fairMapper, never()).selectById(any());
+        verify(fairMapper, never()).update(any());
     }
 
     @Test
@@ -919,6 +963,40 @@ class FairServiceTest {
         List<FairPublicListItemResponse> response = fairService.listPublicFairs(PublicFairListFilter.PAST);
 
         verify(fairMapper).selectPublicFairs(PublicFairListFilter.PAST, NOW.toLocalDate(), NOW);
+        assertThat(response).isEmpty();
+    }
+
+    // ===== listRecruitingFairs =====
+
+    @Test
+    @DisplayName("오늘 날짜(timeProvider 기준)로 조회해서 목록 응답으로 매핑한다(published_at과 무관)")
+    void listRecruitingFairs_오늘날짜로_조회해서_매핑한다() {
+        Fair fair = fairWithStatus(FairStatus.PAYMENT_PENDING);
+        fair.setCategory("DOG");
+        fair.setPlaceName("코엑스");
+        fair.setOperationStartDate(FUTURE_START);
+        fair.setOperationEndDate(FUTURE_END);
+        given(fairMapper.selectRecruitingFairs(NOW.toLocalDate(), NOW)).willReturn(List.of(fair));
+
+        List<FairPublicListItemResponse> response = fairService.listRecruitingFairs();
+
+        verify(fairMapper).selectRecruitingFairs(NOW.toLocalDate(), NOW);
+        assertThat(response).hasSize(1);
+        FairPublicListItemResponse item = response.get(0);
+        assertThat(item.fairId()).isEqualTo(FAIR_ID);
+        assertThat(item.category()).isEqualTo("DOG");
+        assertThat(item.placeName()).isEqualTo("코엑스");
+        assertThat(item.operationStartDate()).isEqualTo(FUTURE_START);
+        assertThat(item.operationEndDate()).isEqualTo(FUTURE_END);
+    }
+
+    @Test
+    @DisplayName("모집중인 행사가 없으면 빈 목록을 반환한다")
+    void listRecruitingFairs_없으면_빈목록을_반환한다() {
+        given(fairMapper.selectRecruitingFairs(NOW.toLocalDate(), NOW)).willReturn(List.of());
+
+        List<FairPublicListItemResponse> response = fairService.listRecruitingFairs();
+
         assertThat(response).isEmpty();
     }
 

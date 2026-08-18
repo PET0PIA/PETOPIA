@@ -99,6 +99,13 @@ public interface FairMapper {
                                  @Param("now") LocalDateTime now);
 
     /**
+     * 부스 모집중(recruiting = true)인 행사만 골라 반환한다({@code FairService#listRecruitingFairs}
+     * 전용, 인증 없이 누구나 볼 수 있는 목록). {@link #selectPublicFairs}와 달리 published_at을
+     * 요구하지 않는다 - "전체공개" 전에도 참가업체가 모집중인 행사를 찾아 신청할 수 있어야 한다.
+     */
+    List<Fair> selectRecruitingFairs(@Param("today") LocalDate today, @Param("now") LocalDateTime now);
+
+    /**
      * 관리자 심사 큐 조회({@code FairService#getApplications} 전용). {@code status}가 없으면
      * 전체, 있으면 그 상태만 걸러 오래된 신청 순(created_at ASC)으로 반환한다 - RECEIVED만
      * 걸러서 보면 "지금 처리해야 할 것"을 먼저 들어온 순서대로 보여주는 큐가 되고, 상태 없이

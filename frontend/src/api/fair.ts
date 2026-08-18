@@ -251,6 +251,15 @@ export function getPublicFairs(filter: PublicFairListFilter) {
   return apiClient.get<FairPublicListItem[]>(`/api/fairs/public?filter=${filter}`);
 }
 
+/**
+ * 부스 모집중인 행사만 목록으로 조회한다(인증 없이 누구나 호출 가능). getPublicFairs와 달리
+ * "전체공개"(published) 여부와 무관하다 - 담당자가 모집공고+부스슬롯만 준비하면, 아직 일반
+ * 소비자에게 전체공개하지 않았어도 참가업체는 이 목록에서 행사를 찾아 신청할 수 있다.
+ */
+export function getRecruitingFairs() {
+  return apiClient.get<FairPublicListItem[]>("/api/fairs/recruiting");
+}
+
 export type FairReviewDecision = "APPROVE" | "REJECT";
 
 export interface ReviewFairApplicationRequest {
@@ -258,6 +267,8 @@ export interface ReviewFairApplicationRequest {
   /** decision이 APPROVE일 때만 필수(개설비 금액, 원). */
   openingFeeAmount?: number;
   rejectReason?: string;
+  /** decision이 APPROVE일 때만 의미 있는 선택 입력. 비우면 서버 기본값(7일)을 쓴다. */
+  paymentDueDays?: number;
 }
 
 export interface ReviewFairApplicationResponse {

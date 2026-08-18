@@ -84,6 +84,10 @@ public enum ErrorCode {
     BOOTH_NOT_FOUND(HttpStatus.NOT_FOUND, "V024", "부스를 찾을 수 없습니다."),
     BOOTH_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "V025", "판매상품·이벤트를 찾을 수 없습니다."),
     BOOTH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V026", "본인 소유의 부스만 관리할 수 있습니다."),
+    BUSINESS_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "V027", "심사 대기 중인 사업자만 처리할 수 있습니다."),
+    BUSINESS_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V028", "반려 시 반려 사유를 입력해야 합니다."),
+    BUSINESS_NOT_APPROVED(HttpStatus.CONFLICT, "V029", "승인된 사업자만 취소 처리할 수 있습니다."),
+    BUSINESS_REVOKE_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V030", "취소 처리 시 사유를 입력해야 합니다."),
 
 
     // ===== Payment =====
@@ -121,6 +125,7 @@ public enum ErrorCode {
     FAIR_APPLICATION_NOT_EDITABLE(HttpStatus.CONFLICT, "F026", "심사 대기 중이거나 반려된 신청서만 수정할 수 있습니다."),
     FAIR_OPENING_FEE_AMOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "F027", "승인 시 개설비 금액을 입력해야 합니다."),
     FAIR_OPENING_FEE_NOT_PAYABLE(HttpStatus.CONFLICT, "F028", "개설비를 결제할 수 없는 상태의 행사입니다."),
+    FAIR_PAYMENT_DUE_DAYS_INVALID(HttpStatus.BAD_REQUEST, "F029", "결제 기한 일수는 1일 이상 365일 이하여야 합니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -185,6 +190,9 @@ public enum ErrorCode {
     REVIEW_REPLY_NOT_FOUND(HttpStatus.NOT_FOUND, "RV009", "존재하지 않는 답글이거나 해당 리뷰의 답글이 아닙니다."),
     REVIEW_REPLY_ALREADY_EXISTS(HttpStatus.CONFLICT, "RV010", "이미 답글이 등록된 리뷰입니다. 기존 답글을 수정해주세요."),
     REVIEW_REPORT_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "RV011", "신고 상세 사유는 500자를 초과할 수 없습니다."),
+    REVIEW_VERSION_CONFLICT(HttpStatus.CONFLICT, "RV012", "다른 곳에서 이미 이 리뷰를 수정했습니다. 새로고침 후 다시 시도해주세요."),
+    REVIEW_FAIR_NOT_PUBLISHED(HttpStatus.BAD_REQUEST, "RV013", "전체공개된 행사가 아닙니다. 아직 공개되지 않았거나 취소된 행사에는 리뷰를 작성·수정·삭제할 수 없습니다."),
+    REVIEW_REPLY_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "RV014", "답글 내용은 1000자를 초과할 수 없습니다."),
 
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),

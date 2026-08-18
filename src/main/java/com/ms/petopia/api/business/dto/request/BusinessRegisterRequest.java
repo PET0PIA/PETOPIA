@@ -44,4 +44,7 @@ public class BusinessRegisterRequest {
     @Size(max = 255, message = "웹사이트 URL은 255자 이하여야 합니다.")
     private String website; // 웹사이트 URL, 선택 입력
 
+    @NotBlank(message = "사업자등록증 파일을 첨부해 주세요.")
+    private String businessRegDocKey; // presigned 업로드로 받은 임시 objectKey
+
 }

@@ -37,7 +37,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -52,10 +51,17 @@ import java.util.Set;
 public class FairService {
 
     /**
-     * 승인 시 개설비 결제 기한. 실제 정책이 확정되기 전까지 7일로 고정한다.
-     * TODO 정책(결제 기한 일수) 확정되면 상수를 교체하거나 행사별 설정으로 옮긴다.
+     * 승인 시 개설비 결제 기한의 기본값(일). 검토자가 승인 시 {@code paymentDueDays}를 따로
+     * 지정하지 않으면 이 값을 쓴다 - 행사마다 다른 기한이 필요할 수 있어 고정 상수 대신
+     * 검토 요청(ReviewFairApplicationRequest)에서 건마다 재정의할 수 있게 했다.
      */
-    private static final Duration PAYMENT_DUE_PERIOD = Duration.ofDays(7);
+    private static final int DEFAULT_PAYMENT_DUE_DAYS = 7;
+
+    /**
+     * paymentDueDays로 허용하는 상한(일). now.plusDays(dueDays)가 DB DATETIME 범위를
+     * 넘지 않도록, 그리고 실무적으로 말이 되는 결제 기한만 받도록 상한을 둔다.
+     */
+    private static final int MAX_PAYMENT_DUE_DAYS = 365;
 
     /**
      * 공개(publish)를 허용하는 상태. 개설비 결제가 끝난 이후(PREPARING~IN_PROGRESS)에만 공개할 수
@@ -267,6 +273,21 @@ public class FairService {
     }
 
     /**
+     * 부스 모집중인 행사 목록을 인증 없이 조회한다(참여 부스 신청 진입점 전용).
+     * {@link #listPublicFairs}와 달리 published_at을 요구하지 않는다 - "전체공개"는 일반
+     * 소비자 노출·사전예약·리뷰 작성 가능 여부만 통제하고, 참가업체 모집 노출은 그와 별개로
+     * 모집공고+부스슬롯만 준비되면(= recruiting 계산식) 시작된 것으로 본다.
+     */
+    @Transactional(readOnly = true)
+    public List<FairPublicListItemResponse> listRecruitingFairs() {
+        LocalDateTime now = timeProvider.now();
+        LocalDate today = now.toLocalDate();
+        return fairMapper.selectRecruitingFairs(today, now).stream()
+                .map(this::toPublicListItemResponse)
+                .toList();
+    }
+
+    /**
      * 신청서를 수정(재제출)한다. RECEIVED(심사 대기) 또는 REJECTED(반려) 상태에서만 가능하고,
      * 본인이 신청한 행사만 수정할 수 있다(신청자 본인 여부는 requesterId가 fairs.applicant_user_id와
      * 같은지로 판단 - requesterId 자체는 JWT로 검증됐지만, "로그인한 누구나"와 "이 신청서의
@@ -389,9 +410,10 @@ public class FairService {
         update.setReviewedBy(reviewerId);
         update.setReviewedAt(now);
         if (approved) {
+            int dueDays = request.paymentDueDays() != null ? request.paymentDueDays() : DEFAULT_PAYMENT_DUE_DAYS;
             update.setStatus(FairStatus.PAYMENT_PENDING);
             update.setOpeningFeeAmount(request.openingFeeAmount());
-            update.setPaymentDueAt(now.plus(PAYMENT_DUE_PERIOD));
+            update.setPaymentDueAt(now.plusDays(dueDays));
         } else {
             update.setStatus(FairStatus.REJECTED);
             update.setRejectReason(request.rejectReason().trim());
@@ -472,6 +494,10 @@ public class FairService {
      * {@code fairs.published_at IS NOT NULL}만 보고 예약 가능 여부를 판단하므로(취소·예약기간은
      * reservation 도메인이 별도로 검증) 여기서는 published_at만 채운다.
      *
+     * <p>SUPER_ADMIN뿐 아니라 그 행사 담당 EVENT_ADMIN도 호출할 수 있다(SecurityConfig가
+     * role까지는 걸러주므로, "이 행사" 담당자인지는 여기서 {@link FairAdminAccessGuard}로 한 번
+     * 더 확인한다 - 다른 행사 담당 EVENT_ADMIN이 남의 행사를 공개하는 걸 막기 위해).
+     *
      * <p>이미 공개된 행사를 다시 호출하면 에러 없이 최초 공개 결과를 그대로 반환한다(멱등).
      */
     @Transactional
@@ -479,6 +505,7 @@ public class FairService {
         if (actorId == null || actorId <= 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        fairAdminAccessGuard.checkAssigned(fairId);
         Fair fair = findFairOrThrow(fairId);
 
         if (fair.getPublishedAt() != null) {
@@ -507,6 +534,11 @@ public class FairService {
         if (request.decision() == FairReviewDecision.APPROVE
                 && (request.openingFeeAmount() == null || request.openingFeeAmount() <= 0)) {
             throw new CommonException(ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
+        }
+        if (request.decision() == FairReviewDecision.APPROVE
+                && request.paymentDueDays() != null
+                && (request.paymentDueDays() <= 0 || request.paymentDueDays() > MAX_PAYMENT_DUE_DAYS)) {
+            throw new CommonException(ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
         }
     }
 

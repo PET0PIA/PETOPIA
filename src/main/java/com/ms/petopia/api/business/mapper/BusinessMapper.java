@@ -4,6 +4,7 @@ import com.ms.petopia.api.business.domain.Business;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -30,5 +31,32 @@ public interface BusinessMapper {
 
     // 같은 사업자의 동시 신청 직렬화용 락 (application 도메인에서 호출)
     Long lockBusinessForApplication(@Param("businessId") Long businessId);
+
+    // 심사 상태별 사업자 목록 조회 (관리자용)
+    List<Business> selectByApprovalStatus(@Param("approvalStatus") String approvalStatus);
+
+    // 사업자 상세 조회 (관리자용, 소유자 필터 없음)
+    Business selectByIdForReview(@Param("businessId") Long businessId);
+
+    // 사업자 승인. PENDING_REVIEW일 때만 반영되는 조건부 UPDATE (반환된 행 수로 동시 처리 감지)
+    int updateApprovalApproved(@Param("businessId") Long businessId,
+                               @Param("reviewerId") Long reviewerId,
+                               @Param("reviewedAt") LocalDateTime reviewedAt);
+
+    // 이 소유자가 이 사업자 말고 다른 승인된 사업자를 하나라도 갖고 있는지 (VENDOR 재부여 방지용)
+    boolean existsApprovedBusinessForOwner(@Param("ownerId") Long ownerId,
+                                           @Param("excludeBusinessId") Long excludeBusinessId);
+
+    // 사업자 반려. PENDING_REVIEW일 때만 반영되는 조건부 UPDATE
+    int updateApprovalRejected(@Param("businessId") Long businessId,
+                               @Param("reviewerId") Long reviewerId,
+                               @Param("rejectReason") String rejectReason,
+                               @Param("reviewedAt") LocalDateTime reviewedAt);
+
+    // 승인된 사업자 취소 처리. APPROVED일 때만 반영되는 조건부 UPDATE
+    int updateApprovalRevoked(@Param("businessId") Long businessId,
+                              @Param("reviewerId") Long reviewerId,
+                              @Param("revokeReason") String revokeReason,
+                              @Param("reviewedAt") LocalDateTime reviewedAt);
 
 }

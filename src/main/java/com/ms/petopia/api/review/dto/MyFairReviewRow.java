@@ -23,4 +23,5 @@ public class MyFairReviewRow {
     private boolean verifiedVisit;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Long version;
 }

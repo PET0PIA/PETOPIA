@@ -12,7 +12,8 @@ public record MyFairReviewResponse(
         String content,
         boolean verifiedVisit,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Long version
 ) {
     public static MyFairReviewResponse from(MyFairReviewRow row) {
         return new MyFairReviewResponse(
@@ -24,7 +25,8 @@ public record MyFairReviewResponse(
                 row.getContent(),
                 row.isVerifiedVisit(),
                 row.getCreatedAt(),
-                row.getUpdatedAt()
+                row.getUpdatedAt(),
+                row.getVersion()
         );
     }
 }

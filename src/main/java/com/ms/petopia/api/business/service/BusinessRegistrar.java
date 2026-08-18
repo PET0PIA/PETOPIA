@@ -1,6 +1,5 @@
 package com.ms.petopia.api.business.service;
 
-import com.ms.petopia.api.auth.service.UserRoleService;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -25,10 +24,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class BusinessRegistrar {
 
     private final BusinessMapper businessMapper;
-    private final UserRoleService userRoleService;
 
     @Transactional
-    public Business save(Long ownerId, BusinessRegisterRequest request, Business.VerifyStatus verifyStatus) {
+    public Business save(Long ownerId, BusinessRegisterRequest request,
+                         Business.VerifyStatus verifyStatus, String businessRegDocKey) {
 
         // 동시 등록 방지: ownerId 단위 애플리케이션 락 (users 테이블에는 영향 없음)
         Integer locked = businessMapper.acquireRegistrationLock(ownerId);
@@ -41,7 +40,7 @@ public class BusinessRegistrar {
          * 락 해제는 메서드 종료 시점이 아니라, 트랜잭션이 실제로 커밋/롤백된 직후에 해야 한다.
          * @Transactional의 실제 커밋은 이 메서드가 return한 뒤 프록시에서 일어나므로,
          * finally에서 바로 풀면 커밋 전에 락이 풀려 다른 트랜잭션이 아직 안 보이는(uncommitted)
-         * insert 이전 상태를 읽고 isFirstBusiness를 잘못 판정할 수 있다(코드래빗 리뷰 반영).
+         * insert 이전 상태를 읽고 잘못 판정할 수 있다.
          */
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 
@@ -52,10 +51,10 @@ public class BusinessRegistrar {
 
         });
 
-        // insert 전에 먼저 확인 — 이번이 첫 사업자 등록인지
-        boolean isFirstBusiness = businessMapper.selectByOwnerId(ownerId).isEmpty();
-
-        // 검증 결과까지 확정된 상태로 한 번에 저장
+        /*
+         * 관리자 승인 전이라 VENDOR 권한은 아직 부여하지 않는다(승인 시점에 BusinessService에서 부여).
+         * approvalStatus는 항상 PENDING_REVIEW로 고정 - 이 메서드로는 그 외 상태를 만들 수 없다.
+         */
         Business business = Business.builder()
                 .ownerId(ownerId)
                 .name(request.getName())
@@ -66,20 +65,14 @@ public class BusinessRegistrar {
                 .phone(request.getPhone())
                 .website(request.getWebsite())
                 .verifyStatus(verifyStatus)
+                .businessRegDocKey(businessRegDocKey)
+                .approvalStatus(Business.ApprovalStatus.PENDING_REVIEW)
                 .build();
 
         try {
             businessMapper.insertBusiness(business);
         } catch (DuplicateKeyException e) {
             throw new CommonException(ErrorCode.BUSINESS_DUPLICATE);
-        }
-
-        /*
-         * 첫 사업자 등록일 때만 role 전환 (두 번째부턴 이미 VENDOR라 건드릴 필요 없음)
-         * 사업자 저장과 role 전환을 같은 트랜잭션으로 묶는다 (하나 실패하면 둘 다 롤백)
-         */
-        if (isFirstBusiness) {
-            userRoleService.grantVendorRole(ownerId);
         }
 
         // 재조회(정확한 값으로 응답 만들기 위해) 값 반환
