@@ -3,6 +3,7 @@ package com.ms.petopia.api.payment.dto;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
+import lombok.ToString.Exclude;
 
 import java.time.LocalDateTime;
 
@@ -38,4 +39,14 @@ public class PaymentRow {
     private String orderId;
     private String tossPaymentKey;
     private LocalDateTime updatedAt;
+
+    /** 간편결제(네이버페이 등) 제공사. 일반 카드/계좌이체 등이면 null. */
+    private String easyPayProvider;
+    /** 아래 4개는 가상계좌로 결제했을 때만 값이 있다(WAITING_FOR_DEPOSIT 상태로 전이할 때 채움). */
+    private String virtualAccountBankCode;
+    private String virtualAccountNumber;
+    private LocalDateTime virtualAccountDueDate;
+    /** 입금 웹훅 검증용 secret. 절대 API 응답으로 노출하면 안 돼서 toString에서도 제외한다. */
+    @Exclude
+    private String virtualAccountSecret;
 }

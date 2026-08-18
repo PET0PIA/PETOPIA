@@ -22,6 +22,11 @@ import java.time.LocalDateTime;
  * @param payerUserId  결제자 USER ID
  * @param reservationId 예약 ID (예약금 결제일 때만 값 있음)
  * @param applicationId 참가신청 ID (참가비 결제일 때만 값 있음)
+ * @param easyPayProvider 간편결제 제공사(네이버페이 등). 일반 카드/계좌이체 등이면 null
+ * @param virtualAccountBankCode 가상계좌 은행 코드. 가상계좌 결제가 아니면 null
+ * @param virtualAccountNumber   가상계좌 계좌번호. 가상계좌 결제가 아니면 null
+ * @param virtualAccountDueDate  가상계좌 입금기한. 가상계좌 결제가 아니면 null
+ *                               (웹훅 검증용 secret은 절대 응답에 포함하지 않는다)
  */
 public record PaymentResponse(
         Long paymentId,
@@ -36,7 +41,11 @@ public record PaymentResponse(
         Long businessId,
         Long payerUserId,
         Long reservationId,
-        Long applicationId
+        Long applicationId,
+        String easyPayProvider,
+        String virtualAccountBankCode,
+        String virtualAccountNumber,
+        LocalDateTime virtualAccountDueDate
 ) {
 
     /**
@@ -57,7 +66,11 @@ public record PaymentResponse(
                 row.getBusinessId(),
                 row.getPayerUserId(),
                 row.getReservationId(),
-                row.getApplicationId()
+                row.getApplicationId(),
+                row.getEasyPayProvider(),
+                row.getVirtualAccountBankCode(),
+                row.getVirtualAccountNumber(),
+                row.getVirtualAccountDueDate()
         );
     }
 }

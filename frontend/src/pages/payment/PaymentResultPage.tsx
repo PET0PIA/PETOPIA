@@ -125,6 +125,10 @@ export function PaymentSuccessPage() {
   const [phase, setPhase] = useState<ConfirmPhase>("confirming");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [entryQrToken, setEntryQrToken] = useState<string | null>(null);
+  // confirm 응답 status를 렌더링 분기에 써야 한다(WAITING_FOR_DEPOSIT이면 성공 화면 대신
+  // 입금 대기 화면을 보여줘야 하므로) — 과거엔 status를 확인 안 하고 무조건 성공 화면을
+  // 띄우던 버그가 있었다.
+  const [confirmedPayment, setConfirmedPayment] = useState<PaymentDetail | null>(null);
   // 결제당 딱 한 번만 confirm한다. 백엔드는 PENDING이 아닌 결제를 409로 막으므로, 가드가
   // 없으면 StrictMode의 이펙트 2회 실행이 그대로 중복 호출이 된다.
   const confirmStarted = useRef(false);
@@ -149,7 +153,9 @@ export function PaymentSuccessPage() {
           try {
             const payment = await getPayment(paymentId, userId);
             confirmed = payment;
-            if (payment.status !== "COMPLETED") {
+            // COMPLETED뿐 아니라 WAITING_FOR_DEPOSIT(가상계좌 입금 대기)도 정상 상태다 —
+            // 둘 다 아니면 진짜 실패로 본다.
+            if (payment.status !== "COMPLETED" && payment.status !== "WAITING_FOR_DEPOSIT") {
               setErrorMessage(err.message);
               setPhase("error");
               return;
@@ -166,19 +172,27 @@ export function PaymentSuccessPage() {
         }
       }
 
-      // confirm 응답에는 QR 토큰이 없다. 승인이 확정되면 결제 도메인이 예약 도메인에
-      // 통지하고 그 시점에 QR이 발급되므로 따로 조회한다. 개설비 결제는 QR이 없는
-      // 흐름이라(예약이 아니다) 이 조회 자체를 건너뛴다.
-      if (reservationId !== null) {
-        try {
-          const qr = await getEntryQr(reservationId);
-          setEntryQrToken(qr.qrToken);
-        } catch {
-          // 결제는 이미 성공 - QR 조회 실패를 결제 실패로 보여주지 않는다.
+      setConfirmedPayment(confirmed);
+
+      // 가상계좌는 confirm이 성공해도 아직 입금 전(WAITING_FOR_DEPOSIT)일 수 있다 — 이때는
+      // 결제·예약이 진짜로 끝난 게 아니므로 QR을 조회하지 않는다(예약 도메인 통지 자체가
+      // 아직 안 갔으므로 어차피 없다). 아래 렌더링에서 confirmedPayment.status를 보고
+      // 성공 화면 대신 "입금 대기" 화면을 보여준다.
+      if (confirmed.status !== "WAITING_FOR_DEPOSIT") {
+        // confirm 응답에는 QR 토큰이 없다. 승인이 확정되면 결제 도메인이 예약 도메인에
+        // 통지하고 그 시점에 QR이 발급되므로 따로 조회한다. 개설비 결제는 QR이 없는
+        // 흐름이라(예약이 아니다) 이 조회 자체를 건너뛴다.
+        if (reservationId !== null) {
+          try {
+            const qr = await getEntryQr(reservationId);
+            setEntryQrToken(qr.qrToken);
+          } catch {
+            // 결제는 이미 성공 - QR 조회 실패를 결제 실패로 보여주지 않는다.
+          }
         }
       }
-      // 결제까지 끝났으니 대기 슬롯을 돌려준다. 예약 생성 단계에서 놓지 않고 여기까지
-      // 들고 온 이유는, 결제 API도 같은 슬롯으로 통과해야 하기 때문이다.
+      // 결제 시도까지는 끝났으니(입금 대기든 즉시완료든) 대기 슬롯을 돌려준다. 예약 생성
+      // 단계에서 놓지 않고 여기까지 들고 온 이유는, 결제 API도 같은 슬롯으로 통과해야 하기 때문이다.
       // fairId는 결제 응답에서 온다 - 이 화면의 URL에는 예약금 결제의 fairId가 없다.
       releaseWaitingSlot(confirmed.fairId);
       setPhase("done");
@@ -265,6 +279,28 @@ export function PaymentSuccessPage() {
           : isVendorFee
             ? "결제가 이미 승인된 상태일 수 있어요. 참가 신청 현황에서 상태를 확인해 주세요."
             : "결제가 이미 승인된 상태일 수 있어요. 내 예약 목록에서 상태를 확인해 주세요."}
+      </ResultShell>
+    );
+  }
+
+  // 가상계좌 결제는 confirm이 성공해도 아직 입금 전일 수 있다 — 성공 화면 대신 계좌정보를
+  // 보여주고, 실제 완료(COMPLETED)는 입금 후 웹훅으로 처리된다는 걸 안내한다.
+  if (confirmedPayment?.status === "WAITING_FOR_DEPOSIT") {
+    return (
+      <ResultShell
+        tone="neutral"
+        icon={<Clock3 size={28} />}
+        title="입금을 기다리고 있어요"
+        actions={<PrimaryLink to={backLink.to}>{backLink.label}</PrimaryLink>}
+      >
+        아래 가상계좌로 결제 금액을 입금해 주시면 자동으로 결제가 완료돼요.
+        <div className="mt-4 grid gap-1 rounded-lg bg-page px-4 py-3 text-left text-sm text-ink">
+          <div>은행코드: {confirmedPayment.virtualAccountBankCode}</div>
+          <div>계좌번호: {confirmedPayment.virtualAccountNumber}</div>
+          {confirmedPayment.virtualAccountDueDate && (
+            <div>입금기한: {new Date(confirmedPayment.virtualAccountDueDate).toLocaleString("ko-KR")}</div>
+          )}
+        </div>
       </ResultShell>
     );
   }

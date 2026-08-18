@@ -1,5 +1,6 @@
 package com.ms.petopia.api.refund.service;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
@@ -48,6 +49,9 @@ class RefundServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     @InjectMocks
     private RefundService refundService;
 
@@ -68,6 +72,51 @@ class RefundServiceTest {
         row.setApplicationId(40L);
         row.setPayerUserId(90L);
         return row;
+    }
+
+    @Test
+    @DisplayName("결제 소유자가 환불을 요청하면 행사담당자 검증 없이 통과한다")
+    void assertRequesterAuthorized_소유자_통과() {
+        given(paymentMapper.selectById(1L)).willReturn(completedPaymentRow());
+
+        refundService.assertRequesterAuthorized(1L, 90L);
+
+        verify(fairAdminAccessGuard, never()).checkAssigned(any());
+    }
+
+    @Test
+    @DisplayName("소유자가 아니면 그 행사 담당 관리자인지 확인한다")
+    void assertRequesterAuthorized_소유자아님_행사담당자면통과() {
+        given(paymentMapper.selectById(1L)).willReturn(completedPaymentRow());
+        // fairAdminAccessGuard.checkAssigned(10L)이 Mock 기본 no-op이니 "담당자로 확인됨"을 흉내냄
+
+        refundService.assertRequesterAuthorized(1L, 99L);
+
+        verify(fairAdminAccessGuard).checkAssigned(10L);
+    }
+
+    @Test
+    @DisplayName("소유자도, 행사 담당 관리자도 아니면 예외를 던진다")
+    void assertRequesterAuthorized_소유자아님_관리자도아님_예외를던진다() {
+        given(paymentMapper.selectById(1L)).willReturn(completedPaymentRow());
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> refundService.assertRequesterAuthorized(1L, 77L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 결제를 요청 권한 검증하면 예외를 던진다")
+    void assertRequesterAuthorized_존재하지않는결제_예외를던진다() {
+        given(paymentMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> refundService.assertRequesterAuthorized(999L, 90L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
     }
 
     @Test
