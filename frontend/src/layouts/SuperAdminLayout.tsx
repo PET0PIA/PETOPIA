@@ -1,11 +1,11 @@
 import { Outlet } from "react-router-dom";
-import { AdminChrome } from "../components/layout/AdminChrome";
+import { ConsoleChrome } from "../components/layout/ConsoleChrome";
 import { superAdminNavigation } from "../config/navigation";
 
 export function SuperAdminLayout() {
   return (
-    <AdminChrome navigation={superAdminNavigation}>
+    <ConsoleChrome navigation={superAdminNavigation} consoleLabel="최고 관리자">
       <Outlet />
-    </AdminChrome>
+    </ConsoleChrome>
   );
 }
