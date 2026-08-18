@@ -25,6 +25,8 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class FairReviewReplyService {
 
+    private static final int MAX_CONTENT_LENGTH = 1000;
+
     private final FairReviewReplyMapper fairReviewReplyMapper;
     private final FairReviewMapper fairReviewMapper;
     private final FairAdminAccessGuard fairAdminAccessGuard;
@@ -101,6 +103,9 @@ public class FairReviewReplyService {
     private void validateContent(String content) {
         if (content == null || content.isBlank()) {
             throw new CommonException(ErrorCode.REVIEW_CONTENT_REQUIRED);
+        }
+        if (content.length() > MAX_CONTENT_LENGTH) {
+            throw new CommonException(ErrorCode.REVIEW_REPLY_CONTENT_TOO_LONG);
         }
     }
 }

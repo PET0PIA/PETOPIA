@@ -77,6 +77,18 @@ class FairReviewServiceTest {
     }
 
     @Test
+    @DisplayName("공개됐다가 취소된 행사면 REVIEW_FAIR_NOT_PUBLISHED를 던지고 저장하지 않는다")
+    void create_취소된행사면_예외를_던진다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
+
+        assertErrorCode(
+                () -> fairReviewService.create(FAIR_ID, USER_ID, new CreateFairReviewRequest(5, "좋아요")),
+                ErrorCode.REVIEW_FAIR_NOT_PUBLISHED
+        );
+        verify(fairReviewMapper, never()).insert(any());
+    }
+
+    @Test
     @DisplayName("존재하지 않는 행사면 FAIR_NOT_FOUND를 던진다")
     void create_존재하지않으면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(null);
@@ -144,6 +156,19 @@ class FairReviewServiceTest {
     }
 
     @Test
+    @DisplayName("공개됐다가 취소된 행사면 REVIEW_FAIR_NOT_PUBLISHED를 던지고 갱신하지 않는다")
+    void update_취소된행사면_예외를_던진다() {
+        given(fairReviewMapper.selectById(REVIEW_ID)).willReturn(existingReview());
+        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
+
+        assertErrorCode(
+                () -> fairReviewService.update(FAIR_ID, REVIEW_ID, USER_ID, new UpdateFairReviewRequest(4, "수정", 0L)),
+                ErrorCode.REVIEW_FAIR_NOT_PUBLISHED
+        );
+        verify(fairReviewMapper, never()).update(any());
+    }
+
+    @Test
     @DisplayName("본인 리뷰가 아니면 REVIEW_ACCESS_DENIED를 던지고 전체공개 여부는 확인하지 않는다")
     void update_본인리뷰아니면_예외를_던진다() {
         given(fairReviewMapper.selectById(REVIEW_ID)).willReturn(existingReview());
@@ -202,6 +227,21 @@ class FairReviewServiceTest {
     }
 
     @Test
+    @DisplayName("공개됐다가 취소된 행사면 REVIEW_FAIR_NOT_PUBLISHED를 던지고 아무것도 지우지 않는다")
+    void delete_취소된행사면_예외를_던진다() {
+        given(fairReviewMapper.selectById(REVIEW_ID)).willReturn(existingReview());
+        given(fairMapper.selectById(FAIR_ID)).willReturn(canceledFair());
+
+        assertErrorCode(
+                () -> fairReviewService.delete(FAIR_ID, REVIEW_ID, USER_ID),
+                ErrorCode.REVIEW_FAIR_NOT_PUBLISHED
+        );
+        verify(fairReviewReportMapper, never()).deleteByReviewId(any());
+        verify(fairReviewReplyMapper, never()).deleteByReviewId(any());
+        verify(fairReviewMapper, never()).deleteById(any());
+    }
+
+    @Test
     @DisplayName("본인 리뷰가 아니면 REVIEW_ACCESS_DENIED를 던지고 아무것도 지우지 않는다")
     void delete_본인리뷰아니면_예외를_던진다() {
         given(fairReviewMapper.selectById(REVIEW_ID)).willReturn(existingReview());
@@ -219,6 +259,12 @@ class FairReviewServiceTest {
         Fair fair = new Fair();
         fair.setFairId(FAIR_ID);
         fair.setPublishedAt(LocalDateTime.of(2026, 8, 1, 0, 0));
+        return fair;
+    }
+
+    private Fair canceledFair() {
+        Fair fair = publishedFair();
+        fair.setCanceledAt(LocalDateTime.of(2026, 8, 10, 0, 0));
         return fair;
     }
 
