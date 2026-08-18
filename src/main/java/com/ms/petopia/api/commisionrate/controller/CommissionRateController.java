@@ -3,13 +3,12 @@ package com.ms.petopia.api.commisionrate.controller;
 import com.ms.petopia.api.commisionrate.dto.CommissionRateResponse;
 import com.ms.petopia.api.commisionrate.dto.UpdateCommissionRateRequest;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
-import com.ms.petopia.api.settlement.controller.SettlementTemporaryAuthHeaders;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,12 +26,13 @@ public class CommissionRateController {
         return commissionRateService.getEffectiveRate(fairId);
     }
 
-    // 요율 설정(SUPER_ADMIN). role 검증은 settlement confirm/recalculate와 같은 이유로
-    // 인증 도메인 완성 후 추가 예정(TODO) - 그 전까진 헤더로 받은 userId를 감사용으로만 기록한다.
+    // 요율 설정(SUPER_ADMIN). role 검증은 SecurityConfig가 한다(hasRole("SUPER_ADMIN")) —
+    // 행사별 override도 SUPER_ADMIN이 전역으로 설정하는 값이라 FairAdminAccessGuard 같은
+    // 행사담당자 스코핑은 필요 없다.
     @PutMapping("/settlements/commission-rate")
     public CommissionRateResponse setRate(
             @RequestBody @Valid UpdateCommissionRateRequest request,
-            @RequestHeader(SettlementTemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         return commissionRateService.setRate(request.scope(), request.fairId(), request.rate(), userId);
     }

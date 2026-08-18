@@ -5,6 +5,7 @@ import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -66,6 +67,7 @@ public class SettlementService {
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final AuditLogService auditLogService;
     private final FairContractClient fairContractClient;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     /**
      * 특정 행사·업체의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
@@ -78,11 +80,13 @@ public class SettlementService {
      * 스케줄러/이벤트 인프라가 없어서 관리자가 수동으로 호출하는 API로 대신한다 — 자동화는
      * 후속 과제.
      *
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_ALREADY_EXISTS} 이미 계산된 정산이 있을 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_FAIR_CANCELED} 취소된 행사일 때
      */
     @Transactional
     public SettlementResponse calculate(Long fairId, Long businessId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
         assertFairNotCanceled(fairId);
         if (settlementMapper.selectByFairAndBusiness(fairId, businessId) != null) {
             throw new CommonException(ErrorCode.SETTLEMENT_ALREADY_EXISTS);
@@ -125,6 +129,7 @@ public class SettlementService {
      * 달리 여기서는 재계산이 몇 번이든 반복될 수 있어 upsert 대신 delete-then-insert가 더 단순하다.
      *
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_FOUND} 존재하지 않는 정산일 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_RECALCULABLE} PENDING이 아니거나,
      *         재계산 중 동시에 확정돼버린 경우
      */
@@ -134,6 +139,7 @@ public class SettlementService {
         if (row == null) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND);
         }
+        fairAdminAccessGuard.checkAssigned(row.getFairId());
         if (!PENDING.equals(row.getStatus())) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_RECALCULABLE);
         }
@@ -223,6 +229,7 @@ public class SettlementService {
      * "확정 이후 변경은 감사기록 필수"이지만 그 정정 절차 자체는 이번 스코프 밖).
      *
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_FOUND} 존재하지 않는 정산일 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_FAIR_CANCELED} 그 사이 행사가 취소됐을 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_CONFIRMABLE} PENDING이 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_RECALCULATION_REQUIRED} 재계산이
@@ -234,6 +241,9 @@ public class SettlementService {
         if (row == null) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND);
         }
+        // 다른 행사 담당 EVENT_ADMIN이 남의 행사 정산을 확정하지 못하도록 먼저 확인한다
+        // (CodeRabbit 리뷰 지적).
+        fairAdminAccessGuard.checkAssigned(row.getFairId());
         assertFairNotCanceled(row.getFairId());
         if (!PENDING.equals(row.getStatus())) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);
@@ -307,8 +317,13 @@ public class SettlementService {
         }
     }
 
-    /** 행사·업체 조합으로 정산 단건 조회(참가업체 본인 조회용). */
+    /**
+     * 행사·업체 조합으로 정산 단건 조회(EVENT_ADMIN/SUPER_ADMIN — SettlementController 참고).
+     *
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
+     */
     public SettlementResponse getByFairAndBusiness(Long fairId, Long businessId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
         SettlementRow row = settlementMapper.selectByFairAndBusiness(fairId, businessId);
         if (row == null) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND);
@@ -316,8 +331,15 @@ public class SettlementService {
         return SettlementResponse.from(row);
     }
 
-    /** 행사 하나에 속한 정산 목록 조회(박람회관리자 조회용). */
+    /**
+     * 행사 하나에 속한 정산 목록 조회(박람회관리자 조회용). {@link SettlementExportService}가
+     * 엑셀 다운로드에서도 재사용한다 — 둘 다 HTTP 요청 경로(SettlementController)로만 들어와서
+     * 여기 가드를 넣어도 SecurityContext 없는 내부 호출과 충돌하지 않는다.
+     *
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
+     */
     public List<SettlementResponse> getByFair(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
         return settlementMapper.selectByFairId(fairId).stream()
                 .map(SettlementResponse::from)
                 .toList();

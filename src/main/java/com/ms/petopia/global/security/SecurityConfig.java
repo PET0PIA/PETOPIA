@@ -160,11 +160,43 @@ public class SecurityConfig {
                                 "/api/fairs/*/visit-stats",
                                 "/api/fairs/*/visit-stats/export"
                         ).hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        // Settlement 도메인 - 정산내역 엑셀 export는 통계 export(visit-stats/export)와 동일
-                        // 기준으로 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 접근(금액이 포함된 대량 다운로드라
-                        // 개별 조회보다 접근을 좁힘). 계산/확정/조회 등 나머지 정산 API 인증 규칙은 결제 도메인
-                        // 인증 연동 PR(별도 진행 중)에서 함께 들어올 예정 - 아직 이 규칙만 먼저 추가한다.
+                        // Payment 도메인 - 결제 생성/확정/내 결제내역은 로그인만 필요(소유자 검증은
+                        // 서비스 계층). 결제 단건 조회(GET /api/payments/{id})는 소유자 또는 그 행사
+                        // 담당 EVENT_ADMIN/SUPER_ADMIN만 - PaymentService.getPayment(id, userId)가 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/payments/*").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/reservations/*/payment").authenticated()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/vendor-applications/*/payment",
+                                "/api/payments/*/confirm",
+                                "/api/reservations/*/payment",
+                                "/api/fairs/*/opening-payment"
+                        ).authenticated()
+                        // Payment 도메인 - 조건별 결제 목록(관리자용). fairId 없이 전체를 보는 건
+                        // SUPER_ADMIN만, fairId를 주면 그 행사 담당 EVENT_ADMIN도 가능 - 세부 스코핑은
+                        // PaymentController.getPayments가 FairAdminAccessGuard로 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/payments").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/me/payments").authenticated()
+                        // Refund 도메인 - 환불 요청은 결제 소유자 또는 그 행사 담당 관리자만
+                        // (RefundService.assertRequesterAuthorized가 확인). 조회는 로그인만 요구.
+                        .requestMatchers(HttpMethod.POST, "/api/payments/*/refunds").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/payments/*/refunds", "/api/refunds/*").authenticated()
+                        // Settlement 도메인 - 계산/확정/재계산/조회/엑셀 export 전부 그 행사 담당
+                        // EVENT_ADMIN 또는 SUPER_ADMIN만(금액이 포함된 관리자 전용 기능이라 개별 조회보다
+                        // 접근을 좁힘). 행사 담당자인지는 SettlementService가 FairAdminAccessGuard로
+                        // 한 번 더 확인한다(계산/확정/재계산은 fairId를, confirm/recalculate는 정산
+                        // 행에서 읽은 fairId를 기준으로).
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/vendors/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/*/confirm", "/api/settlements/*/recalculate").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // CommissionRate 도메인 - 현재 요율 조회는 결제 화면 등에서 누구나 볼 수 있게
+                        // permitAll, 설정 변경만 SUPER_ADMIN.
+                        .requestMatchers(HttpMethod.GET, "/api/settlements/commission-rate").permitAll()
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/commission-rate").hasRole("SUPER_ADMIN")
+                        // PaymentWebhookController - 토스가 사용자 JWT 없이 직접 호출하는 가상계좌
+                        // 입금 웹훅. 위조 방지는 여기(인증)가 아니라 PaymentService.handleDepositWebhook의
+                        // secret 대조가 담당한다.
+                        .requestMatchers(HttpMethod.POST, "/webhooks/toss/**").permitAll()
                         // FairPaymentContractController(/internal/api/v1/**)는 사용자 JWT가 아니라
                         // 도메인 간 내부 호출자 헤더(X-Internal-Caller)로 별도 인증하므로 여기서 다루지 않는다.
                         // Business 도메인 - 등록/조회는 로그인만 필요. VENDOR 승격은 등록 시점이 아니라
