@@ -6,6 +6,7 @@ import com.ms.petopia.api.recommendation.domain.BoothCandidate;
 import com.ms.petopia.api.recommendation.domain.BoothSlotLocation;
 import com.ms.petopia.api.recommendation.dto.BoothRecommendationItem;
 import com.ms.petopia.api.recommendation.dto.BoothRecommendationRequest;
+import com.ms.petopia.api.recommendation.dto.HallRoute;
 import com.ms.petopia.api.recommendation.mapper.BoothRecommendationMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -15,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -236,11 +238,155 @@ class RecommendationServiceTest {
         assertThat(result.get(0).slotNumber()).isEqualTo("A-01");
     }
 
+    @Test
+    void 동선추천_후보_부스가_없으면_Claude를_호출하지_않고_빈_목록을_반환한다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(List.of());
+
+        List<HallRoute> result = recommendationService.recommendRoute(FAIR_ID, null, request);
+
+        assertThat(result).isEmpty();
+        verify(claudeBoothRecommender, never()).recommendForRoute(any(), any(), any());
+    }
+
+    @Test
+    void 동선추천_슬롯_위치가_없는_부스는_제외한다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        BoothCandidate candidate = boothCandidate(1L, "A부스");
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(List.of(candidate));
+        given(claudeBoothRecommender.recommendForRoute(null, "장난감 찾아요", List.of(candidate)))
+                .willReturn(List.of(new ClaudeBoothRecommender.RouteRecommendationEntry(1L, "장난감 많아요", true)));
+        //위치 정보가 아예 없는 상황(슬롯 미배정)을 흉내
+        given(boothRecommendationMapper.selectBoothLocations(List.of(1L))).willReturn(List.of());
+
+        List<HallRoute> result = recommendationService.recommendRoute(FAIR_ID, null, request);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void 동선추천_홀별로_그룹핑해서_반환한다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        List<BoothCandidate> candidates = List.of(
+                boothCandidate(1L, "A부스"), boothCandidate(2L, "B부스"), boothCandidate(3L, "C부스"));
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(candidates);
+        given(claudeBoothRecommender.recommendForRoute(null, "장난감 찾아요", candidates))
+                .willReturn(List.of(
+                        new ClaudeBoothRecommender.RouteRecommendationEntry(1L, "이유1", true),
+                        new ClaudeBoothRecommender.RouteRecommendationEntry(2L, "이유2", true),
+                        new ClaudeBoothRecommender.RouteRecommendationEntry(3L, "이유3", false)
+                ));
+        given(boothRecommendationMapper.selectBoothLocations(List.of(1L, 2L, 3L))).willReturn(List.of(
+                boothSlotLocation(1L, 10L, "A홀", "A-01", 0, 0),
+                boothSlotLocation(2L, 10L, "A홀", "A-02", 1, 0),
+                boothSlotLocation(3L, 20L, "B홀", "B-01", 0, 0)
+        ));
+
+        List<HallRoute> result = recommendationService.recommendRoute(FAIR_ID, null, request);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).hallId()).isEqualTo(10L);
+        assertThat(result.get(0).hallName()).isEqualTo("A홀");
+        assertThat(result.get(0).stops()).hasSize(2);
+        assertThat(result.get(1).hallId()).isEqualTo(20L);
+        assertThat(result.get(1).stops()).hasSize(1);
+    }
+
+    @Test
+    void 동선추천_한_홀에_7개가_와도_matched를_우선으로_6개로_캡한다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        List<BoothCandidate> candidates = java.util.stream.IntStream.rangeClosed(1, 7)
+                .mapToObj(i -> boothCandidate((long) i, "부스" + i))
+                .toList();
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(candidates);
+        //matched=false(extra)인 부스를 먼저 보내고, matched=true 4개를 뒤에 보내도 matched가 우선돼야 함
+        List<ClaudeBoothRecommender.RouteRecommendationEntry> entries = List.of(
+                new ClaudeBoothRecommender.RouteRecommendationEntry(1L, "extra1", false),
+                new ClaudeBoothRecommender.RouteRecommendationEntry(2L, "extra2", false),
+                new ClaudeBoothRecommender.RouteRecommendationEntry(3L, "extra3", false),
+                new ClaudeBoothRecommender.RouteRecommendationEntry(4L, "matched1", true),
+                new ClaudeBoothRecommender.RouteRecommendationEntry(5L, "matched2", true),
+                new ClaudeBoothRecommender.RouteRecommendationEntry(6L, "matched3", true),
+                new ClaudeBoothRecommender.RouteRecommendationEntry(7L, "matched4", true)
+        );
+        given(claudeBoothRecommender.recommendForRoute(null, "장난감 찾아요", candidates)).willReturn(entries);
+        //matched(4,5,6,7) 우선 정렬 후 남은 extra(1,2,3) 순서로 boothId를 조회하므로, 스텁 인자도 그 순서와 맞춰야 함
+        List<Long> boothIds = List.of(4L, 5L, 6L, 7L, 1L, 2L, 3L);
+        List<BoothSlotLocation> locations = java.util.stream.IntStream.rangeClosed(1, 7)
+                .mapToObj(i -> boothSlotLocation((long) i, 10L, "A홀", "A-0" + i, i, 0))
+                .toList();
+        given(boothRecommendationMapper.selectBoothLocations(boothIds)).willReturn(locations);
+
+        List<HallRoute> result = recommendationService.recommendRoute(FAIR_ID, null, request);
+
+        assertThat(result).hasSize(1);
+        List<Long> stopBoothIds = result.get(0).stops().stream().map(stop -> stop.boothId()).toList();
+        assertThat(stopBoothIds).hasSize(6);
+        //matched 4개(4,5,6,7)는 전부 포함되고, extra는 6개를 채우기 위해 필요한 2개(1,2)까지만 포함돼야 함
+        assertThat(stopBoothIds).contains(4L, 5L, 6L, 7L, 1L, 2L);
+        assertThat(stopBoothIds).doesNotContain(3L);
+    }
+
+    @Test
+    void 동선추천_홀_안에서_거리가_최소가_되는_순서로_정렬한다() {
+        BoothRecommendationRequest request = new BoothRecommendationRequest();
+        request.setNeed("장난감 찾아요");
+
+        given(boothRecommendationMapper.existsFair(FAIR_ID)).willReturn(true);
+        List<BoothCandidate> candidates = List.of(
+                boothCandidate(1L, "왼쪽"), boothCandidate(2L, "오른쪽"), boothCandidate(3L, "가운데"));
+        given(boothRecommendationMapper.selectBoothCandidates(FAIR_ID)).willReturn(candidates);
+        //Claude가 1(왼쪽) -> 2(오른쪽) -> 3(가운데) 순서로 반환해도, 실제로는 일직선상 좌표라
+        //왼쪽-가운데-오른쪽(또는 그 역순) 순서가 최단 동선이어야 함
+        given(claudeBoothRecommender.recommendForRoute(null, "장난감 찾아요", candidates))
+                .willReturn(List.of(
+                        new ClaudeBoothRecommender.RouteRecommendationEntry(1L, "이유1", true),
+                        new ClaudeBoothRecommender.RouteRecommendationEntry(2L, "이유2", true),
+                        new ClaudeBoothRecommender.RouteRecommendationEntry(3L, "이유3", true)
+                ));
+        given(boothRecommendationMapper.selectBoothLocations(List.of(1L, 2L, 3L))).willReturn(List.of(
+                boothSlotLocation(1L, 10L, "A홀", "A-01", 0, 0),
+                boothSlotLocation(2L, 10L, "A홀", "A-02", 10, 0),
+                boothSlotLocation(3L, 10L, "A홀", "A-03", 5, 0)
+        ));
+
+        List<HallRoute> result = recommendationService.recommendRoute(FAIR_ID, null, request);
+
+        List<Long> orderedBoothIds = result.get(0).stops().stream().map(stop -> stop.boothId()).toList();
+        //왼쪽(0)->가운데(5)->오른쪽(10) 또는 그 역순만 최단 거리(10)
+        assertThat(orderedBoothIds).isIn(List.of(1L, 3L, 2L), List.of(2L, 3L, 1L));
+        //order 필드도 방문 순서(1,2,3)와 일치해야 함
+        assertThat(result.get(0).stops()).extracting(stop -> stop.order()).containsExactly(1, 2, 3);
+    }
+
     private BoothSlotLocation boothSlotLocation(Long boothId, String hallName, String slotNumber) {
         BoothSlotLocation location = new BoothSlotLocation();
         location.setBoothId(boothId);
         location.setHallName(hallName);
         location.setSlotNumber(slotNumber);
+        return location;
+    }
+
+    private BoothSlotLocation boothSlotLocation(Long boothId, Long hallId, String hallName, String slotNumber, int x, int y) {
+        BoothSlotLocation location = new BoothSlotLocation();
+        location.setBoothId(boothId);
+        location.setHallId(hallId);
+        location.setHallName(hallName);
+        location.setSlotNumber(slotNumber);
+        location.setPosX(BigDecimal.valueOf(x));
+        location.setPosY(BigDecimal.valueOf(y));
         return location;
     }
 
