@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -737,22 +738,63 @@ public class PaymentService {
                         row.getPaidAt()
                 );
                 return;
-            } catch (Exception e) {
-                if (attempt == NOTIFY_MAX_ATTEMPTS) {
-                    // 결제 자체는 이미 성공했으므로 여기서 예외를 던져 결제 응답을 실패로 되돌리지 않는다.
-                    // 재시도까지 다 실패하면 로그를 남겨서 운영 중 예약 확정 누락을 나중에 보정할 수 있게 한다.
-                    // (배치/스케줄러로 자동 보정하는 건 별도 과제로 남겨둠 — 알려진 한계)
-                    log.error("예약 도메인 결제완료 통지 {}회 재시도 모두 실패. reservationId={}, paymentId={}",
-                            NOTIFY_MAX_ATTEMPTS, row.getReservationId(), row.getPaymentId(), e);
+            } catch (RestClientResponseException e) {
+                // 예약 도메인이 4xx로 거부한 경우(결제 제한시간 초과·이미 취소·중복 이벤트 등,
+                // ReservationPaymentCompletionService가 검증 후 던지는 것들)는 재시도해도 결과가
+                // 똑같다 — "예약은 없는데 결제만 COMPLETED로 남는" 상태를 막기 위해 재시도 없이
+                // 바로 자동 환불로 복구한다(2026-08-19, 이슈 #167 후속 — 주원 결정).
+                if (e.getStatusCode().is4xxClientError()) {
+                    log.error("예약 도메인이 결제완료 통지를 거부함({}) - 자동 환불 시도. reservationId={}, paymentId={}",
+                            e.getStatusCode(), row.getReservationId(), row.getPaymentId(), e);
+                    refundAfterReservationRejection(row);
                     return;
                 }
-                log.warn("예약 도메인 결제완료 통지 실패({}번째 시도), 재시도한다. reservationId={}, paymentId={}",
-                        attempt, row.getReservationId(), row.getPaymentId(), e);
-                // 대기 중 인터럽트(취소 신호) 걸리면 재시도를 더 돌리지 않고 바로 빠져나간다.
-                if (!sleepBeforeRetry()) {
+                if (!retryOrGiveUp(row, attempt, e)) {
+                    return;
+                }
+            } catch (Exception e) {
+                if (!retryOrGiveUp(row, attempt, e)) {
                     return;
                 }
             }
+        }
+    }
+
+    /**
+     * @return 재시도를 계속해도 되면 true, 이번이 마지막 시도였거나(로그만 남기고 포기)
+     *         대기 중 인터럽트가 걸려 더 재시도할 수 없으면 false
+     */
+    private boolean retryOrGiveUp(PaymentRow row, int attempt, Exception e) {
+        if (attempt == NOTIFY_MAX_ATTEMPTS) {
+            // 결제 자체는 이미 성공했으므로 여기서 예외를 던져 결제 응답을 실패로 되돌리지 않는다.
+            // 네트워크 장애·예약 도메인 5xx 등 일시적 문제로 보고 재시도까지 다 실패하면 로그를
+            // 남겨서 운영 중 예약 확정 누락을 나중에 보정할 수 있게 한다 - 4xx(확정적 거부)와 달리
+            // 여기서 자동 환불까지 하진 않는다. 짧은 재시도(200ms 간격) 동안의 일시적 장애를
+            // "예약 도메인이 거부했다"로 잘못 단정해 정상 결제를 환불해버릴 위험이 더 크기 때문이다
+            // (배치/스케줄러로 자동 보정하는 건 별도 과제로 남겨둠 — 알려진 한계).
+            log.error("예약 도메인 결제완료 통지 {}회 재시도 모두 실패. reservationId={}, paymentId={}",
+                    NOTIFY_MAX_ATTEMPTS, row.getReservationId(), row.getPaymentId(), e);
+            return false;
+        }
+        log.warn("예약 도메인 결제완료 통지 실패({}번째 시도), 재시도한다. reservationId={}, paymentId={}",
+                attempt, row.getReservationId(), row.getPaymentId(), e);
+        // 대기 중 인터럽트(취소 신호) 걸리면 재시도를 더 돌리지 않고 바로 빠져나간다.
+        return sleepBeforeRetry();
+    }
+
+    /**
+     * 예약 도메인이 결제완료 통지를 확정적으로 거부했을 때(4xx) 자동으로 전액 환불한다.
+     * 참가비(VENDOR_FEE) 결제완료 통지 실패 시의 자동환불 폴백과 같은 패턴 — actingUserId는
+     * 사람이 아니라 이 메서드가 자동으로 트리거하는 환불이라 {@link #SYSTEM_ACTOR_USER_ID}를 쓴다.
+     */
+    private void refundAfterReservationRejection(PaymentRow row) {
+        try {
+            refundService.refund(row.getPaymentId(), SYSTEM_ACTOR_USER_ID,
+                    new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.PAYMENT_ADMIN));
+        } catch (Exception refundEx) {
+            // 환불까지 실패하면(정산 CONFIRMED 포함 등) 더는 자동으로 복구할 방법이 없어
+            // 로그만 남긴다 — 운영자가 결제·예약 상태를 보고 수동으로 맞춰야 한다.
+            log.error("자동 환불도 실패 — 수동 확인 필요. paymentId={}", row.getPaymentId(), refundEx);
         }
     }
 
