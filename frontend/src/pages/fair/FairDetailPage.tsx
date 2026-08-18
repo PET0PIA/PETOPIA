@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, ChevronRight, ImageOff, MapPin } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
+import { KakaoMap } from "../../components/map/KakaoMap";
 import { PageContainer } from "../../components/common/PageContainer";
 import { Badge } from "../../components/ui/Badge";
 import { ApiError } from "../../api/client";
@@ -179,6 +180,10 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
                 </dd>
               </div>
             </dl>
+            {/* 지오코딩 실패(주소 못 찾음) 또는 지도 SDK 키 미설정이면 KakaoMap이 스스로 null을 반환한다 */}
+            {fair.latitude != null && fair.longitude != null && (
+              <KakaoMap latitude={fair.latitude} longitude={fair.longitude} label={fair.placeName} />
+            )}
           </div>
 
           {/* 관람료 + 예매 CTA (관람료는 예매 창이 열렸을 때만 온다) */}
