@@ -102,6 +102,7 @@ export function ApplicationSubmitPage() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   // 초기값 true - 로딩 끝나기 전 등록 화면으로 잘못 튕기는 것 방지
   const [hasAnyBusiness, setHasAnyBusiness] = useState(true);
+  const [hasPendingReview, setHasPendingReview] = useState(true);
   const [boothSlots, setBoothSlots] = useState<BoothSlotLockStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -137,6 +138,7 @@ export function ApplicationSubmitPage() {
         if (ignore) return;
         setBoothSlots(slots);
         setHasAnyBusiness(myBusinesses.length > 0);
+        setHasPendingReview(myBusinesses.some((business) => business.approvalStatus === "PENDING_REVIEW"));
         // 승인된 사업자만 신청 가능 - 심사대기/반려/취소된 사업자는 목록/셀렉트에서 제외
         setBusinesses(myBusinesses.filter((business) => business.approvalStatus === "APPROVED"));
       })
@@ -221,9 +223,13 @@ export function ApplicationSubmitPage() {
     return (
       <PageContainer className="py-10">
         <EmptyState
-          title="승인된 사업자가 없어요"
-          description="사업자 등록 심사가 완료되면 참가 신청을 할 수 있어요."
-          actionTo="/vendor/businesses"
+          title={hasPendingReview ? "승인된 사업자가 없어요" : "사업자 등록이 반려·취소됐어요"}
+          description={
+            hasPendingReview
+              ? "사업자 등록 심사가 완료되면 참가 신청을 할 수 있어요."
+              : "등록한 사업자가 반려되거나 취소됐어요. 사유를 확인하고 다시 등록해 주세요."
+          }
+          actionTo="/businesses/me"
           actionLabel="내 사업자 확인하기"
         />
       </PageContainer>

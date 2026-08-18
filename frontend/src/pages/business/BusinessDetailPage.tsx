@@ -77,7 +77,7 @@ export function BusinessDetailPage() {
 
   return (
     <PageContainer className="py-10">
-      <Link to="/vendor/businesses" className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-ink">
+      <Link to={user?.role === "VENDOR" ? "/vendor/businesses" : "/businesses/me"} className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-ink">
         <ArrowLeft size={16} />사업자 목록으로
       </Link>
       <PageHeader eyebrow="참여 업체" title={business.name} description="심사 상태와 등록 정보예요." />
