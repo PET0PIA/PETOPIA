@@ -191,6 +191,7 @@ public enum ErrorCode {
     REVIEW_REPLY_ALREADY_EXISTS(HttpStatus.CONFLICT, "RV010", "이미 답글이 등록된 리뷰입니다. 기존 답글을 수정해주세요."),
     REVIEW_REPORT_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "RV011", "신고 상세 사유는 500자를 초과할 수 없습니다."),
     REVIEW_VERSION_CONFLICT(HttpStatus.CONFLICT, "RV012", "다른 곳에서 이미 이 리뷰를 수정했습니다. 새로고침 후 다시 시도해주세요."),
+    REVIEW_FAIR_NOT_PUBLISHED(HttpStatus.BAD_REQUEST, "RV013", "아직 전체공개되지 않은 행사입니다. 공개된 뒤에 리뷰를 작성·수정·삭제할 수 있습니다."),
 
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),
