@@ -100,6 +100,8 @@ export function ApplicationSubmitPage() {
   const { fairId } = useParams<{ fairId: string }>();
 
   const [businesses, setBusinesses] = useState<Business[]>([]);
+  // 초기값 true - 로딩 끝나기 전 등록 화면으로 잘못 튕기는 것 방지
+  const [hasAnyBusiness, setHasAnyBusiness] = useState(true);
   const [boothSlots, setBoothSlots] = useState<BoothSlotLockStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -134,7 +136,9 @@ export function ApplicationSubmitPage() {
       .then(([slots, myBusinesses]) => {
         if (ignore) return;
         setBoothSlots(slots);
-        setBusinesses(myBusinesses);
+        setHasAnyBusiness(myBusinesses.length > 0);
+        // 승인된 사업자만 신청 가능 - 심사대기/반려/취소된 사업자는 목록/셀렉트에서 제외
+        setBusinesses(myBusinesses.filter((business) => business.approvalStatus === "APPROVED"));
       })
       .catch((error) => {
         if (ignore) return;
@@ -205,10 +209,25 @@ export function ApplicationSubmitPage() {
     );
   }
 
-  // 로그인은 됐지만 참가할 사업자가 없으면 등록 화면으로 보낸다. from을 함께 넘겨,
+  // 사업자 자체가 하나도 없으면 등록 화면으로 보낸다. from을 함께 넘겨,
   // 사업자 등록을 마치면 BusinessRegisterPage가 이 신청 화면으로 되돌려보낸다.
-  if (businesses.length === 0) {
+  if (!hasAnyBusiness) {
     return <Navigate to="/businesses/new" replace state={{ from: `/fairs/${fairId}/apply` }} />;
+  }
+
+  // 사업자는 있지만 전부 심사 대기중이거나 반려/취소된 상태 - 등록 화면으로 또 보내면
+  // "방금 등록했는데 왜 또 등록하라는 거지" 하는 혼란스러운 루프가 생기니, 안내만 보여준다.
+  if (businesses.length === 0) {
+    return (
+      <PageContainer className="py-10">
+        <EmptyState
+          title="승인된 사업자가 없어요"
+          description="사업자 등록 심사가 완료되면 참가 신청을 할 수 있어요."
+          actionTo="/vendor/businesses"
+          actionLabel="내 사업자 확인하기"
+        />
+      </PageContainer>
+    );
   }
 
   if (result) {

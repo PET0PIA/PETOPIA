@@ -11,6 +11,7 @@ export interface BusinessRegisterRequest {
   address: string;
   phone: string;
   website?: string;
+  businessRegDocKey: string;
 }
 
 export interface Business {
@@ -23,6 +24,8 @@ export interface Business {
   phone: string;
   website: string | null;
   verifyStatus: BusinessVerifyStatus;
+  approvalStatus: "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "REVOKED";
+  rejectReason: string | null;
   createdAt: string;
 }
 

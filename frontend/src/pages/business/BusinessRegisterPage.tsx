@@ -6,6 +6,7 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
+import { AttachmentUploadField } from "../../components/ui/AttachmentUploadField";
 import { ApiError } from "../../api/client";
 import { registerBusiness, type BusinessRegisterRequest } from "../../api/business";
 import { useAuth } from "../../contexts/AuthContext";
@@ -34,7 +35,7 @@ function label(text: string, required = false) {
   return <span className="mb-1.5 block text-sm font-bold text-ink">{text}{required && <span className="ml-1 text-primary-strong">*</span>}</span>;
 }
 
-function validate(form: FormState): string[] {
+function validate(form: FormState, documentObjectKey: string | null): string[] {
   const errors: string[] = [];
   if (form.name.trim() === "") errors.push("업체명을 입력해 주세요.");
   if (form.ceoName.trim() === "") errors.push("대표자명을 입력해 주세요.");
@@ -42,10 +43,11 @@ function validate(form: FormState): string[] {
   if (form.startDate.trim() === "") errors.push("개업일자를 입력해 주세요.");
   if (form.address.trim() === "") errors.push("사업장 주소를 입력해 주세요.");
   if (form.phone.trim() === "") errors.push("연락처를 입력해 주세요.");
+  if (!documentObjectKey) errors.push("사업자등록증을 첨부해 주세요.");
   return errors;
 }
 
-function toRequest(form: FormState): BusinessRegisterRequest {
+function toRequest(form: FormState, documentObjectKey: string): BusinessRegisterRequest {
   return {
     name: form.name.trim(),
     ceoName: form.ceoName.trim(),
@@ -54,6 +56,7 @@ function toRequest(form: FormState): BusinessRegisterRequest {
     address: form.address.trim(),
     phone: form.phone.trim(),
     website: form.website.trim() || undefined,
+    businessRegDocKey: documentObjectKey,
   };
 }
 
@@ -64,6 +67,8 @@ export function BusinessRegisterPage() {
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from ?? null;
   const [form, setForm] = useState<FormState>(initialForm);
+  const [documentObjectKey, setDocumentObjectKey] = useState<string | null>(null);
+  const [documentUploading, setDocumentUploading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -74,24 +79,26 @@ export function BusinessRegisterPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationErrors = validate(form);
+    const validationErrors = validate(form, documentObjectKey);
+    if (documentUploading) validationErrors.push("첨부파일 업로드가 끝날 때까지 잠시만 기다려 주세요.");
     setErrors(validationErrors);
     if (validationErrors.length > 0) return;
     if (!user) {
       setSubmitError("로그인 후 이용할 수 있어요.");
       return;
     }
+    if (!documentObjectKey) return;
 
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const response = await registerBusiness(toRequest(form));
+      const response = await registerBusiness(toRequest(form, documentObjectKey));
       if (from) {
         // 참가 신청 등에서 넘어온 경우: 등록을 마쳤으니 원래 화면(신청서)으로 돌려보낸다.
         // 신청서가 다시 마운트되며 사업자 목록을 새로 불러오므로 방금 등록한 사업자로 바로 신청할 수 있다.
         navigate(from, { replace: true });
       } else {
-        // 일반 진입: 등록 성공 시 바로 상세 페이지로 이동해서 진위확인 결과를 보여준다.
+        // 일반 진입: 등록 성공 시 바로 상세 페이지로 이동해서 심사 대기 안내를 보여준다.
         navigate(`/businesses/${response.businessId}`, { state: { justRegistered: true } });
       }
     } catch (error) {
@@ -106,7 +113,7 @@ export function BusinessRegisterPage() {
       <PageHeader
         eyebrow="PETOPIA 참여 업체"
         title="사업자 등록을 신청해요"
-        description="국세청 진위확인을 거쳐 바로 승인돼요. *는 필수 입력이에요."
+        description="국세청 진위확인 후 사업자등록증을 첨부해 신청하면, 관리자 심사 후 승인돼요. *는 필수 입력이에요."
       />
 
       {errors.length > 0 && (
@@ -158,11 +165,16 @@ export function BusinessRegisterPage() {
               {label("사업장 주소", true)}
               <Input value={form.address} onChange={(event) => update("address", event.target.value)} required />
             </div>
+            <AttachmentUploadField
+              label="사업자등록증 *"
+              onObjectKeyChange={setDocumentObjectKey}
+              onUploadingChange={setDocumentUploading}
+            />
           </Card>
         </section>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || documentUploading}>
             <Send size={16} />
             {submitting ? "등록 중..." : "사업자 등록"}
           </Button>
