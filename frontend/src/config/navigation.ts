@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Ban, BarChart3, Bell, Building2, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, Headset, Image, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Star, Store, Ticket, UsersRound } from "lucide-react";
+import { Ban, BarChart3, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardX, CreditCard, FileCheck2, Headset, Image, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Star, Store, Ticket, UsersRound } from "lucide-react";
 import type { UserRole } from "../api/auth";
 
 export interface NavigationItem {
@@ -94,6 +94,7 @@ export const fairAdminNavigation: NavigationItem[] = [
       { label: "부스 배치 관리", path: "/fair-admin/booths", icon: Map },
       { label: "모집 공고 관리", path: "/fair-admin/recruit-notice", icon: Megaphone },
       { label: "참가업체 신청 관리", path: "/fair-admin/participations", icon: ClipboardCheck },
+      { label: "참가 취소 신청 검토", path: "/fair-admin/cancellation-requests", icon: ClipboardX },
     ],
   },
   {

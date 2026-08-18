@@ -81,6 +81,7 @@ function ProfileMenu({ name, onLogout }: { name: string; onLogout: () => void })
     { label: "내 예약 목록", onSelect: () => navigate("/reservations/me") },
     { label: "내 행사 신청 목록", onSelect: () => navigate("/fair-applications/me") },
     { label: "내 방문 부스", onSelect: () => navigate("/booths/visited/me") },
+    { label: "즐겨찾기 부스", onSelect: () => navigate("/booths/favorites/me") },
     { label: "로그아웃", onSelect: onLogout },
   ];
   return <DropdownMenu label={name} items={items} />;

@@ -318,8 +318,10 @@ export function ReservationDetailPage() {
   if (reservation.canCancel) {
     menuItems.push({ label: "예약 취소", onSelect: handleCancel });
   }
-  // 후기 작성 진입(화면은 아직 미구현). 다녀온 행사에 대한 후기를 남기는 자리.
-  menuItems.push({ label: "후기 작성", onSelect: () => navigate(`/fairs/${reservation.fairId}/reviews/new`) });
+  // 후기 작성 진입. 전용 화면을 새로 만들지 않고 행사 상세의 리뷰 섹션을 작성 상태로 연다
+  // (같은 작성 폼이 두 군데 생기는 중복을 피한다). 백엔드는 예매·방문 여부로 작성을 막지
+  // 않으므로 예약 상태와 무관하게 항상 띄운다.
+  menuItems.push({ label: "후기 작성", onSelect: () => navigate(`/fairs/${reservation.fairId}?write-review=1`) });
 
   return (
     <div className="mx-auto max-w-3xl py-2">

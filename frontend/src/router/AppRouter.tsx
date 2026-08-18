@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { fairAdminNavigation, superAdminNavigation, vendorNavigation, flattenNavigation } from "../config/navigation";
 import { ConsoleHome } from "../components/layout/ConsoleHome";
 import { FairAdminLayout } from "../layouts/FairAdminLayout";
@@ -10,8 +10,7 @@ import { FairApplicationNewPage } from "../pages/fair/FairApplicationNewPage";
 import { FairApplicationEditPage } from "../pages/fair/FairApplicationEditPage";
 import { MyFairApplicationsPage } from "../pages/fair/MyFairApplicationsPage";
 import { MyFairApplicationDetailPage } from "../pages/fair/MyFairApplicationDetailPage";
-import { FairUpcomingPage } from "../pages/fair/FairUpcomingPage";
-import { FairPastPage } from "../pages/fair/FairPastPage";
+import { FairListPage } from "../pages/fair/FairListPage";
 import { FairDetailPage } from "../pages/fair/FairDetailPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
 import { BoothLayoutEditPage } from "../pages/fair-admin/BoothLayoutEditPage";
@@ -85,7 +84,6 @@ import { AdvertisingInquiryPage } from "../pages/advertising/AdvertisingInquiryP
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
 const publicPages: Record<string, string> = {
-  "/businesses/status": "사업자 등록 현황",
   "/about": "서비스 소개",
   "/terms": "이용약관",
   "/privacy": "개인정보 처리방침",
@@ -102,6 +100,7 @@ const fairAdminImplementedPaths = [
   "/fair-admin/cancellation",
   "/fair-admin/recruit-notice",
   "/fair-admin/participations",
+  "/fair-admin/cancellation-requests",
   // fair-admin 레이아웃 밖(PublicLayout)에 별도로 라우팅돼 있다 - fair-admin 하위
   // 폴백 라우트(AdminFallback)를 만들 필요가 없어서 여기 포함시켜 그 목록에서 뺀다.
   "/payments/fair-opening-fee",
@@ -124,6 +123,12 @@ const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).fil
     item.path !== "/admin/notices" &&
     item.path !== "/admin/chat"
 );
+/** 후기 작성은 행사 상세의 리뷰 섹션이 담당한다. 옛 주소로 들어와도 그쪽으로 넘긴다. */
+function ReviewWriteRedirect() {
+  const { fairId } = useParams();
+  return <Navigate to={`/fairs/${fairId}?write-review=1`} replace />;
+}
+
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
   const nav = kind === "fair" ? flattenNavigation(fairAdminNavigation) : flattenNavigation(superAdminNavigation);
@@ -167,8 +172,10 @@ export function AppRouter() {
           </Route>
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
-          <Route path="/fairs/upcoming" element={<FairUpcomingPage />} />
-          <Route path="/fairs/past" element={<FairPastPage />} />
+          {/* 행사 목록은 예정·진행·종료를 상태 배지로 구분하는 통합 목록 하나뿐이다.
+              옛 "지난 행사" 경로(북마크·외부 링크)로 들어와도 같은 목록으로 넘긴다. */}
+          <Route path="/fairs/upcoming" element={<FairListPage />} />
+          <Route path="/fairs/past" element={<Navigate to="/fairs/upcoming" replace />} />
           {/* 행사 상세(공개). 목록 카드가 여기로 오고, '예매하기'는 /tickets/:fairId로 넘긴다.
               정적 경로(/fairs/upcoming 등)가 :fairId보다 우선 매칭되므로 충돌 없다. */}
           <Route path="/fairs/:fairId" element={<FairDetailPage />} />
@@ -192,8 +199,8 @@ export function AppRouter() {
           <Route path="/fairs/:fairId/booths" element={<FairBoothsPage />} />
           {/* 부스 추천(POST /booth-recommendations). 화면 미구현 자리표시. */}
           <Route path="/fairs/:fairId/booth-recommendations" element={<NotImplementedPage title="부스 추천" />} />
-          {/* 행사 후기 작성(POST /reviews). 조회는 행사 상세에 있고, 작성 화면은 미구현. */}
-          <Route path="/fairs/:fairId/reviews/new" element={<NotImplementedPage title="행사 후기 작성" />} />
+          {/* 옛 후기 작성 주소. 전용 화면 대신 행사 상세의 리뷰 섹션을 작성 상태로 연다. */}
+          <Route path="/fairs/:fairId/reviews/new" element={<ReviewWriteRedirect />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
           <Route path="/businesses/me" element={<Navigate to="/vendor/businesses" replace />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />

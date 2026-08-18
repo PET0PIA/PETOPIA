@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Flag, Star } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { ApiError } from "../../api/client";
 import { getFairReviewSummary, getFairReviews, type FairReviewListItem, type FairReviewSummary } from "../../api/review";
@@ -42,6 +42,7 @@ export function FairReviews({ fairId }: { fairId: number }) {
   const { status } = useAuth();
   const loggedIn = status === "authenticated";
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [summary, setSummary] = useState<FairReviewSummary | null>(null);
   const [items, setItems] = useState<FairReviewListItem[]>([]);
@@ -49,10 +50,24 @@ export function FairReviews({ fairId }: { fairId: number }) {
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  // 밖에서 곧바로 작성 폼을 열고 싶을 때 ?write-review=1 을 달고 들어온다(예: 예약 상세의
+  // "후기 작성"). 로그인 확인이 끝나기 전엔 loggedIn이 false라, 이 값은 "작성하러 왔다"는
+  // 의사만 담고 실제 노출은 로그인 상태와 함께 showForm에서 판단한다.
+  const [writeIntent, setWriteIntent] = useState(searchParams.get("write-review") === "1");
+  const showForm = writeIntent && loggedIn;
   const [reportingReviewId, setReportingReviewId] = useState<number | null>(null);
   // 리뷰별 담당자 답글. 아직 안 불러왔으면 키가 없고, 불러왔는데 답글이 없으면 null이다.
   const [replies, setReplies] = useState<Record<number, FairReviewReply | null>>({});
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const scrolledRef = useRef(false);
+
+  // ?write-review=1 로 들어온 경우 리뷰 자리로 스크롤한다. 목록 로딩이 끝나야 섹션이 DOM에
+  // 생기므로 loading이 풀린 뒤에, 그리고 한 번만 움직인다(사용자가 스크롤한 뒤 되돌리지 않게).
+  useEffect(() => {
+    if (loading || scrolledRef.current || searchParams.get("write-review") !== "1") return;
+    scrolledRef.current = true;
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [loading, searchParams]);
 
   // 넘겨받은 리뷰들의 답글을 병렬로 채운다. 답글이 없으면(404) null로 기록해서 "다시 안 불러옴"을
   // 표시한다. 그 외 오류(네트워크·서버 오류)는 기존 값을 그대로 두어 다음 재조회 때 다시 시도되게 한다 -
@@ -127,7 +142,7 @@ export function FairReviews({ fairId }: { fairId: number }) {
       navigate("/login");
       return;
     }
-    setShowForm((prev) => !prev);
+    setWriteIntent((prev) => !prev);
   }
 
   const count = summary?.reviewCount ?? 0;
@@ -136,7 +151,7 @@ export function FairReviews({ fairId }: { fairId: number }) {
   if (count === 0 && !loggedIn) return null;
 
   return (
-    <section className="mt-10">
+    <section id="reviews" ref={sectionRef} className="mt-10 scroll-mt-24">
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-3">
           <h2 className="text-lg font-extrabold">
@@ -159,9 +174,9 @@ export function FairReviews({ fairId }: { fairId: number }) {
           <FairReviewForm
             fairId={fairId}
             submitLabel="리뷰 등록"
-            onCancel={() => setShowForm(false)}
+            onCancel={() => setWriteIntent(false)}
             onSuccess={() => {
-              setShowForm(false);
+              setWriteIntent(false);
               reload();
             }}
           />
