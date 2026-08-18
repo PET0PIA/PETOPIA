@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper">
+
+    <resultMap id="recruitNoticeResultMap" type="com.ms.petopia.api.recruitnotice.domain.RecruitNotice">
+        <id property="recruitNoticeId" column="recruit_notice_id" />
+        <result property="writerId" column="writer_id" />
+        <result property="fairId" column="fair_id" />
+        <result property="title" column="title" />
+        <result property="content" column="content" />
+        <result property="imageUrl" column="image_url" />
+        <result property="createdAt" column="created_at" />
+        <result property="updatedAt" column="updated_at" />
+        <result property="recruitDeadline" column="recruit_deadline" />
+    </resultMap>
+
+    <!--
+        모집 공고 작성
+        해당 행사에 모집 공고가 없으면 새로 작성하고 있을 경우 update로 수정함
+     -->
+    <insert id="upsertNotice" parameterType="com.ms.petopia.api.recruitnotice.domain.RecruitNotice">
+        INSERT INTO recruit_notice (fair_id, writer_id, title, content, image_url, recruit_deadline)
+        VALUES (#{fairId}, #{writerId}, #{title}, #{content}, #{imageUrl}, #{recruitDeadline})
+        ON DUPLICATE KEY UPDATE
+            title = #{title},
+            content = #{content},
+            image_url = #{imageUrl},
+            recruit_deadline = #{recruitDeadline},
+            updated_at = NOW()
+    </insert>
+
+    <!-- 해당 행사에 모집 공고 있는지 확인 -->
+    <select id="selectByFairId" parameterType="long" resultMap="recruitNoticeResultMap">
+        SELECT recruit_notice_id, fair_id, writer_id, title, content, image_url,
+            created_at, updated_at, recruit_deadline
+        FROM recruit_notice
+        WHERE fair_id = #{fairId}
+    </select>
+
+    <!-- 이 행사(fairId)의 담당 EVENT_ADMIN 조회 -->
+    <select id="selectAdminUserIdByFairId" parameterType="long" resultType="long">
+        SELECT admin_user_id
+        FROM fair_admin_assignments
+        WHERE fair_id = #{fairId}
+    </select>
+
+    <!-- 이 행사(fairId)의 취소/종료 여부 조회. 모집 공고 마감(closed) 판정에 사용 -->
+    <select id="selectFairStatusByFairId" parameterType="long"
+            resultType="com.ms.petopia.api.recruitnotice.domain.FairStatusInfo">
+        SELECT canceled_at AS canceledAt, status
+        FROM fairs
+        WHERE fair_id = #{fairId}
+    </select>
+
+    <!--
+         부스 슬롯 현황 + 확정 업체명.
+         한 슬롯을 참조하는 활성(PENDING_REVIEW/PAYMENT_PENDING/CONFIRMED) application_slot은
+         최대 1건만 존재한다는 전제(ApplicationService의 슬롯별 MySQL 네임드 락(GET_LOCK)과
+         활성 신청 재확인으로 보장됨).
+         그래서 상관 서브쿼리로 상태 하나만 뽑아도 안전하다 — JOIN으로 하면 과거
+         REJECTED/CANCELED 이력까지 같이 잡혀서 슬롯 하나가 여러 행으로 중복될 수 있음.
+    -->
+    <select id="selectBoothSlotStatusesByFairId" parameterType="long"
+            resultType="com.ms.petopia.api.recruitnotice.dto.response.BoothSlotStatusResponse">
+        SELECT bs.booth_slot_id AS boothSlotsId,
+            bs.slot_number AS slotNumber,
+            bs.price AS price,
+            bs.pos_x AS posX,
+            bs.pos_y AS posY,
+            bs.width AS width,
+            bs.height AS height,
+            h.hall_id AS hallId,
+            h.name AS hallName,
+            h.floor_plan_image_url AS floorPlanImageUrl,
+            CASE (
+                SELECT a.status
+                FROM application_slot aps
+                JOIN application a ON a.application_id = aps.application_id
+                WHERE aps.booth_slot_id = bs.booth_slot_id
+                AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+                LIMIT 1
+            )
+            WHEN 'CONFIRMED' THEN 'CONFIRMED'
+            WHEN 'PENDING_REVIEW' THEN 'PENDING'
+            WHEN 'PAYMENT_PENDING' THEN 'PENDING'
+            ELSE 'AVAILABLE'
+            END AS status,
+            (
+                SELECT b.name
+                FROM application_slot aps
+                JOIN application a ON a.application_id = aps.application_id
+                JOIN business b ON b.business_id = a.business_id
+                WHERE aps.booth_slot_id = bs.booth_slot_id
+                AND a.status = 'CONFIRMED'
+                LIMIT 1
+            ) AS businessName
+        FROM booth_slots bs
+        JOIN halls h ON bs.hall_id = h.hall_id
+        WHERE h.fair_id = #{fairId}
+        AND bs.is_active = TRUE
+        ORDER BY bs.slot_number
+    </select>
+
+    <!--
+         모집중 판정: 모집공고 있고 마감일 안 지났고, 행사 취소/종료 아님
+         (RecruitNoticeService.isClosed()의 반대 기준과 정확히 동일)
+     -->
+    <select id="selectRecruitingFairIds" resultType="long">
+        SELECT f.fair_id
+        FROM fairs f
+        JOIN recruit_notice rn ON rn.fair_id = f.fair_id
+        WHERE f.fair_id IN
+        <foreach item="fairId" collection="fairIds" open="(" separator="," close=")">
+            #{fairId}
+        </foreach>
+        AND rn.recruit_deadline > #{now}
+        AND f.canceled_at IS NULL
+        AND f.status != 'ENDED'
+    </select>
+
+</mapper>

@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.booth.mapper.BoothMapper">
+
+    <!-- 부스 ID로 단건 조회 -->
+    <select id="selectById" resultType="com.ms.petopia.api.booth.domain.Booth">
+        SELECT booth_id, application_id, business_id, name, image_url, intro, category, target_animal, confirmed_at
+        FROM booth
+        WHERE booth_id = #{boothId}
+    </select>
+
+    <!-- 부스 상세 조회 시 같이 내려줄 판매상품·이벤트 목록 -->
+    <select id="selectItemsByBoothId" resultType="com.ms.petopia.api.booth.domain.BoothItem">
+        SELECT booth_item_id, booth_id, name, type, image_url, note
+        FROM booth_item
+        WHERE booth_id = #{boothId}
+        ORDER BY booth_item_id
+    </select>
+
+    <!-- 부스 생성 (신청 확정 시 자동 생성) -->
+    <insert id="insertBooth" useGeneratedKeys="true" keyProperty="boothId">
+        INSERT INTO booth (application_id, business_id, confirmed_at)
+        VALUES (#{applicationId}, #{businessId}, #{confirmedAt})
+    </insert>
+
+    <!-- 신청 ID 기준으로 부스 삭제 (취소 승인 시) -->
+    <delete id="deleteBoothByApplicationId">
+        DELETE FROM booth WHERE application_id = #{applicationId}
+    </delete>
+
+    <!-- 부스 프로필 부분 수정. null이 아닌 필드만 SET 절에 포함(보낸 필드만 갱신) -->
+    <update id="updateBooth">
+        UPDATE booth
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="imageUrl != null">image_url = #{imageUrl},</if>
+            <if test="intro != null">intro = #{intro},</if>
+            <if test="category != null">category = #{category},</if>
+            <if test="targetAnimal != null">target_animal = #{targetAnimal},</if>
+        </set>
+        WHERE booth_id = #{boothId}
+    </update>
+
+    <!-- 판매상품·이벤트 등록 -->
+    <insert id="insertBoothItem" useGeneratedKeys="true" keyProperty="boothItemId">
+        INSERT INTO booth_item (booth_id, name, type, image_url, note)
+        VALUES (#{boothId}, #{name}, #{type}, #{imageUrl}, #{note})
+    </insert>
+
+    <!-- 상품·이벤트 단건 조회 -->
+    <select id="selectItemById" resultType="com.ms.petopia.api.booth.domain.BoothItem">
+        SELECT booth_item_id, booth_id, name, type, image_url, note
+        FROM booth_item
+        WHERE booth_item_id = #{boothItemId}
+    </select>
+
+    <!-- 상품·이벤트 부분 수정. null이 아닌 필드만 SET 절에 포함(보낸 필드만 갱신) -->
+    <update id="updateBoothItem">
+        UPDATE booth_item
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="type != null">type = #{type},</if>
+            <if test="imageUrl != null">image_url = #{imageUrl},</if>
+            <if test="note != null">note = #{note},</if>
+        </set>
+        WHERE booth_item_id = #{boothItemId}
+    </update>
+
+    <!-- 상품·이벤트 삭제 -->
+    <delete id="deleteBoothItem">
+        DELETE FROM booth_item WHERE booth_item_id = #{boothItemId}
+    </delete>
+
+    <!-- 행사 존재 확인 -->
+    <select id="existsFair" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM fairs WHERE fair_id = #{fairId})
+    </select>
+
+    <!--
+        확정 부스 안내판. booth(1:1 application) -> application_slot -> booth_slots -> halls
+        순으로 조인해서 그 행사(fairId) 소속 슬롯만 걸러낸다. 부스가 슬롯을 여러 개(최대 3개)
+        쓸 수 있어서, 부스 하나가 여러 행으로 나올 수 있음(좌표 배치도에 슬롯별로 표시하는 용도라 의도된 것).
+    -->
+    <select id="selectConfirmedBooths" resultType="com.ms.petopia.api.booth.dto.response.ConfirmedBoothResponse">
+        SELECT bt.booth_id AS boothId,
+            biz.name AS businessName,
+            bt.image_url AS imageUrl,
+            bs.slot_number AS slotNumber,
+            bs.pos_x AS posX,
+            bs.pos_y AS posY,
+            bs.width AS width,
+            bs.height AS height,
+            h.hall_id AS hallId,
+            h.name AS hallName,
+            h.floor_plan_image_url AS floorPlanImageUrl
+        FROM booth bt
+        JOIN business biz ON biz.business_id = bt.business_id
+        JOIN application_slot aps ON aps.application_id = bt.application_id
+        JOIN booth_slots bs ON bs.booth_slot_id = aps.booth_slot_id
+        JOIN halls h ON h.hall_id = bs.hall_id
+        WHERE h.fair_id = #{fairId}
+        ORDER BY bs.slot_number
+    </select>
+
+    <!-- 신청 ID 기준으로 그 부스에 딸린 booth_item 전부 삭제 (FK CASCADE가 없어 booth 삭제 전 먼저 지워야 함) -->
+    <delete id="deleteBoothItemsByApplicationId">
+        DELETE bi FROM booth_item bi
+        JOIN booth b ON b.booth_id = bi.booth_id
+        WHERE b.application_id = #{applicationId}
+    </delete>
+
+    <!-- 부스 상세 조회 시 지금 로그인한 사용자가 이 부스를 이미 즐겨찾기했는지 확인 (favorited 계산용) -->
+    <select id="existsFavorite" resultType="boolean">
+        SELECT EXISTS (
+        SELECT 1 FROM booth_favorites
+        WHERE user_id = #{userId} AND booth_id = #{boothId}
+        )
+    </select>
+
+    <!-- 즐겨찾기한 부스명·이미지·소속 행사명까지 조인해서 한 번에 조회 -->
+    <select id="selectFavoritesByUserId" resultType="com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse">
+        SELECT b.booth_id AS boothId,
+            b.name AS name,
+            b.image_url AS imageUrl,
+            b.category AS category,
+            b.target_animal AS targetAnimal,
+            a.fair_id AS fairId,
+            f.name AS fairName
+        FROM booth_favorites bf
+        JOIN booth b ON b.booth_id = bf.booth_id
+        JOIN application a ON a.application_id = b.application_id
+        JOIN fairs f ON f.fair_id = a.fair_id
+        WHERE bf.user_id = #{userId}
+        ORDER BY bf.created_at DESC
+    </select>
+
+    <!-- 신청 ID 기준으로 그 부스를 즐겨찾기한 행 전부 삭제 -->
+    <delete id="deleteFavoritesByApplicationId">
+        DELETE bf FROM booth_favorites bf
+        JOIN booth b ON b.booth_id = bf.booth_id
+        WHERE b.application_id = #{applicationId}
+    </delete>
+
+    <!--
+         즐겨찾기 추가. INSERT IGNORE로 멱등 처리 - 중복 클릭으로 같은 (user_id, booth_id) 쌍이
+         두 번 들어와도(UNIQUE 제약 위반) 에러 없이 조용히 무시된다
+    -->
+    <insert id="insertFavorite">
+        INSERT IGNORE INTO booth_favorites (user_id, booth_id, created_at)
+        VALUES (#{userId}, #{boothId}, NOW())
+    </insert>
+
+    <!-- 즐겨찾기 삭제. 이미 삭제됐거나 존재하지 않는 조합이어도 0행 삭제로 조용히 끝난다(멱등) -->
+    <delete id="deleteFavorite">
+        DELETE FROM booth_favorites
+        WHERE user_id = #{userId} AND booth_id = #{boothId}
+    </delete>
+
+    <!-- 내가 소유한 부스 목록. business.owner_id 기준으로 조회 -->
+    <select id="selectByOwnerId" resultType="com.ms.petopia.api.booth.dto.response.BoothFavoriteResponse">
+        SELECT b.booth_id AS boothId,
+            b.name AS name,
+            b.image_url AS imageUrl,
+            b.category AS category,
+            b.target_animal AS targetAnimal,
+            a.fair_id AS fairId,
+            f.name AS fairName
+        FROM booth b
+        JOIN application a ON a.application_id = b.application_id
+        JOIN fairs f ON f.fair_id = a.fair_id
+        JOIN business biz ON biz.business_id = b.business_id
+        WHERE biz.owner_id = #{userId}
+        ORDER BY b.confirmed_at DESC
+    </select>
+
+    <!--
+         내가 방문한 적 있는 행사 목록. 같은 행사를 여러 부스에서 방문했을 수 있어 fair_id로 묶고,
+         그중 가장 최근 방문 시각 기준으로 정렬한다
+     -->
+    <select id="selectVisitedFairsByUserId" resultType="com.ms.petopia.api.booth.dto.response.VisitedFairResponse">
+        SELECT bv.fair_id AS fairId,
+            f.name AS fairName
+        FROM booth_visits bv
+        JOIN fairs f ON f.fair_id = bv.fair_id
+        WHERE bv.user_id = #{userId}
+        GROUP BY bv.fair_id, f.name
+        ORDER BY MAX(bv.last_visited_at) DESC
+    </select>
+
+    <!-- 특정 행사에서 내가 방문한 부스 목록 -->
+    <select id="selectVisitedBoothsByUserAndFair" resultType="com.ms.petopia.api.booth.dto.response.BoothVisitResponse">
+        SELECT bv.booth_id AS boothId,
+            b.name AS name,
+            b.image_url AS imageUrl,
+            bv.first_visited_at AS firstVisitedAt,
+            bv.visit_count AS visitCount
+        FROM booth_visits bv
+        JOIN booth b ON b.booth_id = bv.booth_id
+        WHERE bv.user_id = #{userId} AND bv.fair_id = #{fairId}
+        ORDER BY bv.first_visited_at DESC
+    </select>
+
+</mapper>

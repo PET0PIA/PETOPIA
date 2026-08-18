@@ -1,0 +1,42 @@
+package com.ms.petopia.api.recruitnotice.controller;
+
+import com.ms.petopia.api.recruitnotice.dto.request.RecruitNoticeRequest;
+import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeResponse;
+import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeUpsertResponse;
+import com.ms.petopia.api.recruitnotice.service.RecruitNoticeService;
+import com.ms.petopia.global.response.ApiResponse;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/fairs/{fairId}")
+@RequiredArgsConstructor
+public class RecruitNoticeController {
+
+    private final RecruitNoticeService recruitNoticeService;
+
+    // 모집 공고 작성/수정
+    @PutMapping("/recruit-notice")
+    public ResponseEntity<ApiResponse<RecruitNoticeUpsertResponse>> upsertNotice(
+            @PathVariable Long fairId,
+            @Valid @RequestBody RecruitNoticeRequest request
+    ) {
+
+        RecruitNoticeUpsertResponse response = recruitNoticeService.upsertNotice(fairId, request);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+
+    }
+
+    // 모집 공고 상세 조회
+    @GetMapping("/recruit-detail")
+    public ResponseEntity<ApiResponse<RecruitNoticeResponse>> getNotice(@PathVariable Long fairId) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(recruitNoticeService.getNotice(fairId)));
+
+    }
+
+}

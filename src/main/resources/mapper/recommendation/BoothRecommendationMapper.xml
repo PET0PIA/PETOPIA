@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.recommendation.mapper.BoothRecommendationMapper">
+
+    <select id="existsFair" resultType="boolean">
+        SELECT COUNT(*) > 0
+          FROM fairs
+         WHERE fair_id = #{fairId}
+    </select>
+
+    <resultMap id="boothCandidateMap" type="BoothCandidate">
+        <id property="boothId" column="booth_id"/>
+        <result property="name" column="name"/>
+        <result property="category" column="category"/>
+        <result property="targetAnimal" column="target_animal"/>
+        <result property="intro" column="intro"/>
+        <collection property="items" ofType="BoothItemCandidate">
+            <id property="boothItemId" column="booth_item_id"/>
+            <result property="name" column="item_name"/>
+            <result property="type" column="item_type"/>
+            <result property="note" column="item_note"/>
+        </collection>
+    </resultMap>
+
+    <select id="selectBoothCandidates" resultMap="boothCandidateMap">
+        SELECT b.booth_id
+             , b.name
+             , b.category
+             , b.target_animal
+             , b.intro
+             , bi.booth_item_id
+             , bi.name AS item_name
+             , bi.type AS item_type
+             , bi.note AS item_note
+          FROM booth b
+          JOIN application a ON b.application_id = a.application_id
+          LEFT JOIN booth_item bi ON bi.booth_id = b.booth_id
+         WHERE a.fair_id = #{fairId}
+         ORDER BY b.booth_id
+    </select>
+
+    <!-- 부스 동선 추천 부스 위치 -->
+    <select id="selectBoothLocations" resultType="BoothSlotLocation">
+        SELECT b.booth_id
+             , h.hall_id
+             , h.name       AS hall_name
+             , bs.slot_number
+             , bs.pos_x
+             , bs.pos_y
+             , bs.width
+             , bs.height
+          FROM booth b
+          JOIN application_slot aps ON aps.application_id = b.application_id
+          JOIN booth_slots bs ON bs.booth_slot_id = aps.booth_slot_id
+          JOIN halls h ON h.hall_id = bs.hall_id
+         WHERE b.booth_id IN
+        <foreach collection="boothIds" item="boothId" open="(" separator="," close=")">
+            #{boothId}
+        </foreach>
+         ORDER BY b.booth_id, bs.booth_slot_id
+    </select>
+
+</mapper>

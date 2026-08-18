@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/* ocreo 레퍼런스 톤: NanumSquareNeo (jsDelivr CDN, variable woff2) */
+@font-face {
+  font-family: "NanumSquareNeo";
+  src: url("https://cdn.jsdelivr.net/npm/@noonnu/nanum-square-neo-variable@0.1.0/fonts/nanumsquareneo-variable-normal.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@theme {
+  --color-page: #FFFFFF;
+  --color-card: #FFFFFF;
+  --color-surface-alt: #F1F3F6;
+  --color-ink: #000000;
+  --color-muted: #777777;
+  --color-line: #E6E6E6;
+  --color-primary: #000000;
+  --color-primary-strong: #000000;
+  --color-primary-soft: #F5F5F5;
+  /* 상태색: 기능용(배지·상태 표시)이라 유지 */
+  --color-sun: #FFD76A;
+  --color-sun-soft: #FFF8DC;
+  --color-leaf: #79C99A;
+  --color-leaf-soft: #EDF8F1;
+  /* 히어로 포인트 (ocreo 파스텔, 슬라이드마다 교체) */
+  --color-point-yellow: #FFFF72;
+  --color-point-pink: #FFC7FB;
+  --color-point-hotpink: #FFB1D3;
+  --color-point-lavender: #EBD3FF;
+  --radius-card: 8px;
+  --radius-button: 4px;
+  --radius-pill: 9999px;
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { background: var(--color-page); color: var(--color-ink); }
+  body { margin: 0; min-width: 320px; font-family: "NanumSquareNeo", Pretendard, "Noto Sans KR", system-ui, sans-serif; }
+  button, input, textarea, select { font: inherit; }
+  a { color: inherit; text-decoration: none; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-primary) 45%, white); outline-offset: 2px; }
+}
+
+@layer components {
+  .surface { border: 1px solid var(--color-line); background: var(--color-card); border-radius: var(--radius-card); box-shadow: 0 4px 14px rgb(48 44 40 / 4%); }
+  .page-shell { width: 100%; max-width: 80rem; margin-inline: auto; padding-inline: 1rem; }
+  @media (min-width: 640px) { .page-shell { padding-inline: 1.5rem; } }
+  @media (min-width: 1024px) { .page-shell { padding-inline: 2rem; } }
+
+  /* ID 입력창처럼 증감이 의미 없는 number input의 스피너(위아래 화살표)를 숨긴다. */
+  .input-no-spinner::-webkit-outer-spin-button,
+  .input-no-spinner::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .input-no-spinner { -moz-appearance: textfield; }
+}
+
+/* 히어로 캐러셀: 현재 슬라이드 인디케이터가 시간에 맞춰 차오르는 바 */
+@keyframes heroProgress { from { width: 0%; } to { width: 100%; } }
+/* 히어로 캐러셀: 슬라이드가 바뀔 때 텍스트는 아래에서, 포스터는 오른쪽에서 부드럽게 등장 */
+@keyframes heroTextIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes heroPosterIn { from { opacity: 0; transform: translateX(32px) scale(0.97); } to { opacity: 1; transform: translateX(0) scale(1); } }
+/* 공지 마퀴: 좌우로 끊김 없이 흐르는 띠 (콘텐츠 2벌 복제 후 -50% 이동) */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }

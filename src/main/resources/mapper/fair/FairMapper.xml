@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fair.mapper.FairMapper">
+
+    <!--
+        status/reservation_fee는 DDL에 DEFAULT가 걸려 있어(status DEFAULT 'RECEIVED',
+        reservation_fee DEFAULT 0) Java 쪽에서 값을 안 채워도 되게 <if>로 뺐다.
+        applicant_user_id/name/manager_name/manager_email/created_at/updated_at은
+        DDL상 NOT NULL이고 기본값도 없어 서비스 레이어가 항상 채워 넣는다는 전제로 고정 바인딩한다.
+        reject_reason/reviewed_by/reviewed_at/published_at/canceled_at은 신청 시점에는
+        의미가 없는 값이라 insert 대상에서 아예 뺐다(update에서만 채운다).
+    -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="fairId" keyColumn="fair_id">
+        INSERT INTO fairs
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            applicant_user_id, name, manager_name, manager_email, created_at, updated_at,
+            <if test="description != null">description,</if>
+            <if test="category != null">category,</if>
+            <if test="posterImageUrl != null">poster_image_url,</if>
+            <if test="noticeText != null">notice_text,</if>
+            <if test="placeName != null">place_name,</if>
+            <if test="address != null">address,</if>
+            <if test="indoorOutdoor != null">indoor_outdoor,</if>
+            <if test="vendorRecruitStartDate != null">vendor_recruit_start_date,</if>
+            <if test="vendorRecruitEndDate != null">vendor_recruit_end_date,</if>
+            <if test="reservationStartDate != null">reservation_start_date,</if>
+            <if test="reservationEndDate != null">reservation_end_date,</if>
+            <if test="operationStartDate != null">operation_start_date,</if>
+            <if test="operationEndDate != null">operation_end_date,</if>
+            <if test="reservationFee != null">reservation_fee,</if>
+            <if test="reservationCancelDeadlineHours != null">reservation_cancel_deadline_hours,</if>
+            <if test="reservationChangeDeadlineHours != null">reservation_change_deadline_hours,</if>
+            <if test="managerPhone != null">manager_phone,</if>
+            <if test="status != null">status,</if>
+            <if test="paymentDueAt != null">payment_due_at,</if>
+            <if test="publicScheduledAt != null">public_scheduled_at,</if>
+            <if test="submittedSnapshot != null">submitted_snapshot,</if>
+        </trim>
+        <trim prefix="VALUES (" suffix=")" suffixOverrides=",">
+            #{applicantUserId}, #{name}, #{managerName}, #{managerEmail}, #{createdAt}, #{updatedAt},
+            <if test="description != null">#{description},</if>
+            <if test="category != null">#{category},</if>
+            <if test="posterImageUrl != null">#{posterImageUrl},</if>
+            <if test="noticeText != null">#{noticeText},</if>
+            <if test="placeName != null">#{placeName},</if>
+            <if test="address != null">#{address},</if>
+            <if test="indoorOutdoor != null">#{indoorOutdoor},</if>
+            <if test="vendorRecruitStartDate != null">#{vendorRecruitStartDate},</if>
+            <if test="vendorRecruitEndDate != null">#{vendorRecruitEndDate},</if>
+            <if test="reservationStartDate != null">#{reservationStartDate},</if>
+            <if test="reservationEndDate != null">#{reservationEndDate},</if>
+            <if test="operationStartDate != null">#{operationStartDate},</if>
+            <if test="operationEndDate != null">#{operationEndDate},</if>
+            <if test="reservationFee != null">#{reservationFee},</if>
+            <if test="reservationCancelDeadlineHours != null">#{reservationCancelDeadlineHours},</if>
+            <if test="reservationChangeDeadlineHours != null">#{reservationChangeDeadlineHours},</if>
+            <if test="managerPhone != null">#{managerPhone},</if>
+            <if test="status != null">#{status},</if>
+            <if test="paymentDueAt != null">#{paymentDueAt},</if>
+            <if test="publicScheduledAt != null">#{publicScheduledAt},</if>
+            <if test="submittedSnapshot != null">#{submittedSnapshot},</if>
+        </trim>
+    </insert>
+
+    <select id="selectById" resultType="Fair">
+        SELECT fair_id, applicant_user_id, name, description, category, poster_image_url, notice_text,
+               place_name, address, indoor_outdoor,
+               vendor_recruit_start_date, vendor_recruit_end_date,
+               reservation_start_date, reservation_end_date,
+               operation_start_date, operation_end_date,
+               reservation_fee, reservation_cancel_deadline_hours, reservation_change_deadline_hours,
+               manager_name, manager_phone, manager_email,
+               status, reject_reason, reviewed_by, reviewed_at,
+               opening_fee_amount, payment_due_at, public_scheduled_at, published_at, canceled_at,
+               submitted_snapshot, created_at, updated_at
+          FROM fairs
+         WHERE fair_id = #{fairId}
+    </select>
+
+    <!-- 마이페이지 "내 신청 현황" 목록용. 최신 신청이 위로 오도록 created_at 역순 정렬한다. -->
+    <select id="selectByApplicantUserId" resultType="Fair">
+        SELECT fair_id, applicant_user_id, name, description, category, poster_image_url, notice_text,
+               place_name, address, indoor_outdoor,
+               vendor_recruit_start_date, vendor_recruit_end_date,
+               reservation_start_date, reservation_end_date,
+               operation_start_date, operation_end_date,
+               reservation_fee, reservation_cancel_deadline_hours, reservation_change_deadline_hours,
+               manager_name, manager_phone, manager_email,
+               status, reject_reason, reviewed_by, reviewed_at,
+               opening_fee_amount, payment_due_at, public_scheduled_at, published_at, canceled_at,
+               submitted_snapshot, created_at, updated_at
+          FROM fairs
+         WHERE applicant_user_id = #{applicantUserId}
+         ORDER BY created_at DESC
+    </select>
+
+    <!--
+        null이 아닌 필드만 갱신한다(승인/반려/재제출마다 채우는 필드가 달라서 범용으로 둠).
+        updated_at은 호출부 값과 무관하게 항상 NOW()로 덮어쓴다.
+        applicant_user_id, created_at은 갱신 대상에서 제외한다.
+    -->
+    <update id="update">
+        UPDATE fairs
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="category != null">category = #{category},</if>
+            <if test="posterImageUrl != null">poster_image_url = #{posterImageUrl},</if>
+            <if test="noticeText != null">notice_text = #{noticeText},</if>
+            <if test="placeName != null">place_name = #{placeName},</if>
+            <if test="address != null">address = #{address},</if>
+            <if test="indoorOutdoor != null">indoor_outdoor = #{indoorOutdoor},</if>
+            <if test="vendorRecruitStartDate != null">vendor_recruit_start_date = #{vendorRecruitStartDate},</if>
+            <if test="vendorRecruitEndDate != null">vendor_recruit_end_date = #{vendorRecruitEndDate},</if>
+            <if test="reservationStartDate != null">reservation_start_date = #{reservationStartDate},</if>
+            <if test="reservationEndDate != null">reservation_end_date = #{reservationEndDate},</if>
+            <if test="operationStartDate != null">operation_start_date = #{operationStartDate},</if>
+            <if test="operationEndDate != null">operation_end_date = #{operationEndDate},</if>
+            <if test="reservationFee != null">reservation_fee = #{reservationFee},</if>
+            <if test="reservationCancelDeadlineHours != null">reservation_cancel_deadline_hours = #{reservationCancelDeadlineHours},</if>
+            <if test="reservationChangeDeadlineHours != null">reservation_change_deadline_hours = #{reservationChangeDeadlineHours},</if>
+            <if test="managerName != null">manager_name = #{managerName},</if>
+            <if test="managerPhone != null">manager_phone = #{managerPhone},</if>
+            <if test="managerEmail != null">manager_email = #{managerEmail},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="rejectReason != null">reject_reason = #{rejectReason},</if>
+            <if test="reviewedBy != null">reviewed_by = #{reviewedBy},</if>
+            <if test="reviewedAt != null">reviewed_at = #{reviewedAt},</if>
+            <if test="openingFeeAmount != null">opening_fee_amount = #{openingFeeAmount},</if>
+            <if test="paymentDueAt != null">payment_due_at = #{paymentDueAt},</if>
+            <if test="publicScheduledAt != null">public_scheduled_at = #{publicScheduledAt},</if>
+            <if test="publishedAt != null">published_at = #{publishedAt},</if>
+            <if test="canceledAt != null">canceled_at = #{canceledAt},</if>
+            <if test="submittedSnapshot != null">submitted_snapshot = #{submittedSnapshot},</if>
+            updated_at = NOW(),
+        </set>
+        WHERE fair_id = #{fairId}
+    </update>
+
+    <!--
+        status = 'RECEIVED' 조건을 WHERE에 함께 걸어 조건부 갱신으로 만든다(동시성 방어,
+        FairCancelRequestMapper#update와 동일한 패턴). "SELECT로 RECEIVED 확인 후 UPDATE"는
+        두 검토 요청이 동시에 들어오면 둘 다 체크를 통과해버릴 수 있는데, 이 조건이 있으면
+        먼저 커밋되는 쪽만 실제로 행을 바꾸고 나머지는 영향 행 0건으로 실패한다.
+    -->
+    <update id="updateReviewResult">
+        UPDATE fairs
+        <set>
+            <if test="status != null">status = #{status},</if>
+            <if test="rejectReason != null">reject_reason = #{rejectReason},</if>
+            <if test="reviewedBy != null">reviewed_by = #{reviewedBy},</if>
+            <if test="reviewedAt != null">reviewed_at = #{reviewedAt},</if>
+            <if test="openingFeeAmount != null">opening_fee_amount = #{openingFeeAmount},</if>
+            <if test="paymentDueAt != null">payment_due_at = #{paymentDueAt},</if>
+            updated_at = NOW(),
+        </set>
+        WHERE fair_id = #{fairId}
+          AND status = 'RECEIVED'
+    </update>
+
+    <!--
+        내용 필드는 field != null이 아니라 setFields.contains(...)로 갱신 여부를 정한다 - null
+        체크만 쓰면 "필드를 생략함(기존 값 유지)"과 "필드를 명시적으로 비움(NULL로 지움)"을
+        구분할 수 없다. setFields에 있으면 fair에 담긴 값을 그대로 반영한다(그 값이 null이면
+        컬럼도 NULL이 된다).
+
+        status/reject_reason/reviewed_by/reviewed_at은 이 UPDATE가 실제로 행을 바꿀 때마다
+        항상 고정값(RECEIVED/NULL/NULL/NULL)으로 되돌린다 - REJECTED에서 수정으로 재제출되면
+        이전 반려 이력이 더 이상 유효하지 않기 때문이다. WHERE의 status IN (...) 조건이
+        동시성 방어를 겸한다(updateReviewResult와 동일한 이유 - "SELECT로 확인 후 UPDATE"는
+        그 사이 다른 요청이 상태를 바꿔버리는 경합을 못 막는다).
+    -->
+    <update id="updateApplication">
+        UPDATE fairs
+        <set>
+            <if test="setFields.contains('name')">name = #{fair.name},</if>
+            <if test="setFields.contains('description')">description = #{fair.description},</if>
+            <if test="setFields.contains('category')">category = #{fair.category},</if>
+            <if test="setFields.contains('posterImageUrl')">poster_image_url = #{fair.posterImageUrl},</if>
+            <if test="setFields.contains('noticeText')">notice_text = #{fair.noticeText},</if>
+            <if test="setFields.contains('placeName')">place_name = #{fair.placeName},</if>
+            <if test="setFields.contains('address')">address = #{fair.address},</if>
+            <if test="setFields.contains('indoorOutdoor')">indoor_outdoor = #{fair.indoorOutdoor},</if>
+            <if test="setFields.contains('vendorRecruitStartDate')">vendor_recruit_start_date = #{fair.vendorRecruitStartDate},</if>
+            <if test="setFields.contains('vendorRecruitEndDate')">vendor_recruit_end_date = #{fair.vendorRecruitEndDate},</if>
+            <if test="setFields.contains('reservationStartDate')">reservation_start_date = #{fair.reservationStartDate},</if>
+            <if test="setFields.contains('reservationEndDate')">reservation_end_date = #{fair.reservationEndDate},</if>
+            <if test="setFields.contains('operationStartDate')">operation_start_date = #{fair.operationStartDate},</if>
+            <if test="setFields.contains('operationEndDate')">operation_end_date = #{fair.operationEndDate},</if>
+            <if test="setFields.contains('reservationFee')">reservation_fee = #{fair.reservationFee},</if>
+            <if test="setFields.contains('reservationCancelDeadlineHours')">reservation_cancel_deadline_hours = #{fair.reservationCancelDeadlineHours},</if>
+            <if test="setFields.contains('reservationChangeDeadlineHours')">reservation_change_deadline_hours = #{fair.reservationChangeDeadlineHours},</if>
+            <if test="setFields.contains('managerName')">manager_name = #{fair.managerName},</if>
+            <if test="setFields.contains('managerPhone')">manager_phone = #{fair.managerPhone},</if>
+            <if test="setFields.contains('managerEmail')">manager_email = #{fair.managerEmail},</if>
+            status = 'RECEIVED',
+            reject_reason = NULL,
+            reviewed_by = NULL,
+            reviewed_at = NULL,
+            updated_at = NOW(),
+        </set>
+        WHERE fair_id = #{fair.fairId}
+          AND status IN ('RECEIVED', 'REJECTED')
+    </update>
+
+    <!--
+        canceled_at IS NOT NULL만 걸면 취소된 행사 수가 limit를 넘는 순간
+        canceled_at DESC 정렬로 매번 같은 최신 N개만 뽑혀서, 그보다 오래된 행사의 PENDING
+        결제가 영영 처리되지 못하고 배치 슬롯을 못 받을 수 있다. 그래서 이 결제가 아직 남아있는
+        행사만(EXISTS) 고르고 오래된 순(ASC)으로 처리한다 - 한 행사가 다 정리되면(더 이상
+        PENDING이 없으면) 이 목록에서 자연히 빠지니 다음 실행에서 그 자리를 다른 행사가 채운다.
+    -->
+    <select id="selectCanceledFairIds" resultType="long">
+        SELECT f.fair_id
+          FROM fairs f
+         WHERE f.canceled_at IS NOT NULL
+           AND EXISTS (
+               SELECT 1
+                 FROM payment p
+                WHERE p.fair_id = f.fair_id
+                  AND p.status = 'PENDING'
+                  AND p.payment_type IN ('RESERVATION_DEPOSIT', 'VENDOR_FEE')
+           )
+         ORDER BY f.canceled_at
+         LIMIT #{limit}
+    </select>
+
+    <!--
+        PII/심사 관련 컬럼은 아예 SELECT하지 않는다 - 인증 없이 누구나 호출하는 목록이라
+        FairPublicSummaryResponse와 같은 이유로 노출 자체를 막는다.
+        UPCOMING: operation_end_date가 없거나(일정 미정) today 이상인 것 - 끝났다고 볼 근거가
+        없는 행사는 예정으로 취급한다. PAST: operation_end_date가 있고 today보다 이전인 것.
+    -->
+    <!--
+        reservable: 사전예약 가능 여부(계산 컬럼, 목록 전용). ReservationService#validateFair +
+        ReservationMapper#selectAvailabilityDates의 규칙을 그대로 옮긴다 - 예매 기간(reservation_start/
+        end_date) 안이고, 미래 운영일(operation_date > today) 중 정원이 남은(ADVANCE·유효상태 예약수 <
+        capacity) 날이 하나라도 있으면 true. 종료(PAST) 행사는 미래 운영일이 없어 자연히 false다.
+
+        recruiting: 참가기업 부스 모집중 여부(계산 컬럼, 목록 전용). ⚠ 모집 도메인 테이블
+        (recruit_notice·halls·booth_slots·application_slot·application)을 조인한다 - 도메인 경계상
+        모집 담당자 검토 필요. RecruitNoticeService#isClosed(마감일 지남 OR 행사 ENDED OR 취소)의
+        반대 + selectBoothSlotStatusesByFairId의 AVAILABLE 규칙(활성 신청 PENDING_REVIEW/
+        PAYMENT_PENDING/CONFIRMED이 안 걸린 활성 슬롯 존재)을 그대로 옮겼다. 마감일은 DATETIME이라
+        #{now}(LocalDateTime)와 비교한다.
+    -->
+    <select id="selectPublicFairs" resultType="Fair">
+        SELECT f.fair_id, f.name, f.category, f.poster_image_url, f.place_name,
+               f.operation_start_date, f.operation_end_date,
+               (
+                 f.reservation_start_date IS NOT NULL
+                 AND f.reservation_end_date IS NOT NULL
+                 AND #{today} &gt;= f.reservation_start_date
+                 AND #{today} &lt;= f.reservation_end_date
+                 AND EXISTS (
+                   SELECT 1
+                     FROM fair_dates fd
+                    WHERE fd.fair_id = f.fair_id
+                      AND fd.operation_date &gt; #{today}
+                      AND fd.capacity &gt; (
+                            SELECT COUNT(*)
+                              FROM reservations r
+                             WHERE r.fair_id = fd.fair_id
+                               AND r.visit_date = fd.operation_date
+                               AND r.reservation_type = 'ADVANCE'
+                               AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
+                          )
+                 )
+               ) AS reservable,
+               (
+                 EXISTS (SELECT 1 FROM recruit_notice rn
+                          WHERE rn.fair_id = f.fair_id
+                            AND rn.recruit_deadline &gt; #{now})
+                 AND f.status &lt;&gt; 'ENDED'
+                 AND EXISTS (
+                   SELECT 1
+                     FROM booth_slots bs
+                     JOIN halls h ON bs.hall_id = h.hall_id
+                    WHERE h.fair_id = f.fair_id
+                      AND bs.is_active = TRUE
+                      AND NOT EXISTS (
+                        SELECT 1
+                          FROM application_slot aps
+                          JOIN application a ON a.application_id = aps.application_id
+                         WHERE aps.booth_slot_id = bs.booth_slot_id
+                           AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+                      )
+                 )
+               ) AS recruiting
+          FROM fairs f
+         WHERE f.published_at IS NOT NULL
+           AND f.canceled_at IS NULL
+        <if test="filter.name() == 'UPCOMING'">
+           AND (f.operation_end_date IS NULL OR f.operation_end_date &gt;= #{today})
+         ORDER BY (f.operation_start_date IS NULL), f.operation_start_date ASC
+        </if>
+        <if test="filter.name() == 'PAST'">
+           AND f.operation_end_date IS NOT NULL AND f.operation_end_date &lt; #{today}
+         ORDER BY f.operation_end_date DESC
+        </if>
+    </select>
+
+    <!--
+        부스 모집 노출 전용(FairService#listRecruitingFairs). selectPublicFairs와 달리
+        f.published_at IS NOT NULL을 요구하지 않는다 - "전체공개"는 일반 소비자 노출/사전예약/
+        리뷰 작성 가능 여부만 통제하고, 참가업체 모집 노출은 그와 별개로 모집공고+부스슬롯만
+        준비되면(= recruiting 계산식이 true) 시작된 것으로 본다. reservable/recruiting
+        계산식은 selectPublicFairs와 동일하다 - HAVING절에서 recruiting인 것만 추린다(MySQL은
+        SELECT의 별칭을 HAVING에서 참조할 수 있다).
+    -->
+    <select id="selectRecruitingFairs" resultType="Fair">
+        SELECT f.fair_id, f.name, f.category, f.poster_image_url, f.place_name,
+               f.operation_start_date, f.operation_end_date,
+               (
+                 f.reservation_start_date IS NOT NULL
+                 AND f.reservation_end_date IS NOT NULL
+                 AND #{today} &gt;= f.reservation_start_date
+                 AND #{today} &lt;= f.reservation_end_date
+                 AND EXISTS (
+                   SELECT 1
+                     FROM fair_dates fd
+                    WHERE fd.fair_id = f.fair_id
+                      AND fd.operation_date &gt; #{today}
+                      AND fd.capacity &gt; (
+                            SELECT COUNT(*)
+                              FROM reservations r
+                             WHERE r.fair_id = fd.fair_id
+                               AND r.visit_date = fd.operation_date
+                               AND r.reservation_type = 'ADVANCE'
+                               AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
+                          )
+                 )
+               ) AS reservable,
+               (
+                 EXISTS (SELECT 1 FROM recruit_notice rn
+                          WHERE rn.fair_id = f.fair_id
+                            AND rn.recruit_deadline &gt; #{now})
+                 AND f.status &lt;&gt; 'ENDED'
+                 AND EXISTS (
+                   SELECT 1
+                     FROM booth_slots bs
+                     JOIN halls h ON bs.hall_id = h.hall_id
+                    WHERE h.fair_id = f.fair_id
+                      AND bs.is_active = TRUE
+                      AND NOT EXISTS (
+                        SELECT 1
+                          FROM application_slot aps
+                          JOIN application a ON a.application_id = aps.application_id
+                         WHERE aps.booth_slot_id = bs.booth_slot_id
+                           AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+                      )
+                 )
+               ) AS recruiting
+          FROM fairs f
+         WHERE f.canceled_at IS NULL
+        HAVING recruiting = TRUE
+         ORDER BY (f.operation_start_date IS NULL), f.operation_start_date ASC
+    </select>
+
+    <!--
+        관리자 심사 큐(FairService#getApplications) 전용. status가 없으면 전체, 있으면 그
+        상태만 걸러 오래된 신청 순으로 반환한다 - RECEIVED만 걸러서 보면 "지금 처리해야 할 것"을
+        보여주는 큐가 되고, 필요하면 상태를 바꿔가며 이력도 훑어볼 수 있다. 관리자 화면 전용이라
+        managerPhone/managerEmail 같은 PII는 목록에 넣지 않는다(FairApplicationSummaryResponse와
+        동일한 이유 - 상세 조회에서만 노출).
+    -->
+    <select id="selectByStatus" resultType="Fair">
+        SELECT fair_id, name, status, operation_start_date, operation_end_date,
+               reject_reason, created_at, reviewed_at, canceled_at
+          FROM fairs
+        <if test="status != null">
+         WHERE status = #{status}
+        </if>
+         ORDER BY created_at ASC
+    </select>
+
+</mapper>

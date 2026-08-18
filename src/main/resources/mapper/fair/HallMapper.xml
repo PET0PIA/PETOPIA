@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fair.mapper.HallMapper">
+
+    <!-- fair_id/name은 DDL상 NOT NULL이고 기본값도 없어 서비스 레이어가 항상 채워 넣는다는 전제. -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="hallId" keyColumn="hall_id">
+        INSERT INTO halls
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            fair_id, name, created_at, updated_at,
+            <if test="floorPlanImageUrl != null">floor_plan_image_url,</if>
+        </trim>
+        <trim prefix="VALUES (" suffix=")" suffixOverrides=",">
+            #{fairId}, #{name}, #{createdAt}, #{updatedAt},
+            <if test="floorPlanImageUrl != null">#{floorPlanImageUrl},</if>
+        </trim>
+    </insert>
+
+    <select id="selectById" resultType="Hall">
+        SELECT hall_id, fair_id, name, floor_plan_image_url, booth_layout_version, created_at, updated_at
+          FROM halls
+         WHERE hall_id = #{hallId}
+    </select>
+
+    <select id="selectByFairId" resultType="Hall">
+        SELECT hall_id, fair_id, name, floor_plan_image_url, booth_layout_version, created_at, updated_at
+          FROM halls
+         WHERE fair_id = #{fairId}
+         ORDER BY hall_id
+    </select>
+
+    <!--
+        부스 슬롯 일괄저장의 낙관적 락. WHERE 절에 기대 버전을 같이 걸어서 조회-후-갱신
+        사이 다른 저장이 끼어들 수 없게 한다(원자적 검증+증가). 영향받은 행이 0이면
+        BoothSlotService가 버전 충돌로 판단해 409를 던진다.
+    -->
+    <update id="bumpBoothLayoutVersion">
+        UPDATE halls
+           SET booth_layout_version = booth_layout_version + 1
+         WHERE hall_id = #{hallId}
+           AND booth_layout_version = #{expectedVersion}
+    </update>
+
+    <update id="update">
+        UPDATE halls
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="floorPlanImageUrl != null">floor_plan_image_url = #{floorPlanImageUrl},</if>
+            updated_at = NOW(),
+        </set>
+        WHERE hall_id = #{hallId}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM halls WHERE hall_id = #{hallId}
+    </delete>
+
+</mapper>

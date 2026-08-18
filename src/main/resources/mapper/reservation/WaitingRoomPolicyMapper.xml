@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.WaitingRoomPolicyMapper">
+
+    <select id="selectByFairId" resultType="WaitingRoomPolicyRow">
+        SELECT fair_id
+             , enabled
+             , active_limit
+             , version
+             , updated_at
+          FROM waiting_room_policies
+         WHERE fair_id = #{fairId}
+    </select>
+
+    <insert id="insertPolicy">
+        INSERT INTO waiting_room_policies (
+               fair_id
+             , enabled
+             , active_limit
+             , updated_by
+             , version
+             , created_at
+             , updated_at
+        ) VALUES (
+               #{fairId}
+             , #{enabled}
+             , #{activeLimit}
+             , #{updatedBy}
+             , 0
+             , #{now}
+             , #{now}
+        )
+    </insert>
+
+    <!--
+        version 조건이 낙관적 잠금이다. 오픈 중에 두 관리자가 통과 인원을 각자 조정하면,
+        나중에 쓴 쪽이 상대의 변경을 모르고 덮어쓴다. 영향 행수 0이면 충돌로 돌려보낸다.
+    -->
+    <update id="updatePolicy">
+        UPDATE waiting_room_policies
+           SET enabled = #{enabled}
+             , active_limit = #{activeLimit}
+             , updated_by = #{updatedBy}
+             , version = version + 1
+             , updated_at = #{now}
+         WHERE fair_id = #{fairId}
+           AND version = #{expectedVersion}
+    </update>
+
+</mapper>

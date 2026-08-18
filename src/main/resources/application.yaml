@@ -26,6 +26,73 @@ spring:
     # SQL 안의 ${...} 를 Flyway가 치환하려다 깨지는 사고를 막는다.
     placeholder-replacement: false
 
+  # 배포·스케일인 때 SIGTERM을 받으면 진행 중인 요청·SSE를 끊지 않고 마무리한 뒤 종료한다.
+  # Spring은 이 종료 단계를 최대 20초까지 기다린다. 컨테이너 런타임이 그 전에 SIGKILL 하면
+  # 마무리가 잘려 진행 중 요청·SSE가 예고 없이 끊긴다. 그래서 종료 유예를 20초보다 길게 줘야 한다:
+  #   - EC2 docker compose(현재 시연): compose 기본 유예가 10초라 짧다 →
+  #     docker-compose.app.yaml 의 app 에 stop_grace_period: 30s 로 늘려 둔다.
+  #   - ECS(2단계): SIGTERM 후 stopTimeout(기본 30초)에 SIGKILL 하므로 그대로 안전하다.
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+# graceful shutdown 활성화 (spring.lifecycle.timeout-per-shutdown-phase 와 짝).
+server:
+  shutdown: graceful
+
+# ALB/ECS 헬스체크용 actuator. 운영에서는 관리포트를 8081로 분리한다(application-release.yaml).
+management:
+  endpoints:
+    web:
+      exposure:
+        # health 만 노출한다. env/metrics 등 나머지는 공개하지 않는다.
+        include: health
+  endpoint:
+    health:
+      probes:
+        # liveness/readiness 그룹을 켠다.
+        enabled: true
+      group:
+        # liveness = 프로세스 생존만 본다. DB/Redis 상태와 무관해야 한다.
+        # ALB 헬스체크가 이걸 봐야 DB가 흔들려도 무한 재배포 루프에 빠지지 않는다.
+        liveness:
+          include: livenessState
+        # readiness = 트래픽 받을 준비 여부. DB/Redis가 죽으면 503 을 낸다.
+        # 다만 readiness 로 실제 트래픽을 빼려면 로드밸런서가 이 엔드포인트를 물어야 한다.
+        # 현재 ALB 헬스체크는 liveness 만 본다(DB가 흔들려도 무한 재배포 루프에 안 빠지게).
+        # 그래서 지금 이 그룹은 로컬·수동 검증용이다(MySQL 내린 상태에서 readiness 503 확인).
+        # 실제 트래픽 게이팅에 쓸지는 2단계에서 ALB 타깃그룹 헬스체크 대상으로 결정한다.
+        # 자세한 배경: docs/ecs-migration-plan.md
+        readiness:
+          include: readinessState,db,redis
+
+petopia:
+  waiting-room:
+    # 대기열을 켤지와 통과 인원(active_limit)은 waiting_room_policies 테이블에 있다.
+    # 오픈 직후 지표를 보며 조정해야 하는 값이라 재기동 없이 바꿀 수 있어야 한다.
+    # 관리자 API: PUT /api/v1/admin/fairs/{fairId}/waiting-room-policy
+    #
+    # 여기 남은 값은 행사별로 다를 이유가 없는 것들이다.
+    #
+    # 활성 슬롯 수명. 결제 대기 시간(10분)보다 길어야 예약부터 결제까지 슬롯 하나로 끝난다.
+    # 줄이면 결제 중인 사용자가 슬롯을 잃으므로 함부로 낮추지 않는다.
+    active-ttl: ${WAITING_ROOM_ACTIVE_TTL:12m}
+    # 줄을 선 채 방치된 토큰을 정리하는 기준.
+    ticket-ttl: ${WAITING_ROOM_TICKET_TTL:30m}
+    # 정책을 아직 만들지 않은 행사의 관리자 화면 초기값.
+    default-active-limit: ${WAITING_ROOM_DEFAULT_ACTIVE_LIMIT:1000}
+
+  storage:
+    # 환경에 따라 달라지지 않는 항목만 여기 둔다.
+    # 환경마다 다른 bucket / public-base-url 은 application-local.yaml 과
+    # application-release.yaml 에서 각각 선언한다.
+    #
+    # prefix 두 개는 ObjectKeyGenerator 의 키 생성·검증이 함께 맞물려 있어
+    # 환경별로 달리하면 이미 저장된 키를 해석할 수 없게 된다. 바꾸지 않는다.
+    region: ${AWS_REGION:ap-northeast-2}
+    presign-expiry: ${S3_PRESIGN_EXPIRY:5m}
+    tmp-prefix: ${S3_TMP_PREFIX:tmp/}
+    confirmed-prefix: ${S3_CONFIRMED_PREFIX:uploads/}
+
 mybatis:
   # 매퍼 XML 위치. src/main/resources/mapper 아래 하위 디렉터리까지 모두 스캔한다.
   mapper-locations: classpath:mapper/**/*.xml
@@ -43,3 +110,30 @@ logging:
   pattern:
     # HttpLoggingFilter가 MDC에 담아둔 requestId를 기본 콘솔 패턴에 끼워 넣는다.
     correlation: "[%X{requestId:-        }] "
+
+cors:
+  # 콤마로 여러 origin 지정 가능. 운영 배포 도메인이 정해지면 CORS_ALLOWED_ORIGINS 환경변수로 덮어쓴다.
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+app:
+  # 비밀번호 재설정 링크 등 이메일에 실을 프론트 주소. 배포 도메인이 정해지면 FRONTEND_URL 환경변수로 덮어쓴다.
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+
+anthropic:
+  api-key: ${ANTHROPIC_API_KEY:}
+
+kakao:
+  # 지오코딩 실패해도 행사 등록 자체는 막지 않는 fail-soft 기능이라, JWT_SECRET/GOOGLE_CLIENT_ID와
+  # 달리 기본값을 비워둔다. 비어 있으면 KakaoGeocodingClient가 좌표 없이 조용히 넘어간다.
+  rest-api-key: ${KAKAO_REST_API_KEY:}
+
+oauth:
+  google:
+    # 기본값 없음 - 값이 없으면 기동 실패(JWT_SECRET과 동일한 fail-fast 정책)
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET}
+    redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/auth/oauth/google/callback}
+  naver:
+    client-id: ${NAVER_CLIENT_ID}
+    client-secret: ${NAVER_CLIENT_SECRET}
+    redirect-uri: ${NAVER_REDIRECT_URI:http://localhost:8080/api/auth/oauth/naver/callback}

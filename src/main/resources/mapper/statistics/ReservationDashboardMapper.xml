@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.statistics.mapper.ReservationDashboardMapper">
+
+    <!-- ──────────────────────────────────────────── -->
+    <!-- resultMap                                    -->
+    <!-- ──────────────────────────────────────────── -->
+
+    <resultMap id="dateSummaryResultMap" type="com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto">
+        <result column="fair_date_id"      property="fairDateId"/>
+        <result column="operation_date"    property="operationDate"/>
+        <result column="capacity"          property="capacity"/>
+        <result column="entry_start_time"  property="entryStartTime"/>
+        <result column="entry_end_time"    property="entryEndTime"/>
+        <result column="total_count"       property="totalCount"/>
+        <result column="confirmed_count"   property="confirmedCount"/>
+        <result column="checked_in_count"  property="checkedInCount"/>
+        <result column="pending_count"     property="pendingCount"/>
+        <result column="canceled_count"    property="canceledCount"/>
+        <result column="expired_count"     property="expiredCount"/>
+        <result column="remaining_capacity" property="remainingCapacity"/>
+    </resultMap>
+
+    <resultMap id="qrIssuanceSummaryResultMap" type="com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto">
+        <result column="fair_date_id"      property="fairDateId"/>
+        <result column="operation_date"    property="operationDate"/>
+        <result column="qr_issued_count"   property="qrIssuedCount"/>
+        <result column="qr_active_count"   property="qrActiveCount"/>
+        <result column="qr_revoked_count"  property="qrRevokedCount"/>
+    </resultMap>
+
+    <resultMap id="hourlyEntryTrendResultMap" type="com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto">
+        <result column="entry_hour"   property="entryHour"/>
+        <result column="entry_count"  property="entryCount"/>
+    </resultMap>
+
+    <resultMap id="boothVisitStatResultMap" type="com.ms.petopia.api.statistics.dto.BoothVisitStatDto">
+        <result column="booth_id"              property="boothId"/>
+        <result column="booth_number"          property="boothNumber"/>
+        <result column="booth_name"            property="boothName"/>
+        <result column="unique_visitor_count"  property="uniqueVisitorCount"/>
+        <result column="total_scan_count"      property="totalScanCount"/>
+    </resultMap>
+
+    <!-- ──────────────────────────────────────────── -->
+    <!-- 사전예약 통계                                 -->
+    <!-- checkedInCount가 날짜별 실입장 인원이므로      -->
+    <!-- 별도 입장통계 쿼리 불필요                      -->
+    <!-- ──────────────────────────────────────────── -->
+    <select id="selectDateSummaryList" resultMap="dateSummaryResultMap">
+        SELECT fd.fair_date_id,
+               fd.operation_date,
+               fd.capacity,
+               fd.entry_start_time,
+               fd.entry_end_time,
+               COUNT(r.reservation_id)                                                        AS total_count,
+               SUM(CASE WHEN r.status = 'CONFIRMED'       THEN 1 ELSE 0 END)                 AS confirmed_count,
+               SUM(CASE WHEN r.status = 'CHECKED_IN'      THEN 1 ELSE 0 END)                 AS checked_in_count,
+               SUM(CASE WHEN r.status = 'PENDING_PAYMENT' THEN 1 ELSE 0 END)                 AS pending_count,
+               SUM(CASE WHEN r.status = 'CANCELED'        THEN 1 ELSE 0 END)                 AS canceled_count,
+               SUM(CASE WHEN r.status = 'EXPIRED'         THEN 1 ELSE 0 END)                 AS expired_count,
+               fd.capacity - SUM(CASE WHEN r.status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
+                                       AND r.reservation_type != 'ONSITE_DIRECT'
+                                  THEN 1 ELSE 0 END)                                          AS remaining_capacity
+          FROM fair_dates fd
+          LEFT JOIN reservations r
+            ON r.fair_id     = fd.fair_id
+           AND r.visit_date  = fd.operation_date
+         WHERE fd.fair_id = #{fairId}
+           <if test="date != null">
+               AND fd.operation_date = #{date}
+           </if>
+         GROUP BY fd.fair_date_id,
+                  fd.operation_date,
+                  fd.capacity,
+                  fd.entry_start_time,
+                  fd.entry_end_time
+         ORDER BY fd.operation_date ASC
+    </select>
+
+    <!-- ──────────────────────────────────────────── -->
+    <!-- QR 발급 통계                                 -->
+    <!-- ──────────────────────────────────────────── -->
+    <select id="selectQrIssuanceSummary" resultMap="qrIssuanceSummaryResultMap">
+        SELECT fd.fair_date_id,
+               fd.operation_date,
+               COUNT(eq.entry_qr_id)                                                                    AS qr_issued_count,
+               SUM(CASE WHEN eq.expires_at > NOW() AND eq.revoked_at IS NULL THEN 1 ELSE 0 END)         AS qr_active_count,
+               SUM(CASE WHEN eq.revoked_at IS NOT NULL                        THEN 1 ELSE 0 END)         AS qr_revoked_count
+          FROM fair_dates fd
+          LEFT JOIN reservations r
+            ON r.fair_id    = fd.fair_id
+           AND r.visit_date = fd.operation_date
+          LEFT JOIN entry_qrs eq
+            ON eq.reservation_id = r.reservation_id
+         WHERE fd.fair_id = #{fairId}
+         GROUP BY fd.fair_date_id, fd.operation_date
+         ORDER BY fd.operation_date ASC
+    </select>
+
+    <!-- ──────────────────────────────────────────── -->
+    <!-- 시간대별 입장 추이                            -->
+    <!-- 특정 운영일(date 필수)의 시간대별 입장 건수    -->
+    <!-- ──────────────────────────────────────────── -->
+    <select id="selectHourlyEntryTrend" resultMap="hourlyEntryTrendResultMap">
+        SELECT HOUR(enr.first_checked_in_at)  AS entry_hour,
+               COUNT(enr.entry_record_id)     AS entry_count
+          FROM entry_records enr
+          JOIN reservations r
+            ON r.reservation_id = enr.reservation_id
+         WHERE enr.fair_id = #{fairId}
+           AND r.visit_date = #{date}
+         GROUP BY HOUR(enr.first_checked_in_at)
+         ORDER BY entry_hour ASC
+    </select>
+
+    <!-- ──────────────────────────────────────────── -->
+    <!-- 부스별 방문자 통계                            -->
+    <!-- ──────────────────────────────────────────── -->
+    <select id="selectBoothVisitStats" resultMap="boothVisitStatResultMap">
+        SELECT b.booth_id,
+               bs.slot_number              AS booth_number,
+               b.name                      AS booth_name,
+               COUNT(DISTINCT bv.user_id)  AS unique_visitor_count,
+               SUM(bv.visit_count)         AS total_scan_count
+          FROM booth_visits bv
+          JOIN booth b
+            ON b.booth_id = bv.booth_id
+          JOIN application a
+            ON a.application_id = b.application_id
+          JOIN application_slot aslot
+            ON aslot.application_id = a.application_id
+          JOIN booth_slots bs
+            ON bs.booth_slot_id = aslot.booth_slot_id
+         WHERE bv.fair_id = #{fairId}
+         GROUP BY b.booth_id, bs.slot_number, b.name
+         ORDER BY unique_visitor_count DESC, total_scan_count DESC, b.booth_id ASC
+    </select>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- visit-stats                                         -->
+    <!-- ─────────────────────────────────────────────────── -->
+    <!-- 실제 입장한 총 방문자 수 (중복 제거) -->
+    <select id="selectTotalVisitors" resultType="int">
+        SELECT COUNT(DISTINCT user_id)
+        FROM entry_records
+        WHERE fair_id = #{fairId}
+    </select>
+
+    <!--확정된 예약 수 (방문율 분모)-->
+    <select id="selectTotalConfirmedReservations" resultType="int">
+        SELECT COUNT(DISTINCT user_id)
+        FROM reservations
+        WHERE fair_id = #{fairId}
+            AND status IN ('CONFIRMED', 'CHECKED_IN')
+    </select>
+
+    <!--채널별(ONLINE/ONSITE_DIRECT)-->
+    <select id="selectChannelBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT COALESCE(r.channel, '미등록') AS label,
+            COUNT(*) AS count
+        FROM entry_records enr
+            JOIN reservations r ON r.reservation_id = enr.reservation_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY r.channel
+        ORDER BY count DESC
+    </select>
+
+    <!--성별 분포-->
+    <select id="selectGenderBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT COALESCE(u.gender, '미등록') AS label,
+            COUNT(DISTINCT enr.user_id) AS count
+        FROM entry_records enr
+            JOIN users u ON u.user_id = enr.user_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY u.gender
+        ORDER BY count DESC
+    </select>
+
+    <!--연령대 분포-->
+    <select id="selectAgeGroupBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT CASE
+                WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 20 THEN '10대 이하'
+                WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 30 THEN '20대'
+                WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 40 THEN '30대'
+                WHEN TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE()) &lt; 50 THEN '40대'
+                ELSE '50대 이상'
+            END AS label,
+            COUNT(DISTINCT enr.user_id) AS count
+        FROM entry_records enr
+            JOIN users u ON u.user_id = enr.user_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY label
+        ORDER BY MIN(TIMESTAMPDIFF(YEAR, u.birth_date, CURDATE())) ASC
+    </select>
+
+    <!-- 반려동물 종 분포 -->
+    <select id="selectPetSpeciesBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT COALESCE(rp.pet_species_snapshot, '미등록') AS label,
+            COUNT(*) AS count
+        FROM entry_records enr
+            JOIN reservations r ON r.reservation_id = enr.reservation_id
+            LEFT JOIN reservation_pets rp ON rp.reservation_id = r.reservation_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY rp.pet_species_snapshot
+        ORDER BY count DESC
+    </select>
+
+    <!-- 방문자 1명이 평균 몇 개 부스를 방문했는지 -->
+    <!-- 부스를 하나도 방문하지 않은 입장자도 분모에 포함하기 위해 entry_records를 기준으로 LEFT JOIN -->
+    <select id="selectAvgBoothsPerVisitor" resultType="java.lang.Double">
+        SELECT ROUND(AVG(booth_count), 1)
+          FROM (
+               SELECT enr.user_id, COUNT(DISTINCT bv.booth_id) AS booth_count
+                 FROM entry_records enr
+                 LEFT JOIN booth_visits bv
+                        ON bv.fair_id = enr.fair_id AND bv.user_id = enr.user_id
+                WHERE enr.fair_id = #{fairId}
+                GROUP BY enr.user_id
+               ) sub
+    </select>
+
+    <!-- 부스 방문 패턴 분포: 유저별 방문 부스 수 히스토그램 -->
+    <!-- 부스를 하나도 방문하지 않은 입장자도 "0개 부스" 버킷에 포함하기 위해 entry_records 기준 LEFT JOIN -->
+    <select id="selectBoothVisitPatternDistribution" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT CONCAT(visit_depth, '개 부스') AS label,
+               COUNT(*) AS count
+          FROM (
+               SELECT enr.user_id, COUNT(DISTINCT bv.booth_id) AS visit_depth
+                 FROM entry_records enr
+                 LEFT JOIN booth_visits bv
+                        ON bv.fair_id = enr.fair_id AND bv.user_id = enr.user_id
+                WHERE enr.fair_id = #{fairId}
+                GROUP BY enr.user_id
+               ) sub
+         GROUP BY visit_depth
+         ORDER BY visit_depth ASC
+    </select>
+
+    <!-- 반려동물 품종 분포 -->
+    <select id="selectPetBreedBreakdown" resultType="com.ms.petopia.api.statistics.dto.PetBreedStatDto">
+        SELECT COALESCE(rp.pet_species_snapshot, '미등록') AS species,
+        COALESCE(rp.pet_breed_snapshot,  '미등록') AS breed,
+        COUNT(*) AS count
+        FROM entry_records enr
+        JOIN reservations r   ON r.reservation_id  = enr.reservation_id
+        LEFT JOIN reservation_pets rp ON rp.reservation_id = r.reservation_id
+        WHERE enr.fair_id = #{fairId}
+        GROUP BY rp.pet_species_snapshot, rp.pet_breed_snapshot
+        ORDER BY count DESC
+    </select>
+
+    <!-- 평균 반려동물 나이. 데이터 없으면 NULL 반환 -->
+    <select id="selectAvgPetAge" resultType="java.lang.Double">
+        SELECT AVG(rp.pet_age_snapshot)
+        FROM entry_records enr
+            JOIN reservations r ON r.reservation_id = enr.reservation_id
+            LEFT JOIN reservation_pets rp ON rp.reservation_id = r.reservation_id
+        WHERE enr.fair_id = #{fairId}
+            AND rp.pet_age_snapshot IS NOT NULL
+    </select>
+</mapper>

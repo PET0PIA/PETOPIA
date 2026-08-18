@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.ReservationChangeMapper">
+
+    <select id="selectReservationForUpdate" resultType="ReservationChangeReservationRow">
+        SELECT reservation_id
+             , fair_id
+             , user_id
+             , visit_date
+             , reservation_type
+             , status
+          FROM reservations
+         WHERE reservation_id = #{reservationId}
+         FOR UPDATE
+    </select>
+
+    <!-- 두 운영일은 날짜 오름차순으로 잠가 서로 반대 방향의 변경 요청도 교착되지 않게 한다. -->
+    <select id="selectFairDatesForUpdate" resultType="ReservationChangeFairDateRow">
+        SELECT fair_date_id
+             , operation_date
+             , capacity
+             , entry_start_time
+             , entry_end_time
+        <!--
+            FORCE INDEX로 스캔 순서를 (fair_id, operation_date)에 고정한다. 잠금 순서는
+            ORDER BY가 아니라 실제 스캔 순서로 정해지므로, 옵티마이저가 다른 접근 경로를
+            고르면 A→B와 B→A 동시 변경이 서로 반대 순서로 잠가 교착된다.
+        -->
+          FROM fair_dates FORCE INDEX (UK_FAIR_DATE_FAIR_DATE)
+         WHERE fair_id = #{fairId}
+           AND operation_date IN
+            <foreach collection="operationDates" item="operationDate" open="(" separator="," close=")">
+                #{operationDate}
+            </foreach>
+         ORDER BY operation_date ASC
+         FOR UPDATE
+    </select>
+
+    <update id="updateVisitDate">
+        UPDATE reservations
+           SET visit_date = #{visitDate}
+             , updated_at = #{now}
+         WHERE reservation_id = #{reservationId}
+           AND status = 'CONFIRMED'
+    </update>
+
+    <insert id="insertVisitDateChangedHistory">
+        INSERT INTO reservation_histories (
+               reservation_id
+             , action_type
+             , before_data
+             , after_data
+             , changed_by
+             , actor_type
+             , is_admin_action
+             , change_reason
+             , created_at
+        ) VALUES (
+               #{reservationId}
+             , 'VISIT_DATE_CHANGED'
+             , JSON_OBJECT('visitDate', #{previousVisitDate})
+             , JSON_OBJECT('visitDate', #{visitDate})
+             , #{changedBy}
+             , 'USER'
+             , FALSE
+             , NULL
+             , #{now}
+        )
+    </insert>
+
+</mapper>

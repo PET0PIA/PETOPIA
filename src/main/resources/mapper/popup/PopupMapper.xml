@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.popup.mapper.PopupMapper">
+    <!--현재 노출 중인 팝업 목록-->
+    <select id="selectActiveList" resultType="com.ms.petopia.api.popup.domain.Popup">
+        SELECT popup_id, title, subtitle, image_key, link_url, link_target, link_label, bg_color,
+            width, height, is_active, started_at, ended_at, created_at
+        FROM popup
+        WHERE is_active = 1
+            AND (started_at IS NULL OR started_at &lt;= NOW())
+            AND (ended_at IS NULL OR ended_at &gt;= NOW())
+    </select>
+
+    <!--전체 팝업 목록 (관리자)-->
+    <select id="selectAll" resultType="com.ms.petopia.api.popup.domain.Popup">
+        SELECT popup_id, title, subtitle, image_key, link_url, link_target, link_label, bg_color,
+            width, height, is_active, started_at, ended_at, created_at
+        FROM popup
+    </select>
+
+    <!--단건 조회-->
+    <select id="selectById" resultType="com.ms.petopia.api.popup.domain.Popup">
+        SELECT popup_id, title, subtitle, image_key, link_url, link_target, link_label, bg_color,
+            width, height, is_active, started_at, ended_at,
+            created_by, created_at, updated_at
+        FROM popup
+        WHERE popup_id = #{popupId}
+    </select>
+
+    <!--등록-->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="popupId">
+        INSERT INTO popup(title, subtitle, image_key, link_url, link_target, link_label, bg_color,
+            width, height, is_active, started_at, ended_at, created_by)
+        VALUES (#{title}, #{subtitle}, #{imageKey}, #{linkUrl}, #{linkTarget}, #{linkLabel}, #{bgColor},
+            #{width}, #{height}, #{isActive}, #{startedAt}, #{endedAt}, #{createdBy})
+    </insert>
+
+    <!--수정 (null이 아닌 필드만 갱신, 빈 문자열은 명시적 삭제로 취급해 NULL 저장)-->
+    <update id="update">
+        UPDATE popup
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="subtitle != null">subtitle = <choose><when test="subtitle == ''">NULL</when><otherwise>#{subtitle}</otherwise></choose>,</if>
+            <if test="imageKey != null">image_key = <choose><when test="imageKey == ''">NULL</when><otherwise>#{imageKey}</otherwise></choose>,</if>
+            <if test="linkUrl != null">link_url = <choose><when test="linkUrl == ''">NULL</when><otherwise>#{linkUrl}</otherwise></choose>,</if>
+            <if test="linkTarget != null">link_target = #{linkTarget},</if>
+            <if test="linkLabel != null">link_label = <choose><when test="linkLabel == ''">NULL</when><otherwise>#{linkLabel}</otherwise></choose>,</if>
+            <if test="bgColor != null">bg_color = <choose><when test="bgColor == ''">NULL</when><otherwise>#{bgColor}</otherwise></choose>,</if>
+            <if test="width != null">width = #{width},</if>
+            <if test="height != null">height = #{height},</if>
+            <if test="startedAt != null">started_at = #{startedAt},</if>
+            <if test="endedAt != null">ended_at = #{endedAt},</if>
+        </set>
+        WHERE popup_id = #{popupId}
+    </update>
+
+    <!--삭제-->
+    <delete id="delete">
+        DELETE FROM popup WHERE popup_id = #{popupId}
+    </delete>
+
+    <!--노출 여부 토글-->
+    <update id="updateActive">
+        UPDATE popup SET is_active = #{isActive}
+        WHERE popup_id = #{popupId}
+    </update>
+</mapper>

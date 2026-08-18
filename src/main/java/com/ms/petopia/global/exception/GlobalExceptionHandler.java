@@ -3,10 +3,13 @@ package com.ms.petopia.global.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
@@ -49,6 +52,47 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(errorCode.getHttpStatus())
                 .body(ErrorResponse.of(errorCode, errorCode.getMessage(), request.getRequestURI(), fieldErrors));
+    }
+
+    /**
+     * 필수 헤더·요청 파라미터 누락 등 요청 바인딩 실패.
+     */
+    @ExceptionHandler(ServletRequestBindingException.class)
+    public ResponseEntity<ErrorResponse> handleServletRequestBinding(
+            ServletRequestBindingException e, HttpServletRequest request) {
+
+        ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+        log.warn("[ServletRequestBindingException] uri={}, message={}", request.getRequestURI(), e.getMessage());
+
+        return ResponseEntity
+                .status(errorCode.getHttpStatus())
+                .body(ErrorResponse.of(errorCode, errorCode.getMessage(), request.getRequestURI()));
+    }
+
+    /** 쿼리 파라미터·경로 변수 타입 변환 실패 (예: 잘못된 날짜 형식). */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+
+        ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+        log.warn("[MethodArgumentTypeMismatchException] uri={}, param={}, value={}",
+                request.getRequestURI(), e.getName(), e.getValue());
+
+        return ResponseEntity
+                .status(errorCode.getHttpStatus())
+                .body(ErrorResponse.of(errorCode, errorCode.getMessage(), request.getRequestURI()));
+    }
+
+    /** JSON 형식 오류 또는 enum 바인딩 실패. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException e, HttpServletRequest request) {
+
+        ErrorCode errorCode = ErrorCode.INVALID_INPUT_VALUE;
+        log.warn("[HttpMessageNotReadableException] uri={}", request.getRequestURI());
+        return ResponseEntity
+                .status(errorCode.getHttpStatus())
+                .body(ErrorResponse.of(errorCode, errorCode.getMessage(), request.getRequestURI()));
     }
 
     /**

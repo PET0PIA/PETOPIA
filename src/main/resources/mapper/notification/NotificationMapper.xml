@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.notification.mapper.NotificationMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="notificationId">
+        INSERT INTO notification(
+            user_id, recipient_type, type, title, body, link_url, created_at
+        ) VALUES(
+            #{userId}, #{recipientType}, #{type}, #{title}, #{body}, #{linkUrl}, NOW()
+        )
+    </insert>
+    
+    <select id="selectById" resultType="Notification">
+        SELECT *
+        FROM notification
+        WHERE notification_id = #{notificationId}
+    </select>
+
+    <select id="selectByUserId" resultType="NotificationListRow">
+        SELECT n.notification_id, n.type, n.title, n.body, n.link_url, n.created_at,
+        nd.read_at IS NOT NULL AS already_read
+        FROM notification n
+        INNER JOIN notification_delivery nd
+        ON nd.notification_id = n.notification_id
+        AND nd.channel = 'IN_APP'
+        WHERE n.user_id = #{userId}
+        ORDER BY n.created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- countByUserId: JOIN 추가 -->
+    <select id="countByUserId" resultType="long">
+        SELECT COUNT(*)
+        FROM notification n
+        INNER JOIN notification_delivery nd
+        ON nd.notification_id = n.notification_id
+        AND nd.channel = 'IN_APP'
+        WHERE n.user_id = #{userId}
+    </select>
+</mapper>

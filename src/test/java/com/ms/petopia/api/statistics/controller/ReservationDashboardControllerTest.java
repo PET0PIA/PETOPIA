@@ -1,0 +1,314 @@
+package com.ms.petopia.api.statistics.controller;
+
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
+import com.ms.petopia.api.statistics.dto.BoothVisitStatDto;
+import com.ms.petopia.api.statistics.dto.HourlyEntryTrendDto;
+import com.ms.petopia.api.statistics.dto.LabelCountDto;
+import com.ms.petopia.api.statistics.dto.PetBreedStatDto;
+import com.ms.petopia.api.statistics.dto.QrIssuanceSummaryDto;
+import com.ms.petopia.api.statistics.dto.ReservationDateSummaryDto;
+import com.ms.petopia.api.statistics.dto.VisitStatsDto;
+import com.ms.petopia.api.statistics.service.ReservationDashboardService;
+import com.ms.petopia.api.statistics.service.VisitStatsExportService;
+import com.ms.petopia.api.statistics.sse.DashboardEmitterRegistry;
+import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
+import com.ms.petopia.global.security.jwt.JwtTokenProvider;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.LocalDate;
+import java.util.List;
+
+import static org.hamcrest.Matchers.hasSize;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@WebMvcTest(controllers = ReservationDashboardController.class)
+class ReservationDashboardControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockitoBean
+    private ReservationDashboardService dashboardService;
+
+    @MockitoBean
+    private VisitStatsExportService exportService;
+
+    @MockitoBean
+    private DashboardEmitterRegistry emitterRegistry;
+
+    // 행사 담당자 검증 가드. 기본(스텁 없음)은 아무것도 던지지 않아 통과되므로,
+    // 거부 시나리오를 검증하는 테스트에서만 개별적으로 willThrow를 스텁한다.
+    @MockitoBean
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
+    // SecurityConfig → JwtAuthenticationFilter → JwtTokenProvider 의존성 체인을 끊기 위해 등록
+    // anyRequest().permitAll() 설정으로 인증 없이 테스트 요청이 통과된다
+    @MockitoBean
+    private JwtTokenProvider jwtTokenProvider;
+
+    // ── reservation-dashboard ─────────────────────────────────────────
+
+    @Test
+    void getDashboard_noDateParam_returnsAllDates() throws Exception {
+        List<ReservationDateSummaryDto> fakeResult = List.of(
+                makeSummary(LocalDate.of(2026, 8, 1), 200, 150),
+                makeSummary(LocalDate.of(2026, 8, 2), 200, 80)
+        );
+        given(dashboardService.getDateSummary(eq(1L), isNull()))
+                .willReturn(fakeResult);
+
+        mockMvc.perform(get("/api/fairs/1/reservation-dashboard")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data", hasSize(2)))
+                .andExpect(jsonPath("$.data[0].operationDate").value("2026-08-01"))
+                .andExpect(jsonPath("$.data[0].capacity").value(200));
+    }
+
+    @Test
+    void getDashboard_withDateParam_returnsFilteredDate() throws Exception {
+        List<ReservationDateSummaryDto> fakeResult = List.of(
+                makeSummary(LocalDate.of(2026, 8, 1), 200, 150)
+        );
+        given(dashboardService.getDateSummary(eq(1L), eq(LocalDate.of(2026, 8, 1))))
+                .willReturn(fakeResult);
+
+        mockMvc.perform(get("/api/fairs/1/reservation-dashboard")
+                        .param("date", "2026-08-01")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].operationDate").value("2026-08-01"));
+    }
+
+    @Test
+    void getDashboard_invalidDateFormat_returns400() throws Exception {
+        mockMvc.perform(get("/api/fairs/1/reservation-dashboard")
+                        .param("date", "20260801"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getDashboard_담당행사아니면_403이고_서비스를_호출하지_않는다() throws Exception {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(1L);
+
+        mockMvc.perform(get("/api/fairs/1/reservation-dashboard"))
+                .andExpect(status().isForbidden());
+
+        then(fairAdminAccessGuard).should().checkAssigned(1L);
+        then(dashboardService).should(never()).getDateSummary(any(), any());
+    }
+
+    // ── qr-issuance-summary ───────────────────────────────────────────
+
+    @Test
+    void getQrIssuanceSummary_returnsList() throws Exception {
+        QrIssuanceSummaryDto dto1 = makeQrSummary(LocalDate.of(2026, 8, 1), 120, 100, 20);
+        QrIssuanceSummaryDto dto2 = makeQrSummary(LocalDate.of(2026, 8, 2), 80,  75,  5);
+        given(dashboardService.getQrIssuanceSummary(1L)).willReturn(List.of(dto1, dto2));
+
+        mockMvc.perform(get("/api/fairs/1/qr-issuance-summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data", hasSize(2)))
+                .andExpect(jsonPath("$.data[0].operationDate").value("2026-08-01"))
+                .andExpect(jsonPath("$.data[0].qrIssuedCount").value(120))
+                .andExpect(jsonPath("$.data[0].qrActiveCount").value(100))
+                .andExpect(jsonPath("$.data[0].qrRevokedCount").value(20));
+    }
+
+    @Test
+    void getQrIssuanceSummary_noData_returnsEmptyList() throws Exception {
+        given(dashboardService.getQrIssuanceSummary(1L)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/fairs/1/qr-issuance-summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(0)));
+    }
+
+    // ── hourly-entry-trend ────────────────────────────────────────────
+
+    @Test
+    void getHourlyEntryTrend_returnsHourlyList() throws Exception {
+        HourlyEntryTrendDto hour10 = makeHourlyDto(10, 30);
+        HourlyEntryTrendDto hour11 = makeHourlyDto(11, 55);
+        given(dashboardService.getHourlyEntryTrend(eq(1L), eq(LocalDate.of(2026, 8, 1))))
+                .willReturn(List.of(hour10, hour11));
+
+        mockMvc.perform(get("/api/fairs/1/hourly-entry-trend")
+                        .param("date", "2026-08-01"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data", hasSize(2)))
+                .andExpect(jsonPath("$.data[0].entryHour").value(10))
+                .andExpect(jsonPath("$.data[0].entryCount").value(30))
+                .andExpect(jsonPath("$.data[1].entryHour").value(11))
+                .andExpect(jsonPath("$.data[1].entryCount").value(55));
+    }
+
+    @Test
+    void getHourlyEntryTrend_missingDateParam_returns400() throws Exception {
+        // date는 @RequestParam 필수값이므로 누락 시 400
+        mockMvc.perform(get("/api/fairs/1/hourly-entry-trend"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getHourlyEntryTrend_invalidDateFormat_returns400() throws Exception {
+        mockMvc.perform(get("/api/fairs/1/hourly-entry-trend")
+                        .param("date", "20260801"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ── booth-visit-stats ─────────────────────────────────────────────
+
+    @Test
+    void getBoothVisitStats_returnsList() throws Exception {
+        BoothVisitStatDto dto1 = makeBoothDto(1L, "A-01", "펫샵 강남", 200, 210);
+        BoothVisitStatDto dto2 = makeBoothDto(2L, "A-02", "고양이 왕국", 150, 155);
+        given(dashboardService.getBoothVisitStats(1L)).willReturn(List.of(dto1, dto2));
+
+        mockMvc.perform(get("/api/fairs/1/booth-visit-stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data", hasSize(2)))
+                .andExpect(jsonPath("$.data[0].boothNumber").value("A-01"))
+                .andExpect(jsonPath("$.data[0].boothName").value("펫샵 강남"))
+                .andExpect(jsonPath("$.data[0].uniqueVisitorCount").value(200))
+                .andExpect(jsonPath("$.data[0].totalScanCount").value(210));
+    }
+
+    @Test
+    void getBoothVisitStats_noData_returnsEmptyList() throws Exception {
+        given(dashboardService.getBoothVisitStats(1L)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/fairs/1/booth-visit-stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(0)));
+    }
+
+    // ── visit-stats ───────────────────────────────────────────────────
+
+    @Test
+    void getVisitStats_returnsFullStats() throws Exception {
+        VisitStatsDto dto = makeVisitStats(80, 100, 80.0);
+        given(dashboardService.getVisitStats(1L)).willReturn(dto);
+
+        mockMvc.perform(get("/api/fairs/1/visit-stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.totalVisitors").value(80))
+                .andExpect(jsonPath("$.data.totalConfirmedReservations").value(100))
+                .andExpect(jsonPath("$.data.visitRate").value(80.0));
+    }
+
+    @Test
+    void getVisitStats_noVisitors_returnsZeroRate() throws Exception {
+        VisitStatsDto dto = makeVisitStats(0, 0, 0.0);
+        given(dashboardService.getVisitStats(1L)).willReturn(dto);
+
+        mockMvc.perform(get("/api/fairs/1/visit-stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalVisitors").value(0))
+                .andExpect(jsonPath("$.data.visitRate").value(0.0));
+    }
+
+    @Test
+    void getVisitStats_avgPetAgeIsNull_returnsNullInResponse() throws Exception {
+        VisitStatsDto dto = makeVisitStats(10, 10, 100.0);
+        dto.setAvgPetAge(null);
+        given(dashboardService.getVisitStats(1L)).willReturn(dto);
+
+        mockMvc.perform(get("/api/fairs/1/visit-stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.avgPetAge").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    // getVisitStats() 자체의 담당자 검증은 ReservationDashboardService 내부에서 이뤄지고
+    // 이 컨트롤러 테스트는 그 서비스를 통째로 mock하므로 여기서는 검증할 수 없다 -
+    // ReservationDashboardServiceTest#getVisitStats_담당행사아니면_예외를_던진다 참고.
+
+    // ── reservation-dashboard/stream(SSE) ───────────────────────────────
+
+    @Test
+    void streamDashboard_담당행사아니면_403이고_emitter를_등록하지_않는다() throws Exception {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(1L);
+
+        mockMvc.perform(get("/api/fairs/1/reservation-dashboard/stream"))
+                .andExpect(status().isForbidden());
+
+        then(fairAdminAccessGuard).should().checkAssigned(1L);
+        then(emitterRegistry).should(never()).register(any());
+    }
+
+    // ── 헬퍼 메서드 ──────────────────────────────────────────────────
+
+    private ReservationDateSummaryDto makeSummary(LocalDate date, int capacity, int confirmed) {
+        ReservationDateSummaryDto dto = new ReservationDateSummaryDto();
+        dto.setOperationDate(date);
+        dto.setCapacity(capacity);
+        dto.setConfirmedCount(confirmed);
+        dto.setRemainingCapacity(capacity - confirmed);
+        return dto;
+    }
+
+    private QrIssuanceSummaryDto makeQrSummary(LocalDate date, int issued, int active, int revoked) {
+        QrIssuanceSummaryDto dto = new QrIssuanceSummaryDto();
+        dto.setOperationDate(date);
+        dto.setQrIssuedCount(issued);
+        dto.setQrActiveCount(active);
+        dto.setQrRevokedCount(revoked);
+        return dto;
+    }
+
+    private HourlyEntryTrendDto makeHourlyDto(int hour, int count) {
+        HourlyEntryTrendDto dto = new HourlyEntryTrendDto();
+        dto.setEntryHour(hour);
+        dto.setEntryCount(count);
+        return dto;
+    }
+
+    private BoothVisitStatDto makeBoothDto(Long boothId, String number, String name,
+                                           int uniqueCount, int totalCount) {
+        BoothVisitStatDto dto = new BoothVisitStatDto();
+        dto.setBoothId(boothId);
+        dto.setBoothNumber(number);
+        dto.setBoothName(name);
+        dto.setUniqueVisitorCount(uniqueCount);
+        dto.setTotalScanCount(totalCount);
+        return dto;
+    }
+
+    private VisitStatsDto makeVisitStats(int visitors, int confirmed, double rate) {
+        VisitStatsDto dto = new VisitStatsDto();
+        dto.setTotalVisitors(visitors);
+        dto.setTotalConfirmedReservations(confirmed);
+        dto.setVisitRate(rate);
+        dto.setChannelBreakdown(List.of());
+        dto.setGenderBreakdown(List.of());
+        dto.setAgeGroupBreakdown(List.of());
+        dto.setPetSpeciesBreakdown(List.of());
+        dto.setPetBreedBreakdown(List.of());
+        dto.setAvgPetAge(null);
+        return dto;
+    }
+}

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.auth.mapper.FairAdminAssignmentMapper">
+
+    <insert id="insertFairAdminAssignment">
+        INSERT INTO fair_admin_assignments (
+               admin_user_id
+             , requester_user_id
+             , fair_id
+        ) VALUES (
+               #{adminUserId}
+             , #{requesterUserId}
+             , #{fairId}
+        )
+    </insert>
+
+    <select id="existsByAdminUserIdAndFairId" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM fair_admin_assignments
+            WHERE admin_user_id = #{adminUserId} AND fair_id = #{fairId}
+        )
+    </select>
+
+    <select id="selectByAdminUserId" resultType="com.ms.petopia.api.fair.dto.AssignedFairSummary">
+        SELECT f.fair_id AS fairId, f.name
+        FROM fair_admin_assignments a
+        JOIN fairs f ON f.fair_id = a.fair_id
+        WHERE a.admin_user_id = #{adminUserId}
+        ORDER BY f.fair_id DESC
+    </select>
+
+</mapper>

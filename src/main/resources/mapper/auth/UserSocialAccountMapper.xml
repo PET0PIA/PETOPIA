@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.auth.mapper.UserSocialAccountMapper">
+
+    <!-- OAuth 콜백에서 (provider, oauthId)로 기존 연결 조회 -->
+    <select id="selectByProviderAndOauthId" resultType="UserSocialAccount">
+        SELECT social_id
+             , user_id
+             , provider
+             , oauth_id
+             , connected_at
+          FROM user_social_accounts
+         WHERE provider = #{provider}
+           AND oauth_id = #{oauthId}
+    </select>
+
+    <!-- 신규 가입 완료 시 소셜 계정 연결 저장 -->
+    <insert id="insertSocialAccount"
+            parameterType="UserSocialAccount"
+            useGeneratedKeys="true"
+            keyProperty="socialId"
+            keyColumn="social_id">
+        INSERT INTO user_social_accounts (
+               user_id
+             , provider
+             , oauth_id
+             , connected_at
+        ) VALUES (
+               #{userId}
+             , #{provider}
+             , #{oauthId}
+             , #{connectedAt}
+        )
+    </insert>
+
+</mapper>

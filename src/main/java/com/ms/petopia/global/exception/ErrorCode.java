@@ -23,9 +23,192 @@ public enum ErrorCode {
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "U001", "존재하지 않는 사용자입니다."),
     DUPLICATED_EMAIL(HttpStatus.CONFLICT, "U002", "이미 사용 중인 이메일입니다."),
 
+    // ===== Pet =====
+    PET_NOT_FOUND(HttpStatus.NOT_FOUND, "PT001", "존재하지 않는 반려동물입니다."),
+    PET_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PT002", "본인의 반려동물만 조회·수정·삭제할 수 있습니다."),
+
     // ===== Auth =====
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "A001", "인증이 필요합니다."),
-    ACCESS_DENIED(HttpStatus.FORBIDDEN, "A002", "접근 권한이 없습니다.");
+    ACCESS_DENIED(HttpStatus.FORBIDDEN, "A002", "접근 권한이 없습니다."),
+    INVALID_LOGIN(HttpStatus.UNAUTHORIZED, "A003", "이메일 혹은 비밀번호가 일치하지 않습니다."),
+    INVALID_TOKEN(HttpStatus.BAD_REQUEST, "A004", "유효하지 않은 인증 코드입니다."),
+    TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "A005", "인증 코드가 만료되었습니다."),
+    TOKEN_ALREADY_USED(HttpStatus.BAD_REQUEST, "A006", "이미 사용된 인증 코드입니다."),
+    EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "A007", "이미 인증된 이메일입니다."),
+    TOO_MANY_VERIFY_ATTEMPTS(HttpStatus.BAD_REQUEST, "A008", "인증 시도 횟수를 초과했습니다. 인증 코드를 다시 받아주세요."),
+    RESEND_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "A009", "인증 코드 재전송은 잠시 후 다시 시도해주세요."),
+    EMAIL_NOT_VERIFIED(HttpStatus.UNAUTHORIZED, "A010", "이메일 인증이 완료되지 않은 이메일입니다."),
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "A011", "유효하지 않거나 만료된 토큰입니다. 다시 로그인해주세요."),
+    INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "A012", "현재 비밀번호가 일치하지 않습니다."),
+    FAIR_ADMIN_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "A013", "이미 관리자 계정이 배정된 행사입니다."),
+    OAUTH_UNSUPPORTED_PROVIDER(HttpStatus.BAD_REQUEST, "A014", "지원하지 않는 소셜 로그인 제공자입니다."),
+    OAUTH_INVALID_STATE(HttpStatus.BAD_REQUEST, "A015", "잘못되었거나 만료된 요청입니다. 다시 시도해주세요."),
+    OAUTH_PENDING_NOT_FOUND(HttpStatus.BAD_REQUEST, "A016", "만료되었거나 잘못된 요청입니다. 처음부터 다시 시도해주세요."),
+    OAUTH_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY, "A017", "소셜 로그인 제공자와 통신 중 오류가 발생했습니다."),
+    ACCOUNT_INACTIVE(HttpStatus.FORBIDDEN, "A018", "정지된 계정입니다."),
+    TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "A019", "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요."),
+
+    // ===== Storage =====
+    STORAGE_UNSUPPORTED_EXTENSION(HttpStatus.BAD_REQUEST, "S001", "허용하지 않는 파일 확장자입니다."),
+    STORAGE_CONTENT_TYPE_MISMATCH(HttpStatus.BAD_REQUEST, "S002", "파일 확장자와 Content-Type이 일치하지 않습니다."),
+    STORAGE_FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "S003", "허용 용량을 초과했습니다."),
+    STORAGE_INVALID_OBJECT_KEY(HttpStatus.BAD_REQUEST, "S004", "잘못된 임시 파일 키입니다."),
+    STORAGE_UPLOAD_NOT_FOUND(HttpStatus.BAD_REQUEST, "S005", "업로드된 파일을 찾을 수 없습니다."),
+    STORAGE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "S006", "파일 저장소에 일시적으로 연결할 수 없습니다."),
+    STORAGE_UPLOAD_CHANGED(HttpStatus.CONFLICT, "S007", "파일이 업로드 후 변경되어 확정할 수 없습니다."),
+
+    // ===== Vendor (참가업체·부스) =====
+    BUSINESS_NOT_FOUND(HttpStatus.NOT_FOUND, "V001", "사업자를 찾을 수 없습니다."),
+    RECRUIT_NOTICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V002", "해당 공고에 대한 권한이 없습니다."),
+    RECRUIT_NOTICE_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "V003", "모집 공고 등록에 실패했습니다."),
+    RECRUIT_NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "V004", "아직 작성된 모집 공고가 없습니다."),
+    NTS_API_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "V005", "사업자 진위확인 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요."),
+    BUSINESS_VERIFICATION_FAILED(HttpStatus.BAD_REQUEST, "V006", "사업자 정보를 확인할 수 없습니다. 입력하신 정보를 다시 확인해주세요."),
+    BUSINESS_DUPLICATE(HttpStatus.CONFLICT, "V007", "이미 등록된 사업자등록번호입니다."),
+    APPLICATION_DUPLICATE_ACTIVE(HttpStatus.CONFLICT, "V008", "이미 진행 중인 신청이 존재합니다."),
+    BOOTH_SLOT_ALREADY_LOCKED(HttpStatus.CONFLICT, "V009", "이미 다른 신청에서 선택된 부스 슬롯이 포함되어 있습니다."),
+    TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "V010", "이용약관에 동의해야 신청서를 제출할 수 있습니다."),
+    RECRUIT_CLOSED(HttpStatus.CONFLICT, "V011", "모집이 마감되어 신청할 수 없습니다."),
+    APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "V012", "신청을 찾을 수 없습니다."),
+    BUSINESS_REGISTER_LOCK_TIMEOUT(HttpStatus.CONFLICT, "V013", "사업자 등록 처리 중입니다. 잠시 후 다시 시도해주세요."),
+    APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V014", "본인이 담당하는 행사가 아닙니다."),
+    APPLICATION_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "V015", "심사 대기 중인 신청서만 검토할 수 있습니다."),
+    APPLICATION_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V016", "반려 시 반려 사유를 입력해야 합니다."),
+    APPLICATION_NOT_CANCELABLE(HttpStatus.CONFLICT, "V017", "취소 요청은 결제 대기 또는 확정된 신청서만 가능합니다."),
+    APPLICATION_CANCEL_REQUEST_DUPLICATE(HttpStatus.CONFLICT, "V018", "이미 처리 대기 중인 취소 요청이 있습니다."),
+    APPLICATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "V019", "취소 요청은 행사 시작 7일 전까지만 가능합니다."),
+    APPLICATION_CANCEL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "V020", "처리 대기 중인 취소 요청을 찾을 수 없습니다."),
+    APPLICATION_PAYMENT_EVENT_CONFLICT(HttpStatus.CONFLICT, "V021", "이미 다른 결제로 완료 처리된 신청서입니다."),
+    APPLICATION_NOT_PAYMENT_PENDING(HttpStatus.CONFLICT, "V022", "결제 대기 중인 신청서만 결제 완료 처리할 수 있습니다."),
+    APPLICATION_PAYMENT_AMOUNT_MISMATCH(HttpStatus.CONFLICT, "V023", "통지된 결제 금액이 승인 시 확정된 금액과 일치하지 않습니다."),
+    BOOTH_NOT_FOUND(HttpStatus.NOT_FOUND, "V024", "부스를 찾을 수 없습니다."),
+    BOOTH_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "V025", "판매상품·이벤트를 찾을 수 없습니다."),
+    BOOTH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "V026", "본인 소유의 부스만 관리할 수 있습니다."),
+    BUSINESS_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "V027", "심사 대기 중인 사업자만 처리할 수 있습니다."),
+    BUSINESS_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V028", "반려 시 반려 사유를 입력해야 합니다."),
+    BUSINESS_NOT_APPROVED(HttpStatus.CONFLICT, "V029", "승인된 사업자만 취소 처리할 수 있습니다."),
+    BUSINESS_REVOKE_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V030", "취소 처리 시 사유를 입력해야 합니다."),
+
+
+    // ===== Payment =====
+    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 결제입니다."),
+    PAYMENT_TARGET_NOT_PAYABLE(HttpStatus.CONFLICT, "P002", "결제할 수 없는 상태입니다."),
+    PAYMENT_APPROVAL_FAILED(HttpStatus.PAYMENT_REQUIRED, "P003", "결제 승인에 실패했습니다."),
+    PAYMENT_GATEWAY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "P004", "결제 서비스에 일시적으로 연결할 수 없습니다."),
+
+    // ===== Fair =====
+    FAIR_INVALID_VENDOR_RECRUIT_PERIOD(HttpStatus.BAD_REQUEST, "F001", "참가업체 모집 종료일이 시작일보다 빠릅니다."),
+    FAIR_INVALID_RESERVATION_PERIOD(HttpStatus.BAD_REQUEST, "F002", "예약 기간 종료일이 시작일보다 빠릅니다."),
+    FAIR_INVALID_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F003", "행사 운영 종료일이 시작일보다 빠릅니다."),
+    FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "F004", "존재하지 않는 행사입니다."),
+    HALL_NOT_FOUND(HttpStatus.NOT_FOUND, "F005", "존재하지 않는 홀이거나 해당 행사의 홀이 아닙니다."),
+    FAIR_NOT_PENDING_REVIEW(HttpStatus.CONFLICT, "F006", "심사 대기 중인 신청서만 검토할 수 있습니다."),
+    FAIR_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F007", "반려 시 반려 사유를 입력해야 합니다."),
+    BOOTH_SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "F008", "존재하지 않는 부스 슬롯이거나 해당 홀의 슬롯이 아닙니다."),
+    BOOTH_SLOT_LOCKED(HttpStatus.CONFLICT, "F009", "이미 신청이 걸려 위치·번호·가격 변경 및 삭제가 제한된 부스 슬롯입니다."),
+    BOOTH_SLOT_DUPLICATE_NUMBER(HttpStatus.BAD_REQUEST, "F010", "같은 홀 안에 중복된 부스 번호가 있습니다."),
+    BOOTH_LAYOUT_VERSION_CONFLICT(HttpStatus.CONFLICT, "F011", "다른 곳에서 이미 이 홀의 배치를 저장했습니다. 최신 상태를 다시 불러와 주세요."),
+    BOOTH_SLOT_DUPLICATE_REFERENCE(HttpStatus.BAD_REQUEST, "F012", "같은 부스 슬롯을 요청 안에서 두 번 이상 참조했습니다."),
+    FAIR_DATE_NOT_FOUND(HttpStatus.NOT_FOUND, "F013", "존재하지 않는 운영일이거나 해당 행사의 운영일이 아닙니다."),
+    FAIR_DATE_DUPLICATE(HttpStatus.CONFLICT, "F014", "이미 등록된 운영 날짜입니다."),
+    FAIR_DATE_OUT_OF_OPERATION_PERIOD(HttpStatus.BAD_REQUEST, "F015", "운영 날짜가 행사 운영 기간을 벗어났습니다."),
+    FAIR_DATE_INVALID_ENTRY_TIME(HttpStatus.BAD_REQUEST, "F016", "입장 종료 시간이 입장 시작 시간보다 빠릅니다."),
+    FAIR_NOT_PUBLISHABLE(HttpStatus.CONFLICT, "F017", "공개할 수 없는 상태의 행사입니다."),
+    FAIR_CANCEL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "F018", "존재하지 않는 취소 신청이거나 해당 행사의 취소 신청이 아닙니다."),
+    FAIR_CANCEL_NOT_REQUESTABLE(HttpStatus.CONFLICT, "F019", "취소를 신청할 수 없는 행사입니다."),
+    FAIR_CANCEL_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F020", "취소 신청 사유를 입력해야 합니다."),
+    FAIR_CANCEL_REQUEST_NOT_PENDING(HttpStatus.CONFLICT, "F021", "검토 대기 중인 취소 신청만 검토할 수 있습니다."),
+    FAIR_CANCEL_REJECT_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "F022", "취소 신청 반려 시 반려 사유를 입력해야 합니다."),
+    HALL_HAS_BOOTH_SLOTS(HttpStatus.CONFLICT, "F023", "부스 슬롯이 남아있는 홀은 삭제할 수 없습니다."),
+    FAIR_DATE_FAIR_NOT_EDITABLE(HttpStatus.CONFLICT, "F024", "취소되었거나 종료된 행사는 운영일을 관리할 수 없습니다."),
+    FAIR_APPLICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "F025", "본인이 신청한 행사만 수정할 수 있습니다."),
+    FAIR_APPLICATION_NOT_EDITABLE(HttpStatus.CONFLICT, "F026", "심사 대기 중이거나 반려된 신청서만 수정할 수 있습니다."),
+    FAIR_OPENING_FEE_AMOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "F027", "승인 시 개설비 금액을 입력해야 합니다."),
+    FAIR_OPENING_FEE_NOT_PAYABLE(HttpStatus.CONFLICT, "F028", "개설비를 결제할 수 없는 상태의 행사입니다."),
+    FAIR_PAYMENT_DUE_DAYS_INVALID(HttpStatus.BAD_REQUEST, "F029", "결제 기한 일수는 1일 이상 365일 이하여야 합니다."),
+
+    // ===== Reservation =====
+    RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
+    RESERVATION_DATE_NOT_AVAILABLE(HttpStatus.BAD_REQUEST, "R002", "예약할 수 없는 방문 날짜입니다."),
+    RESERVATION_NOT_OPEN(HttpStatus.CONFLICT, "R003", "현재 예약을 접수하지 않는 행사입니다."),
+    RESERVATION_SOLD_OUT(HttpStatus.CONFLICT, "R004", "선택한 날짜의 예약이 마감되었습니다."),
+    DUPLICATED_RESERVATION(HttpStatus.CONFLICT, "R005", "이미 활성 예약이 존재합니다."),
+    RESERVATION_TERMS_REQUIRED(HttpStatus.BAD_REQUEST, "R006", "유료 예약의 취소·환불 약관 동의가 필요합니다."),
+    ONSITE_RESERVATION_CLOSED(HttpStatus.CONFLICT, "R007", "현재 현장예매를 접수하지 않습니다."),
+    ONSITE_RESERVATION_PAUSED(HttpStatus.CONFLICT, "R008", "현장예매가 일시 중지되었습니다."),
+    ONSITE_SALES_POLICY_CONFLICT(HttpStatus.CONFLICT, "R009", "현장예매 정책이 다른 관리자에 의해 변경되었습니다."),
+    RESERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "R010", "예약을 찾을 수 없습니다."),
+    RESERVATION_PAYMENT_EXPIRED(HttpStatus.CONFLICT, "R011", "예약의 결제 제한시간이 지났습니다."),
+    RESERVATION_PAYMENT_AMOUNT_MISMATCH(HttpStatus.CONFLICT, "R012", "예약금과 결제금액이 일치하지 않습니다."),
+    RESERVATION_STATUS_CONFLICT(HttpStatus.CONFLICT, "R013", "현재 예약 상태에서는 요청을 처리할 수 없습니다."),
+    RESERVATION_PAYMENT_EVENT_CONFLICT(HttpStatus.CONFLICT, "R014", "이미 다른 결제로 확정된 예약이거나 중복된 결제 이벤트입니다."),
+    ENTRY_QR_NOT_FOUND(HttpStatus.NOT_FOUND, "R015", "유효한 입장 QR을 찾을 수 없습니다."),
+    ENTRY_QR_NOT_AVAILABLE(HttpStatus.CONFLICT, "R016", "현재 사용할 수 없는 입장 QR입니다."),
+    ENTRY_FAIR_MISMATCH(HttpStatus.FORBIDDEN, "R017", "해당 행사의 입장 QR이 아닙니다."),
+    RESERVATION_CHANGE_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R018", "방문 날짜 변경 가능 시간이 지났습니다."),
+    RESERVATION_CANCEL_DEADLINE_EXCEEDED(HttpStatus.CONFLICT, "R019", "예약 취소 가능 시간이 지났습니다."),
+    RESERVATION_REFUND_PAYMENT_NOT_FOUND(HttpStatus.CONFLICT, "R020", "환불할 예약금 결제 내역을 찾을 수 없습니다."),
+    RESERVATION_PAYMENT_IN_PROGRESS(HttpStatus.CONFLICT, "R021", "결제가 진행 중입니다. 잠시 후 다시 시도해 주세요."),
+    // 대기열을 켠 행사에서 유효한 대기 토큰 없이 예약·결제를 시도한 경우.
+    // 프론트는 이 코드를 받으면 대기 화면으로 보내 토큰을 발급받게 한다.
+    WAITING_ROOM_TICKET_REQUIRED(HttpStatus.TOO_MANY_REQUESTS, "R022", "대기열을 통과한 뒤 이용할 수 있습니다."),
+    WAITING_ROOM_POLICY_CONFLICT(HttpStatus.CONFLICT, "R023", "대기열 설정이 다른 관리자에 의해 변경되었습니다."),
+
+    // ===== Notification =====
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),
+    NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "N002", "해당 알림에 접근 권한이 없습니다."),
+
+    // ===== Refund =====
+    REFUND_NOT_FOUND(HttpStatus.NOT_FOUND, "RF001", "존재하지 않는 환불입니다."),
+    REFUND_TARGET_NOT_REFUNDABLE(HttpStatus.CONFLICT, "RF002", "환불할 수 없는 결제 상태입니다."),
+    REFUND_ALREADY_PROCESSED(HttpStatus.CONFLICT, "RF003", "이미 환불이 접수된 결제입니다."),
+
+    // ===== Settlement =====
+    SETTLEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "ST001", "존재하지 않는 정산입니다."),
+    SETTLEMENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "ST002", "이미 계산된 정산이 있습니다."),
+    SETTLEMENT_NOT_CONFIRMABLE(HttpStatus.CONFLICT, "ST003", "확정할 수 없는 정산 상태입니다."),
+    SETTLEMENT_NOT_RECALCULABLE(HttpStatus.CONFLICT, "ST004", "재계산할 수 없는 정산 상태입니다."),
+    SETTLEMENT_RECALCULATION_REQUIRED(HttpStatus.CONFLICT, "ST005", "재계산이 필요한 정산은 확정할 수 없습니다. 먼저 재계산해 주세요."),
+    SETTLEMENT_FAIR_CANCELED(HttpStatus.CONFLICT, "ST006", "취소된 행사는 정산을 계산하거나 확정할 수 없습니다."),
+
+    // ===== Commission Rate (수수료율) =====
+    COMMISSION_RATE_INVALID_SCOPE(HttpStatus.BAD_REQUEST, "CR001", "scope와 fairId 조합이 올바르지 않습니다(GLOBAL은 fairId 없이, FAIR는 fairId와 함께)."),
+
+    // ===== Banner & Popup =====
+    BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "AD001", "존재하지 않는 배너입니다."),
+    POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "AD002", "존재하지 않는 팝업입니다."),
+
+    // ===== Review (페어 리뷰) =====
+    REVIEW_INVALID_RATING(HttpStatus.BAD_REQUEST, "RV001", "평점은 1~5 사이여야 합니다."),
+    REVIEW_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "RV002", "리뷰 내용을 입력해야 합니다."),
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "RV003", "존재하지 않는 리뷰이거나 해당 행사의 리뷰가 아닙니다."),
+    REVIEW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "RV004", "본인이 작성한 리뷰만 수정·삭제할 수 있습니다."),
+    REVIEW_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "RV005", "리뷰 내용은 1000자를 초과할 수 없습니다."),
+    REVIEW_INVALID_REPORT_REASON(HttpStatus.BAD_REQUEST, "RV006", "신고 사유가 올바르지 않습니다."),
+    REVIEW_REPORT_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "RV007", "기타 사유는 상세 내용을 입력해야 합니다."),
+    REVIEW_ALREADY_REPORTED(HttpStatus.CONFLICT, "RV008", "이미 신고한 리뷰입니다."),
+    REVIEW_REPLY_NOT_FOUND(HttpStatus.NOT_FOUND, "RV009", "존재하지 않는 답글이거나 해당 리뷰의 답글이 아닙니다."),
+    REVIEW_REPLY_ALREADY_EXISTS(HttpStatus.CONFLICT, "RV010", "이미 답글이 등록된 리뷰입니다. 기존 답글을 수정해주세요."),
+    REVIEW_REPORT_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "RV011", "신고 상세 사유는 500자를 초과할 수 없습니다."),
+    REVIEW_VERSION_CONFLICT(HttpStatus.CONFLICT, "RV012", "다른 곳에서 이미 이 리뷰를 수정했습니다. 새로고침 후 다시 시도해주세요."),
+    REVIEW_FAIR_NOT_PUBLISHED(HttpStatus.BAD_REQUEST, "RV013", "전체공개된 행사가 아닙니다. 아직 공개되지 않았거나 취소된 행사에는 리뷰를 작성·수정·삭제할 수 없습니다."),
+    REVIEW_REPLY_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "RV014", "답글 내용은 1000자를 초과할 수 없습니다."),
+
+    // ===== Recommendation (AI 부스 추천) =====
+    RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),
+    AI_RECOMMENDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "RC002", "지금은 추천 기능을 사용할 수 없습니다. 잠시 후 다시 시도해주세요."),
+
+    // ===== Chat (상담 챗봇) =====
+    CHAT_CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "CH001", "존재하지 않는 상담입니다."),
+    CHAT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CH002", "본인의 상담만 조회할 수 있습니다."),
+    CHAT_MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "CH003", "사용할 수 없는 문의 유형입니다."),
+    // 423 LOCKED: 요청 자체는 올바른데 리소스가 잠겨 있어 거부한다는 뜻이라 이 상황에 맞다.
+    // 400/409로 내리면 프론트가 "입력이 잘못됐다"와 구분하기 어렵다.
+    CHAT_AWAITING_AGENT(HttpStatus.LOCKED, "CH010", "자동 답변을 드렸어요. 상담사가 이어서 답변드릴 때까지 기다려주세요."),
+    CHAT_ALREADY_CLOSED(HttpStatus.CONFLICT, "CH011", "이미 종료된 상담입니다."),
+    CHAT_MENU_CODE_DUPLICATED(HttpStatus.CONFLICT, "CH012", "이미 사용 중인 문의 유형 코드입니다."),
+    CHAT_BUSINESS_HOUR_INVALID(HttpStatus.BAD_REQUEST, "CH013", "운영시간 설정이 올바르지 않습니다."),
+    ;
 
     private final HttpStatus httpStatus;
     private final String code;

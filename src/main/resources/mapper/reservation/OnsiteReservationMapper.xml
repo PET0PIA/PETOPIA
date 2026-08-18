@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.OnsiteReservationMapper">
+
+    <!--
+        잠금 대상을 fair_dates(fd)와 현장 판매 정책(osp)으로 한정한다. 그냥 FOR UPDATE로 두면
+        조인한 fairs 행까지 잠겨서 같은 행사의 현장예매 요청이 전부 한 줄로 대기한다.
+        osp는 여기서 읽은 price가 그대로 청구 금액이 되므로 잠금을 유지해야 한다.
+    -->
+    <select id="selectCreationContextForUpdate" resultType="OnsiteReservationCreationContext">
+        SELECT f.fair_id
+             , f.name AS fair_name
+             , f.status AS fair_status
+             , f.published_at
+             , f.canceled_at
+             , fd.fair_date_id
+             , fd.operation_date
+             , fd.entry_start_time
+             , fd.entry_end_time
+             , osp.price AS onsite_price
+             , osp.status AS onsite_sales_status
+          FROM fairs f
+          JOIN fair_dates fd
+            ON fd.fair_id = f.fair_id
+          LEFT JOIN onsite_sales_policies osp
+            ON osp.fair_date_id = fd.fair_date_id
+         WHERE f.fair_id = #{fairId}
+           AND fd.operation_date = #{operationDate}
+           FOR UPDATE OF fd, osp
+    </select>
+
+    <select id="selectFairDateForUpdate" resultType="FairDateSnapshot">
+        SELECT fair_date_id
+             , fair_id
+             , operation_date
+          FROM fair_dates
+         WHERE fair_id = #{fairId}
+           AND fair_date_id = #{fairDateId}
+         FOR UPDATE
+    </select>
+
+    <select id="selectFairDate" resultType="FairDateSnapshot">
+        SELECT fair_date_id
+             , fair_id
+             , operation_date
+          FROM fair_dates
+         WHERE fair_id = #{fairId}
+           AND fair_date_id = #{fairDateId}
+    </select>
+
+    <select id="selectPolicy" resultType="OnsiteSalesPolicyRow">
+        SELECT onsite_sales_policy_id
+             , fair_date_id
+             , price
+             , status
+             , updated_by
+             , version
+             , created_at
+             , updated_at
+          FROM onsite_sales_policies
+         WHERE fair_date_id = #{fairDateId}
+    </select>
+
+    <insert id="insertPolicy">
+        INSERT INTO onsite_sales_policies (
+               fair_date_id
+             , price
+             , status
+             , updated_by
+             , version
+             , created_at
+             , updated_at
+        ) VALUES (
+               #{fairDateId}
+             , #{price}
+             , #{status}
+             , #{updatedBy}
+             , 0
+             , #{now}
+             , #{now}
+        )
+    </insert>
+
+    <update id="updatePolicy">
+        UPDATE onsite_sales_policies
+           SET price = #{price}
+             , status = #{status}
+             , updated_by = #{updatedBy}
+             , version = version + 1
+             , updated_at = #{now}
+         WHERE fair_date_id = #{fairDateId}
+           AND version = #{expectedVersion}
+    </update>
+
+</mapper>

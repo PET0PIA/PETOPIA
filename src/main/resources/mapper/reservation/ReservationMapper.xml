@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.ReservationMapper">
+
+    <select id="selectAvailabilityFair" resultType="ReservationAvailabilityFair">
+        SELECT fair_id
+             , reservation_fee
+             , reservation_start_date
+             , reservation_end_date
+             , published_at
+             , canceled_at
+          FROM fairs
+         WHERE fair_id = #{fairId}
+    </select>
+
+    <!--
+        오픈 직후 가장 많이 호출되는 조회다. 예전에는 reservations를 LEFT JOIN해서
+        GROUP BY COUNT으로 점유 수를 셌는데, 예약이 쌓일수록 무거워지는 데다 정원 차감
+        경로와 같은 행들을 훑어 경합까지 만들었다.
+
+        지금은 fair_dates.reserved_count를 그대로 읽는다. 이 컬럼은 예약 상태를 바꾸는
+        트랜잭션 안에서만 움직이므로 JOIN으로 세던 값과 항상 일치한다.
+    -->
+    <select id="selectAvailabilityDates" resultType="ReservationAvailabilityDateRow">
+        SELECT fd.operation_date AS visit_date
+             , fd.entry_start_time
+             , fd.entry_end_time
+             , fd.capacity
+             , fd.reserved_count AS occupied_count
+          FROM fair_dates fd
+         WHERE fd.fair_id = #{fairId}
+           AND fd.operation_date > #{today}
+         ORDER BY fd.operation_date ASC
+    </select>
+
+    <select id="selectMyReservations" resultType="ReservationListRow">
+        SELECT r.reservation_id
+             , f.name AS fair_name
+             , f.poster_image_url AS fair_poster_image_url
+             , r.visit_date
+             , fd.entry_start_time
+             , fd.entry_end_time
+             , r.status AS reservation_status
+             , r.reservation_amount AS amount
+             , r.reserved_at
+             , r.payment_expires_at
+             , er.first_checked_in_at AS checked_in_at
+          FROM reservations r
+          JOIN fairs f
+            ON f.fair_id = r.fair_id
+          JOIN fair_dates fd
+            ON fd.fair_id = r.fair_id
+           AND fd.operation_date = r.visit_date
+     LEFT JOIN entry_records er
+            ON er.reservation_id = r.reservation_id
+         WHERE r.user_id = #{userId}
+         ORDER BY r.created_at DESC, r.reservation_id DESC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countMyReservations" resultType="long">
+        SELECT COUNT(*)
+          FROM reservations
+         WHERE user_id = #{userId}
+    </select>
+
+    <select id="selectReservationForOwner" resultType="ReservationListRow">
+        SELECT r.reservation_id
+             , r.reservation_no
+             , r.fair_id
+             , f.name AS fair_name
+             , f.poster_image_url AS fair_poster_image_url
+             , r.visit_date
+             , fd.entry_start_time
+             , fd.entry_end_time
+             , r.status AS reservation_status
+             , r.reservation_type
+             , r.reservation_amount AS amount
+             , r.reserved_at
+             , r.payment_expires_at
+             , er.first_checked_in_at AS checked_in_at
+          FROM reservations r
+          JOIN fairs f
+            ON f.fair_id = r.fair_id
+          JOIN fair_dates fd
+            ON fd.fair_id = r.fair_id
+           AND fd.operation_date = r.visit_date
+     LEFT JOIN entry_records er
+            ON er.reservation_id = r.reservation_id
+         WHERE r.reservation_id = #{reservationId}
+           AND r.user_id = #{userId}
+    </select>
+
+    <!--
+        예약 생성에 필요한 행사·운영일 정보를 읽는다. 잠그지 않는다.
+
+        예전에는 여기에 FOR UPDATE OF fd가 붙어 있었다. 같은 운영일 요청을 직렬화해
+        "COUNT(*)로 세고 정원을 넘으면 거절"하는 판정을 안전하게 만들기 위해서였는데,
+        그 대가로 모든 요청이 한 줄로 대기했고 임계구간 안의 COUNT(*)가 예약이 쌓일수록
+        무거워졌다.
+
+        지금 정원 판정은 ReservationCapacityMapper.occupy의 조건부 UPDATE가 단독으로
+        책임진다. 여기서 읽는 capacity는 응답용·사전검증용 참고값일 뿐 정원 초과를 막는
+        근거가 아니므로 잠글 이유가 없다.
+    -->
+    <select id="selectCreationContext" resultType="ReservationCreationContext">
+        SELECT f.fair_id
+             , f.name AS fair_name
+             , f.status AS fair_status
+             , f.reservation_start_date
+             , f.reservation_end_date
+             , f.reservation_fee
+             , f.published_at
+             , f.canceled_at
+             , fd.fair_date_id
+             , fd.operation_date
+             , fd.capacity
+          FROM fairs f
+          JOIN fair_dates fd
+            ON fd.fair_id = f.fair_id
+         WHERE f.fair_id = #{fairId}
+           AND fd.operation_date = #{visitDate}
+    </select>
+
+    <select id="existsFair" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM fairs
+             WHERE fair_id = #{fairId}
+        )
+    </select>
+
+    <select id="existsActiveReservation" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM reservations
+             WHERE fair_id = #{fairId}
+               AND user_id = #{userId}
+               AND visit_date = #{visitDate}
+               AND status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
+        )
+    </select>
+
+    <select id="selectUserSnapshot" resultType="ReservationUserSnapshot">
+        SELECT user_id
+             , nickname
+             , phone
+             , email
+             , role
+             , status
+          FROM users
+         WHERE user_id = #{userId}
+    </select>
+
+    <select id="isAssignedEventAdmin" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM fair_admin_assignments
+             WHERE fair_id = #{fairId}
+               AND admin_user_id = #{adminUserId}
+        )
+    </select>
+
+    <insert id="insertReservation"
+            parameterType="ReservationInsertRow"
+            useGeneratedKeys="true"
+            keyProperty="reservationId"
+            keyColumn="reservation_id">
+        INSERT INTO reservations (
+               reservation_no
+             , fair_id
+             , user_id
+             , visit_date
+             , reservation_type
+             , status
+             , reservation_amount
+             , reserver_name
+             , reserver_phone
+             , reserver_email
+             , channel
+             , agreed_terms
+             , reservation_terms_version
+             , reservation_terms_agreed_at
+             , agreed_privacy
+             , agreed_marketing
+             , reserved_at
+             , payment_expires_at
+             , created_at
+             , updated_at
+        ) VALUES (
+               #{reservationNo}
+             , #{fairId}
+             , #{userId}
+             , #{visitDate}
+             , #{reservationType}
+             , #{status}
+             , #{reservationAmount}
+             , #{reserverName}
+             , #{reserverPhone}
+             , #{reserverEmail}
+             , #{channel}
+             , #{agreedTerms}
+             , #{reservationTermsVersion}
+             , #{reservationTermsAgreedAt}
+             , FALSE
+             , FALSE
+             , #{reservedAt}
+             , #{paymentExpiresAt}
+             , #{createdAt}
+             , #{updatedAt}
+        )
+    </insert>
+
+    <insert id="insertCreatedHistory">
+        INSERT INTO reservation_histories (
+               reservation_id
+             , action_type
+             , before_data
+             , after_data
+             , changed_by
+             , is_admin_action
+             , change_reason
+             , created_at
+        ) VALUES (
+               #{reservationId}
+             , 'CREATED'
+             , NULL
+             , JSON_OBJECT('status', #{status})
+             , #{changedBy}
+             , FALSE
+             , NULL
+             , NOW()
+        )
+    </insert>
+
+</mapper>
