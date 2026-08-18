@@ -176,3 +176,5 @@ compose의 `--requirepass` 값과 `application-local.yaml`의 `spring.data.redis
 ```bash
 docker compose logs -f mysql
 ```
+
+# 배포
