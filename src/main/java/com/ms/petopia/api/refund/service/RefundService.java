@@ -1,5 +1,6 @@
 package com.ms.petopia.api.refund.service;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -60,6 +61,26 @@ public class RefundService {
     private final PaymentMapper paymentMapper;
     private final SettlementMapper settlementMapper;
     private final NotificationService notificationService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
+
+    /**
+     * 환불 요청자가 결제 소유자 또는 그 행사 담당 EVENT_ADMIN/SUPER_ADMIN인지 확인한다
+     * (HTTP 진입점 전용). {@link #refund}/{@link #refundOrReuse} 자체엔 이 검증을 넣지 않는다 —
+     * 채린님(참가업체)·승훈님(행사) 도메인이 시스템 명의({@code PaymentService.SYSTEM_ACTOR_USER_ID})로
+     * SecurityContext 없이 직접 빈 주입 호출하는 내부 경로가 있어서다.
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 대상 결제가 없을 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 소유자도, 그 행사 담당 관리자도 아닐 때
+     */
+    public void assertRequesterAuthorized(Long paymentId, Long actingUserId) {
+        PaymentRow payment = paymentMapper.selectById(paymentId);
+        if (payment == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!actingUserId.equals(payment.getPayerUserId())) {
+            fairAdminAccessGuard.checkAssigned(payment.getFairId());
+        }
+    }
 
     /**
      * 결제 한 건에 대한 환불을 접수하고 그 자리에서 바로 처리(모의 환불)한다.

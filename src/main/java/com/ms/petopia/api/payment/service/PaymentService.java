@@ -5,6 +5,7 @@ import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -27,6 +28,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -57,6 +59,7 @@ public class PaymentService {
     private final AuditLogService auditLogService;
     private final ApplicationService applicationService;
     private final RefundService refundService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     // RefundService.refund()의 actingUserId는 원래 "누가 환불을 처리했는지" 기록하는 값인데,
     // 여기서는 사람이 아니라 시스템(이 메서드)이 자동으로 트리거하는 환불이라 실제 유저 ID가 없다.
@@ -72,6 +75,26 @@ public class PaymentService {
         PaymentRow row = paymentMapper.selectById(paymentId);
         if (row == null) {
             throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 결제 ID로 상세 조회한다(HTTP 진입점 전용). 위 {@link #getPayment(Long)}과 달리
+     * 소유자(payerUserId) 또는 그 행사 담당 EVENT_ADMIN/SUPER_ADMIN인지 검증한다 —
+     * {@link #getPayment(Long)}은 SecurityContext 없는 내부 도메인간 직접호출
+     * (예: {@code FairCancelRefundOrchestrationService})에서도 쓰이므로 그쪽엔 가드를 넣지 않는다.
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 존재하지 않는 결제 ID일 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 소유자도, 그 행사 담당 관리자도 아닐 때
+     */
+    public PaymentResponse getPayment(Long paymentId, Long userId) {
+        PaymentRow row = paymentMapper.selectById(paymentId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!userId.equals(row.getPayerUserId())) {
+            fairAdminAccessGuard.checkAssigned(row.getFairId());
         }
         return PaymentResponse.from(row);
     }
@@ -399,9 +422,20 @@ public class PaymentService {
             throw e;
         }
         LocalDateTime now = LocalDateTime.now();
+
+        // 토스 confirm 응답 status를 반드시 확인한다 — "WAITING_FOR_DEPOSIT"(가상계좌 발급,
+        // 입금 전)인데 확인 없이 무조건 COMPLETED로 확정하면 아직 입금도 안 된 결제가 완료로
+        // 잘못 표시된다. 진짜 완료(status="DONE")만 이 자리에서 COMPLETED로 확정하고,
+        // WAITING_FOR_DEPOSIT은 별도 상태로 남겨서 입금 웹훅(handleDepositWebhook)이 나중에
+        // COMPLETED로 전환한다.
+        if ("WAITING_FOR_DEPOSIT".equals(tossResponse.status())) {
+            return markWaitingForDeposit(row, tossResponse, now);
+        }
+
         row.setStatus("COMPLETED");
         row.setMethod(tossResponse.method());
         row.setTossPaymentKey(tossResponse.paymentKey());
+        row.setEasyPayProvider(tossResponse.easyPay() != null ? tossResponse.easyPay().provider() : null);
         row.setPaidAt(now);
         row.setUpdatedAt(now);
 
@@ -412,6 +446,112 @@ public class PaymentService {
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
         }
 
+        completePaymentAndNotify(row, userId);
+
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 토스 confirm 응답이 가상계좌 발급(WAITING_FOR_DEPOSIT)일 때 그 상태로 저장한다.
+     * 계좌정보와 웹훅검증용 secret을 같이 저장해야, 나중에 입금 완료 웹훅이 왔을 때 secret을
+     * 대조해 위조를 막을 수 있다(handleDepositWebhook 참고).
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_GATEWAY_UNAVAILABLE} status는
+     *         WAITING_FOR_DEPOSIT인데 virtualAccount 필드가 없는 이상한 응답일 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} markProcessing으로
+     *         선점한 뒤인데도 전이가 실패한 방어적 케이스(이론상 발생하지 않아야 함)
+     */
+    private PaymentResponse markWaitingForDeposit(PaymentRow row, TossPaymentResponse tossResponse, LocalDateTime now) {
+        TossPaymentResponse.VirtualAccount virtualAccount = tossResponse.virtualAccount();
+        if (virtualAccount == null) {
+            log.error("토스 응답이 WAITING_FOR_DEPOSIT인데 virtualAccount가 없음. paymentId={}, orderId={}",
+                    row.getPaymentId(), row.getOrderId());
+            throw new CommonException(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE);
+        }
+
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setMethod(tossResponse.method());
+        row.setTossPaymentKey(tossResponse.paymentKey());
+        row.setVirtualAccountBankCode(virtualAccount.bankCode());
+        row.setVirtualAccountNumber(virtualAccount.accountNumber());
+        row.setVirtualAccountDueDate(virtualAccount.dueDate());
+        row.setVirtualAccountSecret(virtualAccount.secret());
+        row.setUpdatedAt(now);
+
+        int updated = paymentMapper.markWaitingForDeposit(row);
+        if (updated == 0) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+        return PaymentResponse.from(row);
+    }
+
+    /**
+     * 가상계좌 입금 웹훅(POST /webhooks/toss/deposit-callback)을 처리한다. 웹훅은 JWT 없이
+     * 토스가 직접 호출하므로(SecurityConfig에 permitAll), secret 대조로 위조를 막는다 — 토스
+     * 공식 문서 기준 가상계좌 웹훅은 HMAC 서명이 아니라 발급 응답의 secret과 웹훅 body의
+     * secret 비교가 공식 검증방식이다.
+     *
+     * <p>대상 없음/이미 처리됨/secret 불일치는 전부 예외를 던지지 않고 로그만 남기고 조용히
+     * 끝낸다 — 컨트롤러는 이 메서드가 끝나면 항상 200을 반환해서, 토스가 실패로 보고
+     * 불필요하게 재전송을 반복하지 않게 한다.
+     */
+    public void handleDepositWebhook(TossWebhookEvent event) {
+        if (event == null || event.data() == null || !"DEPOSIT_CALLBACK".equals(event.eventType())) {
+            return;
+        }
+        TossWebhookEvent.Data data = event.data();
+        PaymentRow row = paymentMapper.selectByOrderId(data.orderId());
+        if (row == null) {
+            log.warn("입금 웹훅 대상 결제를 찾을 수 없음. orderId={}", data.orderId());
+            return;
+        }
+        if (!"WAITING_FOR_DEPOSIT".equals(row.getStatus())) {
+            // 이미 처리됐거나(웹훅 재전송) 애초에 가상계좌 결제가 아닌 경우 — 멱등하게 무시한다.
+            return;
+        }
+        // Objects.equals(null, null)이 true라서, 저장된 secret이 비어있는 결제(버그로 저장이
+        // 빠졌거나 하는 경우)에 웹훅 body도 secret 없이 오면 위조 검증 자체가 통과해버리는
+        // 문제가 있었다(CodeRabbit 리뷰 지적, 실제 위조방지 우회 가능한 보안 버그) — 양쪽 다
+        // 값이 있어야만 비교를 통과하도록 막는다.
+        String storedSecret = row.getVirtualAccountSecret();
+        if (!StringUtils.hasText(storedSecret) || !StringUtils.hasText(data.secret())
+                || !storedSecret.equals(data.secret())) {
+            log.warn("입금 웹훅 secret 불일치 — 위조 의심. paymentId={}, orderId={}",
+                    row.getPaymentId(), data.orderId());
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if ("DONE".equals(data.status())) {
+            int updated = paymentMapper.markVirtualAccountCompleted(row.getPaymentId(), now, now);
+            if (updated == 0) {
+                return; // 동시에 다른 요청(웹훅 재전송)이 먼저 처리함
+            }
+            row.setStatus("COMPLETED");
+            row.setPaidAt(now);
+            row.setUpdatedAt(now);
+            // 가상계좌는 사람(관리자)이 아니라 결제자 본인의 계좌이체가 완료 트리거이므로,
+            // 감사로그 행위자는 confirmPayment의 로그인 사용자 대신 결제자 본인으로 남긴다.
+            completePaymentAndNotify(row, row.getPayerUserId());
+        } else if ("CANCELED".equals(data.status())) {
+            int failed = paymentMapper.markVirtualAccountDepositFailed(row.getPaymentId(), now);
+            if (failed == 0) {
+                log.warn("가상계좌 입금취소 웹훅 상태전이 실패 - 이미 다른 요청이 처리함. paymentId={}",
+                        row.getPaymentId());
+            }
+        } else {
+            log.warn("알 수 없는 입금 웹훅 status. paymentId={}, status={}", row.getPaymentId(), data.status());
+        }
+    }
+
+    /**
+     * 결제 완료 후속처리(도메인 통지·감사로그·완료알림)를 {@link #confirmPayment}(카드/일반결제
+     * 즉시완료)와 {@link #handleDepositWebhook}(가상계좌 입금완료) 둘이 공유한다. 호출 전에
+     * row.status는 이미 COMPLETED로 확정돼 있어야 한다.
+     *
+     * @param actingUserId 감사로그에 남길 행위자
+     */
+    private void completePaymentAndNotify(PaymentRow row, Long actingUserId) {
         if ("RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
             notifyReservationDomain(row);
         }
@@ -438,10 +578,8 @@ public class PaymentService {
             }
         }
 
-        recordPaymentCompletionAudit(row, userId);
+        recordPaymentCompletionAudit(row, actingUserId);
         notifyPaymentCompleted(row);
-
-        return PaymentResponse.from(row);
     }
 
     private void recordPaymentCompletionAudit(PaymentRow row, Long userId) {
@@ -509,10 +647,27 @@ public class PaymentService {
     );
 
     /**
-     * 다른 도메인이 자기 업무(예약/신청/행사)를 취소 처리하면서, 그에 딸린 PENDING 결제를
-     * 함께 취소시키는 용도(WBS 1.7). PROCESSING(토스 승인 진행중)인 결제는 건드리면 안 되므로
-     * PENDING에서만 허용한다 — CANCELED/EXPIRED는 영구 종료 상태라 재결제는 새 결제 생성으로
-     * 처리한다(FAILED처럼 재사용하지 않음).
+     * cancelPayment/expirePayment가 건드릴 수 있는 상태 — PENDING(결제 시작 전)뿐 아니라
+     * WAITING_FOR_DEPOSIT(가상계좌 발급, 아직 입금 전)도 포함한다. 가상계좌는 confirm이
+     * 성공해도 실제 돈은 아직 안 움직인 상태라 PENDING과 마찬가지로 로컬에서 안전하게
+     * 종료시킬 수 있다(PROCESSING·COMPLETED와 다른 점 — 이 둘은 카드 승인이 진행 중이거나
+     * 이미 끝나 돈이 움직였으므로 여전히 건드리지 않는다).
+     *
+     * <p><b>알려진 한계(트레이드오프)</b>: 여기서 WAITING_FOR_DEPOSIT을 CANCELED/EXPIRED로
+     * 바꿔도, 실제로 발급된 가상계좌 자체가 은행에서 사라지는 건 아니다 — 이미 취소·만료
+     * 처리한 뒤에 사용자가 그 계좌로 실제 입금을 하면, {@link #handleDepositWebhook}의
+     * {@code WHERE status = 'WAITING_FOR_DEPOSIT'} 가드에 더 이상 걸리지 않아 조용히
+     * 무시된다(멱등하게 안전하지만, 그 돈은 자동으로 처리되지 않으므로 운영자가 수동으로
+     * 확인·환불해야 한다). 가상계좌를 실제로 취소하는 PG API 연동은 이번 스코프 밖.
+     */
+    private static final Set<String> CANCELABLE_STATUSES = Set.of("PENDING", "WAITING_FOR_DEPOSIT");
+
+    /**
+     * 다른 도메인이 자기 업무(예약/신청/행사)를 취소 처리하면서, 그에 딸린 결제를 함께
+     * 취소시키는 용도(WBS 1.7). {@link #CANCELABLE_STATUSES}에서만 허용한다 —
+     * PROCESSING(토스 승인 진행중)·COMPLETED는 이미 돈이 움직였을 수 있어 건드리지 않는다.
+     * CANCELED/EXPIRED는 영구 종료 상태라 재결제는 새 결제 생성으로 처리한다(FAILED처럼
+     * 재사용하지 않음).
      *
      * @param callerDomain 호출 도메인(RESERVATION/FAIR/VENDOR_APPLICATION) — 그 결제의
      *                     paymentType이 이 도메인이 다룰 수 있는 유형에 없으면 남의 결제를
@@ -521,15 +676,15 @@ public class PaymentService {
      * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 존재하지 않는 결제 ID일 때
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 호출 도메인이 그 결제의 소유
      *         도메인이 아닐 때
-     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} PENDING이 아니거나,
-     *         조회 이후 다른 요청(confirm 등)이 먼저 상태를 바꿔버렸을 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 취소 가능한 상태가
+     *         아니거나, 조회 이후 다른 요청(confirm 등)이 먼저 상태를 바꿔버렸을 때
      */
     public PaymentResponse cancelPayment(Long paymentId, String callerDomain) {
         return changeToTerminalStatus(paymentId, callerDomain, "CANCELED", paymentMapper::markCanceled);
     }
 
     /**
-     * 다른 도메인의 자체 만료 배치(결제기한 초과)가 호출해서 PENDING 결제를 만료 처리하는
+     * 다른 도메인의 자체 만료 배치(결제기한 초과)가 호출해서 결제를 만료 처리하는
      * 용도(WBS 1.7). 취소와 상태 가드·트레이드오프는 동일 — {@link #cancelPayment} 참고.
      */
     public PaymentResponse expirePayment(Long paymentId, String callerDomain) {
@@ -550,7 +705,7 @@ public class PaymentService {
         if (allowedTypes == null || !allowedTypes.contains(row.getPaymentType())) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
-        if (!"PENDING".equals(row.getStatus())) {
+        if (!CANCELABLE_STATUSES.contains(row.getStatus())) {
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
         }
 

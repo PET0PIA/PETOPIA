@@ -28,16 +28,32 @@ public class FairAdminAccessGuard {
     private final FairAdminAssignmentMapper fairAdminAssignmentMapper;
 
     public void checkAssigned(Long fairId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        boolean isSuperAdmin = authentication.getAuthorities().stream()
-                .anyMatch(authority -> SUPER_ADMIN_AUTHORITY.equals(authority.getAuthority()));
-        if (isSuperAdmin) {
+        if (isSuperAdmin()) {
             return;
         }
 
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Long adminUserId = (Long) authentication.getPrincipal();
         if (!fairAdminAssignmentMapper.existsByAdminUserIdAndFairId(adminUserId, fairId)) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
+    }
+
+    /**
+     * fairId 없이 "전체"를 조회하는 요청(예: 행사 필터 없는 결제 목록)처럼, 특정 행사
+     * 담당자로는 판단할 수 없어 SUPER_ADMIN만 허용해야 하는 경우에 쓴다.
+     *
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} SUPER_ADMIN이 아닐 때
+     */
+    public void requireSuperAdmin() {
+        if (!isSuperAdmin()) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+    }
+
+    private boolean isSuperAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> SUPER_ADMIN_AUTHORITY.equals(authority.getAuthority()));
     }
 }
