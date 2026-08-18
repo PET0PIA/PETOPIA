@@ -878,6 +878,22 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("WAITING_FOR_DEPOSIT 결제도 취소할 수 있다 — 아직 실제 입금 전이라 PENDING과 동일하게 안전함")
+    void cancelPayment_WAITING_FOR_DEPOSIT상태도_CANCELED로바뀐다() {
+        // 가상계좌 발급까지는 됐지만 아직 입금 전인 결제를, 그 원업무(예약 등)가 취소되면서
+        // 함께 정리하려는 상황(2026-08-18 CodeRabbit 리뷰 지적 — 이 상태를 못 다뤄서
+        // 원업무가 취소돼도 이 결제만 계속 대기 상태로 남는 사각지대였음).
+        PaymentRow row = pendingRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markCanceled(eq(1L), any(LocalDateTime.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.cancelPayment(1L, "VENDOR_APPLICATION");
+
+        assertThat(result.status()).isEqualTo("CANCELED");
+    }
+
+    @Test
     @DisplayName("존재하지 않는 결제를 취소하려 하면 예외를 던진다")
     void cancelPayment_결제없음_예외를던진다() {
         given(paymentMapper.selectById(999L)).willReturn(null);
@@ -978,6 +994,19 @@ class PaymentServiceTest {
 
         assertThat(result.status()).isEqualTo("EXPIRED");
         verify(paymentMapper).markExpired(eq(2L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("WAITING_FOR_DEPOSIT 결제도 만료 처리할 수 있다")
+    void expirePayment_WAITING_FOR_DEPOSIT상태도_EXPIRED로바뀐다() {
+        PaymentRow row = pendingReservationDepositRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        given(paymentMapper.markExpired(eq(2L), any(LocalDateTime.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.expirePayment(2L, "RESERVATION");
+
+        assertThat(result.status()).isEqualTo("EXPIRED");
     }
 
     @Test
@@ -1383,6 +1412,31 @@ class PaymentServiceTest {
         given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(waitingForDepositRow());
 
         paymentService.handleDepositWebhook(depositCallback("DONE", "wrong-secret"));
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("저장된 secret이 없으면 웹훅 body에도 secret이 없어도(null==null) 통과시키지 않는다")
+    void handleDepositWebhook_저장된secret없음_웹훅도secret없음_통과안됨() {
+        // Objects.equals(null, null)이 true라서 저장된 secret이 비어있으면(예: 저장 버그로
+        // 빠졌거나) 검증 자체가 무의미하게 통과해버리던 보안 버그의 회귀 테스트
+        // (2026-08-18 CodeRabbit 리뷰 지적).
+        PaymentRow row = waitingForDepositRow();
+        row.setVirtualAccountSecret(null);
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(row);
+
+        paymentService.handleDepositWebhook(depositCallback("DONE", null));
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("웹훅 body에 secret이 빈 문자열로 오면 통과시키지 않는다")
+    void handleDepositWebhook_웹훅secret빈문자열_통과안됨() {
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(waitingForDepositRow());
+
+        paymentService.handleDepositWebhook(depositCallback("DONE", ""));
 
         verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
     }

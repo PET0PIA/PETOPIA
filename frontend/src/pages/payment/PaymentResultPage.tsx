@@ -298,7 +298,11 @@ export function PaymentSuccessPage() {
           <div>은행코드: {confirmedPayment.virtualAccountBankCode}</div>
           <div>계좌번호: {confirmedPayment.virtualAccountNumber}</div>
           {confirmedPayment.virtualAccountDueDate && (
-            <div>입금기한: {new Date(confirmedPayment.virtualAccountDueDate).toLocaleString("ko-KR")}</div>
+            // 서버가 내려주는 값에는 타임존 오프셋이 없다(토스 응답 자체가 그렇다 - 한국
+            // 서비스 전제로 한국시간 값을 그대로 준다). 오프셋 없는 문자열을 new Date()에
+            // 넘기면 브라우저 로컬시간으로 해석되므로, 해외에서 접속한 브라우저라면 실제
+            // 마감시각과 어긋나 보일 수 있다 - 그래서 "(한국시간)"을 명시해 오해를 줄인다.
+            <div>입금기한: {new Date(confirmedPayment.virtualAccountDueDate).toLocaleString("ko-KR")} (한국시간)</div>
           )}
         </div>
       </ResultShell>

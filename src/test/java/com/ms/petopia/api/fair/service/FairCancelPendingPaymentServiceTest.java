@@ -6,6 +6,7 @@ import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -40,6 +42,19 @@ class FairCancelPendingPaymentServiceTest {
 
     @InjectMocks
     private FairCancelPendingPaymentService pendingPaymentService;
+
+    /**
+     * cancelForFair가 이제 상태별(PENDING·WAITING_FOR_DEPOSIT)로도 훑기 때문에, 대부분
+     * 테스트는 WAITING_FOR_DEPOSIT 쪽에 신경 안 써도 되게 기본값으로 빈 페이지를 깔아둔다.
+     * WAITING_FOR_DEPOSIT 동작 자체를 검증하는 테스트만 이 기본값을 덮어쓴다. lenient인
+     * 이유는 fairId 자체가 없어서 이 스텁을 안 쓰는 테스트(예: 취소된 행사 없음)에서
+     * UnnecessaryStubbingException이 안 나게 하기 위함.
+     */
+    @BeforeEach
+    void stubWaitingForDepositEmptyByDefault() {
+        lenient().when(paymentService.getPayments(any(), any(), any(), eq("WAITING_FOR_DEPOSIT"), anyInt(), anyInt()))
+                .thenReturn(emptyPage());
+    }
 
     @Test
     @DisplayName("취소된 행사가 없으면 0을 반환하고 결제 조회 자체를 하지 않는다")
@@ -68,6 +83,27 @@ class FairCancelPendingPaymentServiceTest {
         assertThat(canceled).isEqualTo(2);
         verify(paymentService).cancelPayment(1L, "FAIR");
         verify(paymentService).cancelPayment(2L, "FAIR");
+    }
+
+    @Test
+    @DisplayName("취소된 행사의 WAITING_FOR_DEPOSIT 예약금·참가비 결제도 함께 취소한다")
+    void WAITING_FOR_DEPOSIT_결제도_취소한다() {
+        // 가상계좌 발급까지는 됐지만 아직 입금 전인 결제 — 아직 실제 돈은 안 움직였으므로
+        // 행사 취소 시 PENDING과 동일하게 정리 대상이다(2026-08-18 CodeRabbit 리뷰 지적,
+        // 이 상태를 못 다뤄서 행사가 취소돼도 계속 대기로 남던 사각지대였음).
+        given(fairMapper.selectCanceledFairIds(50)).willReturn(List.of(FAIR_ID));
+        given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "PENDING", 0, 100))
+                .willReturn(emptyPage());
+        given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "PENDING", 0, 100))
+                .willReturn(emptyPage());
+        given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "WAITING_FOR_DEPOSIT", 0, 100))
+                .willReturn(singlePage(payment(4L, "RESERVATION_DEPOSIT")))
+                .willReturn(emptyPage());
+
+        int canceled = pendingPaymentService.cancelPendingPayments(50);
+
+        assertThat(canceled).isEqualTo(1);
+        verify(paymentService).cancelPayment(4L, "FAIR");
     }
 
     @Test
