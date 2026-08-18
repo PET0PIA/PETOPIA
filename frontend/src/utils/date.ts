@@ -19,3 +19,19 @@ export function maxBirthDate(): string {
   yesterday.setDate(yesterday.getDate() - 1);
   return toDateString(yesterday);
 }
+
+/**
+ * 오늘 날짜(YYYY-MM-DD)를 Asia/Seoul 기준으로 만든다.
+ * 서비스·서버·DB가 모두 KST 전제이므로, 백엔드가 준 날짜 문자열과 문자열 비교로 오늘을
+ * 판정할 때는 이 값을 쓴다. 브라우저 로컬 시간대를 쓰면 해외 기기에서 자정 근처에 하루
+ * 밀려, 운영 당일/종료 판정이 어긋난다.
+ * en-CA 로케일이 YYYY-MM-DD 형태를 그대로 내준다.
+ */
+export function todayInSeoul(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
