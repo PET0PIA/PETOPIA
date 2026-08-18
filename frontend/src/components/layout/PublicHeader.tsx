@@ -9,6 +9,7 @@ import { getMe } from "../../api/user";
 import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../ui/Button";
 import { DropdownMenu } from "../ui/DropdownMenu";
+import { getMyBusinesses } from "../../api/business";
 
 function useUnreadNotificationCount() {
   const [count, setCount] = useState(0);
@@ -82,11 +83,36 @@ const accountMenuItems: { label: string; path: string }[] = [
   { label: "즐겨찾기 부스", path: "/booths/favorites/me" },
 ];
 
+// 사업자를 하나라도 등록한 적 있으면(대기/승인/반려/취소 상태 무관) "사업자 등록 현황"을
+// 노출한다. 승인돼서 VENDOR가 되면 콘솔 전환 버튼(consoleEntryForRole)이 따로 뜨지만,
+// 그 전에도 자기 신청이 어떻게 됐는지 확인할 방법은 있어야 해서 role과 별개로 둔다.
+function useHasAnyBusiness() {
+  const [hasBusiness, setHasBusiness] = useState(false);
+  const { status } = useAuth();
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      setHasBusiness(false);
+      return;
+    }
+    let active = true;
+    getMyBusinesses()
+      .then((businesses) => { if (active) setHasBusiness(businesses.length > 0); })
+      .catch(() => { if (active) setHasBusiness(false); });
+    return () => { active = false; };
+  }, [status, pathname]);
+
+  return hasBusiness;
+}
+
 // 로그인한 사용자의 프로필 메뉴. 역할에 따라 사업자 메뉴/관리자 콘솔 진입이 더해진다.
-function ProfileMenu({ name, onLogout }: { name: string; onLogout: () => void }) {
+// ProfileMenu - accountMenuItems를 prop으로 받도록 변경
+function ProfileMenu({ name, accountMenuItems, onLogout }: { name: string; accountMenuItems: { label: string; path: string }[]; onLogout: () => void }) {
   const navigate = useNavigate();
   // 역할별 콘솔·업무 진입은 헤더의 "전환" 버튼(consoleEntryForRole)으로 옮겼다.
   // 프로필 메뉴엔 누구에게나 공통인 개인 계정 항목만 둔다.
+  // 사업자 등록 현황 메뉴는 한 번이라도 사업자 신청을 했을 경우 나오는 메뉴이다.
   const items: { label: string; onSelect: () => void }[] = [
     { label: "마이페이지", onSelect: () => navigate("/mypage") },
     ...accountMenuItems.map(({ label, path }) => ({ label, onSelect: () => navigate(path) })),
@@ -147,6 +173,10 @@ export function PublicHeader() {
 
   const role = user?.role ?? null;
   const consoleEntry = consoleEntryForRole(role);
+  const hasBusiness = useHasAnyBusiness();
+  const visibleAccountMenuItems = (hasBusiness && role !== "VENDOR")
+    ? [...accountMenuItems.slice(0, 2), { label: "사업자 등록 현황", path: "/businesses/me" }, ...accountMenuItems.slice(2)]
+    : accountMenuItems;
   // requiredRole로 자식 메뉴를 거르고, 남은 자식이 없고 자체 경로도 없는 부모 메뉴는 숨긴다.
   const visibleNavigation = publicNavigation
     .map((item) => ({ ...item, children: item.children?.filter((child) => isVisibleForRole(child, role)) }))
@@ -198,7 +228,7 @@ export function PublicHeader() {
                 <Bell size={19} />
                 {unreadCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}
               </button>
-              <ProfileMenu name={nickname ?? "내 계정"} onLogout={handleLogout} />
+              <ProfileMenu name={nickname ?? "내 계정"} accountMenuItems={visibleAccountMenuItems} onLogout={handleLogout} />
               {/* 역할별 콘솔 전환 버튼 - 프로필 바로 오른쪽에 둔다. */}
               {consoleEntry && (
                 <button
@@ -272,7 +302,7 @@ export function PublicHeader() {
                     {consoleEntry.label}
                   </button>
                 )}
-                {accountMenuItems.map(({ label, path }) => (
+                {visibleAccountMenuItems.map(({ label, path }) => (
                   <button key={path} type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go(path)}>
                     {label}
                   </button>

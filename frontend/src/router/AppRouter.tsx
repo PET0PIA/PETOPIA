@@ -80,6 +80,7 @@ import { MyBoothsPage } from "../pages/booth/MyBoothsPage";
 import { ApplicationEditPage } from "../pages/application/ApplicationEditPage";
 import { ParticipationNewPage } from "../pages/application/ParticipationNewPage";
 import { AdvertisingInquiryPage } from "../pages/advertising/AdvertisingInquiryPage";
+import { BusinessReviewPage } from "../pages/admin/BusinessReviewPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
@@ -121,7 +122,8 @@ const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).fil
     item.path !== "/admin/banners" &&
     item.path !== "/admin/popups" &&
     item.path !== "/admin/notices" &&
-    item.path !== "/admin/chat"
+    item.path !== "/admin/chat" &&
+    item.path !== "/admin/businesses"
 );
 /** 후기 작성은 행사 상세의 리뷰 섹션이 담당한다. 옛 주소로 들어와도 그쪽으로 넘긴다. */
 function ReviewWriteRedirect() {
@@ -202,7 +204,7 @@ export function AppRouter() {
           {/* 옛 후기 작성 주소. 전용 화면 대신 행사 상세의 리뷰 섹션을 작성 상태로 연다. */}
           <Route path="/fairs/:fairId/reviews/new" element={<ReviewWriteRedirect />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
-          <Route path="/businesses/me" element={<Navigate to="/vendor/businesses" replace />} />
+          <Route path="/businesses/me" element={<MyBusinessesPage />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
           <Route path="/participations/new" element={<ParticipationNewPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
@@ -285,6 +287,8 @@ export function AppRouter() {
             {/* 고객지원 */}
             <Route path="chat" element={<AdminChatPage />} />
             <Route path="chat/settings" element={<AdminChatSettingsPage />} />
+            {/* 사업자 관리 */}
+            <Route path="businesses" element={<BusinessReviewPage />} />
             {superAdminFallbackNavigation.map((item) => (
               <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
             ))}
