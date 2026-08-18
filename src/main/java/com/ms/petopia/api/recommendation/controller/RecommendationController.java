@@ -2,6 +2,7 @@ package com.ms.petopia.api.recommendation.controller;
 
 import com.ms.petopia.api.recommendation.dto.BoothRecommendationItem;
 import com.ms.petopia.api.recommendation.dto.BoothRecommendationRequest;
+import com.ms.petopia.api.recommendation.dto.HallRoute;
 import com.ms.petopia.api.recommendation.service.RecommendationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,5 +30,15 @@ public class RecommendationController {
             @Valid @RequestBody BoothRecommendationRequest request
     ) {
         return recommendationService.recommend(fairId, userId, request);
+    }
+
+    //클로드 동선 추천
+    @PostMapping("/{fairId}/booth-routes")
+    public List<HallRoute> recommendRoute(
+            @PathVariable Long fairId,
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody BoothRecommendationRequest request
+    ) {
+        return recommendationService.recommendRoute(fairId, userId, request);
     }
 }
