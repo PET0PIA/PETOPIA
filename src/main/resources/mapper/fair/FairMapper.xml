@@ -23,6 +23,8 @@
             <if test="placeName != null">place_name,</if>
             <if test="address != null">address,</if>
             <if test="indoorOutdoor != null">indoor_outdoor,</if>
+            <if test="latitude != null">latitude,</if>
+            <if test="longitude != null">longitude,</if>
             <if test="vendorRecruitStartDate != null">vendor_recruit_start_date,</if>
             <if test="vendorRecruitEndDate != null">vendor_recruit_end_date,</if>
             <if test="reservationStartDate != null">reservation_start_date,</if>
@@ -47,6 +49,8 @@
             <if test="placeName != null">#{placeName},</if>
             <if test="address != null">#{address},</if>
             <if test="indoorOutdoor != null">#{indoorOutdoor},</if>
+            <if test="latitude != null">#{latitude},</if>
+            <if test="longitude != null">#{longitude},</if>
             <if test="vendorRecruitStartDate != null">#{vendorRecruitStartDate},</if>
             <if test="vendorRecruitEndDate != null">#{vendorRecruitEndDate},</if>
             <if test="reservationStartDate != null">#{reservationStartDate},</if>
@@ -66,7 +70,7 @@
 
     <select id="selectById" resultType="Fair">
         SELECT fair_id, applicant_user_id, name, description, category, poster_image_url, notice_text,
-               place_name, address, indoor_outdoor,
+               place_name, address, indoor_outdoor, latitude, longitude,
                vendor_recruit_start_date, vendor_recruit_end_date,
                reservation_start_date, reservation_end_date,
                operation_start_date, operation_end_date,
@@ -181,7 +185,11 @@
             <if test="setFields.contains('posterImageUrl')">poster_image_url = #{fair.posterImageUrl},</if>
             <if test="setFields.contains('noticeText')">notice_text = #{fair.noticeText},</if>
             <if test="setFields.contains('placeName')">place_name = #{fair.placeName},</if>
-            <if test="setFields.contains('address')">address = #{fair.address},</if>
+            <if test="setFields.contains('address')">
+                address = #{fair.address},
+                latitude = #{fair.latitude},
+                longitude = #{fair.longitude},
+            </if>
             <if test="setFields.contains('indoorOutdoor')">indoor_outdoor = #{fair.indoorOutdoor},</if>
             <if test="setFields.contains('vendorRecruitStartDate')">vendor_recruit_start_date = #{fair.vendorRecruitStartDate},</if>
             <if test="setFields.contains('vendorRecruitEndDate')">vendor_recruit_end_date = #{fair.vendorRecruitEndDate},</if>
