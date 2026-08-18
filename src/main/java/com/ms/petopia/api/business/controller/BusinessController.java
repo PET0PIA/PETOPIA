@@ -102,7 +102,7 @@ public class BusinessController {
     public ResponseEntity<ApiResponse<BusinessReviewResultResponse>> rejectBusiness(
             @AuthenticationPrincipal Long reviewerId,
             @PathVariable Long businessId,
-            @RequestBody BusinessRejectRequest request
+            @Valid @RequestBody BusinessRejectRequest request
     ) {
 
         return ResponseEntity.ok(
@@ -115,7 +115,7 @@ public class BusinessController {
     public ResponseEntity<ApiResponse<BusinessReviewResultResponse>> revokeBusiness(
             @AuthenticationPrincipal Long reviewerId,
             @PathVariable Long businessId,
-            @RequestBody BusinessRevokeRequest request
+            @Valid @RequestBody BusinessRevokeRequest request
     ) {
 
         return ResponseEntity.ok(

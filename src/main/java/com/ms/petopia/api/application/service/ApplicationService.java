@@ -36,6 +36,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -918,10 +919,15 @@ public class ApplicationService {
 
         List<Application> applications = applicationMapper.selectActiveApplicationsByBusinessId(businessId);
 
+        // businessId가 이 메서드 전체에서 고정값이라 루프 밖에서 한 번만 조회
+        Business business = businessMapper.selectById(businessId);
+
+        // 환불은 커밋 후 처리하므로, 대상 결제ID만 루프에서 모아둔다
+        List<Long> paymentIdsToRefund = new ArrayList<>();
+
         for (Application application : applications) {
 
             Long applicationId = application.getApplicationId();
-            boolean wasConfirmed = application.getStatus() == Application.Status.CONFIRMED;
 
             // 락 순서를 approveCancelRequest/cancelApplicationForCanceledFair와 통일해서 교착상태 방지
             applicationMapper.lockPendingCancelRequestIfExists(applicationId);
@@ -934,26 +940,60 @@ public class ApplicationService {
 
             unlockSlots(applicationId);
 
-            if (wasConfirmed) {
-
-                boothMapper.deleteFavoritesByApplicationId(applicationId);
-                boothMapper.deleteBoothItemsByApplicationId(applicationId);
-                boothMapper.deleteBoothByApplicationId(applicationId);
-
-            }
+            /*
+             * select 시점 스냅샷으로 CONFIRMED 여부를 판단하면 레이스가 생길 수 있어(코드래빗 리뷰
+             * 반영), 상태로 분기하지 않고 매번 호출한다 - 부스가 없으면 0행 삭제로 조용히 끝난다.
+             */
+            boothMapper.deleteFavoritesByApplicationId(applicationId);
+            boothMapper.deleteBoothItemsByApplicationId(applicationId);
+            boothMapper.deleteBoothByApplicationId(applicationId);
 
             // 딸려있던 처리 대기 중인 취소 요청이 있으면 함께 종료 처리 (없으면 0행, 정상)
             applicationMapper.closeRequestedCancelRequestByApplicationId(applicationId, LocalDateTime.now());
 
-            // 결제가 있었다면(CONFIRMED였던 경우) 환불 처리
+            // 결제가 있었다면(CONFIRMED였던 경우) 환불 대상으로 모아둠 - 실제 호출은 커밋 후
             Long paymentId = applicationMapper.selectPaymentIdByApplicationId(applicationId);
 
             if (paymentId != null) {
+                paymentIdsToRefund.add(paymentId);
+            }
 
-                refundService.refund(paymentId, adminUserId,
-                        new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.VENDOR));
+            // 알림 - 사업자 취소로 신청이 강제 취소됐다는 걸 소유자에게 알림
+            if (business != null) {
+
+                notifyApplicationEventAfterCommit(business.getOwnerId(),
+                        NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
+                        "사업자 승인 취소로 참가 신청이 취소되었습니다",
+                        "관리자가 사업자를 취소 처리하여 신청이 취소되었습니다.");
 
             }
+
+        }
+
+        /*
+         * 환불(외부 결제 게이트웨이 호출)은 트랜잭션 커밋 후에 실행한다. 트랜잭션 안에서 하면
+         * 중간에 한 건이라도 실패 시 이미 게이트웨이가 승인한 앞선 환불들은 롤백 안 되는데
+         * DB(신청 취소, 부스 삭제, 사업자 REVOKED)만 롤백돼서 "환불은 됐는데 상태는 그대로"인
+         * 불일치가 생긴다(코드래빗 리뷰 반영). RefundService의 UK_REFUND_PAYMENT 유니크 제약이
+         * 중복 방지를 이미 해주니, 커밋 후 단계가 재시도돼도 안전하다.
+         */
+        if (!paymentIdsToRefund.isEmpty()) {
+
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+
+                @Override
+                public void afterCommit() {
+
+                    for (Long paymentId : paymentIdsToRefund) {
+
+                        refundService.refund(paymentId, adminUserId,
+                                new RefundRequest(RefundReason.VENDOR_CANCEL, RequestedByDomain.VENDOR));
+
+                    }
+
+                }
+
+            });
 
         }
 
