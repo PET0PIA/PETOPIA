@@ -6,11 +6,20 @@ import { apiClient } from "./client";
  * 원칙에 따라 그 파일은 건드리지 않는다(petopia-review-feature-plan 스킬 참고).
  */
 
-/** 리뷰 작성/수정 요청 바디. 백엔드 CreateFairReviewRequest/UpdateFairReviewRequest에 맞춘다. */
+/** 리뷰 작성 요청 바디. 백엔드 CreateFairReviewRequest에 맞춘다. */
 export interface FairReviewWriteRequest {
   /** 평점 1~5 */
   rating: number;
   content: string;
+}
+
+/**
+ * 리뷰 수정 요청 바디. 백엔드 UpdateFairReviewRequest에 맞춘다. version은 조회 시점에 받은
+ * 낙관적 락 버전을 그대로 돌려보내야 한다 - 그 사이 다른 곳에서 먼저 수정했으면 409
+ * (REVIEW_VERSION_CONFLICT)가 온다.
+ */
+export interface FairReviewUpdateRequest extends FairReviewWriteRequest {
+  version: number;
 }
 
 /** 리뷰 작성/수정 응답. 백엔드 FairReviewResponse에 맞춘다. */
@@ -23,6 +32,7 @@ export interface FairReviewWriteResult {
   verifiedVisit: boolean;
   createdAt: string;
   updatedAt: string;
+  version: number;
 }
 
 /** 리뷰 작성(POST, 로그인 필요 - 예매·방문 여부로 막지 않는다). */
@@ -31,7 +41,7 @@ export function createFairReview(fairId: number, payload: FairReviewWriteRequest
 }
 
 /** 리뷰 수정(PATCH, 본인이 작성한 리뷰만 가능). rating·content만 바뀐다. */
-export function updateFairReview(fairId: number, reviewId: number, payload: FairReviewWriteRequest) {
+export function updateFairReview(fairId: number, reviewId: number, payload: FairReviewUpdateRequest) {
   return apiClient.patch<FairReviewWriteResult>(`/api/fairs/${fairId}/reviews/${reviewId}`, payload);
 }
 
@@ -52,6 +62,7 @@ export interface MyFairReviewItem {
   verifiedVisit: boolean;
   createdAt: string;
   updatedAt: string;
+  version: number;
 }
 
 /** 마이페이지 "내 리뷰" 목록 응답(페이지네이션). 백엔드 MyFairReviewListResponse. */

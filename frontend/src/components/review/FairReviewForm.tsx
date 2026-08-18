@@ -14,6 +14,8 @@ interface FairReviewFormProps {
   reviewId?: number;
   initialRating?: number;
   initialContent?: string;
+  /** 수정 모드일 때 필수 - 조회 시점에 받은 낙관적 락 버전. 그대로 PATCH에 실어 보낸다. */
+  initialVersion?: number;
   submitLabel?: string;
   onSuccess: (result: FairReviewWriteResult) => void;
   onCancel?: () => void;
@@ -25,7 +27,16 @@ interface FairReviewFormProps {
  * 진행한다(petopia-review-feature-plan 스킬 참고). 작성·수정 양쪽에서 재사용할 수 있게
  * reviewId 유무로 모드를 나눴다.
  */
-export function FairReviewForm({ fairId, reviewId, initialRating = 0, initialContent = "", submitLabel, onSuccess, onCancel }: FairReviewFormProps) {
+export function FairReviewForm({
+  fairId,
+  reviewId,
+  initialRating = 0,
+  initialContent = "",
+  initialVersion,
+  submitLabel,
+  onSuccess,
+  onCancel,
+}: FairReviewFormProps) {
   const [rating, setRating] = useState(initialRating);
   const [content, setContent] = useState(initialContent);
   const [submitting, setSubmitting] = useState(false);
@@ -49,9 +60,16 @@ export function FairReviewForm({ fairId, reviewId, initialRating = 0, initialCon
       return;
     }
 
+    if (isEdit && initialVersion == null) {
+      setError("리뷰 정보를 다시 불러온 뒤 수정해주세요.");
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
-    const request = isEdit ? updateFairReview(fairId, reviewId, { rating, content }) : createFairReview(fairId, { rating, content });
+    const request = isEdit
+      ? updateFairReview(fairId, reviewId, { rating, content, version: initialVersion! })
+      : createFairReview(fairId, { rating, content });
     request
       .then((result) => onSuccess(result))
       .catch((err) => setError(err instanceof ApiError ? err.message : "리뷰를 저장하지 못했어요."))

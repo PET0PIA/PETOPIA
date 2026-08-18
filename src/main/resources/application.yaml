@@ -122,6 +122,11 @@ app:
 anthropic:
   api-key: ${ANTHROPIC_API_KEY:}
 
+kakao:
+  # 지오코딩 실패해도 행사 등록 자체는 막지 않는 fail-soft 기능이라, JWT_SECRET/GOOGLE_CLIENT_ID와
+  # 달리 기본값을 비워둔다. 비어 있으면 KakaoGeocodingClient가 좌표 없이 조용히 넘어간다.
+  rest-api-key: ${KAKAO_REST_API_KEY:}
+
 oauth:
   google:
     # 기본값 없음 - 값이 없으면 기동 실패(JWT_SECRET과 동일한 fail-fast 정책)

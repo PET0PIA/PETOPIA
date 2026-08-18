@@ -5,7 +5,7 @@
 <mapper namespace="com.ms.petopia.api.review.mapper.FairReviewMapper">
 
     <sql id="columns">
-        review_id, fair_id, user_id, rating, content, is_verified_visit AS verifiedVisit, created_at, updated_at
+        review_id, fair_id, user_id, rating, content, is_verified_visit AS verifiedVisit, created_at, updated_at, version
     </sql>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="reviewId" keyColumn="review_id">
@@ -38,7 +38,7 @@
     <select id="selectListByFairId" resultType="FairReviewListRow">
         SELECT fr.review_id, fr.fair_id, fr.user_id, u.nickname,
                fr.rating, fr.content, fr.is_verified_visit AS verifiedVisit,
-               fr.created_at, fr.updated_at
+               fr.created_at, fr.updated_at, fr.version
           FROM fair_reviews fr
           JOIN users u ON u.user_id = fr.user_id
          WHERE fr.fair_id = #{fairId}
@@ -69,7 +69,7 @@
     <select id="selectMyReviews" resultType="MyFairReviewRow">
         SELECT fr.review_id, fr.fair_id, f.name AS fairName, f.poster_image_url AS fairPosterImageUrl,
                fr.rating, fr.content, fr.is_verified_visit AS verifiedVisit,
-               fr.created_at, fr.updated_at
+               fr.created_at, fr.updated_at, fr.version
           FROM fair_reviews fr
           JOIN fairs f ON f.fair_id = fr.fair_id
          WHERE fr.user_id = #{userId}
@@ -77,12 +77,17 @@
          LIMIT #{limit} OFFSET #{offset}
     </select>
 
+    <!-- version(#{version})은 호출부가 "기대 버전"(클라이언트가 조회 시점에 받은 값)을 담아
+         넘긴다. 그 사이 다른 수정이 있었으면 WHERE 절에서 걸려 영향받은 행이 0건이 되고,
+         호출부(FairReviewService)가 그걸 REVIEW_VERSION_CONFLICT로 처리한다. -->
     <update id="update">
         UPDATE fair_reviews
            SET rating = #{rating},
                content = #{content},
-               updated_at = #{updatedAt}
+               updated_at = #{updatedAt},
+               version = version + 1
          WHERE review_id = #{reviewId}
+           AND version = #{version}
     </update>
 
     <delete id="deleteById">
