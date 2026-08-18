@@ -89,6 +89,7 @@ const accountMenuItems: { label: string; path: string }[] = [
 function useHasAnyBusiness() {
   const [hasBusiness, setHasBusiness] = useState(false);
   const { status } = useAuth();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -100,7 +101,7 @@ function useHasAnyBusiness() {
       .then((businesses) => { if (active) setHasBusiness(businesses.length > 0); })
       .catch(() => { if (active) setHasBusiness(false); });
     return () => { active = false; };
-  }, [status]);
+  }, [status, pathname]);
 
   return hasBusiness;
 }

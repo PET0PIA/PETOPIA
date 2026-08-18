@@ -97,8 +97,11 @@ export function BusinessReviewPage() {
   }
 
   useEffect(() => {
+    detailRequestIdRef.current += 1;
     setSelectedId(null);
     setDetail(null);
+    setDetailLoading(false);
+    setDetailError(null);
     void loadQueue(activeStatus);
   }, [activeStatus]);
 
