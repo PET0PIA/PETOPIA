@@ -211,6 +211,9 @@ export interface FairPublicSummary {
   placeName: string | null;
   address: string | null;
   indoorOutdoor: IndoorOutdoor | null;
+  /** 지오코딩 실패 시 latitude/longitude 둘 다 null - 이땐 지도 없이 주소 텍스트만 보여준다 */
+  latitude: number | null;
+  longitude: number | null;
   operationStartDate: string | null;
   operationEndDate: string | null;
   status: string;

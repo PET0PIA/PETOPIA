@@ -80,6 +80,7 @@ public class FairService {
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
     private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final KakaoGeocodingClient geocodingClient;
 
     /**
      * 행사 신청서를 등록한다. 심사 전 상태이므로 status는 채우지 않고 DDL 기본값(RECEIVED)에
@@ -100,6 +101,7 @@ public class FairService {
         fair.setNoticeText(request.noticeText());
         fair.setPlaceName(request.placeName());
         fair.setAddress(request.address());
+        applyGeocoding(fair, request.address());
         fair.setIndoorOutdoor(request.indoorOutdoor());
         fair.setVendorRecruitStartDate(request.vendorRecruitStartDate());
         fair.setVendorRecruitEndDate(request.vendorRecruitEndDate());
@@ -337,6 +339,12 @@ public class FairService {
         update.setNoticeText(request.noticeText());
         update.setPlaceName(request.placeName());
         update.setAddress(request.address());
+        if (setFields.contains("address")) {
+            // FairMapper.xml의 updateApplication도 setFields.contains('address')일 때만
+            // latitude/longitude를 함께 덮어쓴다 - 주소를 안 바꿨는데 재지오코딩하거나,
+            // 반대로 주소는 바꿨는데 좌표가 이전 값으로 남는 걸 막는다.
+            applyGeocoding(update, request.address());
+        }
         update.setIndoorOutdoor(request.indoorOutdoor());
         update.setVendorRecruitStartDate(request.vendorRecruitStartDate());
         update.setVendorRecruitEndDate(request.vendorRecruitEndDate());
@@ -599,6 +607,8 @@ public class FairService {
                 fair.getPlaceName(),
                 fair.getAddress(),
                 fair.getIndoorOutdoor(),
+                fair.getLatitude(),
+                fair.getLongitude(),
                 fair.getOperationStartDate(),
                 fair.getOperationEndDate(),
                 fair.getStatus() == null ? null : fair.getStatus().name()
@@ -720,5 +730,18 @@ public class FairService {
         }
         String confirmedKey = storageService.confirm(temporaryObjectKey, UploadPolicy.IMAGE);
         return storageService.toPublicUrl(confirmedKey);
+    }
+
+    /**
+     * address를 지오코딩해 fair.latitude/longitude를 채운다. 실패(키 미설정, API 에러, 주소
+     * 검색 결과 없음)해도 fair의 좌표는 초기값(null)인 채로 남을 뿐 예외를 던지지 않는다 -
+     * {@link KakaoGeocodingClient} 자체가 fail-soft라서, 여기서도 지오코딩 실패가 행사
+     * 등록/수정을 막으면 안 된다.
+     */
+    private void applyGeocoding(Fair fair, String address) {
+        geocodingClient.geocode(address).ifPresent(point -> {
+            fair.setLatitude(point.latitude());
+            fair.setLongitude(point.longitude());
+        });
     }
 }
