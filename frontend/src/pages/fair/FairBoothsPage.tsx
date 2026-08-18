@@ -1,9 +1,10 @@
-import { ChevronLeft, ImageOff } from "lucide-react";
+import { ChevronLeft, ImageOff, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
+import { Button } from "../../components/ui/Button";
 import { ApiError } from "../../api/client";
 import { getConfirmedBooths, type ConfirmedBoothResponse } from "../../api/booth";
 
@@ -34,6 +35,7 @@ export function FairBoothsPage() {
 }
 
 function FairBoothsContent({ fairId }: { fairId: number }) {
+  const navigate = useNavigate();
   const [booths, setBooths] = useState<ConfirmedBoothResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +83,16 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
       </Link>
 
       <div className="mt-4">
-        <PageHeader eyebrow="참여 기업" title="확정 참가 부스" />
+        <PageHeader
+          eyebrow="참여 기업"
+          title="확정 참가 부스"
+          action={
+            <Button variant="outline" onClick={() => navigate(`/fairs/${fairId}/booth-recommendations`)}>
+              <Sparkles size={16} />
+              부스 추천받기
+            </Button>
+          }
+        />
       </div>
 
       {loading && <p className="text-sm text-muted">불러오는 중...</p>}

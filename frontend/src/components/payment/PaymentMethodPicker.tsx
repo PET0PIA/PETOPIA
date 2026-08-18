@@ -2,7 +2,9 @@ import { CreditCard, Landmark, Wallet } from "lucide-react";
 import type { PaymentMethodOption } from "../../payments/toss";
 
 const METHOD_OPTIONS: { value: PaymentMethodOption; label: string; icon: typeof CreditCard }[] = [
-  { value: "CARD", label: "카드", icon: CreditCard },
+  // CARD는 토스 통합 결제창이라 카드와 간편결제(카카오페이 등)를 함께 고를 수 있다.
+  // NAVER_PAY는 네이버페이 자체창을 바로 여는 선택지라, 라벨도 제공사 이름 그대로 쓴다.
+  { value: "CARD", label: "카드·간편결제", icon: CreditCard },
   { value: "NAVER_PAY", label: "네이버페이", icon: Wallet },
   { value: "VIRTUAL_ACCOUNT", label: "가상계좌", icon: Landmark },
 ];
@@ -36,7 +38,7 @@ export function PaymentMethodPicker({
             aria-checked={active}
             disabled={disabled}
             onClick={() => onChange(option)}
-            className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-button border px-2 py-3 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`flex min-h-16 flex-col items-center justify-center gap-1 break-keep rounded-button border px-2 py-3 text-center text-xs font-bold leading-tight transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
               active
                 ? "border-primary-strong bg-primary-soft text-primary-strong"
                 : "border-line bg-card text-muted hover:bg-page"

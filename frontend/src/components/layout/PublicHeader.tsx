@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, LogOut, Menu, UserRound, X } from "lucide-react";
+import { Bell, ChevronDown, LayoutDashboard, LogOut, Menu, UserRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { publicNavigation, type NavigationItem } from "../../config/navigation";
@@ -32,6 +32,21 @@ function isVisibleForRole(item: NavigationItem, role: UserRole | null) {
   return role != null && item.requiredRole.includes(role);
 }
 
+// 로그인 사용자의 역할별 콘솔 진입 정보. 헤더의 "전환" 버튼으로 노출한다.
+// USER(및 비로그인)는 콘솔이 없어 null.
+function consoleEntryForRole(role: UserRole | null): { label: string; path: string } | null {
+  switch (role) {
+    case "SUPER_ADMIN":
+      return { label: "관리자 콘솔", path: "/admin" };
+    case "EVENT_ADMIN":
+      return { label: "박람회 관리", path: "/fair-admin" };
+    case "VENDOR":
+      return { label: "부스 관리", path: "/vendor" };
+    default:
+      return null;
+  }
+}
+
 function HeaderLogo() {
   return (
     <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label="PETOPIA 홈">
@@ -56,22 +71,27 @@ function TopNavLink({ to, label }: { to: string; label: string }) {
   );
 }
 
+// 데스크톱 프로필 드롭다운과 모바일 메뉴가 함께 쓰는 개인 계정 항목. 한쪽에만 추가하면
+// 화면 크기에 따라 못 들어가는 화면이 생기므로(실제로 "내 방문 부스"가 모바일에서
+// 빠져 있었다) 목록을 여기 한 곳에만 둔다. 마이페이지·로그아웃은 두 메뉴에서 생김새가
+// 달라(모바일은 아이콘 버튼) 각자 그린다.
+const accountMenuItems: { label: string; path: string }[] = [
+  { label: "내 예약 목록", path: "/reservations/me" },
+  { label: "내 행사 신청 목록", path: "/fair-applications/me" },
+  { label: "내 방문 부스", path: "/booths/visited/me" },
+  { label: "즐겨찾기 부스", path: "/booths/favorites/me" },
+];
+
 // 로그인한 사용자의 프로필 메뉴. 역할에 따라 사업자 메뉴/관리자 콘솔 진입이 더해진다.
-function ProfileMenu({ role, name, onLogout }: { role: UserRole; name: string; onLogout: () => void }) {
+function ProfileMenu({ name, onLogout }: { name: string; onLogout: () => void }) {
   const navigate = useNavigate();
+  // 역할별 콘솔·업무 진입은 헤더의 "전환" 버튼(consoleEntryForRole)으로 옮겼다.
+  // 프로필 메뉴엔 누구에게나 공통인 개인 계정 항목만 둔다.
   const items: { label: string; onSelect: () => void }[] = [
     { label: "마이페이지", onSelect: () => navigate("/mypage") },
-    { label: "내 예약 목록", onSelect: () => navigate("/reservations/me") },
-    { label: "내 행사 신청 목록", onSelect: () => navigate("/fair-applications/me") },
+    ...accountMenuItems.map(({ label, path }) => ({ label, onSelect: () => navigate(path) })),
+    { label: "로그아웃", onSelect: onLogout },
   ];
-  if (role === "VENDOR") {
-    items.push({ label: "내 사업자 목록", onSelect: () => navigate("/businesses/me") });
-    items.push({ label: "내 부스 참가 신청 목록", onSelect: () => navigate("/participations/me") });
-    items.push({ label: "부스 방문 스캔", onSelect: () => navigate("/booths/scan") });
-  }
-  if (role === "EVENT_ADMIN") items.push({ label: "박람회 관리자 콘솔", onSelect: () => navigate("/fair-admin/fair") });
-  if (role === "SUPER_ADMIN") items.push({ label: "최고 관리자 콘솔", onSelect: () => navigate("/admin") });
-  items.push({ label: "로그아웃", onSelect: onLogout });
   return <DropdownMenu label={name} items={items} />;
 }
 
@@ -126,6 +146,7 @@ export function PublicHeader() {
   }, [status]);
 
   const role = user?.role ?? null;
+  const consoleEntry = consoleEntryForRole(role);
   // requiredRole로 자식 메뉴를 거르고, 남은 자식이 없고 자체 경로도 없는 부모 메뉴는 숨긴다.
   const visibleNavigation = publicNavigation
     .map((item) => ({ ...item, children: item.children?.filter((child) => isVisibleForRole(child, role)) }))
@@ -177,7 +198,18 @@ export function PublicHeader() {
                 <Bell size={19} />
                 {unreadCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}
               </button>
-              <ProfileMenu role={role} name={nickname ?? "내 계정"} onLogout={handleLogout} />
+              <ProfileMenu name={nickname ?? "내 계정"} onLogout={handleLogout} />
+              {/* 역할별 콘솔 전환 버튼 - 프로필 바로 오른쪽에 둔다. */}
+              {consoleEntry && (
+                <button
+                  type="button"
+                  onClick={() => navigate(consoleEntry.path)}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3.5 py-2 text-sm font-bold text-primary-strong transition hover:opacity-80"
+                >
+                  <LayoutDashboard size={16} />
+                  {consoleEntry.label}
+                </button>
+              )}
             </>
           ) : status === "unauthenticated" ? (
             <>
@@ -230,35 +262,21 @@ export function PublicHeader() {
                     {unreadCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}
                   </button>
                 </div>
-                <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/reservations/me")}>
-                  내 예약 목록
-                </button>
-                <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/fair-applications/me")}>
-                  내 행사 신청 목록
-                </button>
-                {role === "VENDOR" && (
-                  <>
-                    <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/businesses/me")}>
-                      내 사업자 목록
-                    </button>
-                    <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/participations/me")}>
-                      내 부스 참가 신청 목록
-                    </button>
-                    <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/booths/scan")}>
-                      부스 방문 스캔
-                    </button>
-                  </>
-                )}
-                {role === "EVENT_ADMIN" && (
-                  <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/fair-admin/fair")}>
-                    박람회 관리자 콘솔
+                {consoleEntry && (
+                  <button
+                    type="button"
+                    onClick={() => go(consoleEntry.path)}
+                    className="mb-3 inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-primary-soft px-4 py-2.5 text-sm font-bold text-primary-strong hover:opacity-80"
+                  >
+                    <LayoutDashboard size={16} />
+                    {consoleEntry.label}
                   </button>
                 )}
-                {role === "SUPER_ADMIN" && (
-                  <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/admin")}>
-                    최고 관리자 콘솔
+                {accountMenuItems.map(({ label, path }) => (
+                  <button key={path} type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go(path)}>
+                    {label}
                   </button>
-                )}
+                ))}
                 <button type="button" className="mb-3 flex items-center gap-2 text-sm text-muted" onClick={handleLogout}>
                   <LogOut size={16} />
                   로그아웃
