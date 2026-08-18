@@ -30,6 +30,9 @@ public interface ApplicationMapper {
     // 같은 사업자·같은 행사에 활성 신청(PENDING_REVIEW/PAYMENT_PENDING/CONFIRMED)이 있는지 확인
     boolean existsActiveApplication(@Param("businessId") Long businessId, @Param("fairId") Long fairId);
 
+    // 사업자별 진행 중인(취소 가능한) 신청서 목록 조회 - 사업자 취소(revoke) 시 연쇄 취소용
+    List<Application> selectActiveApplicationsByBusinessId(@Param("businessId") Long businessId);
+
     // 재조회(submitted_at 등 DB 기본값 반영해서 정확한 응답 만들기 위해)
     Application selectById(@Param("applicationId") Long applicationId);
 
