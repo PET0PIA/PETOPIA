@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -40,6 +41,9 @@ public class Fair {
     private String address;
     /** INDOOR / OUTDOOR */
     private String indoorOutdoor;
+    /** address를 카카오 지오코딩한 결과. 실패했거나 아직 시도 전이면 NULL */
+    private BigDecimal latitude;
+    private BigDecimal longitude;
 
     // ===== 기간 3종 =====
     private LocalDate vendorRecruitStartDate;

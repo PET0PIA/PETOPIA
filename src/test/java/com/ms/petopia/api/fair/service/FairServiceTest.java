@@ -9,6 +9,7 @@ import com.ms.petopia.api.fair.dto.FairOpeningFeeSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairReviewDecision;
+import com.ms.petopia.api.fair.dto.GeoPoint;
 import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
@@ -37,9 +38,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,6 +106,9 @@ class FairServiceTest {
 
     @Mock
     private FairAdminAccessGuard fairAdminAccessGuard;
+
+    @Mock
+    private KakaoGeocodingClient geocodingClient;
 
     @InjectMocks
     private FairService fairService;
@@ -172,6 +178,44 @@ class FairServiceTest {
         ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
         verify(fairMapper).insert(captor.capture());
         assertThat(captor.getValue().getPosterImageUrl()).isEqualTo("https://cdn.petopia.example/uploads/image/poster.jpg");
+    }
+
+    @Test
+    @DisplayName("주소가 있으면 지오코딩 결과로 좌표를 채워 저장한다")
+    void createApplication_주소가있으면_지오코딩결과로_좌표를_채운다() {
+        given(geocodingClient.geocode("서울"))
+                .willReturn(Optional.of(new GeoPoint(BigDecimal.valueOf(37.5), BigDecimal.valueOf(127.0))));
+        willAnswer(invocation -> {
+            Fair fair = invocation.getArgument(0);
+            fair.setFairId(FAIR_ID);
+            return 1;
+        }).given(fairMapper).insert(any(Fair.class));
+
+        fairService.createApplication(USER_ID, validRequest());
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).insert(captor.capture());
+        assertThat(captor.getValue().getLatitude()).isEqualByComparingTo(BigDecimal.valueOf(37.5));
+        assertThat(captor.getValue().getLongitude()).isEqualByComparingTo(BigDecimal.valueOf(127.0));
+    }
+
+    @Test
+    @DisplayName("지오코딩이 실패해도(빈 결과) 좌표만 비운 채 신청은 정상 처리된다")
+    void createApplication_지오코딩실패해도_신청은_정상처리된다() {
+        given(geocodingClient.geocode("서울")).willReturn(Optional.empty());
+        willAnswer(invocation -> {
+            Fair fair = invocation.getArgument(0);
+            fair.setFairId(FAIR_ID);
+            return 1;
+        }).given(fairMapper).insert(any(Fair.class));
+
+        CreateFairApplicationResponse response = fairService.createApplication(USER_ID, validRequest());
+
+        assertThat(response.status()).isEqualTo(FairStatus.RECEIVED.name());
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).insert(captor.capture());
+        assertThat(captor.getValue().getLatitude()).isNull();
+        assertThat(captor.getValue().getLongitude()).isNull();
     }
 
     @Test
@@ -530,6 +574,70 @@ class FairServiceTest {
         fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("2026 서울 펫페어(재제출)"), ALL_UPDATE_FIELDS);
 
         verify(fairMapper).updateApplication(any(), any());
+    }
+
+    @Test
+    @DisplayName("주소를 수정하면 재지오코딩해서 좌표를 함께 갱신한다")
+    void updateApplication_주소를_수정하면_좌표도_갱신한다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
+        given(geocodingClient.geocode("부산"))
+                .willReturn(Optional.of(new GeoPoint(BigDecimal.valueOf(35.1), BigDecimal.valueOf(129.0))));
+
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                null, null, null, null, null,
+                null, "부산", null,
+                null, null, null, null, null, null,
+                null, null, null,
+                null, null, null
+        );
+
+        fairService.updateApplication(FAIR_ID, USER_ID, request, Set.of("address"));
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).updateApplication(captor.capture(), eq(Set.of("address")));
+        assertThat(captor.getValue().getLatitude()).isEqualByComparingTo(BigDecimal.valueOf(35.1));
+        assertThat(captor.getValue().getLongitude()).isEqualByComparingTo(BigDecimal.valueOf(129.0));
+    }
+
+    @Test
+    @DisplayName("주소를 수정하지 않으면 재지오코딩을 호출하지 않는다")
+    void updateApplication_주소를_수정하지않으면_지오코딩을_호출하지않는다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
+
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                "이름만변경", null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null,
+                null, null, null
+        );
+
+        fairService.updateApplication(FAIR_ID, USER_ID, request, Set.of("name"));
+
+        verify(geocodingClient, never()).geocode(any());
+    }
+
+    @Test
+    @DisplayName("address 필드가 포함됐지만 값이 그대로면 재지오코딩하지 않고 기존 좌표를 유지한다")
+    void updateApplication_주소값이그대로면_기존좌표를_유지한다() {
+        // updateRequest()의 address는 항상 "서울" - 폼 전체를 재제출해도(ALL_UPDATE_FIELDS)
+        // 실제 주소 값 자체는 안 바뀐, 실무에서 흔한 상황을 재현한다.
+        Fair existing = fairWithStatus(FairStatus.RECEIVED);
+        existing.setAddress("서울");
+        existing.setLatitude(BigDecimal.valueOf(37.5));
+        existing.setLongitude(BigDecimal.valueOf(127.0));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(existing);
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
+
+        fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("이름만변경"), ALL_UPDATE_FIELDS);
+
+        verify(geocodingClient, never()).geocode(any());
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).updateApplication(captor.capture(), any());
+        assertThat(captor.getValue().getLatitude()).isEqualByComparingTo(BigDecimal.valueOf(37.5));
+        assertThat(captor.getValue().getLongitude()).isEqualByComparingTo(BigDecimal.valueOf(127.0));
     }
 
     @Test
