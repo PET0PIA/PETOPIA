@@ -5,7 +5,7 @@ import type { NavigationItem } from "../../config/navigation";
 import { useAuth } from "../../contexts/AuthContext";
 import { FairSwitcher } from "../fair-admin/FairSwitcher";
 import { getMe } from "../../api/user";
-import petopiaLogoOriginal from "../../assets/logo/PetopiaLOGO.png";
+import petopiaLogoOriginal from "../../assets/logo/petopiaLOGO.png";
 
 interface ConsoleChromeProps {
   /** 왼쪽 사이드바에 펼칠 콘솔 네비게이션(그룹 = 섹션, path만 있는 항목 = 단일 링크). */
