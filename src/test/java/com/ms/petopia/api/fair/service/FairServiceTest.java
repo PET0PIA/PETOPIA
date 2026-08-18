@@ -620,6 +620,27 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("address 필드가 포함됐지만 값이 그대로면 재지오코딩하지 않고 기존 좌표를 유지한다")
+    void updateApplication_주소값이그대로면_기존좌표를_유지한다() {
+        // updateRequest()의 address는 항상 "서울" - 폼 전체를 재제출해도(ALL_UPDATE_FIELDS)
+        // 실제 주소 값 자체는 안 바뀐, 실무에서 흔한 상황을 재현한다.
+        Fair existing = fairWithStatus(FairStatus.RECEIVED);
+        existing.setAddress("서울");
+        existing.setLatitude(BigDecimal.valueOf(37.5));
+        existing.setLongitude(BigDecimal.valueOf(127.0));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(existing);
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
+
+        fairService.updateApplication(FAIR_ID, USER_ID, updateRequest("이름만변경"), ALL_UPDATE_FIELDS);
+
+        verify(geocodingClient, never()).geocode(any());
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).updateApplication(captor.capture(), any());
+        assertThat(captor.getValue().getLatitude()).isEqualByComparingTo(BigDecimal.valueOf(37.5));
+        assertThat(captor.getValue().getLongitude()).isEqualByComparingTo(BigDecimal.valueOf(127.0));
+    }
+
+    @Test
     @DisplayName("본인이 신청한 행사가 아니면 FAIR_APPLICATION_ACCESS_DENIED를 던진다")
     void updateApplication_본인아니면_예외를_던진다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));

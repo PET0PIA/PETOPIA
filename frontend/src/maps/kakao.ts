@@ -54,7 +54,17 @@ export function loadKakaoMaps(): Promise<KakaoNamespace> {
       const script = document.createElement("script");
       script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appkey}&autoload=false`;
       script.async = true;
-      script.onload = () => window.kakao.maps.load(() => resolve(window.kakao));
+      script.onload = () => {
+        try {
+          if (!window.kakao?.maps?.load) {
+            reject(new Error("카카오맵 SDK가 올바르게 초기화되지 않았어요."));
+            return;
+          }
+          window.kakao.maps.load(() => resolve(window.kakao));
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error("카카오맵 SDK 초기화에 실패했어요."));
+        }
+      };
       script.onerror = () => reject(new Error("카카오맵 SDK 로드에 실패했어요."));
       document.head.appendChild(script);
     }).catch((error: unknown) => {

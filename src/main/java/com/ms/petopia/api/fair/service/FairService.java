@@ -43,6 +43,7 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @Slf4j
@@ -343,7 +344,18 @@ public class FairService {
             // FairMapper.xml의 updateApplication도 setFields.contains('address')일 때만
             // latitude/longitude를 함께 덮어쓴다 - 주소를 안 바꿨는데 재지오코딩하거나,
             // 반대로 주소는 바꿨는데 좌표가 이전 값으로 남는 걸 막는다.
-            applyGeocoding(update, request.address());
+            //
+            // 다만 폼 전체를 재제출하는 흐름(ALL_UPDATE_FIELDS 참고)이라 값이 그대로인데도
+            // setFields에 address가 딸려 들어오는 경우가 흔하다 - 이때 무조건 재지오코딩하면,
+            // 하필 그 순간 카카오 API가 일시적으로 실패했을 때 안 바뀐 주소의 멀쩡한 좌표까지
+            // 덩달아 지워진다. 실제로 값이 바뀌었을 때만 재지오코딩하고, 안 바뀌었으면 기존
+            // 좌표를 그대로 들고 간다.
+            if (Objects.equals(fair.getAddress(), request.address())) {
+                update.setLatitude(fair.getLatitude());
+                update.setLongitude(fair.getLongitude());
+            } else {
+                applyGeocoding(update, request.address());
+            }
         }
         update.setIndoorOutdoor(request.indoorOutdoor());
         update.setVendorRecruitStartDate(request.vendorRecruitStartDate());
