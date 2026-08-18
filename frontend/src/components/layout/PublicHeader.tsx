@@ -71,6 +71,17 @@ function TopNavLink({ to, label }: { to: string; label: string }) {
   );
 }
 
+// 데스크톱 프로필 드롭다운과 모바일 메뉴가 함께 쓰는 개인 계정 항목. 한쪽에만 추가하면
+// 화면 크기에 따라 못 들어가는 화면이 생기므로(실제로 "내 방문 부스"가 모바일에서
+// 빠져 있었다) 목록을 여기 한 곳에만 둔다. 마이페이지·로그아웃은 두 메뉴에서 생김새가
+// 달라(모바일은 아이콘 버튼) 각자 그린다.
+const accountMenuItems: { label: string; path: string }[] = [
+  { label: "내 예약 목록", path: "/reservations/me" },
+  { label: "내 행사 신청 목록", path: "/fair-applications/me" },
+  { label: "내 방문 부스", path: "/booths/visited/me" },
+  { label: "즐겨찾기 부스", path: "/booths/favorites/me" },
+];
+
 // 로그인한 사용자의 프로필 메뉴. 역할에 따라 사업자 메뉴/관리자 콘솔 진입이 더해진다.
 function ProfileMenu({ name, onLogout }: { name: string; onLogout: () => void }) {
   const navigate = useNavigate();
@@ -78,10 +89,7 @@ function ProfileMenu({ name, onLogout }: { name: string; onLogout: () => void })
   // 프로필 메뉴엔 누구에게나 공통인 개인 계정 항목만 둔다.
   const items: { label: string; onSelect: () => void }[] = [
     { label: "마이페이지", onSelect: () => navigate("/mypage") },
-    { label: "내 예약 목록", onSelect: () => navigate("/reservations/me") },
-    { label: "내 행사 신청 목록", onSelect: () => navigate("/fair-applications/me") },
-    { label: "내 방문 부스", onSelect: () => navigate("/booths/visited/me") },
-    { label: "즐겨찾기 부스", onSelect: () => navigate("/booths/favorites/me") },
+    ...accountMenuItems.map(({ label, path }) => ({ label, onSelect: () => navigate(path) })),
     { label: "로그아웃", onSelect: onLogout },
   ];
   return <DropdownMenu label={name} items={items} />;
@@ -264,12 +272,11 @@ export function PublicHeader() {
                     {consoleEntry.label}
                   </button>
                 )}
-                <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/reservations/me")}>
-                  내 예약 목록
-                </button>
-                <button type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go("/fair-applications/me")}>
-                  내 행사 신청 목록
-                </button>
+                {accountMenuItems.map(({ label, path }) => (
+                  <button key={path} type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go(path)}>
+                    {label}
+                  </button>
+                ))}
                 <button type="button" className="mb-3 flex items-center gap-2 text-sm text-muted" onClick={handleLogout}>
                   <LogOut size={16} />
                   로그아웃

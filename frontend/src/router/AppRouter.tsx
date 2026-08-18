@@ -308,6 +308,10 @@ export function AppRouter() {
             <Route path="booths" element={<MyBoothsPage />} />
             <Route path="participations" element={<MyApplicationsPage />} />
             <Route path="scan" element={<BoothVisitScanPage />} />
+            {/* 부스 콘솔은 사이드바 메뉴 전부가 구현돼 있어, 여기 닿는 경우는 잘못된 주소뿐이다.
+                그래서 다른 콘솔처럼 "미구현" 자리표시를 보여주는 대신 콘솔 홈으로 되돌린다
+                (없으면 최상위 /* 에 걸려 공개 레이아웃 404로 콘솔 밖으로 튕겨 나간다). */}
+            <Route path="*" element={<Navigate to="/vendor" replace />} />
           </Route>
         </Route>
       </Routes>

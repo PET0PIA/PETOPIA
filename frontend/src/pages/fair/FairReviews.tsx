@@ -42,7 +42,7 @@ export function FairReviews({ fairId }: { fairId: number }) {
   const { status } = useAuth();
   const loggedIn = status === "authenticated";
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [summary, setSummary] = useState<FairReviewSummary | null>(null);
   const [items, setItems] = useState<FairReviewListItem[]>([]);
@@ -137,12 +137,27 @@ export function FairReviews({ fairId }: { fairId: number }) {
     });
   }
 
+  // 폼을 닫을 때 주소의 ?write-review=1도 같이 지운다. 안 지우면 새로고침·뒤로가기로
+  // 돌아왔을 때 닫았던(또는 이미 등록을 마친) 폼이 다시 열린다.
+  function closeForm() {
+    setWriteIntent(false);
+    if (searchParams.has("write-review")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("write-review");
+      setSearchParams(next, { replace: true });
+    }
+  }
+
   function handleWriteClick() {
     if (!loggedIn) {
       navigate("/login");
       return;
     }
-    setWriteIntent((prev) => !prev);
+    if (showForm) {
+      closeForm();
+      return;
+    }
+    setWriteIntent(true);
   }
 
   const count = summary?.reviewCount ?? 0;
@@ -174,9 +189,9 @@ export function FairReviews({ fairId }: { fairId: number }) {
           <FairReviewForm
             fairId={fairId}
             submitLabel="리뷰 등록"
-            onCancel={() => setWriteIntent(false)}
+            onCancel={closeForm}
             onSuccess={() => {
-              setWriteIntent(false);
+              closeForm();
               reload();
             }}
           />
