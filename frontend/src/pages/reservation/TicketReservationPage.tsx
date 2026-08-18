@@ -18,9 +18,11 @@ import {
   getReservationAvailability,
   ONSITE_TERMS_VERSION,
   type ReservationAvailability,
+  type ReservationAvailabilityDate,
 } from "../../api/reservation";
 import { releaseWaitingSlot, WAITING_ROOM_REQUIRED_CODE } from "../../api/waitingRoom";
 import { useAuth } from "../../contexts/AuthContext";
+import { todayInSeoul } from "../../utils/date";
 import { WaitingRoomPanel } from "./WaitingRoomPanel";
 import { isTossConfigured, requestReservationPayment, type PaymentMethodOption } from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
@@ -70,24 +72,26 @@ function formatPeriod(start: string | null, end: string | null) {
   return `${start} ~ ${sameYear ? end.slice(5) : end}`;
 }
 
-// 브라우저 로컬(=Asia/Seoul 전제) 오늘 날짜를 "YYYY-MM-DD"로 만든다.
-function todayLocalDate(): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+/**
+ * 지금 실제로 예약을 넣을 수 있는 날짜인지. 목록에 떠 있어도 마감(available=false)이거나
+ * 잔여석이 없으면 예약이 되지 않으므로, 날짜 카드의 "마감" 표시와 사전예약 노출 판정이
+ * 같은 기준을 쓰도록 한곳에 모아둔다.
+ */
+function isReservableDate(date: ReservationAvailabilityDate): boolean {
+  return date.available && date.remainingCapacity > 0;
 }
 
 /**
  * 오늘이 행사 운영기간(운영 시작일~종료일) 안인지 판단한다. 현장예매는 운영 당일에만
  * 가능하므로, 이 값이 참일 때만 현장예매를 화면에 노출한다.
+ * 오늘 날짜는 브라우저 시간대가 아니라 Asia/Seoul 기준으로 구한다(해외 기기에서 자정
+ * 근처에 하루 밀려 현장예매가 잘못 열리거나 닫히는 것을 막는다).
  * 운영기간을 모르면(행사 정보 로드 실패) 현장예매를 막지 않으려 true로 폴백한다 —
  * 현장에서 실제 예매하려는 사람을 실수로 차단하지 않기 위함이다(최종 판정은 백엔드).
  */
 function isOperatingToday(start: string | null, end: string | null): boolean {
   if (!start || !end) return true;
-  const today = todayLocalDate();
+  const today = todayInSeoul();
   return start <= today && today <= end;
 }
 
@@ -207,10 +211,11 @@ export function TicketReservationPage() {
   const canProceedOnsite = onsiteAgreed && !submitting;
 
   // 이 화면에 어떤 예약 유형을 노출할지 결정한다.
-  // - 사전예약: 예매 가능 날짜가 있으면 노출(당일은 백엔드가 이미 목록에서 제외한다).
+  // - 사전예약: 잔여석이 남은 날짜가 하나라도 있어야 노출한다(당일은 백엔드가 이미 목록에서
+  //   제외한다). 날짜는 내려오지만 전부 매진이면 진행할 수 없는 폼을 띄우게 되므로 제외한다.
   // - 현장예매: 오늘이 행사 운영기간 안일 때만 노출(현장예매는 운영 당일에만 생성 가능).
   // 여러 날 행사에선 운영 중에도 남은 날짜 사전예약이 열려 있어 둘 다 뜰 수 있다.
-  const advanceAvailable = availability.dates.length > 0;
+  const advanceAvailable = availability.dates.some(isReservableDate);
   const onsiteAvailable = isOperatingToday(fair?.operationStartDate ?? null, fair?.operationEndDate ?? null);
   const bothTypes = advanceAvailable && onsiteAvailable;
   // 실제로 그릴 유형. 둘 다면 사용자가 고른 type을, 하나만 되면 그쪽으로 고정한다.
@@ -385,6 +390,10 @@ export function TicketReservationPage() {
    * 내 예약 목록에서 제한시간(약 10분) 안에 결제할 수 있고, 안 하면 자동으로 만료된다.
    */
   async function attemptClosePayment() {
+    // 결제창을 여는 중(결제 생성 API 응답 대기 + 토스 SDK 호출)에는 닫기를 받지 않는다.
+    // 여기서 나가버리면 화면은 내 예약 목록으로 떠난 뒤에 진행 중이던 요청이 뒤늦게 끝나면서
+    // 사용자가 그만두기로 한 결제창을 띄운다. 결제 버튼도 이 구간에는 이미 비활성이다.
+    if (paying) return;
     const leave = await confirm({
       title: "예약이 아직 완료되지 않았어요",
       description: "결제를 마치지 않고 나가면 예약이 완료되지 않아요. 이 예약은 '내 예약 목록'에 "
@@ -451,13 +460,19 @@ export function TicketReservationPage() {
     );
   }
 
-  // 사전예약·현장예매 어느 쪽도 지금은 불가능하면(접수 전/후, 행사 종료 등) 폼 대신 안내를 띄운다.
+  // 사전예약·현장예매 어느 쪽도 지금은 불가능하면(접수 전/후, 매진, 행사 종료 등) 폼 대신 안내를 띄운다.
   if (!advanceAvailable && !onsiteAvailable) {
+    // 날짜는 내려왔는데 전부 잔여석이 없는 경우와, 애초에 접수 기간이 아닌 경우를 구분해 안내한다.
+    const allSoldOut = availability.dates.length > 0;
     return (
       <div className="mx-auto max-w-3xl py-2">
         <EmptyState
-          title="지금은 예매할 수 없어요."
-          description="예매 접수가 마감되었거나 아직 시작되지 않았어요. 예매 가능한 다른 행사를 확인해 주세요."
+          title={allSoldOut ? "예매 가능한 방문일이 없어요." : "지금은 예매할 수 없어요."}
+          description={
+            allSoldOut
+              ? "모든 방문일이 마감됐어요. 예매 가능한 다른 행사를 확인해 주세요."
+              : "예매 접수가 마감되었거나 아직 시작되지 않았어요. 예매 가능한 다른 행사를 확인해 주세요."
+          }
           actionTo="/fairs/upcoming"
           actionLabel="예매 가능한 행사 보기"
         />
@@ -524,12 +539,14 @@ export function TicketReservationPage() {
           <h3 className="mb-3 text-sm font-bold text-ink">
             방문일 선택<span className="ml-1 text-primary-strong">*</span>
           </h3>
+          {/* 사전예약을 그리는 시점엔 예약 가능한 날짜가 반드시 하나는 있다(advanceAvailable).
+              아래 빈 목록 분기는 판정이 바뀌었을 때를 대비한 안전망으로만 남겨둔다. */}
           {availability.dates.length === 0 ? (
             <Card className="mb-6 p-4 text-sm text-muted">지금 예매할 수 있는 방문일이 없어요.</Card>
           ) : (
             <div className="mb-6 grid gap-3 sm:grid-cols-3">
               {availability.dates.map((date) => {
-                const soldOut = !date.available || date.remainingCapacity === 0;
+                const soldOut = !isReservableDate(date);
                 const selected = date.visitDate === selectedVisitDate;
                 return (
                   <button
@@ -679,6 +696,11 @@ export function TicketReservationPage() {
                 {paying ? "결제창을 여는 중…" : "결제하기"}
               </Button>
             </div>
+
+            {/* 이 구간에는 닫기(X·배경·ESC)가 막혀 있어서, 눌러도 아무 일이 없는 것처럼 보이지 않게 안내한다. */}
+            {paying && (
+              <p className="text-right text-xs text-muted">결제창을 여는 중에는 창을 닫을 수 없어요. 잠시만 기다려 주세요.</p>
+            )}
           </div>
         </Dialog>
       )}
