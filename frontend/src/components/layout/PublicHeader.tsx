@@ -4,7 +4,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { publicNavigation } from "../../config/navigation";
 import type { BusinessStatus, CurrentUser } from "../../types/domain";
 import type { NavigationItem } from "../../config/navigation";
-import petopiaLogoOriginal from "../../assets/logo/PetopiaLOGO.png";
+import petopiaLogoOriginal from "../../assets/logo/petopiaLOGO.png";
 import { currentUser } from "../../mocks/home";
 import { getUnreadNotificationCount } from "../../api/notification";
 import { useAuth } from "../../contexts/AuthContext";

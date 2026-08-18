@@ -2,7 +2,7 @@ import { LogOut, Menu, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import type { NavigationItem } from "../../config/navigation";
-import petopiaLogoOriginal from "../../assets/logo/PetopiaLOGO.png";
+import petopiaLogoOriginal from "../../assets/logo/petopiaLOGO.png";
 
 interface AdminChromeProps { navigation: NavigationItem[]; accountName: string; fairName?: string; children: ReactNode; }
 
