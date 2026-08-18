@@ -1,13 +1,15 @@
-import { AlertCircle, AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   createFairDate,
   deleteFairDate,
   getFairDates,
+  publishFair,
   updateFairDate,
   type CreateFairDateRequest,
   type FairDate,
+  type PublishFairResponse,
   type UpdateFairDateRequest,
 } from "../../api/fair";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -48,11 +50,20 @@ export function FairDateManagementPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // 공개(publish) 버튼 - 이 페이지는 그 행사의 published_at을 미리 조회해오지 않는다(백엔드가
+  // 멱등이라 이미 공개된 행사를 다시 눌러도 최초 공개 결과를 그대로 돌려주고, 공개 불가 상태면
+  // FAIR_NOT_PUBLISHABLE 메시지로 바로 알려주기 때문). 눌러서 받은 응답만 화면에 반영한다.
+  const [publishResult, setPublishResult] = useState<PublishFairResponse | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+
   useEffect(() => {
     if (fairId === null) return;
     let ignore = false;
     setLoading(true);
     setLoadError(null);
+    setPublishResult(null);
+    setPublishError(null);
 
     getFairDates(fairId)
       .then((data) => { if (!ignore) setFairDates(data); })
@@ -174,6 +185,27 @@ export function FairDateManagementPage() {
     }
   }
 
+  async function handlePublish() {
+    if (fairId === null) return;
+    const proceed = await confirm({
+      title: "행사를 공개할까요?",
+      description: "공개하면 즉시 티켓 예매 화면에 노출되고 관람객 예약을 받을 수 있어요.",
+      confirmLabel: "공개",
+    });
+    if (!proceed) return;
+
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const result = await publishFair(fairId);
+      setPublishResult(result);
+    } catch (error) {
+      setPublishError(error instanceof ApiError ? error.message : "공개 처리에 실패했어요.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl py-2">
       <PageHeader
@@ -187,6 +219,26 @@ export function FairDateManagementPage() {
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <p>{loadError}</p>
+        </div>
+      )}
+
+      {fairId !== null && (
+        <div className="surface mb-6 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Megaphone size={18} className="mt-0.5 shrink-0 text-muted" />
+            <div>
+              <p className="text-sm font-bold text-ink">행사 공개</p>
+              <p className="text-xs text-muted">
+                {publishResult
+                  ? `공개됨 (${new Date(publishResult.publishedAt).toLocaleString("ko-KR")})`
+                  : "공개하면 관람객이 티켓 예매 화면에서 이 행사를 보고 예약할 수 있어요. 개설비 결제가 끝난 뒤에만 공개할 수 있어요."}
+              </p>
+              {publishError && <p className="mt-1 text-xs font-bold text-primary-strong">{publishError}</p>}
+            </div>
+          </div>
+          <Button variant="outline" onClick={handlePublish} disabled={publishing || publishResult !== null}>
+            {publishing ? "공개 처리 중..." : publishResult ? "공개됨" : "행사 공개하기"}
+          </Button>
         </div>
       )}
 

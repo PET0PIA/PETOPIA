@@ -1,10 +1,12 @@
-import { AlertCircle, Check, Search, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { AlertCircle, Check, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
+  getFairApplications,
   getFairCancelRequestQueue,
   getFairCancelRequests,
   reviewFairCancelRequest,
+  type FairApplicationSummary,
   type FairCancelRequestItem,
   type FairCancelRequestQueueItem,
 } from "../../api/fair";
@@ -13,7 +15,7 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
-import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Select";
 import { Table } from "../../components/ui/Table";
 import { Textarea } from "../../components/ui/Textarea";
 import { useConfirm } from "../../components/ui/useConfirm";
@@ -41,7 +43,11 @@ export function FairCancelRequestReviewPage() {
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
 
-  const [fairIdInput, setFairIdInput] = useState("");
+  // 행사 ID를 직접 타이핑하지 않고 이름으로 찾도록, 전체 행사 목록(상태 무관)을 한 번 받아와
+  // 검색용 드롭다운을 채운다.
+  const [allFairs, setAllFairs] = useState<FairApplicationSummary[]>([]);
+  const [allFairsError, setAllFairsError] = useState<string | null>(null);
+
   const [fairId, setFairId] = useState<number | null>(null);
   const [requests, setRequests] = useState<FairCancelRequestItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -52,6 +58,12 @@ export function FairCancelRequestReviewPage() {
 
   const [rejectTarget, setRejectTarget] = useState<FairCancelRequestItem | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  // 행사를 빠르게 여러 번 바꿔 선택하면 먼저 보낸 요청의 응답이 나중에 도착할 수 있다 - 그
+  // 응답으로 목록이 덮어써지면 지금 선택과 다른 행사의 취소 신청 이력이 보이면서, 승인·반려
+  // 버튼은 여전히 지금 선택된(다른) fairId를 대상으로 동작하게 된다. 매 요청마다 번호를
+  // 매겨서, 응답이 왔을 때 그게 여전히 "지금 선택"에 대한 요청인지 확인한다.
+  const requestsRequestIdRef = useRef(0);
 
   // 승인/반려 후 큐를 새로고침할 때 재사용한다. 최초 마운트 시 큐를 받아오는 아래 useEffect는
   // queueLoading의 초기값이 이미 true라 이 함수 대신 별도로 fetch만 한다(react-hooks/set-state-in-effect
@@ -89,35 +101,51 @@ export function FairCancelRequestReviewPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    getFairApplications()
+      .then((data) => {
+        if (alive) setAllFairs([...data].sort((a, b) => a.name.localeCompare(b.name, "ko")));
+      })
+      .catch((error: unknown) => {
+        if (alive) setAllFairsError(error instanceof ApiError ? error.message : "행사 목록을 불러오지 못했어요.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   async function loadRequests(targetFairId: number) {
+    const requestId = ++requestsRequestIdRef.current;
     setLoading(true);
     setLoadError(null);
     setReviewError(null);
     try {
       const data = await getFairCancelRequests(targetFairId);
+      if (requestId !== requestsRequestIdRef.current) return; // 그 사이 다른 행사를 선택했으면 이 응답은 버린다
       setRequests(data);
     } catch (error) {
+      if (requestId !== requestsRequestIdRef.current) return;
       setRequests([]);
       setLoadError(error instanceof ApiError ? error.message : "취소 신청 이력을 불러오지 못했어요.");
     } finally {
-      setLoading(false);
+      if (requestId === requestsRequestIdRef.current) setLoading(false);
     }
   }
 
   function openFair(targetFairId: number) {
-    setFairIdInput(String(targetFairId));
     setFairId(targetFairId);
     void loadRequests(targetFairId);
   }
 
-  function handleLoadFair(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
+  function handleSelectFair(value: string) {
+    if (value === "") {
+      requestsRequestIdRef.current += 1; // 진행 중이던 조회가 있었다면 응답이 와도 버려지도록 무효화한다
+      setFairId(null);
+      setRequests([]);
       return;
     }
-    openFair(parsed);
+    openFair(Number(value));
   }
 
   async function handleApprove(request: FairCancelRequestItem) {
@@ -211,13 +239,16 @@ export function FairCancelRequestReviewPage() {
         )}
       </div>
 
-      <form onSubmit={handleLoadFair} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">조회할 행사 ID</label>
-          <Input id="fairIdInput" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
-        </div>
-        <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
-      </form>
+      <div className="surface mb-6 p-5">
+        <label htmlFor="fairSelect" className="mb-1.5 block text-sm font-bold text-ink">조회할 행사</label>
+        <Select id="fairSelect" value={fairId ?? ""} onChange={(event) => handleSelectFair(event.target.value)}>
+          <option value="">행사명으로 찾기...</option>
+          {allFairs.map((fair) => (
+            <option key={fair.fairId} value={fair.fairId}>{fair.name}</option>
+          ))}
+        </Select>
+        {allFairsError && <p className="mt-1.5 text-xs font-bold text-primary-strong">{allFairsError}</p>}
+      </div>
 
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -234,7 +265,7 @@ export function FairCancelRequestReviewPage() {
       )}
 
       {fairId === null && (
-        <EmptyState title="행사 ID를 먼저 입력해 주세요." description="검토할 행사의 ID를 입력하고 불러오기를 누르면 취소 신청 이력이 표시돼요." />
+        <EmptyState title="행사를 먼저 선택해 주세요." description="위 목록에서 행사를 선택하면 취소 신청 이력이 표시돼요." />
       )}
 
       {fairId !== null && loading && (

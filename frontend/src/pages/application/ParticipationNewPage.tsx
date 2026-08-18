@@ -4,7 +4,7 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
 import { ApiError } from "../../api/client";
-import { getPublicFairs, type FairPublicListItem } from "../../api/fair";
+import { getRecruitingFairs, type FairPublicListItem } from "../../api/fair";
 import { FairPublicCard } from "../fair/FairPublicCard";
 
 type ViewMode = "grid" | "list";
@@ -18,11 +18,11 @@ export function ParticipationNewPage() {
 
   useEffect(() => {
     let alive = true;
-    // 모집중인 행사는 아직 안 끝난 행사(UPCOMING)에만 있을 수 있다 - recruiting은
-    // 행사 종료 여부도 조건에 포함하므로, PAST를 따로 조회할 필요가 없다.
-    getPublicFairs("UPCOMING")
+    // 모집중인 행사는 "전체공개"(published) 여부와 무관하다 - 담당자가 모집공고+부스슬롯만
+    // 준비하면, 아직 일반 소비자에게 전체공개하지 않았어도 여기서 찾아 신청할 수 있어야 한다.
+    getRecruitingFairs()
       .then((data) => {
-        if (alive) setFairs(data.filter((fair) => fair.recruiting));
+        if (alive) setFairs(data);
       })
       .catch((err: unknown) => {
         if (!alive) return;

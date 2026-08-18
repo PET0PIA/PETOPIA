@@ -97,14 +97,21 @@ public class SecurityConfig {
                         // "/api/fairs/*"(SUPER_ADMIN 전용, 바로 아래)와 세그먼트 패턴이 겹쳐서
                         // ("/api/fairs/public"도 "/api/fairs/*"에 매치됨) 반드시 그 규칙보다 먼저 와야 한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/public").permitAll()
+                        // Fair 도메인 - 부스 모집중인 행사 목록도 인증 없이 허용(전체공개 여부와
+                        // 무관하게 참가업체가 찾아 신청할 수 있어야 한다). "/api/fairs/*"(SUPER_ADMIN
+                        // 전용, 바로 아래)와 패턴이 겹치므로 먼저 와야 한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/recruiting").permitAll()
                         // Fair 도메인 - EVENT_ADMIN 전용: 자신에게 배정된 행사 목록.
                         // "/api/fairs/*"(SUPER_ADMIN 전용, 바로 아래)와 패턴이 겹치므로 먼저 와야 한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/mine-assigned").hasRole("EVENT_ADMIN")
-                        // Fair 도메인 - SUPER_ADMIN 전용(신청서 심사 큐/상세 조회, 심사, 공개, 취소 신청 검토).
+                        // Fair 도메인 - SUPER_ADMIN 전용(신청서 심사 큐/상세 조회, 심사, 취소 신청 검토).
                         // "/api/fairs"(세그먼트 없음)는 "/api/fairs/*"에 안 걸려서 따로 적어야 한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*").hasRole("SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/review", "/api/fairs/*/publish").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/review").hasRole("SUPER_ADMIN")
+                        // Fair 도메인 - 공개(publish)는 그 행사 담당 EVENT_ADMIN도 할 수 있다. 담당
+                        // fair인지(소유자 검증)는 FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/publish").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/fair-cancel-requests/*/review").hasRole("SUPER_ADMIN")
                         // Fair 도메인 - 취소 신청 큐(전체 행사를 가로질러 조회, fairId 없이 접근).
                         // "/api/fairs/*/fair-cancel-requests"와 경로 자체가 다르므로(prefix가
