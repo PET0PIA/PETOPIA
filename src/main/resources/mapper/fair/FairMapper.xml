@@ -303,6 +303,63 @@
     </select>
 
     <!--
+        부스 모집 노출 전용(FairService#listRecruitingFairs). selectPublicFairs와 달리
+        f.published_at IS NOT NULL을 요구하지 않는다 - "전체공개"는 일반 소비자 노출/사전예약/
+        리뷰 작성 가능 여부만 통제하고, 참가업체 모집 노출은 그와 별개로 모집공고+부스슬롯만
+        준비되면(= recruiting 계산식이 true) 시작된 것으로 본다. reservable/recruiting
+        계산식은 selectPublicFairs와 동일하다 - HAVING절에서 recruiting인 것만 추린다(MySQL은
+        SELECT의 별칭을 HAVING에서 참조할 수 있다).
+    -->
+    <select id="selectRecruitingFairs" resultType="Fair">
+        SELECT f.fair_id, f.name, f.category, f.poster_image_url, f.place_name,
+               f.operation_start_date, f.operation_end_date,
+               (
+                 f.reservation_start_date IS NOT NULL
+                 AND f.reservation_end_date IS NOT NULL
+                 AND #{today} &gt;= f.reservation_start_date
+                 AND #{today} &lt;= f.reservation_end_date
+                 AND EXISTS (
+                   SELECT 1
+                     FROM fair_dates fd
+                    WHERE fd.fair_id = f.fair_id
+                      AND fd.operation_date &gt; #{today}
+                      AND fd.capacity &gt; (
+                            SELECT COUNT(*)
+                              FROM reservations r
+                             WHERE r.fair_id = fd.fair_id
+                               AND r.visit_date = fd.operation_date
+                               AND r.reservation_type = 'ADVANCE'
+                               AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED', 'CHECKED_IN')
+                          )
+                 )
+               ) AS reservable,
+               (
+                 EXISTS (SELECT 1 FROM recruit_notice rn
+                          WHERE rn.fair_id = f.fair_id
+                            AND rn.recruit_deadline &gt; #{now})
+                 AND f.status &lt;&gt; 'ENDED'
+                 AND EXISTS (
+                   SELECT 1
+                     FROM booth_slots bs
+                     JOIN halls h ON bs.hall_id = h.hall_id
+                    WHERE h.fair_id = f.fair_id
+                      AND bs.is_active = TRUE
+                      AND NOT EXISTS (
+                        SELECT 1
+                          FROM application_slot aps
+                          JOIN application a ON a.application_id = aps.application_id
+                         WHERE aps.booth_slot_id = bs.booth_slot_id
+                           AND a.status IN ('PENDING_REVIEW', 'PAYMENT_PENDING', 'CONFIRMED')
+                      )
+                 )
+               ) AS recruiting
+          FROM fairs f
+         WHERE f.canceled_at IS NULL
+        HAVING recruiting = TRUE
+         ORDER BY (f.operation_start_date IS NULL), f.operation_start_date ASC
+    </select>
+
+    <!--
         관리자 심사 큐(FairService#getApplications) 전용. status가 없으면 전체, 있으면 그
         상태만 걸러 오래된 신청 순으로 반환한다 - RECEIVED만 걸러서 보면 "지금 처리해야 할 것"을
         보여주는 큐가 되고, 필요하면 상태를 바꿔가며 이력도 훑어볼 수 있다. 관리자 화면 전용이라

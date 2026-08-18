@@ -32,7 +32,9 @@ public class FairReviewService {
 
     /**
      * 리뷰를 작성한다. 로그인만 하면 누구나 작성할 수 있다 - 예매·방문 여부로 작성 자체를
-     * 막지 않는다(petopia-review-feature-plan 스킬 참고).
+     * 막지 않는다(petopia-review-feature-plan 스킬 참고). 다만 그 행사가 전체공개
+     * (published_at IS NOT NULL)된 뒤에만 작성할 수 있다 - 부스 모집중이라도 아직 일반
+     * 소비자에게 공개하지 않은 행사에 리뷰가 달리는 걸 막는다.
      *
      * <p>is_verified_visit은 지금은 항상 false로 저장한다. 실제 예매·방문 이력을 판단하려면
      * Reservation 도메인 데이터가 필요한데, 아직 그쪽에 조회용 내부 계약 API가 없다. 그 API가
@@ -44,6 +46,7 @@ public class FairReviewService {
         if (fair == null) {
             throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
         }
+        assertFairPublished(fair);
         validateRating(request.rating());
         validateContent(request.content());
 
@@ -69,10 +72,14 @@ public class FairReviewService {
      * <p>낙관적 락(V35): {@code request.version()}은 클라이언트가 조회 시점에 받은 버전이어야
      * 한다. 같은 리뷰를 두 곳에서 동시에 수정하면 먼저 커밋된 쪽만 반영되고, 나중 요청은
      * 버전이 이미 바뀐 상태라 REVIEW_VERSION_CONFLICT(409)로 거부된다.
+     *
+     * <p>작성과 마찬가지로 그 행사가 전체공개된 상태여야만 수정할 수 있다(지금은 공개를 되돌리는
+     * 기능이 없어 사실상 항상 통과하지만, 생기더라도 안전하게 막히도록 대칭적으로 검증해 둔다).
      */
     @Transactional
     public FairReviewResponse update(Long fairId, Long reviewId, Long userId, UpdateFairReviewRequest request) {
         FairReview review = getOwnedReview(fairId, reviewId, userId);
+        assertFairPublished(fairId);
         validateRating(request.rating());
         validateContent(request.content());
         if (request.version() == null) {
@@ -98,10 +105,14 @@ public class FairReviewService {
      * <p>이 프로젝트는 FK 제약을 쓰지 않으므로, 이 리뷰를 참조하는 신고(fair_review_reports)·
      * 답글(fair_review_replies)을 애플리케이션 레이어에서 같은 트랜잭션 안에 먼저 지운다 -
      * 안 그러면 리뷰만 사라지고 참조가 끊긴 신고·답글 행이 고아 데이터로 남는다.
+     *
+     * <p>작성·수정과 마찬가지로 그 행사가 전체공개된 상태여야만 삭제할 수 있다(대칭성 유지 -
+     * update() 주석 참고).
      */
     @Transactional
     public void delete(Long fairId, Long reviewId, Long userId) {
         getOwnedReview(fairId, reviewId, userId);
+        assertFairPublished(fairId);
         fairReviewReportMapper.deleteByReviewId(reviewId);
         fairReviewReplyMapper.deleteByReviewId(reviewId);
         fairReviewMapper.deleteById(reviewId);
@@ -122,6 +133,25 @@ public class FairReviewService {
             throw new CommonException(ErrorCode.REVIEW_ACCESS_DENIED);
         }
         return review;
+    }
+
+    /**
+     * fairId로 Fair를 다시 조회해 전체공개 여부를 확인한다(update/delete 전용 - 이 시점엔
+     * Fair를 아직 안 불러온 상태라 한 번 더 조회가 필요하다). fair가 이미 없어졌을 리는 없지만
+     * (리뷰가 존재하면 그 fair도 존재), 방어적으로 findFairOrThrow와 같은 방식으로 처리한다.
+     */
+    private void assertFairPublished(Long fairId) {
+        Fair fair = fairMapper.selectById(fairId);
+        if (fair == null) {
+            throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
+        }
+        assertFairPublished(fair);
+    }
+
+    private void assertFairPublished(Fair fair) {
+        if (fair.getPublishedAt() == null) {
+            throw new CommonException(ErrorCode.REVIEW_FAIR_NOT_PUBLISHED);
+        }
     }
 
     private void validateRating(Integer rating) {

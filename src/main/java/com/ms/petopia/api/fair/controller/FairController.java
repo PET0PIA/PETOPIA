@@ -37,10 +37,11 @@ import java.util.Map;
 
 /**
  * 요청자 식별은 전부 {@code @AuthenticationPrincipal}(JwtAuthenticationFilter가 심어주는 userId)로
- * 받는다. review/publish/getApplication은 SecurityConfig에서 SUPER_ADMIN role로, getPublicSummary는
- * 인증 없이 permitAll로, 나머지는 로그인 여부만 검증한다({@code SecurityConfig}의 "Fair 도메인"
- * 섹션 참고) - 본인 신청 여부처럼 role만으로 못 가리는 검증은 지금처럼 서비스 계층(FairService)이
- * 계속 담당한다.
+ * 받는다. review/getApplication은 SecurityConfig에서 SUPER_ADMIN role로, publish는 EVENT_ADMIN/
+ * SUPER_ADMIN role로(담당 행사인지는 서비스 계층에서 FairAdminAccessGuard가 한 번 더 확인),
+ * getPublicSummary는 인증 없이 permitAll로, 나머지는 로그인 여부만 검증한다({@code SecurityConfig}의
+ * "Fair 도메인" 섹션 참고) - 본인 신청 여부처럼 role만으로 못 가리는 검증은 지금처럼 서비스
+ * 계층(FairService)이 계속 담당한다.
  */
 @RestController
 @RequestMapping("/api/fairs")
@@ -101,6 +102,14 @@ public class FairController {
         // SecurityConfig에서 이 경로는 인증 없이 permitAll이다 - getPublicSummary와 동일한 이유
         // (지난/예정 행사 목록을 로그인 여부와 무관하게 훑어볼 수 있어야 한다).
         return fairService.listPublicFairs(filter);
+    }
+
+    @GetMapping("/recruiting")
+    public List<FairPublicListItemResponse> listRecruitingFairs() {
+        // SecurityConfig에서 이 경로는 인증 없이 permitAll이다. listPublicFairs와 달리
+        // published_at(전체공개) 여부와 무관하게 모집중인 행사를 그대로 돌려준다 - 참가업체가
+        // 전체공개 전에도 모집중인 행사를 찾아 신청할 수 있어야 한다.
+        return fairService.listRecruitingFairs();
     }
 
     @GetMapping

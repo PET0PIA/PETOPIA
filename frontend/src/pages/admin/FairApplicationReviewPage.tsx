@@ -1,4 +1,4 @@
-import { AlertCircle, Check, Globe, Search, X } from "lucide-react";
+import { AlertCircle, Check, Globe, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
@@ -14,6 +14,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Dialog } from "../../components/ui/Dialog";
 import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Select";
 import { Table } from "../../components/ui/Table";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -62,7 +63,12 @@ export function FairApplicationReviewPage() {
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
 
-  const [fairIdInput, setFairIdInput] = useState("");
+  // 행사 ID를 직접 타이핑하지 않고 이름으로 찾도록, 전체 신청서 목록(상태 무관)을 한 번
+  // 받아와서 검색용 드롭다운을 채운다 - 이미 심사된(REJECTED/PREPARING 등) 행사도 포함된다.
+  const [allApplications, setAllApplications] = useState<FairApplicationSummary[]>([]);
+  const [allApplicationsError, setAllApplicationsError] = useState<string | null>(null);
+
+  const [selectedFairId, setSelectedFairId] = useState<number | null>(null);
   const [detail, setDetail] = useState<FairApplicationDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -117,6 +123,20 @@ export function FairApplicationReviewPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    getFairApplications()
+      .then((data) => {
+        if (alive) setAllApplications([...data].sort((a, b) => a.name.localeCompare(b.name, "ko")));
+      })
+      .catch((error: unknown) => {
+        if (alive) setAllApplicationsError(error instanceof ApiError ? error.message : "행사 목록을 불러오지 못했어요.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   async function loadDetail(fairId: number) {
     setLoading(true);
     setLoadError(null);
@@ -134,18 +154,23 @@ export function FairApplicationReviewPage() {
   }
 
   function openFair(fairId: number) {
-    setFairIdInput(String(fairId));
+    setSelectedFairId(fairId);
     void loadDetail(fairId);
   }
 
-  function handleLoad(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const parsed = Number(fairIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setLoadError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
+  function handleSelectFair(value: string) {
+    if (value === "") {
+      setSelectedFairId(null);
+      setDetail(null);
       return;
     }
-    void loadDetail(parsed);
+    openFair(Number(value));
+  }
+
+  // 승인/반려 직후 검색 드롭다운의 상태 라벨도 같이 갱신한다 - 안 하면 방금 승인한 행사가
+  // 드롭다운에는 여전히 "심사 대기"로 남아 보인다.
+  function patchAllApplicationsStatus(fairId: number, status: string) {
+    setAllApplications((previous) => previous.map((item) => (item.fairId === fairId ? { ...item, status } : item)));
   }
 
   function openApproveDialog() {
@@ -206,6 +231,7 @@ export function FairApplicationReviewPage() {
       setApproveDialogOpen(false);
       setOpeningFeeAmountInput("");
       setPaymentDueDaysInput("");
+      patchAllApplicationsStatus(detail.fairId, result.status);
       void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
@@ -243,6 +269,7 @@ export function FairApplicationReviewPage() {
       });
       setRejectDialogOpen(false);
       setRejectReason("");
+      patchAllApplicationsStatus(detail.fairId, result.status);
       void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "반려 처리에 실패했어요.");
@@ -316,13 +343,22 @@ export function FairApplicationReviewPage() {
         )}
       </div>
 
-      <form onSubmit={handleLoad} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <label htmlFor="fairIdInput" className="mb-1.5 block text-sm font-bold text-ink">검토할 행사(신청서) ID</label>
-          <Input id="fairIdInput" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1" />
-        </div>
-        <Button type="submit" variant="outline"><Search size={16} />불러오기</Button>
-      </form>
+      <div className="surface mb-6 p-5">
+        <label htmlFor="fairSelect" className="mb-1.5 block text-sm font-bold text-ink">검토할 행사(신청서)</label>
+        <Select
+          id="fairSelect"
+          value={selectedFairId ?? ""}
+          onChange={(event) => handleSelectFair(event.target.value)}
+        >
+          <option value="">행사명으로 찾기...</option>
+          {allApplications.map((application) => (
+            <option key={application.fairId} value={application.fairId}>
+              {application.name} ({statusLabels[application.status] ?? application.status})
+            </option>
+          ))}
+        </Select>
+        {allApplicationsError && <p className="mt-1.5 text-xs font-bold text-primary-strong">{allApplicationsError}</p>}
+      </div>
 
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -332,7 +368,7 @@ export function FairApplicationReviewPage() {
       )}
 
       {!detail && !loading && (
-        <EmptyState title="신청서 ID를 먼저 입력해 주세요." description="검토할 행사 신청서의 ID를 입력하고 불러오기를 누르면 상세 내용이 표시돼요." />
+        <EmptyState title="행사를 먼저 선택해 주세요." description="위 목록에서 검토할 행사를 선택하면 상세 내용이 표시돼요." />
       )}
 
       {loading && <div className="surface grid min-h-40 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
