@@ -121,6 +121,7 @@ public enum ErrorCode {
     FAIR_APPLICATION_NOT_EDITABLE(HttpStatus.CONFLICT, "F026", "심사 대기 중이거나 반려된 신청서만 수정할 수 있습니다."),
     FAIR_OPENING_FEE_AMOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "F027", "승인 시 개설비 금액을 입력해야 합니다."),
     FAIR_OPENING_FEE_NOT_PAYABLE(HttpStatus.CONFLICT, "F028", "개설비를 결제할 수 없는 상태의 행사입니다."),
+    FAIR_PAYMENT_DUE_DAYS_INVALID(HttpStatus.BAD_REQUEST, "F029", "결제 기한 일수는 1일 이상 365일 이하여야 합니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -176,10 +177,31 @@ public enum ErrorCode {
     // ===== Review (페어 리뷰) =====
     REVIEW_INVALID_RATING(HttpStatus.BAD_REQUEST, "RV001", "평점은 1~5 사이여야 합니다."),
     REVIEW_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "RV002", "리뷰 내용을 입력해야 합니다."),
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "RV003", "존재하지 않는 리뷰이거나 해당 행사의 리뷰가 아닙니다."),
+    REVIEW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "RV004", "본인이 작성한 리뷰만 수정·삭제할 수 있습니다."),
+    REVIEW_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "RV005", "리뷰 내용은 1000자를 초과할 수 없습니다."),
+    REVIEW_INVALID_REPORT_REASON(HttpStatus.BAD_REQUEST, "RV006", "신고 사유가 올바르지 않습니다."),
+    REVIEW_REPORT_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "RV007", "기타 사유는 상세 내용을 입력해야 합니다."),
+    REVIEW_ALREADY_REPORTED(HttpStatus.CONFLICT, "RV008", "이미 신고한 리뷰입니다."),
+    REVIEW_REPLY_NOT_FOUND(HttpStatus.NOT_FOUND, "RV009", "존재하지 않는 답글이거나 해당 리뷰의 답글이 아닙니다."),
+    REVIEW_REPLY_ALREADY_EXISTS(HttpStatus.CONFLICT, "RV010", "이미 답글이 등록된 리뷰입니다. 기존 답글을 수정해주세요."),
+    REVIEW_REPORT_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "RV011", "신고 상세 사유는 500자를 초과할 수 없습니다."),
+    REVIEW_VERSION_CONFLICT(HttpStatus.CONFLICT, "RV012", "다른 곳에서 이미 이 리뷰를 수정했습니다. 새로고침 후 다시 시도해주세요."),
 
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),
     AI_RECOMMENDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "RC002", "지금은 추천 기능을 사용할 수 없습니다. 잠시 후 다시 시도해주세요."),
+
+    // ===== Chat (상담 챗봇) =====
+    CHAT_CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "CH001", "존재하지 않는 상담입니다."),
+    CHAT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "CH002", "본인의 상담만 조회할 수 있습니다."),
+    CHAT_MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "CH003", "사용할 수 없는 문의 유형입니다."),
+    // 423 LOCKED: 요청 자체는 올바른데 리소스가 잠겨 있어 거부한다는 뜻이라 이 상황에 맞다.
+    // 400/409로 내리면 프론트가 "입력이 잘못됐다"와 구분하기 어렵다.
+    CHAT_AWAITING_AGENT(HttpStatus.LOCKED, "CH010", "자동 답변을 드렸어요. 상담사가 이어서 답변드릴 때까지 기다려주세요."),
+    CHAT_ALREADY_CLOSED(HttpStatus.CONFLICT, "CH011", "이미 종료된 상담입니다."),
+    CHAT_MENU_CODE_DUPLICATED(HttpStatus.CONFLICT, "CH012", "이미 사용 중인 문의 유형 코드입니다."),
+    CHAT_BUSINESS_HOUR_INVALID(HttpStatus.BAD_REQUEST, "CH013", "운영시간 설정이 올바르지 않습니다."),
     ;
 
     private final HttpStatus httpStatus;

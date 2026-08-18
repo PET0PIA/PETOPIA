@@ -37,7 +37,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -52,10 +51,17 @@ import java.util.Set;
 public class FairService {
 
     /**
-     * 승인 시 개설비 결제 기한. 실제 정책이 확정되기 전까지 7일로 고정한다.
-     * TODO 정책(결제 기한 일수) 확정되면 상수를 교체하거나 행사별 설정으로 옮긴다.
+     * 승인 시 개설비 결제 기한의 기본값(일). 검토자가 승인 시 {@code paymentDueDays}를 따로
+     * 지정하지 않으면 이 값을 쓴다 - 행사마다 다른 기한이 필요할 수 있어 고정 상수 대신
+     * 검토 요청(ReviewFairApplicationRequest)에서 건마다 재정의할 수 있게 했다.
      */
-    private static final Duration PAYMENT_DUE_PERIOD = Duration.ofDays(7);
+    private static final int DEFAULT_PAYMENT_DUE_DAYS = 7;
+
+    /**
+     * paymentDueDays로 허용하는 상한(일). now.plusDays(dueDays)가 DB DATETIME 범위를
+     * 넘지 않도록, 그리고 실무적으로 말이 되는 결제 기한만 받도록 상한을 둔다.
+     */
+    private static final int MAX_PAYMENT_DUE_DAYS = 365;
 
     /**
      * 공개(publish)를 허용하는 상태. 개설비 결제가 끝난 이후(PREPARING~IN_PROGRESS)에만 공개할 수
@@ -389,9 +395,10 @@ public class FairService {
         update.setReviewedBy(reviewerId);
         update.setReviewedAt(now);
         if (approved) {
+            int dueDays = request.paymentDueDays() != null ? request.paymentDueDays() : DEFAULT_PAYMENT_DUE_DAYS;
             update.setStatus(FairStatus.PAYMENT_PENDING);
             update.setOpeningFeeAmount(request.openingFeeAmount());
-            update.setPaymentDueAt(now.plus(PAYMENT_DUE_PERIOD));
+            update.setPaymentDueAt(now.plusDays(dueDays));
         } else {
             update.setStatus(FairStatus.REJECTED);
             update.setRejectReason(request.rejectReason().trim());
@@ -507,6 +514,11 @@ public class FairService {
         if (request.decision() == FairReviewDecision.APPROVE
                 && (request.openingFeeAmount() == null || request.openingFeeAmount() <= 0)) {
             throw new CommonException(ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
+        }
+        if (request.decision() == FairReviewDecision.APPROVE
+                && request.paymentDueDays() != null
+                && (request.paymentDueDays() <= 0 || request.paymentDueDays() > MAX_PAYMENT_DUE_DAYS)) {
+            throw new CommonException(ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
         }
     }
 

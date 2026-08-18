@@ -204,7 +204,7 @@ class OnsiteReservationServiceTest {
     void create_existingReservation_rejects() {
         givenOpenContext(0);
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(activeUser());
-        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(true);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, NOW.toLocalDate())).willReturn(true);
 
         assertError(() -> service.create(FAIR_ID, USER_ID, null), ErrorCode.DUPLICATED_RESERVATION);
         verify(reservationMapper, never()).insertReservation(any());
@@ -217,7 +217,7 @@ class OnsiteReservationServiceTest {
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801DUPL0001");
         given(reservationMapper.insertReservation(any()))
-                .willThrow(new DuplicateKeyException("UK_RESERVATION_ACTIVE_USER_FAIR"));
+                .willThrow(new DuplicateKeyException("UK_RESERVATION_ACTIVE_USER_FAIR_DATE"));
 
         assertError(() -> service.create(FAIR_ID, USER_ID, null), ErrorCode.DUPLICATED_RESERVATION);
     }
@@ -234,7 +234,7 @@ class OnsiteReservationServiceTest {
 
     private void givenUserAndNoDuplicate() {
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(activeUser());
-        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID)).willReturn(false);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, NOW.toLocalDate())).willReturn(false);
     }
 
     private void assignGeneratedReservationId() {

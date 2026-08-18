@@ -56,6 +56,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/admin/auth/login").permitAll()
                         // 시스템 전체를 가로지르는 관리자 API(감사 로그, 전체 대시보드) - SUPER_ADMIN 전용.
                         // AuditLogController, AdminDashboardController가 여기 해당한다.
+                        //
+                        // 상담 콘솔(AdminChatController, /api/admin/chat/**)도 이 규칙에 걸려 SUPER_ADMIN
+                        // 전용이다. 박람회 관리자에게도 상담 답변을 열어주려면 그 규칙을 이 줄 "위에"
+                        // 놓아야 한다 - 아래에 두면 이 매처가 먼저 잡아 도달하지 못한다.
+                        // (박람회 관리자 허용 여부는 미정. 열어줄 때 chat_conversation.fair_id로
+                        //  "자기 행사 문의만" 스코프를 함께 걸어야 한다.)
                         .requestMatchers("/api/admin/**")
                         .hasRole("SUPER_ADMIN")
                         //참가업체 부스 운영 API(부스 방문 스캔 등). 부스 소유 검증은 서비스 계층에서 한 번 더 한다.
@@ -122,8 +128,19 @@ public class SecurityConfig {
                         // Review 도메인 - 리뷰 작성은 로그인만 하면 누구나 가능(예매·방문 여부로 막지 않음).
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews").authenticated()
                         // Review 도메인 - 목록·요약 조회는 로그인 없이 누구나(방문 전 리뷰를 미리 볼 수 있게).
-                        // 수정/삭제 규칙은 그 API를 만들 때(B.4~B.5) 추가한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews", "/api/fairs/*/reviews/summary").permitAll()
+                        // Review 도메인 - 수정/삭제는 로그인만 요구(본인 작성 리뷰인지는 서비스 계층에서 검증).
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/reviews/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/fairs/*/reviews/*").authenticated()
+                        // Review 도메인 - 마이페이지 "내 리뷰" 목록(로그인한 본인 것만).
+                        .requestMatchers(HttpMethod.GET, "/api/users/me/reviews").authenticated()
+                        // Review 도메인 - 리뷰 신고는 로그인만 요구(중복 신고 여부는 서비스 계층에서 검증).
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews/*/reports").authenticated()
+                        // Review 도메인 - 답글 조회는 리뷰처럼 공개. 작성·수정은 EVENT_ADMIN/SUPER_ADMIN만,
+                        // "이 행사 담당자인지"는 FairReviewReplyService가 FairAdminAccessGuard로 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/*/reply").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews/*/reply").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/reviews/*/reply").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // Statistics 도메인 - 행사 하나에 대한 예약/방문 통계 대시보드(ReservationDashboardController).
                         // halls/fair-dates와 같은 이유로 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 접근.
                         .requestMatchers(HttpMethod.GET,
@@ -172,6 +189,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/booths/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/booths/visits/fairs").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/booths/visits").authenticated()
+                        // Chat 도메인 - 비로그인 상담이 기본이라 전 구간 permitAll이다.
+                        // 대화 소유는 X-Chat-Guest-Key 헤더로 증명하고, 일치 여부는
+                        // ChatConversationService가 매 요청 검증한다(인증으로 막지 않는다).
+                        // anyRequest().permitAll()에 이미 걸리지만, 기본값이 나중에
+                        // authenticated()로 바뀌어도 위젯이 죽지 않도록 명시해 둔다.
+                        .requestMatchers("/api/chat/**").permitAll()
                         .anyRequest().permitAll())
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, e) ->

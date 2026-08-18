@@ -69,6 +69,8 @@ export function FairApplicationReviewPage() {
 
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [openingFeeAmountInput, setOpeningFeeAmountInput] = useState("");
+  // 비워두면 서버 기본값(7일)을 쓴다 - 필수 입력이 아니다.
+  const [paymentDueDaysInput, setPaymentDueDaysInput] = useState("");
 
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
@@ -149,6 +151,7 @@ export function FairApplicationReviewPage() {
   function openApproveDialog() {
     setReviewError(null);
     setOpeningFeeAmountInput("");
+    setPaymentDueDaysInput("");
     setApproveDialogOpen(true);
   }
 
@@ -169,10 +172,20 @@ export function FairApplicationReviewPage() {
       setReviewError("개설비 금액을 1 이상의 숫자로 입력해 주세요.");
       return;
     }
+    // 비워두면 서버 기본값(7일)을 쓴다 - undefined로 보내면 백엔드가 그렇게 처리한다.
+    let dueDays: number | undefined;
+    if (paymentDueDaysInput.trim() !== "") {
+      dueDays = Number(paymentDueDaysInput);
+      if (!Number.isInteger(dueDays) || dueDays <= 0 || dueDays > 365) {
+        setReviewError("결제 기한은 1일 이상 365일 이하로 입력해 주세요.");
+        return;
+      }
+    }
 
+    const dueDaysLabel = dueDays != null ? `${dueDays}일` : "기본 기한(7일)";
     const proceed = await confirm({
       title: "행사를 승인할까요?",
-      description: `개설비 ${amount.toLocaleString("ko-KR")}원으로 승인해요. 승인하면 관리자 계정이 발급되고 신청자에게 결제 안내 메일이 발송돼요.`,
+      description: `개설비 ${amount.toLocaleString("ko-KR")}원, 결제 기한 ${dueDaysLabel}으로 승인해요. 승인하면 관리자 계정이 발급되고 신청자에게 결제 안내 메일이 발송돼요.`,
       confirmLabel: "승인",
       danger: false,
     });
@@ -181,7 +194,7 @@ export function FairApplicationReviewPage() {
     setReviewing(true);
     setReviewError(null);
     try {
-      const result = await reviewFairApplication(detail.fairId, { decision: "APPROVE", openingFeeAmount: amount });
+      const result = await reviewFairApplication(detail.fairId, { decision: "APPROVE", openingFeeAmount: amount, paymentDueDays: dueDays });
       setDetail({
         ...detail,
         status: result.status,
@@ -192,6 +205,7 @@ export function FairApplicationReviewPage() {
       });
       setApproveDialogOpen(false);
       setOpeningFeeAmountInput("");
+      setPaymentDueDaysInput("");
       void loadQueue();
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
@@ -434,6 +448,18 @@ export function FairApplicationReviewPage() {
               onChange={(event) => setOpeningFeeAmountInput(event.target.value)}
               placeholder="예: 500000"
               required
+            />
+          </div>
+          <div>
+            <label htmlFor="paymentDueDaysInput" className="mb-1.5 block text-sm font-bold text-ink">결제 기한(일)</label>
+            <Input
+              id="paymentDueDaysInput"
+              type="number"
+              min={1}
+              max={365}
+              value={paymentDueDaysInput}
+              onChange={(event) => setPaymentDueDaysInput(event.target.value)}
+              placeholder="비워두면 기본 7일"
             />
           </div>
           {reviewError && <p className="text-sm font-bold text-primary-strong">{reviewError}</p>}

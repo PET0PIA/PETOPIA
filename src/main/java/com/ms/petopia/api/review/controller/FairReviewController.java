@@ -1,16 +1,22 @@
 package com.ms.petopia.api.review.controller;
 
 import com.ms.petopia.api.review.dto.CreateFairReviewRequest;
+import com.ms.petopia.api.review.dto.CreateFairReviewReportRequest;
 import com.ms.petopia.api.review.dto.FairReviewListResponse;
+import com.ms.petopia.api.review.dto.FairReviewReportResponse;
 import com.ms.petopia.api.review.dto.FairReviewResponse;
 import com.ms.petopia.api.review.dto.FairReviewSummaryResponse;
+import com.ms.petopia.api.review.dto.UpdateFairReviewRequest;
 import com.ms.petopia.api.review.service.FairReviewQueryService;
+import com.ms.petopia.api.review.service.FairReviewReportService;
 import com.ms.petopia.api.review.service.FairReviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +32,9 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>목록·요약 조회(GET)는 permitAll이다 - 방문 전에 누구나 리뷰를 미리 볼 수 있게 한다는
  * 결정.
+ *
+ * <p>수정(PATCH)·삭제(DELETE)는 로그인만 요구한다 - 본인이 작성한 리뷰인지는 서비스 계층
+ * ({@link FairReviewService#update}/{@link FairReviewService#delete})에서 검증한다.
  */
 @RestController
 @RequestMapping("/api/fairs/{fairId}/reviews")
@@ -34,6 +43,7 @@ public class FairReviewController {
 
     private final FairReviewService fairReviewService;
     private final FairReviewQueryService fairReviewQueryService;
+    private final FairReviewReportService fairReviewReportService;
 
     @PostMapping
     public ResponseEntity<FairReviewResponse> create(
@@ -56,5 +66,35 @@ public class FairReviewController {
     @GetMapping("/summary")
     public FairReviewSummaryResponse summary(@PathVariable Long fairId) {
         return fairReviewQueryService.getSummaryByFair(fairId);
+    }
+
+    @PatchMapping("/{reviewId}")
+    public FairReviewResponse update(
+            @PathVariable Long fairId,
+            @PathVariable Long reviewId,
+            @AuthenticationPrincipal Long userId,
+            @RequestBody UpdateFairReviewRequest request
+    ) {
+        return fairReviewService.update(fairId, reviewId, userId, request);
+    }
+
+    @DeleteMapping("/{reviewId}")
+    public ResponseEntity<Void> delete(
+            @PathVariable Long fairId,
+            @PathVariable Long reviewId,
+            @AuthenticationPrincipal Long userId
+    ) {
+        fairReviewService.delete(fairId, reviewId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{reviewId}/reports")
+    public ResponseEntity<FairReviewReportResponse> report(
+            @PathVariable Long fairId,
+            @PathVariable Long reviewId,
+            @AuthenticationPrincipal Long userId,
+            @RequestBody CreateFairReviewReportRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(fairReviewReportService.create(fairId, reviewId, userId, request));
     }
 }

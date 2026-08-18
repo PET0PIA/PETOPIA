@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.chat.mapper.ChatBusinessHourMapper">
+
+    <!--
+      경계는 [start, end)로 본다. 18:00 종료면 17:59:59까지가 운영시간이다.
+      end_time을 포함(<=)으로 두면 18:00에 접수된 문의가 "운영시간 내"로 분류돼
+      AI 답변 없이 대기열에 들어가는데, 그 시각엔 이미 상담사가 없다.
+    -->
+    <select id="existsOpenSlot" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM chat_business_hour
+             WHERE is_active = 1
+               AND day_of_week = #{dayOfWeek}
+               AND start_time &lt;= #{time}
+               AND end_time &gt; #{time}
+        )
+    </select>
+
+    <select id="existsHoliday" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1 FROM chat_holiday WHERE holiday_date = #{date}
+        )
+    </select>
+
+    <select id="selectAll" resultType="ChatBusinessHour">
+        SELECT day_of_week, start_time, end_time, is_active
+          FROM chat_business_hour
+         ORDER BY day_of_week
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO chat_business_hour (day_of_week, start_time, end_time, is_active)
+        VALUES (#{dayOfWeek}, #{startTime}, #{endTime}, #{isActive})
+        AS new_hour
+        ON DUPLICATE KEY UPDATE
+            start_time = new_hour.start_time,
+            end_time   = new_hour.end_time,
+            is_active  = new_hour.is_active
+    </insert>
+
+</mapper>

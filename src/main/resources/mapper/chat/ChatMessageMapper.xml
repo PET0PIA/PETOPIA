@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.chat.mapper.ChatMessageMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="messageId">
+        INSERT INTO chat_message (
+            conversation_id, sender_type, sender_id, menu_id, content, created_at
+        ) VALUES (
+            #{conversationId}, #{senderType}, #{senderId}, #{menuId}, #{content}, NOW()
+        )
+    </insert>
+
+    <!--
+      커서(message_id) 기반 조회. OFFSET을 쓰지 않는 이유는 폴링 중 새 메시지가 끼어들면
+      OFFSET이 가리키는 위치가 밀려서 같은 메시지를 두 번 받거나 건너뛰기 때문이다.
+    -->
+    <select id="selectByConversation" resultType="ChatMessage">
+        SELECT message_id, conversation_id, sender_type, sender_id, menu_id, content, created_at
+          FROM chat_message
+         WHERE conversation_id = #{conversationId}
+        <if test="afterMessageId != null">
+           AND message_id &gt; #{afterMessageId}
+        </if>
+         ORDER BY message_id
+         LIMIT #{limit}
+    </select>
+
+    <!--
+      뒤에서 N건을 집은 뒤 다시 오래된 순으로 뒤집는다. 프롬프트는 시간 순서대로 읽혀야
+      "이어지는 질문"의 맥락이 살아난다.
+    -->
+    <select id="selectRecentByConversation" resultType="ChatMessage">
+        SELECT * FROM (
+            SELECT message_id, conversation_id, sender_type, sender_id, menu_id, content, created_at
+              FROM chat_message
+             WHERE conversation_id = #{conversationId}
+             ORDER BY message_id DESC
+             LIMIT #{limit}
+        ) recent
+        ORDER BY message_id
+    </select>
+
+    <!--
+      소유자 조건은 chat_conversation을 통해 건다. 메시지 테이블에는 소유자 정보가 없고,
+      넣어서 중복 보관하면 승계(게스트 → 로그인) 때 두 곳을 함께 고쳐야 한다.
+
+      user_id와 guest_key를 OR로 묶지 않는 이유는 selectLatest와 같다 - 게스트 키가 없는
+      요청에 OR을 태우면 guest_key IS NULL인 남의 대화까지 걸린다.
+    -->
+    <select id="selectRecentByRequester" resultType="ChatMessage">
+        SELECT * FROM (
+            SELECT m.message_id, m.conversation_id, m.sender_type, m.sender_id,
+                   m.menu_id, m.content, m.created_at
+              FROM chat_message m
+              JOIN chat_conversation c ON c.conversation_id = m.conversation_id
+             WHERE 1 = 1
+            <choose>
+                <when test="userId != null">
+                   AND c.user_id = #{userId}
+                </when>
+                <otherwise>
+                   AND c.guest_key = #{guestKey}
+                </otherwise>
+            </choose>
+             ORDER BY m.message_id DESC
+             LIMIT #{limit}
+        ) recent
+        ORDER BY message_id
+    </select>
+
+</mapper>

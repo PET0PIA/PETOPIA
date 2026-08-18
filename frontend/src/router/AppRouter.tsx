@@ -23,6 +23,8 @@ import { VisitStatisticsPage } from "../pages/fair-admin/VisitStatisticsPage";
 import { BoothVisitStatsPage } from "../pages/fair-admin/BoothVisitStatsPage";
 import { FairCancelRequestPage } from "../pages/fair-admin/FairCancelRequestPage";
 import { AdminAccountsPage } from "../pages/admin/AdminAccountsPage";
+import { AdminChatPage } from "../pages/admin/AdminChatPage";
+import { AdminChatSettingsPage } from "../pages/admin/AdminChatSettingsPage";
 import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
@@ -44,6 +46,7 @@ import { FairReservationsPage } from "../pages/fair-admin/FairReservationsPage";
 import { NotFoundPage, PlaceholderPage } from "../pages/PlaceholderPage";
 import { NotImplementedPage } from "../pages/NotImplementedPage";
 import { AdminBannersPage } from "../pages/admin/AdminBannersPage";
+import { AdminPopupsPage } from "../pages/admin/AdminPopupsPage";
 import { MyVisitedBoothsPage } from "../pages/booth/MyVisitedBoothsPage";
 import { LoginPage } from "../pages/auth/LoginPage";
 import { SignupPage } from "../pages/auth/SignupPage";
@@ -56,6 +59,8 @@ import { EditProfilePage } from "../pages/mypage/EditProfilePage";
 import { PasswordChangePage } from "../pages/mypage/PasswordChangePage";
 import { PetFormPage } from "../pages/mypage/PetFormPage";
 import { PetDetailPage } from "../pages/mypage/PetDetailPage";
+import { MyReviewsPage } from "../pages/mypage/MyReviewsPage";
+import { ReviewManagementPage } from "../pages/fair-admin/ReviewManagementPage";
 import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
 import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
 import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
@@ -92,6 +97,7 @@ const fairAdminImplementedPaths = [
   "/fair-admin/onsite-sales",
   "/fair-admin/qr",
   "/fair-admin/reservations",
+  "/fair-admin/reviews",
   "/fair-admin/statistics",
   "/fair-admin/cancellation",
   "/fair-admin/recruit-notice",
@@ -115,7 +121,8 @@ const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).fil
     item.path !== "/admin/accounts" &&
     item.path !== "/admin/banners" &&
     item.path !== "/admin/popups" &&
-    item.path !== "/admin/notices"
+    item.path !== "/admin/notices" &&
+    item.path !== "/admin/chat"
 );
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
@@ -151,6 +158,7 @@ export function AppRouter() {
             <Route path="/mypage/password" element={<PasswordChangePage />} />
             <Route path="/mypage/pets/new" element={<PetFormPage />} />
             <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
+            <Route path="/mypage/reviews" element={<MyReviewsPage />} />
             <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
             <Route path="/booths/favorites/me" element={<BoothFavoritesPage />} />
             <Route path="/booths/visited/me" element={<MyVisitedBoothsPage />} />
@@ -225,6 +233,7 @@ export function AppRouter() {
             <Route path="qr" element={<GateEntryScanPage />} />
             <Route path="reservations" element={<ReservationStatusPage />} />
             <Route path="reservations/list" element={<FairReservationsPage />} />
+            <Route path="reviews" element={<ReviewManagementPage />} />
             <Route path="statistics" element={<VisitStatisticsPage />} />
             <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
             <Route path="cancellation" element={<FairCancelRequestPage />} />
@@ -262,10 +271,13 @@ export function AppRouter() {
             <Route path="settlements" element={<SettlementPage />} />
             <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
             <Route path="accounts" element={<AdminAccountsPage />} />
-            {/* 콘텐츠·홍보: 배너는 실제 화면, 팝업·공지는 미구현 자리표시(백엔드 없음). */}
+            {/* 콘텐츠·홍보: 배너·팝업은 실제 화면, 공지는 미구현 자리표시(백엔드 없음). */}
             <Route path="banners" element={<AdminBannersPage />} />
-            <Route path="popups" element={<NotImplementedPage title="광고 팝업 관리" admin />} />
+            <Route path="popups" element={<AdminPopupsPage />} />
             <Route path="notices" element={<NotImplementedPage title="공지사항 관리" admin />} />
+            {/* 고객지원 */}
+            <Route path="chat" element={<AdminChatPage />} />
+            <Route path="chat/settings" element={<AdminChatSettingsPage />} />
             {superAdminFallbackNavigation.map((item) => (
               <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
             ))}

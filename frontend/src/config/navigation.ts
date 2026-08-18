@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Ban, BarChart3, Bell, Building2, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, Image, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Store, Ticket, UsersRound } from "lucide-react";
+import { Ban, BarChart3, Bell, Building2, CalendarDays, ClipboardCheck, CreditCard, FileCheck2, Headset, Image, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Star, Store, Ticket, UsersRound } from "lucide-react";
 import type { UserRole } from "../api/auth";
 
 export interface NavigationItem {
@@ -32,9 +32,8 @@ export const publicNavigation: NavigationItem[] = [
 ];
 
 // ── 콘솔(관리자/부스) 네비게이션 ────────────────────────────────────────────────
-// 콘솔은 상단 헤더바에 "영역 그룹 ▾ 드롭다운" 형태로 메뉴를 편다(ConsoleChrome). 메뉴가 많아
-// (최고 관리자 12개 등) 한 줄에 다 늘어놓으면 넘치므로 영역별 그룹으로 묶는다.
-// children이 있는 항목은 그룹(드롭다운), path만 있는 항목은 단일 상단 링크로 렌더된다.
+// 콘솔은 좌측 사이드바에 "영역 그룹" 형태로 메뉴를 편다(ConsoleChrome). 메뉴가 많아 영역별로 묶는다.
+// children이 있는 항목은 그룹(섹션), path만 있는 항목은 단일 링크로 렌더된다.
 
 export const superAdminNavigation: NavigationItem[] = [
   { label: "대시보드", path: "/admin/dashboard", icon: LayoutDashboard },
@@ -69,6 +68,13 @@ export const superAdminNavigation: NavigationItem[] = [
     ],
   },
   {
+    label: "고객지원",
+    icon: Headset,
+    children: [
+      { label: "상담 문의", path: "/admin/chat", icon: Headset },
+    ],
+  },
+  {
     label: "시스템",
     icon: Settings2,
     children: [
@@ -97,6 +103,7 @@ export const fairAdminNavigation: NavigationItem[] = [
       { label: "예약 현황", path: "/fair-admin/reservations", icon: Ticket },
       { label: "QR 입장 스캔", path: "/fair-admin/qr", icon: QrCode },
       { label: "방문 통계", path: "/fair-admin/statistics", icon: BarChart3 },
+      { label: "리뷰 관리", path: "/fair-admin/reviews", icon: Star },
     ],
   },
   {

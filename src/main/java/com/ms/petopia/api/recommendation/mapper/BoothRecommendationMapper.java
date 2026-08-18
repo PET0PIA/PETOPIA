@@ -1,6 +1,7 @@
 package com.ms.petopia.api.recommendation.mapper;
 
 import com.ms.petopia.api.recommendation.domain.BoothCandidate;
+import com.ms.petopia.api.recommendation.domain.BoothSlotLocation;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -15,4 +16,7 @@ public interface BoothRecommendationMapper {
 
     //그 행사의 부스 + 아이템 목록을 한 번에 조회
     List<BoothCandidate> selectBoothCandidates(@Param("fairId") Long fairId);
+
+    //boothId별 슬롯 위치 조회
+    List<BoothSlotLocation> selectBoothLocations(@Param("boothIds") List<Long> boothIds);
 }
