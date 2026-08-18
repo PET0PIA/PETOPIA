@@ -1,5 +1,5 @@
 import { AlertCircle, Check, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   getFairApplications,
@@ -59,6 +59,12 @@ export function FairCancelRequestReviewPage() {
   const [rejectTarget, setRejectTarget] = useState<FairCancelRequestItem | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  // 행사를 빠르게 여러 번 바꿔 선택하면 먼저 보낸 요청의 응답이 나중에 도착할 수 있다 - 그
+  // 응답으로 목록이 덮어써지면 지금 선택과 다른 행사의 취소 신청 이력이 보이면서, 승인·반려
+  // 버튼은 여전히 지금 선택된(다른) fairId를 대상으로 동작하게 된다. 매 요청마다 번호를
+  // 매겨서, 응답이 왔을 때 그게 여전히 "지금 선택"에 대한 요청인지 확인한다.
+  const requestsRequestIdRef = useRef(0);
+
   // 승인/반려 후 큐를 새로고침할 때 재사용한다. 최초 마운트 시 큐를 받아오는 아래 useEffect는
   // queueLoading의 초기값이 이미 true라 이 함수 대신 별도로 fetch만 한다(react-hooks/set-state-in-effect
   // 회피 - effect 안에서 setState를 동기 호출하는 함수를 부르면 안 된다).
@@ -110,17 +116,20 @@ export function FairCancelRequestReviewPage() {
   }, []);
 
   async function loadRequests(targetFairId: number) {
+    const requestId = ++requestsRequestIdRef.current;
     setLoading(true);
     setLoadError(null);
     setReviewError(null);
     try {
       const data = await getFairCancelRequests(targetFairId);
+      if (requestId !== requestsRequestIdRef.current) return; // 그 사이 다른 행사를 선택했으면 이 응답은 버린다
       setRequests(data);
     } catch (error) {
+      if (requestId !== requestsRequestIdRef.current) return;
       setRequests([]);
       setLoadError(error instanceof ApiError ? error.message : "취소 신청 이력을 불러오지 못했어요.");
     } finally {
-      setLoading(false);
+      if (requestId === requestsRequestIdRef.current) setLoading(false);
     }
   }
 
@@ -131,6 +140,7 @@ export function FairCancelRequestReviewPage() {
 
   function handleSelectFair(value: string) {
     if (value === "") {
+      requestsRequestIdRef.current += 1; // 진행 중이던 조회가 있었다면 응답이 와도 버려지도록 무효화한다
       setFairId(null);
       setRequests([]);
       return;

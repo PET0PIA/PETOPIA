@@ -1,5 +1,5 @@
 import { AlertCircle, Check, Globe, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   getFairApplication,
@@ -86,6 +86,11 @@ export function FairApplicationReviewPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
+  // 행사를 빠르게 여러 번 바꿔 선택하면 먼저 보낸 요청의 응답이 나중에 도착할 수 있다 -
+  // 그 응답으로 화면이 덮어써지면 지금 선택과 다른 행사의 상세가 보이게 된다. 매 요청마다
+  // 번호를 매겨서, 응답이 왔을 때 그게 여전히 "지금 선택"에 대한 요청인지 확인한다.
+  const detailRequestIdRef = useRef(0);
+
   // 승인/반려 후 큐를 새로고침할 때 재사용한다(그때는 이미 마운트된 상태라 setQueueLoading(true)를
   // 먼저 불러 로딩 표시를 다시 보여줘도 된다). 최초 마운트 시 큐를 받아오는 아래 useEffect는
   // queueLoading의 초기값이 이미 true라 이 함수 대신 별도로 fetch만 한다(react-hooks/set-state-in-effect
@@ -138,18 +143,21 @@ export function FairApplicationReviewPage() {
   }, []);
 
   async function loadDetail(fairId: number) {
+    const requestId = ++detailRequestIdRef.current;
     setLoading(true);
     setLoadError(null);
     setReviewError(null);
     setPublishError(null);
     try {
       const data = await getFairApplication(fairId);
+      if (requestId !== detailRequestIdRef.current) return; // 그 사이 다른 행사를 선택했으면 이 응답은 버린다
       setDetail(data);
     } catch (error) {
+      if (requestId !== detailRequestIdRef.current) return;
       setDetail(null);
       setLoadError(error instanceof ApiError ? error.message : "신청서를 불러오지 못했어요.");
     } finally {
-      setLoading(false);
+      if (requestId === detailRequestIdRef.current) setLoading(false);
     }
   }
 
@@ -160,6 +168,7 @@ export function FairApplicationReviewPage() {
 
   function handleSelectFair(value: string) {
     if (value === "") {
+      detailRequestIdRef.current += 1; // 진행 중이던 조회가 있었다면 응답이 와도 버려지도록 무효화한다
       setSelectedFairId(null);
       setDetail(null);
       return;
