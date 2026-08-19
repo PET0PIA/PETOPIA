@@ -13,6 +13,9 @@ public interface AuthMapper {
 
     boolean existsVerifiedByEmail(@Param("email") String email);
 
+    //탈퇴 후 15일 이내인 계정이 이 이메일로 탈퇴했는지 - 재가입 제한용
+    boolean existsWithdrawnEmailWithinCooldown(@Param("email") String email, @Param("cooldownDays") int cooldownDays);
+
     int insertUser(User user);
 
     int updateUnverifiedUser(User user);

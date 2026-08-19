@@ -140,6 +140,7 @@ class ApplicationServiceTest {
 
         business.setBusinessId(businessId);
         business.setOwnerId(ownerId);
+        business.setApprovalStatus(Business.ApprovalStatus.APPROVED);
 
         return business;
 

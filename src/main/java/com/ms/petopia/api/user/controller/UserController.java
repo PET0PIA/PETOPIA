@@ -5,7 +5,9 @@ import com.ms.petopia.api.user.dto.UserUpdateRequest;
 import com.ms.petopia.api.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,5 +31,12 @@ public class UserController {
     @PatchMapping
     public UserMeResponse updateMe(@AuthenticationPrincipal Long userId, @Valid @RequestBody UserUpdateRequest request) {
         return userService.updateMe(userId, request);
+    }
+
+    //회원 탈퇴
+    @DeleteMapping
+    public ResponseEntity<Void> withdraw(@AuthenticationPrincipal Long userId) {
+        userService.withdraw(userId);
+        return ResponseEntity.noContent().build();
     }
 }

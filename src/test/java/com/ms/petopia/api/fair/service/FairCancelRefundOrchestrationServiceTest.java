@@ -252,7 +252,8 @@ class FairCancelRefundOrchestrationServiceTest {
     private PaymentResponse payment(Long paymentId) {
         return new PaymentResponse(
                 paymentId, "PAYMENT_" + paymentId, "RESERVATION_DEPOSIT", 10_000L, "COMPLETED",
-                "MOCK", NOW, NOW.minusMinutes(5), FAIR_ID, null, 1L, null, null
+                "MOCK", NOW, NOW.minusMinutes(5), FAIR_ID, null, 1L, null, null,
+                null, null, null, null
         );
     }
 

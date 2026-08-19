@@ -3,6 +3,7 @@ import type { PaymentStatus, PaymentType } from "../../api/payment";
 // 결제 상세/생성/목록 페이지가 공통으로 쓰는 표시용 매핑·포맷 함수.
 export const statusLabels: Record<PaymentStatus, string> = {
   PENDING: "결제 대기",
+  WAITING_FOR_DEPOSIT: "입금 대기",
   COMPLETED: "결제 완료",
   FAILED: "결제 실패",
   CANCELED: "결제 취소",
@@ -11,6 +12,7 @@ export const statusLabels: Record<PaymentStatus, string> = {
 
 export const statusTone: Record<PaymentStatus, "leaf" | "sun" | "neutral" | "primary"> = {
   PENDING: "sun",
+  WAITING_FOR_DEPOSIT: "sun",
   COMPLETED: "leaf",
   FAILED: "primary",
   CANCELED: "neutral",

@@ -71,6 +71,29 @@ class FairAdminAccessGuardTest {
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
     }
 
+    @Test
+    @DisplayName("requireSuperAdmin: SUPER_ADMIN이면 통과한다")
+    void requireSuperAdmin_SUPER_ADMIN이면_통과한다() {
+        authenticateAs(ADMIN_USER_ID, "SUPER_ADMIN");
+
+        fairAdminAccessGuard.requireSuperAdmin();
+
+        verify(fairAdminAssignmentMapper, never()).existsByAdminUserIdAndFairId(any(), any());
+    }
+
+    @Test
+    @DisplayName("requireSuperAdmin: EVENT_ADMIN이면 배정 여부와 무관하게 ACCESS_DENIED를 던진다")
+    void requireSuperAdmin_EVENT_ADMIN이면_예외를_던진다() {
+        authenticateAs(ADMIN_USER_ID, "EVENT_ADMIN");
+
+        assertThatThrownBy(() -> fairAdminAccessGuard.requireSuperAdmin())
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(fairAdminAssignmentMapper, never()).existsByAdminUserIdAndFairId(any(), any());
+    }
+
     private void authenticateAs(Long userId, String role) {
         List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
         UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken(userId, null, authorities);

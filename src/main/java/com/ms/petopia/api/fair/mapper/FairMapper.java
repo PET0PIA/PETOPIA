@@ -71,16 +71,22 @@ public interface FairMapper {
     int updateApplication(@Param("fair") Fair fair, @Param("setFields") Set<String> setFields);
 
     /**
-     * 취소된({@code canceled_at IS NOT NULL}) 행사 중, 아직 정리할 PENDING 예약금·참가비
-     * 결제가 남아있는 것만 오래된 취소순으로 조회한다({@code FairCancelPendingPaymentService}
-     * 전용). {@code FairCancelRefundTargetMapper#selectUnenumeratedCanceledFairIds}처럼 별도
-     * 완료 기록 테이블을 두지 않는다 - PENDING 결제는 우리가 취소에 성공하지 못하는 한 계속
-     * PENDING으로 남아 다음 호출에서 자연히 다시 걸리므로(멱등) 완료 기록이 필요 없다.
+     * 취소된({@code canceled_at IS NOT NULL}) 행사 중, 아직 정리할 PENDING·WAITING_FOR_DEPOSIT
+     * 예약금·참가비 결제가 남아있는 것만 오래된 취소순으로 조회한다({@code
+     * FairCancelPendingPaymentService} 전용). {@code
+     * FairCancelRefundTargetMapper#selectUnenumeratedCanceledFairIds}처럼 별도 완료 기록
+     * 테이블을 두지 않는다 - 이 두 상태는 우리가 정리에 성공하지 못하는 한 계속 그대로 남아
+     * 다음 호출에서 자연히 다시 걸리므로(멱등) 완료 기록이 필요 없다.
      *
-     * <p>다만 "아직 남은 PENDING이 있는지"(EXISTS)는 반드시 걸러야 한다 -
+     * <p>다만 "아직 남은 대상이 있는지"(EXISTS)는 반드시 걸러야 한다 -
      * 이 조건 없이 canceled_at DESC로만 limit를 걸면, 취소된 행사 수가 limit를 넘는 순간
-     * 이미 다 정리된 최신 행사들이 매번 그 자리를 계속 차지해서 더 오래된 행사의 PENDING
-     * 결제가 배치 슬롯을 영영 못 받을 수 있다.
+     * 이미 다 정리된 최신 행사들이 매번 그 자리를 계속 차지해서 더 오래된 행사의 결제가
+     * 배치 슬롯을 영영 못 받을 수 있다.
+     *
+     * <p>WAITING_FOR_DEPOSIT을 빠뜨리면 PENDING이 하나도 안 남고 WAITING_FOR_DEPOSIT만 남은
+     * 행사는 이 EXISTS 자체를 통과 못 해서, {@code FairCancelPendingPaymentService}가 그
+     * 결제를 취소하는 로직을 갖고 있어도 그 행사를 아예 훑을 기회를 못 얻는다(2026-08-18
+     * 리뷰 지적 — 애초에 여기서 걸러지면 하위 로직 확장이 무의미해짐).
      */
     List<Long> selectCanceledFairIds(@Param("limit") int limit);
 

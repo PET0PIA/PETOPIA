@@ -48,6 +48,13 @@ export const superAdminNavigation: NavigationItem[] = [
     ],
   },
   {
+    label: "사업자 관리",
+    icon: Building2,
+    children: [
+      { label: "사업자 심사", path: "/admin/businesses", icon: FileCheck2 },
+    ],
+  },
+  {
     label: "결제·정산",
     icon: CreditCard,
     children: [
