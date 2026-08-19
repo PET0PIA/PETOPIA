@@ -1,4 +1,4 @@
-import { AlertCircle, Calculator, Check, Download, RefreshCw, Search } from "lucide-react";
+import { AlertCircle, Calculator, Check, Download, RefreshCw, RotateCcw, Search } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
@@ -8,6 +8,7 @@ import {
   getSettlementsByFair,
   getVendorSettlement,
   recalculateSettlement,
+  reopenSettlement,
   type SettlementResponse,
   type SettlementStatus,
 } from "../../api/settlement";
@@ -289,6 +290,29 @@ export function SettlementPage() {
     }
   }
 
+  async function handleReopen(settlement: SettlementResponse) {
+    const version = fairContextVersionRef.current;
+    const ok = await confirm({
+      title: "정산 확정 되돌리기",
+      description: `업체 #${settlement.businessId} 정산(${formatWon(settlement.netAmount)})을 확정 전 상태로 되돌릴까요?\n되돌린 뒤엔 재계산으로 최신 금액을 반영하고 다시 확정해야 해요.`,
+      confirmLabel: "되돌리기",
+    });
+    if (!ok || fairContextVersionRef.current !== version) return;
+
+    setActionError(null);
+    markActioning(settlement.settlementId, true);
+    try {
+      const result = await reopenSettlement(settlement.settlementId);
+      if (fairContextVersionRef.current !== version) return;
+      updateSettlementInList(result);
+    } catch (error) {
+      if (fairContextVersionRef.current !== version) return;
+      setActionError(errorMessage(error, "정산 되돌리기에 실패했어요."));
+    } finally {
+      markActioning(settlement.settlementId, false);
+    }
+  }
+
   // ── 업체별 정산 상세 단건 조회 ──
   const [vendorFairIdInput, setVendorFairIdInput] = useState("");
   const [vendorBusinessIdInput, setVendorBusinessIdInput] = useState("");
@@ -482,6 +506,16 @@ export function SettlementPage() {
                               <Button onClick={() => handleConfirm(row)} disabled={isActioning}>
                                 <Check size={14} />
                                 {isActioning ? "처리 중..." : "확정"}
+                              </Button>
+                            </div>
+                          ) : row.status === "CONFIRMED" ? (
+                            <div className="flex flex-col items-start gap-1.5">
+                              <span className="text-sm text-muted">
+                                {row.confirmedAt ? `${formatDateTime(row.confirmedAt)} 확정` : "-"}
+                              </span>
+                              <Button variant="outline" onClick={() => handleReopen(row)} disabled={isActioning}>
+                                <RotateCcw size={14} />
+                                {isActioning ? "처리 중..." : "되돌리기"}
                               </Button>
                             </div>
                           ) : (

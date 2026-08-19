@@ -52,6 +52,15 @@ export function recalculateSettlement(settlementId: number) {
   return apiClient.put<SettlementResponse>(`/api/settlements/${settlementId}/recalculate`);
 }
 
+/**
+ * 확정(CONFIRMED)된 정산을 PENDING으로 되돌린다(SUPER_ADMIN 전용). 확정 후 정정 절차의
+ * 첫 단계 — 되돌린 뒤 recalculateSettlement로 최신 금액을 반영하고 confirmSettlement로
+ * 다시 확정한다. PENDING 상태거나 존재하지 않으면 409/404가 온다.
+ */
+export function reopenSettlement(settlementId: number) {
+  return apiClient.put<SettlementResponse>(`/api/settlements/${settlementId}/reopen`);
+}
+
 /** Content-Disposition 헤더의 filename="..."을 뽑아낸다. 없으면 null. (statistics.ts와 동일 패턴) */
 function parseFilename(contentDisposition: string | null): string | null {
   if (!contentDisposition) return null;

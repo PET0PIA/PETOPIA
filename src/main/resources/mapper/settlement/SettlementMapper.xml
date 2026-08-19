@@ -104,4 +104,14 @@
         AND status = 'PENDING'
     </update>
 
+    <update id="reopen">
+        UPDATE settlement
+        SET status = 'PENDING',
+        confirmed_by_user_id = NULL,
+        confirmed_at = NULL,
+        updated_at = #{updatedAt}
+        WHERE settlement_id = #{settlementId}
+        AND status = 'CONFIRMED'
+    </update>
+
 </mapper>
