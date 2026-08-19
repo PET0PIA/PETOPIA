@@ -29,6 +29,9 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class AuthService {
 
+    //탈퇴한 이메일 재가입 제한 기간
+    private static final int WITHDRAWAL_COOLDOWN_DAYS = 15;
+
     private final AuthMapper authMapper;
     private final PasswordEncoder passwordEncoder;
     private final EmailVerificationService emailVerificationService;
@@ -43,6 +46,10 @@ public class AuthService {
 
         if(authMapper.existsVerifiedByEmail(request.getEmail())){
             throw new CommonException(ErrorCode.DUPLICATED_EMAIL);
+        }
+
+        if(authMapper.existsWithdrawnEmailWithinCooldown(request.getEmail(), WITHDRAWAL_COOLDOWN_DAYS)){
+            throw new CommonException(ErrorCode.WITHDRAWN_EMAIL_COOLDOWN);
         }
 
         //인증 안 끝내고 이탈한 기존 row가 있으면 재사용, 없으면 새로 생성
@@ -87,7 +94,8 @@ public class AuthService {
     //이메일이 이미 존재하는지 확인
     public EmailCheckResponse isEmailAvailable(String email){
         boolean exists = authMapper.existsVerifiedByEmail(email);
-        return new EmailCheckResponse(!exists);
+        boolean withinCooldown = authMapper.existsWithdrawnEmailWithinCooldown(email, WITHDRAWAL_COOLDOWN_DAYS);
+        return new EmailCheckResponse(!exists && !withinCooldown);
     }
 
     //이메일 인증 재전송

@@ -15,6 +15,16 @@
         )
     </select>
 
+    <!-- 탈퇴 시 email은 합성값으로 치환되므로 원래 이메일은 withdrawn_email에서 찾는다 -->
+    <select id="existsWithdrawnEmailWithinCooldown" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM users
+             WHERE withdrawn_email = #{email}
+               AND deleted_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL #{cooldownDays} DAY)
+        )
+    </select>
+
     <insert id="insertUser"
             parameterType="User"
             useGeneratedKeys="true"

@@ -20,4 +20,12 @@ public interface UserMapper {
             @Param("gender") String gender,
             @Param("address") String address
     );
+
+    //탈퇴 처리: status/deleted_at 전환. email을 합성값으로 치환하고 원래 이메일은 withdrawnEmail에 보존.
+    //deleted_at IS NULL 조건으로 동시 탈퇴 요청 중 하나만 반영되게 막는다
+    int withdrawUser(
+            @Param("userId") Long userId,
+            @Param("syntheticEmail") String syntheticEmail,
+            @Param("withdrawnEmail") String withdrawnEmail
+    );
 }

@@ -22,6 +22,8 @@ public enum ErrorCode {
     // ===== User =====
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "U001", "존재하지 않는 사용자입니다."),
     DUPLICATED_EMAIL(HttpStatus.CONFLICT, "U002", "이미 사용 중인 이메일입니다."),
+    WITHDRAWN_EMAIL_COOLDOWN(HttpStatus.CONFLICT, "U003", "최근 탈퇴한 이메일입니다. 15일 후 다시 가입할 수 있습니다."),
+    WITHDRAWAL_BLOCKED(HttpStatus.CONFLICT, "U004", "진행 중인 예약 또는 결제가 있어 탈퇴할 수 없습니다."),
 
     // ===== Pet =====
     PET_NOT_FOUND(HttpStatus.NOT_FOUND, "PT001", "존재하지 않는 반려동물입니다."),

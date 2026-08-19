@@ -37,4 +37,16 @@
         WHERE user_id = #{userId}
     </update>
 
+    <!-- 탈퇴 처리. deleted_at IS NULL 조건이 동시 탈퇴 요청에 대한 가드 역할을 한다 -->
+    <update id="withdrawUser">
+        UPDATE users
+           SET status          = 'INACTIVE'
+             , deleted_at      = CURRENT_TIMESTAMP
+             , email           = #{syntheticEmail}
+             , withdrawn_email = #{withdrawnEmail}
+             , updated_at      = CURRENT_TIMESTAMP
+         WHERE user_id = #{userId}
+           AND deleted_at IS NULL
+    </update>
+
 </mapper>
