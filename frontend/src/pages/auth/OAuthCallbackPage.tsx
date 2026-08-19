@@ -9,6 +9,7 @@ import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
 import { maxBirthDate, today } from "../../utils/date";
+import { SignupWelcomeCard } from "./SignupWelcomeCard";
 
 const PHONE_PATTERN = /^01[0-9]-?\d{3,4}-?\d{4}$/;
 
@@ -120,6 +121,7 @@ function OAuthSignupCompleteForm({ tempKey }: { tempKey: string }) {
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [signupCompleted, setSignupCompleted] = useState(false);
 
   function update<K extends keyof SignupFormState>(key: K, value: SignupFormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -144,7 +146,7 @@ function OAuthSignupCompleteForm({ tempKey }: { tempKey: string }) {
         agreedTerms: form.agreedTerms,
         agreedPrivacy: form.agreedPrivacy,
       });
-      navigate("/", { replace: true });
+      setSignupCompleted(true);
     } catch (error) {
       setSubmitError(
         error instanceof ApiError
@@ -154,6 +156,17 @@ function OAuthSignupCompleteForm({ tempKey }: { tempKey: string }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (signupCompleted) {
+    return (
+      <PageContainer className="py-10">
+        <SignupWelcomeCard
+          onRegisterPet={() => navigate("/mypage/pets/new", { replace: true })}
+          onLater={() => navigate("/", { replace: true })}
+        />
+      </PageContainer>
+    );
   }
 
   return (
