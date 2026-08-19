@@ -185,6 +185,9 @@ public class SecurityConfig {
                         // 행에서 읽은 fairId를 기준으로).
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/vendors/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/*/confirm", "/api/settlements/*/recalculate").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // reopen(확정취소)은 confirm/recalculate보다 더 신중해야 하는 결정이라
+                        // EVENT_ADMIN은 빼고 SUPER_ADMIN만 허용한다(서비스 계층 requireSuperAdmin과 이중 방어).
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/*/reopen").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // CommissionRate 도메인 - 현재 요율 조회는 결제 화면 등에서 누구나 볼 수 있게

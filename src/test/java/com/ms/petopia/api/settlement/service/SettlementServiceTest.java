@@ -1,5 +1,8 @@
 package com.ms.petopia.api.settlement.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
@@ -488,5 +491,105 @@ class SettlementServiceTest {
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
 
         verify(settlementMapper, never()).selectByFairId(any());
+    }
+
+    private SettlementRow confirmedSettlementRow() {
+        SettlementRow row = pendingSettlementRow();
+        row.setStatus("CONFIRMED");
+        row.setConfirmedByUserId(99L);
+        row.setConfirmedAt(LocalDateTime.of(2026, 8, 19, 10, 0));
+        return row;
+    }
+
+    @Test
+    @DisplayName("CONFIRMED 정산을 되돌리면 PENDING으로 바뀌고 확정 정보가 지워진다")
+    void reopen_성공() {
+        given(settlementMapper.selectById(1L)).willReturn(confirmedSettlementRow());
+        given(settlementMapper.reopen(eq(1L), any(LocalDateTime.class))).willReturn(1);
+
+        SettlementResponse result = settlementService.reopen(1L, 200L);
+
+        assertThat(result.status()).isEqualTo("PENDING");
+        assertThat(result.confirmedByUserId()).isNull();
+        assertThat(result.confirmedAt()).isNull();
+        verify(auditLogService).record(
+                eq(200L), eq(ActorType.ADMIN), eq("SUPER_ADMIN"), eq(ActionType.SETTLEMENT_REOPEN),
+                eq(TargetType.SETTLEMENT), eq(1L), any(), any());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 정산을 되돌리려 하면 예외를 던진다")
+    void reopen_존재하지않음_예외를던진다() {
+        given(settlementMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> settlementService.reopen(999L, 200L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN이 아니면 확정된 정산을 되돌릴 수 없다")
+    void reopen_슈퍼어드민아님_예외를던진다() {
+        given(settlementMapper.selectById(1L)).willReturn(confirmedSettlementRow());
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).requireSuperAdmin();
+
+        assertThatThrownBy(() -> settlementService.reopen(1L, 200L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(settlementMapper, never()).reopen(any(), any());
+    }
+
+    @Test
+    @DisplayName("PENDING 정산은 되돌릴 수 없다 — 이미 확정 전 상태")
+    void reopen_PENDING_예외를던진다() {
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+
+        assertThatThrownBy(() -> settlementService.reopen(1L, 200L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_REOPENABLE);
+
+        verify(settlementMapper, never()).reopen(any(), any());
+    }
+
+    @Test
+    @DisplayName("되돌리는 도중 동시에 다른 요청이 먼저 처리하면 예외를 던진다")
+    void reopen_동시처리_예외를던진다() {
+        given(settlementMapper.selectById(1L)).willReturn(confirmedSettlementRow());
+        given(settlementMapper.reopen(eq(1L), any(LocalDateTime.class))).willReturn(0);
+
+        assertThatThrownBy(() -> settlementService.reopen(1L, 200L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_NOT_REOPENABLE);
+    }
+
+    @Test
+    @DisplayName("되돌린 뒤 재계산 없이 바로 확정하려 하면 예외를 던진다 — 옛날 금액으로 재확정되는 걸 막는다")
+    void reopen_이후_재계산없이확정하면_예외를던진다() {
+        // Arrange: reopen() 성공 (CodeRabbit 리뷰 지적, PR #181 — reopen이 needs_recalculation을
+        // TRUE로 세우지 않으면, CONFIRMED 시점엔 이미 FALSE였던 이 값 때문에 recalculate 없이도
+        // confirm()이 그대로 통과해버려 정정 전 옛날 금액이 재확정될 수 있었다.)
+        given(settlementMapper.selectById(1L)).willReturn(confirmedSettlementRow());
+        given(settlementMapper.reopen(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        settlementService.reopen(1L, 200L);
+
+        // Act: 실제 DB라면 reopen()이 needs_recalculation=TRUE로 세워둔 상태 — 그 상태를 반영한
+        // row로 다시 조회되는 상황을 시뮬레이션한다.
+        SettlementRow reopenedRow = pendingSettlementRow();
+        reopenedRow.setNeedsRecalculation(true);
+        given(settlementMapper.selectById(1L)).willReturn(reopenedRow);
+
+        // Assert: recalculate() 없이 바로 confirm()을 부르면 막혀야 한다.
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_RECALCULATION_REQUIRED);
+
+        verify(settlementMapper, never()).confirm(any(), any(), any(), any());
     }
 }

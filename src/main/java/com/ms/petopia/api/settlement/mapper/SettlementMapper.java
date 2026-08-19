@@ -76,4 +76,14 @@ public interface SettlementMapper {
                           @Param("commissionAmount") Long commissionAmount,
                           @Param("netAmount") Long netAmount,
                           @Param("updatedAt") LocalDateTime updatedAt);
+
+    /**
+     * CONFIRMED -> PENDING으로 원자적으로 되돌린다(정정 절차, SettlementService.reopen 전용).
+     * confirmed_at/confirmed_by_user_id도 같이 비워서 되돌아간 뒤엔 "확정 안 된 상태"로
+     * 정확히 보이게 한다 — 남겨두면 프론트가 status는 PENDING인데 확정일시는 남아있는
+     * 것처럼 헷갈리게 보여줄 수 있다. 이미 PENDING이거나 없는 정산이면 0을 반환한다
+     * (동시성 방어 — confirm/updateAggregates와 같은 패턴).
+     */
+    int reopen(@Param("settlementId") Long settlementId,
+               @Param("updatedAt") LocalDateTime updatedAt);
 }
