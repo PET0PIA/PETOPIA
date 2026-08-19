@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { refreshAccessTokenOnce, setAccessToken } from "../api/client";
 import {
   adminLogin as adminLoginRequest,
@@ -30,6 +30,9 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AccessTokenPayload | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
+  // login/logout이 일어날 때마다 올려서, 그 이전에 시작된 비동기 refreshUser 응답이
+  // 뒤늦게 돌아와도 user를 덮어쓰지 못하게 막는다.
+  const authGeneration = useRef(0);
 
   useEffect(() => {
     // 새로고침하면 메모리에 들고 있던 accessToken은 사라진다. httpOnly로 남아있는
@@ -57,30 +60,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(payload: EmailLoginRequest) {
+    authGeneration.current += 1;
     const decoded = await loginRequest(payload);
     setUser(decoded);
     setStatus("authenticated");
   }
 
   async function loginAsAdmin(payload: EmailLoginRequest) {
+    authGeneration.current += 1;
     const decoded = await adminLoginRequest(payload);
     setUser(decoded);
     setStatus("authenticated");
   }
 
   async function loginWithOAuthCode(code: string) {
+    authGeneration.current += 1;
     const decoded = await exchangeOAuthLogin(code);
     setUser(decoded);
     setStatus("authenticated");
   }
 
   async function completeOAuthSignup(payload: OAuthSignupCompleteRequest) {
+    authGeneration.current += 1;
     const decoded = await completeOAuthSignupRequest(payload);
     setUser(decoded);
     setStatus("authenticated");
   }
 
   async function logout() {
+    authGeneration.current += 1;
     try {
       await logoutRequest();
     } finally {
@@ -90,11 +98,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function refreshUser() {
+    const generation = authGeneration.current;
     try {
-      // role은 JWT payload에 박혀있어서, 서버에서 사업자 취소 등으로 role이
-      // 바뀌어도 토큰을 다시 발급받기 전엔 프론트가 알 방법이 없다.
+      // role은 JWT payload에 박혀있어서, 마운트 시 디코드한 값을 그대로 들고 있는 한
+      // 서버에서 role이 바뀌어도(사업자 취소/승인 등) 프론트는 알 방법이 없다.
       // 토큰을 다시 발급받아 새 payload로 role을 재확인한다.
       const token = await refreshAccessTokenOnce();
+      // await 도중 로그인/로그아웃 등으로 인증 상태가 이미 바뀌었으면, 뒤늦게 도착한
+      // 이 결과로 user를 덮어쓰지 않는다.
+      if (authGeneration.current !== generation) return;
+      setAccessToken(token);
       setUser(decodeAccessToken(token));
     } catch {
       // 여기서 실패해도 로그아웃 처리는 하지 않는다 - 일시적인 네트워크 오류일 수 있고,

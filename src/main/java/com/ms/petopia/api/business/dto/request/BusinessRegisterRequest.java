@@ -1,9 +1,6 @@
 package com.ms.petopia.api.business.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -46,5 +43,8 @@ public class BusinessRegisterRequest {
 
     @NotBlank(message = "사업자등록증 파일을 첨부해 주세요.")
     private String businessRegDocKey; // presigned 업로드로 받은 임시 objectKey
+
+    @AssertTrue(message = "이용약관에 동의해야 등록할 수 있습니다.")
+    private Boolean agreedTerms;
 
 }

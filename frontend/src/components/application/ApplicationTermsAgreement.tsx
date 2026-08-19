@@ -79,15 +79,17 @@ export function ApplicationTermsAgreement({ agreed, onAgreedChange }: Applicatio
 
   return (
     <div className="flex items-center gap-2">
-      <input
-        type="checkbox"
-        checked={agreed}
-        onChange={(event) => onAgreedChange(event.target.checked)}
-        className="mt-0.5"
-      />
-      <span className="text-sm text-ink">
-        이용약관 및 참가 신청 유의사항에 동의합니다. <span className="text-primary-strong">*</span>
-      </span>
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(event) => onAgreedChange(event.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          이용약관 및 참가 신청 유의사항에 동의합니다. <span className="text-primary-strong">*</span>
+        </span>
+      </label>
       <button
         type="button"
         className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
