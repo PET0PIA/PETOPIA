@@ -52,6 +52,31 @@ function getTossPayment(): Promise<TossPaymentsPayment> {
  */
 export type PaymentMethodOption = "CARD" | "NAVER_PAY" | "VIRTUAL_ACCOUNT";
 
+/**
+ * 예약금 결제(사전예약·현장예매)가 쓸 수 있는 결제수단 — 가상계좌를 뺀 나머지.
+ *
+ * 예약은 결제 제한시간이 10분인데 가상계좌는 입금까지 하루 단위라 애초에 성립하지 않는다.
+ * 늦게 입금되면 "결제는 됐는데 예약은 만료" 상태가 되어 돈만 받은 셈이 된다(이슈 #167).
+ * 화면에서 선택지를 감추는 것만으로는 옛 번들·직접 호출을 못 막으므로, 예약금 결제 함수의
+ * method 타입 자체를 좁혀 컴파일 단계에서 막는다.
+ *
+ * 참가비·개설비(사업자)는 결제 기한이 일 단위라 가상계좌를 계속 쓴다 — 그쪽은
+ * {@link PaymentMethodOption}을 그대로 쓴다.
+ */
+export type ReservationPaymentMethod = Exclude<PaymentMethodOption, "VIRTUAL_ACCOUNT">;
+
+/**
+ * 참가비·개설비(사업자) 결제가 쓰는 목록 — 전체 3종.
+ * 이쪽은 결제 기한이 일(day) 단위라 입금까지 시간이 걸리는 가상계좌와 궁합이 맞다.
+ */
+export const ALL_PAYMENT_METHODS: readonly PaymentMethodOption[] = ["CARD", "NAVER_PAY", "VIRTUAL_ACCOUNT"];
+
+/**
+ * 예약금 결제(사전예약·현장예매)가 쓰는 목록 — 가상계좌를 뺐다.
+ * 이유는 {@link ReservationPaymentMethod} 주석 참고.
+ */
+export const RESERVATION_PAYMENT_METHODS: readonly ReservationPaymentMethod[] = ["CARD", "NAVER_PAY"];
+
 interface CheckoutParams {
   method: PaymentMethodOption;
   amount: number;
@@ -68,7 +93,8 @@ interface CheckoutParams {
  * method를 리터럴로 직접 박아 별도로 호출한다.
  *
  * 가상계좌는 기한(validHours)·현금영수증 옵션이 필수급이라 여기서 기본값을 같이 정한다 —
- * 백엔드가 아직 이 값들(입금기한 등)을 안 쓰고 있어서(2차 예정), 우선 24시간 고정.
+ * 우선 24시간 고정. 이 분기를 타는 건 참가비·개설비 결제뿐이다(예약금은 가상계좌 미지원,
+ * {@link ReservationPaymentMethod} 참고).
  */
 async function openTossCheckout(params: CheckoutParams): Promise<void> {
   const payment = await getTossPayment();
@@ -119,8 +145,11 @@ export interface ReservationPaymentRequest {
   /** 화면에 보여준 예약금이 아니라 서버가 계산한 금액. */
   amount: number;
   orderName: string;
-  /** 생략하면 "CARD"(일반 카드/간편결제 통합결제창). */
-  method?: PaymentMethodOption;
+  /**
+   * 생략하면 "CARD"(일반 카드/간편결제 통합결제창).
+   * 가상계좌는 예약금 결제에서 지원하지 않는다({@link ReservationPaymentMethod} 참고).
+   */
+  method?: ReservationPaymentMethod;
 }
 
 /**
