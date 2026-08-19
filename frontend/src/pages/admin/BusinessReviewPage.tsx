@@ -208,7 +208,7 @@ export function BusinessReviewPage() {
 
     const proceed = await confirm({
       title: "이 사업자를 취소 처리할까요?",
-      description: "취소하면 이 사업자로 진행 중이던 참가 신청이 전부 취소되고(결제된 건은 환불), 다른 승인된 사업자가 없으면 VENDOR 권한도 회수돼요.",
+      description: "취소하면 이 사업자로 진행 중이던 신청 중 아직 시작 안 한 행사 건만 자동으로 취소·환불돼요. 이미 시작된 행사 건은 자동으로 처리되지 않으니 필요하면 따로 확인해 주세요. 다른 승인된 사업자가 없으면 VENDOR 권한도 회수돼요.",
       confirmLabel: "취소 처리",
     });
     if (!proceed) return;

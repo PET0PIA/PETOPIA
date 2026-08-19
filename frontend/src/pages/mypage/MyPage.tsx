@@ -1,6 +1,6 @@
 import { CalendarDays, Heart, IdCard, PawPrint, Star, Ticket, User } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -8,20 +8,27 @@ import { SectionHeader } from "../../components/common/SectionHeader";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Table } from "../../components/ui/Table";
+import { useConfirm } from "../../components/ui/useConfirm";
 import { ApiError } from "../../api/client";
 import { getMyPets, type Pet } from "../../api/pet";
-import { getMe, type UserMe } from "../../api/user";
+import { getMe, withdraw, type UserMe } from "../../api/user";
+import { useAuth } from "../../contexts/AuthContext";
 
 /** 마이페이지 - 내 정보 요약, 반려동물 목록, 다른 도메인 바로가기를 모아둔 허브.
  * "내 예약 목록"/"내 행사 신청 목록"은 이미 각자 페이지가 있어 여기서 데이터를 새로
  * 가져오지 않고 링크만 연결한다 - 중복 구현을 피한다. */
 export function MyPage() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
   const [me, setMe] = useState<UserMe | null>(null);
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [petsLoading, setPetsLoading] = useState(true);
   const [petsError, setPetsError] = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
   const aliveRef = useRef(true);
 
   // 반려동물 목록만 따로 불러온다. loading/error를 리셋하지 않고 요청만 보낸다 - 이펙트
@@ -45,6 +52,29 @@ export function MyPage() {
     setPetsLoading(true);
     setPetsError(null);
     fetchPets();
+  }
+
+  async function handleWithdraw() {
+    const confirmed = await confirm({
+      title: "정말 탈퇴하시겠어요?",
+      description: "탈퇴하면 되돌릴 수 없어요. 진행 중인 예약이나 결제가 있으면 먼저 처리한 뒤 다시 시도해 주세요.",
+      confirmLabel: "탈퇴",
+    });
+    if (!confirmed) return;
+
+    setWithdrawing(true);
+    setWithdrawError(null);
+    try {
+      await withdraw();
+      // 백엔드가 이미 refresh token/access token을 무효화했지만, 프론트 세션 상태(user/status)도
+      // 지워야 로그인한 것처럼 보이는 화면이 안 남는다. logout()은 실패해도 finally에서
+      // 클라이언트 상태를 정리하므로(AuthContext 참고) 여기선 결과를 신경 쓰지 않아도 된다.
+      await logout();
+      navigate("/");
+    } catch (err) {
+      setWithdrawError(err instanceof ApiError ? err.message : "탈퇴에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setWithdrawing(false);
+    }
   }
 
   useEffect(() => {
@@ -221,6 +251,16 @@ export function MyPage() {
           </Link>
         </div>
       </section>
+
+      {/* 위험한 액션이라 다른 버튼들과 나란히 두지 않고 페이지 맨 아래에 따로 둔다(오클릭 방지). */}
+      <section className="mt-12 border-t border-line pt-6 text-right">
+        {withdrawError && <p className="mb-2 text-sm font-bold text-primary-strong">{withdrawError}</p>}
+        <Button variant="ghost" onClick={handleWithdraw} disabled={withdrawing}>
+          {withdrawing ? "탈퇴 처리 중…" : "회원 탈퇴"}
+        </Button>
+      </section>
+
+      {confirmDialog}
     </PageContainer>
   );
 }
