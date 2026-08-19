@@ -17,20 +17,22 @@ import { Table } from "../../components/ui/Table";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 
-type FilterKind = "target" | "actor" | "action";
-
-const filterKindLabels: Record<FilterKind, string> = {
-  target: "대상별",
-  actor: "행위자별",
-  action: "액션 타입별",
-};
-
 const targetTypeLabels: Record<TargetType, string> = {
   ACCOUNT: "계정",
   FAIR: "행사",
   RESERVATION: "예약",
   SETTLEMENT: "정산",
   COMMISSION_RATE: "수수료율",
+};
+
+// 대상 ID는 대상 종류에 따라 실제로 가리키는 게 다르다(계정=회원번호, 행사=행사ID 등) -
+// 어떤 숫자를 넣어야 하는지 감이 안 오는 필드라 예시를 같이 보여준다.
+const targetIdHints: Record<TargetType, string> = {
+  ACCOUNT: "회원번호. 계정 관리 목록에서 확인",
+  FAIR: "행사 ID. 행사 상세 화면 URL에서 확인",
+  RESERVATION: "예약 ID",
+  SETTLEMENT: "정산 ID. 정산 목록에서 확인",
+  COMMISSION_RATE: "수수료율 ID",
 };
 
 const actionTypeLabels: Record<ActionType, string> = {
@@ -62,12 +64,15 @@ function isValidId(value: string) {
 }
 
 export function AuditLogPage() {
-  const [filterKind, setFilterKind] = useState<FilterKind>("target");
   const [targetTypeInput, setTargetTypeInput] = useState<TargetType | "">("");
   const [targetIdInput, setTargetIdInput] = useState("");
   const [actorIdInput, setActorIdInput] = useState("");
   const [actionTypeInput, setActionTypeInput] = useState<ActionType | "">("");
+  const [startDateInput, setStartDateInput] = useState("");
+  const [endDateInput, setEndDateInput] = useState("");
 
+  // null이면 아직 한 번도 조회 버튼을 안 누른 상태 - 필터를 하나도 안 채워도 조회는 되지만
+  // (백엔드가 조건 없으면 전체를 돌려줌), 페이지 진입 즉시 전체 조회를 쏘진 않는다.
   const [appliedQuery, setAppliedQuery] = useState<AuditLogQuery | null>(null);
   const [page, setPage] = useState(0);
   const [response, setResponse] = useState<AuditLogListResponse | null>(null);
@@ -96,26 +101,32 @@ export function AuditLogPage() {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (filterKind === "target") {
-      if (targetTypeInput === "" || !isValidId(targetIdInput)) {
-        setLoadError("대상 종류와 대상 ID를 모두 선택/입력해 주세요.");
-        return;
-      }
-      setAppliedQuery({ targetType: targetTypeInput, targetId: Number(targetIdInput) });
-    } else if (filterKind === "actor") {
-      if (!isValidId(actorIdInput)) {
-        setLoadError("행위자 사용자 ID를 숫자로 입력해 주세요.");
-        return;
-      }
-      setAppliedQuery({ actorUserId: Number(actorIdInput) });
-    } else {
-      if (actionTypeInput === "") {
-        setLoadError("액션 타입을 선택해 주세요.");
-        return;
-      }
-      setAppliedQuery({ actionType: actionTypeInput });
+    // 대상종류/ID는 짝으로만 의미가 있다 - 하나만 채워졌으면 조회 조건에서 빠뜨리지 않도록 막는다.
+    const targetFilled = targetTypeInput !== "" || targetIdInput !== "";
+    if (targetFilled && (targetTypeInput === "" || !isValidId(targetIdInput))) {
+      setLoadError("대상 종류와 대상 ID는 함께 선택/입력해 주세요.");
+      return;
+    }
+    if (actorIdInput !== "" && !isValidId(actorIdInput)) {
+      setLoadError("행위자 사용자 ID를 숫자로 입력해 주세요.");
+      return;
+    }
+    if (startDateInput && endDateInput && startDateInput > endDateInput) {
+      setLoadError("시작일이 종료일보다 늦을 수 없어요.");
+      return;
     }
 
+    const query: AuditLogQuery = {};
+    if (targetTypeInput !== "" && isValidId(targetIdInput)) {
+      query.targetType = targetTypeInput;
+      query.targetId = Number(targetIdInput);
+    }
+    if (actorIdInput !== "") query.actorUserId = Number(actorIdInput);
+    if (actionTypeInput !== "") query.actionType = actionTypeInput;
+    if (startDateInput) query.startDate = startDateInput;
+    if (endDateInput) query.endDate = endDateInput;
+
+    setAppliedQuery(query);
     setLoadError(null);
     setPage(0);
   }
@@ -124,50 +135,47 @@ export function AuditLogPage() {
     <div className="mx-auto max-w-6xl py-2">
       <PageHeader eyebrow="전체 운영" title="감사 로그" description="관리자·시스템의 주요 조치 이력을 조회해요." />
 
-      <form onSubmit={handleSubmit} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-        <div className="w-full sm:w-44">
-          <label htmlFor="filter-kind" className="mb-1.5 block text-sm font-bold text-ink">조회 조건</label>
-          <Select id="filter-kind" value={filterKind} onChange={(event) => setFilterKind(event.target.value as FilterKind)}>
-            {Object.entries(filterKindLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        {filterKind === "target" && (
-          <>
-            <div className="w-full sm:w-40">
-              <label htmlFor="target-type" className="mb-1.5 block text-sm font-bold text-ink">대상 종류</label>
-              <Select id="target-type" value={targetTypeInput} onChange={(event) => setTargetTypeInput(event.target.value as TargetType)}>
-                <option value="">선택</option>
-                {Object.entries(targetTypeLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="flex-1">
-              <label htmlFor="target-id" className="mb-1.5 block text-sm font-bold text-ink">대상 ID</label>
-              <Input id="target-id" type="number" min={1} value={targetIdInput} onChange={(event) => setTargetIdInput(event.target.value)} placeholder="예: 1" />
-            </div>
-          </>
-        )}
-
-        {filterKind === "actor" && (
-          <div className="flex-1">
+      <form onSubmit={handleSubmit} className="surface mb-6 flex flex-col gap-4 p-5">
+        <p className="text-xs text-muted">필요한 조건만 채워서 조합할 수 있어요. 전부 비워두면 전체를 최신순으로 보여줘요.</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <label htmlFor="target-type" className="mb-1.5 block text-sm font-bold text-ink">대상 종류</label>
+            <Select
+              id="target-type"
+              value={targetTypeInput}
+              onChange={(event) => {
+                setTargetTypeInput(event.target.value as TargetType);
+                setTargetIdInput(""); // 대상 종류가 바뀌면 이전 값은 의미가 없으니 비우고 새 placeholder를 보여준다
+              }}
+            >
+              <option value="">전체</option>
+              {Object.entries(targetTypeLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label htmlFor="target-id" className="mb-1.5 block text-sm font-bold text-ink">대상 ID</label>
+            <Input
+              id="target-id"
+              type="number"
+              min={1}
+              value={targetIdInput}
+              onChange={(event) => setTargetIdInput(event.target.value)}
+              disabled={targetTypeInput === ""}
+              placeholder={targetTypeInput === "" ? "대상 종류를 먼저 선택하세요" : targetIdHints[targetTypeInput]}
+            />
+          </div>
+          <div>
             <label htmlFor="actor-id" className="mb-1.5 block text-sm font-bold text-ink">행위자 사용자 ID</label>
             <Input id="actor-id" type="number" min={1} value={actorIdInput} onChange={(event) => setActorIdInput(event.target.value)} placeholder="예: 1" />
           </div>
-        )}
-
-        {filterKind === "action" && (
-          <div className="flex-1">
+          <div>
             <label htmlFor="action-type" className="mb-1.5 block text-sm font-bold text-ink">액션 타입</label>
             <Select id="action-type" value={actionTypeInput} onChange={(event) => setActionTypeInput(event.target.value as ActionType)}>
-              <option value="">선택</option>
+              <option value="">전체</option>
               {Object.entries(actionTypeLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -175,12 +183,22 @@ export function AuditLogPage() {
               ))}
             </Select>
           </div>
-        )}
+          <div>
+            <label htmlFor="start-date" className="mb-1.5 block text-sm font-bold text-ink">시작일</label>
+            <Input id="start-date" type="date" value={startDateInput} onChange={(event) => setStartDateInput(event.target.value)} />
+          </div>
+          <div>
+            <label htmlFor="end-date" className="mb-1.5 block text-sm font-bold text-ink">종료일</label>
+            <Input id="end-date" type="date" value={endDateInput} onChange={(event) => setEndDateInput(event.target.value)} />
+          </div>
+        </div>
 
-        <Button type="submit" variant="outline">
-          <Search size={16} />
-          조회
-        </Button>
+        <div className="flex justify-end">
+          <Button type="submit" variant="outline">
+            <Search size={16} />
+            조회
+          </Button>
+        </div>
       </form>
 
       {loadError && (
@@ -191,7 +209,7 @@ export function AuditLogPage() {
       )}
 
       {!appliedQuery && !loading && (
-        <EmptyState title="조회 조건을 선택해 주세요" description="대상, 행위자, 액션 타입 중 하나를 골라 조회하면 감사 로그가 표시돼요." />
+        <EmptyState title="조회 버튼을 눌러 주세요" description="조건을 채우지 않고 조회하면 전체 로그를 최신순으로 보여줘요." />
       )}
 
       {loading && <div className="surface grid min-h-40 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
