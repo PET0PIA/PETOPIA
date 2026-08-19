@@ -44,6 +44,7 @@ public class BusinessRegisterRequest {
     @NotBlank(message = "사업자등록증 파일을 첨부해 주세요.")
     private String businessRegDocKey; // presigned 업로드로 받은 임시 objectKey
 
+    @NotNull(message = "이용약관 동의 여부를 확인할 수 없습니다.")
     @AssertTrue(message = "이용약관에 동의해야 등록할 수 있습니다.")
     private Boolean agreedTerms;
 
