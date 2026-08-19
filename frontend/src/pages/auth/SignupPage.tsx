@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, MailCheck } from "lucide-react";
+import { AlertCircle, MailCheck } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
@@ -9,6 +9,7 @@ import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
 import { checkEmailAvailable, resendVerification, signup, verifyEmail, type EmailSignupRequest } from "../../api/auth";
 import { maxBirthDate, today } from "../../utils/date";
+import { SignupWelcomeCard } from "./SignupWelcomeCard";
 
 interface FormState {
   email: string;
@@ -186,14 +187,12 @@ export function SignupPage() {
   if (step === "verified") {
     return (
       <PageContainer className="py-10">
-        <Card className="mx-auto max-w-md p-8 text-center">
-          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-leaf-soft text-ink">
-            <CheckCircle2 size={26} />
-          </div>
-          <h1 className="text-xl font-extrabold">이메일 인증이 완료됐어요.</h1>
-          <p className="mt-2 text-sm leading-6 text-muted">이제 로그인할 수 있어요.</p>
-          <Button className="mt-6 w-full" onClick={() => navigate("/login")}>로그인하러 가기</Button>
-        </Card>
+        <SignupWelcomeCard
+          registerLabel="로그인하고 반려동물 등록하기"
+          laterLabel="로그인하러 가기"
+          onRegisterPet={() => navigate("/login", { state: { from: "/mypage/pets/new" } })}
+          onLater={() => navigate("/login")}
+        />
       </PageContainer>
     );
   }

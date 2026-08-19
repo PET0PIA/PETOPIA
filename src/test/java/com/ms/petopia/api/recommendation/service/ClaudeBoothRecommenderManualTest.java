@@ -53,7 +53,7 @@ class ClaudeBoothRecommenderManualTest {
         );
 
         List<ClaudeBoothRecommender.RecommendationEntry> result =
-                recommender.recommend(pet, "관절에 좋은 거 찾아요", List.of(boothForDog, boothForCat));
+                recommender.recommend(List.of(pet), "관절에 좋은 거 찾아요", List.of(boothForDog, boothForCat));
 
         result.forEach(entry -> System.out.println("boothId=" + entry.boothId() + ", reason=" + entry.reason()));
 

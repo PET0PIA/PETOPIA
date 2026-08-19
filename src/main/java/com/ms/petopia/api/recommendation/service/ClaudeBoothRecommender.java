@@ -34,9 +34,14 @@ public class ClaudeBoothRecommender {
 
     private static final String SYSTEM_PROMPT = """
             당신은 반려동물 박람회 부스 추천 도우미입니다.
-            주어진 반려동물 정보(종, 나이, 크기)와(또는) 사용자가 찾는 물건 설명을 참고해서,
-            아래 부스 목록 중 가장 적합한 부스를 최대 5개까지 골라 추천하세요.
-            목록에 없는 부스는 추천하지 마세요. 추천할 부스가 하나도 없으면 빈 목록을 반환하세요.
+            주어진 반려동물 정보(종, 나이, 크기 - 여러 마리일 수 있습니다)와(또는) 사용자가 찾는
+            물건 설명을 참고해서, 아래 부스 목록 중 가장 적합한 부스를 최대 5개까지 골라 추천하세요.
+            사용자가 구체적으로 원하는 물건을 적지 않았더라도, 반려동물 정보만으로 그 반려동물의
+            종·특성에 어울리는 부스(대상동물이 그 종과 일치하거나 모든 동물 공용인 부스)를 폭넓게
+            추천하세요 - "특별한 요청이 없다"는 이유로 빈 목록을 반환하지 마세요.
+            목록에 없는 부스는 추천하지 마세요. 후보 부스 중 반려동물/요청과 관련 있는 부스가
+            정말 하나도 없을 때만 빈 목록을 반환하세요.
+            반려동물이 여러 마리면 reason에 어느 반려동물에게 맞는지 이름으로 언급하세요.
             reason은 한국어로 1~2문장으로 간결하게 작성하세요.
             """;
 
@@ -49,7 +54,7 @@ public class ClaudeBoothRecommender {
         this.client = enabled ? AnthropicOkHttpClient.builder().apiKey(apiKey).build() : null;
     }
 
-    public List<RecommendationEntry> recommend(PetResponse pet, String need, List<BoothCandidate> candidates) {
+    public List<RecommendationEntry> recommend(List<PetResponse> pets, String need, List<BoothCandidate> candidates) {
         if (!enabled) {
             throw new CommonException(ErrorCode.AI_RECOMMENDATION_UNAVAILABLE);
         }
@@ -59,7 +64,7 @@ public class ClaudeBoothRecommender {
                 .maxTokens(MAX_TOKENS)
                 .system(SYSTEM_PROMPT)
                 .outputConfig(RecommendationResult.class)
-                .addUserMessage(buildUserPrompt(pet, need, candidates))
+                .addUserMessage(buildUserPrompt(pets, need, candidates))
                 .build();
 
         try {
@@ -77,15 +82,23 @@ public class ClaudeBoothRecommender {
 
     //동선 추천용 시스템 프롬프트
     private static final String ROUTE_SYSTEM_PROMPT = """
-            당신은 반려동물 박람회 부스 추천 도우미입니다.
-            주어진 반려동물 정보(종, 나이, 크기)와(또는) 사용자가 찾는 물건 설명을 참고해서,
-            아래 부스 목록 중 가장 적합한 부스를 최대 8개, 그 외 추천하면 좋을 부스를 최대 3개까지 골라 추천하세요.
-            목록에 없는 부스는 추천하지 마세요. 추천할 부스가 하나도 없으면 빈 목록을 반환하세요.
+            당신은 반려동물 박람회 부스 추천 도우미입니다. 이번 추천은 관람객이 실제로 걸어서
+            돌아볼 "동선"을 만드는 용도이므로, 딱 맞는 부스가 적더라도 가능하면 최소 3~4개 이상을
+            추천해서 여러 곳을 도는 경로가 되게 하세요(후보 부스 자체가 그보다 적으면 있는 만큼만).
+            주어진 반려동물 정보(종, 나이, 크기 - 여러 마리일 수 있습니다)와(또는) 사용자가 찾는
+            물건 설명을 참고해서, 아래 부스 목록 중 가장 적합한 부스를 최대 8개(matched=true)
+            고르고, 부족하면 그 외 겸사겸사 둘러볼만한 부스를 최대 3개(matched=false)까지 추가해서
+            채우세요. 사용자가 구체적으로 원하는 물건을 적지 않았더라도, 반려동물 정보만으로 그
+            반려동물의 종·특성에 어울리는 부스(대상동물이 그 종과 일치하거나 모든 동물 공용인
+            부스)를 폭넓게 추천하세요 - "특별한 요청이 없다"는 이유로 빈 목록을 반환하지 마세요.
+            목록에 없는 부스는 추천하지 마세요. 후보 부스 중 반려동물/요청과 관련 있는 부스가
+            정말 하나도 없을 때만 빈 목록을 반환하세요.
+            반려동물이 여러 마리면 reason에 어느 반려동물에게 맞는지 이름으로 언급하세요.
             reason은 한국어로 1~2문장으로 간결하게 작성하세요.
             """;
 
     //동선 추천용 Claude 호출. recommend()와 구조는 같고, 결과에 matched(맞춤/추가 구분)가 붙는 버전
-    public List<RouteRecommendationEntry> recommendForRoute(PetResponse pet, String need, List<BoothCandidate> candidates) {
+    public List<RouteRecommendationEntry> recommendForRoute(List<PetResponse> pets, String need, List<BoothCandidate> candidates) {
         if (!enabled) {
             throw new CommonException(ErrorCode.AI_RECOMMENDATION_UNAVAILABLE);
         }
@@ -95,7 +108,7 @@ public class ClaudeBoothRecommender {
                 .maxTokens(MAX_TOKENS)
                 .system(ROUTE_SYSTEM_PROMPT)
                 .outputConfig(RouteRecommendationResult.class)
-                .addUserMessage(buildUserPrompt(pet, need, candidates))
+                .addUserMessage(buildUserPrompt(pets, need, candidates))
                 .build();
 
         try {
@@ -111,21 +124,26 @@ public class ClaudeBoothRecommender {
         }
     }
 
-    private String buildUserPrompt(PetResponse pet, String need, List<BoothCandidate> candidates) {
+    private String buildUserPrompt(List<PetResponse> pets, String need, List<BoothCandidate> candidates) {
         StringBuilder sb = new StringBuilder();
 
         //PetResponse는 record라 getXxx()가 아니라 xxx()로 값을 꺼낸다(레코드 접근자 이름 규칙)
-        if (pet != null) {
-            int age = Period.between(pet.birthDate(), LocalDate.now()).getYears();
-            sb.append("반려동물 정보: ")
-                    .append(pet.species()).append(", ")
-                    .append(pet.breed()).append(", ")
-                    .append(age).append("살, ")
-                    .append("MALE".equals(pet.gender()) ? "수컷" : "암컷");
-            if (Boolean.TRUE.equals(pet.isNeutered())) {
-                sb.append(", 중성화 완료");
+        //여러 마리를 한 번에 보낼 수 있어서 번호를 붙여 나열한다 - 어느 부스가 어느 반려동물에게
+        //맞는지 Claude가 구분할 수 있게 각 부스의 reason에서 이름을 언급하도록 시스템 프롬프트에서도 안내한다.
+        if (pets != null && !pets.isEmpty()) {
+            sb.append("반려동물 정보:\n");
+            for (PetResponse pet : pets) {
+                int age = Period.between(pet.birthDate(), LocalDate.now()).getYears();
+                sb.append("- ").append(pet.name()).append(": ")
+                        .append(pet.species()).append(", ")
+                        .append(pet.breed()).append(", ")
+                        .append(age).append("살, ")
+                        .append("MALE".equals(pet.gender()) ? "수컷" : "암컷");
+                if (Boolean.TRUE.equals(pet.isNeutered())) {
+                    sb.append(", 중성화 완료");
+                }
+                sb.append("\n");
             }
-            sb.append("\n");
         }
 
         if (need != null && !need.isBlank()) {
