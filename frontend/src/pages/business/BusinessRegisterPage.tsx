@@ -10,6 +10,7 @@ import { AttachmentUploadField } from "../../components/ui/AttachmentUploadField
 import { ApiError } from "../../api/client";
 import { registerBusiness, type BusinessRegisterRequest } from "../../api/business";
 import { useAuth } from "../../contexts/AuthContext";
+import { BusinessTermsAgreement } from "../../components/business/BusinessTermsAgreement";
 
 interface FormState {
   name: string;
@@ -19,6 +20,7 @@ interface FormState {
   address: string;
   phone: string;
   website: string;
+  agreedTerms: boolean;
 }
 
 const initialForm: FormState = {
@@ -29,6 +31,7 @@ const initialForm: FormState = {
   address: "",
   phone: "",
   website: "",
+  agreedTerms: false,
 };
 
 function label(text: string, required = false) {
@@ -44,6 +47,7 @@ function validate(form: FormState, documentObjectKey: string | null): string[] {
   if (form.address.trim() === "") errors.push("사업장 주소를 입력해 주세요.");
   if (form.phone.trim() === "") errors.push("연락처를 입력해 주세요.");
   if (!documentObjectKey) errors.push("사업자등록증을 첨부해 주세요.");
+  if (!form.agreedTerms) errors.push("사업자 등록 이용약관에 동의해 주세요.");
   return errors;
 }
 
@@ -172,6 +176,11 @@ export function BusinessRegisterPage() {
             />
           </Card>
         </section>
+
+        <BusinessTermsAgreement
+          agreed={form.agreedTerms}
+          onAgreedChange={(checked) => update("agreedTerms", checked)}
+        />
 
         <div className="flex justify-end">
           <Button type="submit" disabled={submitting || documentUploading}>
