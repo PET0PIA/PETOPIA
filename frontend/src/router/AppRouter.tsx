@@ -75,6 +75,7 @@ import { BoothEditPage } from "../pages/booth/BoothEditPage";
 import { BoothFavoritesPage } from "../pages/booth/BoothFavoritesPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { BusinessesByFairPage } from "../pages/business/BusinessesByFairPage";
+import { BoothRecommendationPage } from "../pages/fair/BoothRecommendationPage";
 import { FairBoothsPage } from "../pages/fair/FairBoothsPage";
 import { MyBoothsPage } from "../pages/booth/MyBoothsPage";
 import { ApplicationEditPage } from "../pages/application/ApplicationEditPage";
@@ -199,8 +200,8 @@ export function AppRouter() {
           <Route path="/booths/scan" element={<Navigate to="/vendor/scan" replace />} />
           <Route path="/businesses" element={<BusinessesByFairPage />} />
           <Route path="/fairs/:fairId/booths" element={<FairBoothsPage />} />
-          {/* 부스 추천(POST /booth-recommendations). 화면 미구현 자리표시. */}
-          <Route path="/fairs/:fairId/booth-recommendations" element={<NotImplementedPage title="부스 추천" />} />
+          {/* 부스 추천 + 동선 추천(같은 입력으로 API 2개를 호출해 탭으로 결과를 나눠 보여준다). */}
+          <Route path="/fairs/:fairId/booth-recommendations" element={<BoothRecommendationPage />} />
           {/* 옛 후기 작성 주소. 전용 화면 대신 행사 상세의 리뷰 섹션을 작성 상태로 연다. */}
           <Route path="/fairs/:fairId/reviews/new" element={<ReviewWriteRedirect />} />
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />

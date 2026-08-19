@@ -19,4 +19,6 @@ public class BoothSlotLocation {
     private BigDecimal posY;
     private BigDecimal width;
     private BigDecimal height;
+    //동선 추천 화면에서 배치도 배경으로 쓴다. 업로드 안 한 행사면 null(프론트가 배경 없이 격자만 그림).
+    private String floorPlanImageUrl;
 }

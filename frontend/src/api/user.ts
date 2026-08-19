@@ -36,3 +36,8 @@ export function getMe() {
 export function updateMe(payload: UpdateUserRequest) {
   return apiClient.patch<UserMe>("/api/users/me", payload);
 }
+
+/** DELETE /api/users/me. 진행 중인 예약/결제가 있으면 WITHDRAWAL_BLOCKED(409)로 실패한다. */
+export function withdraw() {
+  return apiClient.delete<void>("/api/users/me");
+}

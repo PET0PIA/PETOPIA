@@ -2,9 +2,35 @@ import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { getActiveBanners, type Banner } from "../../api/banner";
 import { SmartLink } from "../common/SmartLink";
+import homeHeroPetfair from "../../assets/home-hero-petfair.png";
 
 const SLIDE_MS = 3000;
 const prefersReducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// 관리자가 등록한 배너가 하나도 없을 때 대신 보여줄 기본 배너. bannerId는 실제 배너와
+// 겹치지 않는 음수를 써서(DB는 AUTO_INCREMENT라 양수만 나옴) 자연스럽게 구분되게 한다.
+const FALLBACK_BANNER: Banner = {
+  bannerId: -1,
+  title: "우리 브랜드를\nPETOPIA에 소개해보세요",
+  eyebrow: "광고 문의",
+  subtitle: "반려동물을 사랑하는 방문자들에게 홈 화면 배너로 브랜드를 알릴 수 있어요.",
+  imageKey: homeHeroPetfair,
+  linkUrl: "/advertising",
+  linkTarget: "SELF",
+  linkLabel: "광고 문의하기",
+  link2Label: null,
+  link2Url: null,
+  link2Target: null,
+  // 실제 행사 배너들은 각자 화사한 파스텔(--color-point-*)을 쓰지만, 이건 진짜 행사가
+  // 아니라 광고 영업용 기본 배너라 사이트 전반의 무채색 톤(카드·서피스에 쓰는 회색)과
+  // 맞춰 차분하게 둔다 - 다른 진짜 배너들 사이에 섞였을 때도 튀지 않게.
+  bgColor: "var(--color-surface-alt)",
+  sortOrder: 0,
+  active: true,
+  startedAt: null,
+  endedAt: null,
+  createdAt: "",
+};
 
 export function HeroSection() {
   const [banners, setBanners] = useState<Banner[] | null>(null);
@@ -37,11 +63,12 @@ export function HeroSection() {
   }, []);
 
   // 로딩 중에는 실제 히어로와 비슷한 높이의 빈 영역을 잡아둬서, 데이터가 도착했을 때
-  // 레이아웃이 출렁이지 않게 한다. 노출 중인 배너가 0개로 확정되면 섹션 자체를 그리지 않는다.
+  // 레이아웃이 출렁이지 않게 한다. 노출 중인 배너가 0개로 확정되면 광고 문의로 이어지는
+  // 기본 배너를 대신 보여준다 - 완전히 빈 화면보다는 광고 영업 기회로 쓰는 편이 낫다.
   if (!banners) return <section className="h-[26rem]" aria-hidden="true" />;
-  if (banners.length === 0) return null;
+  const slides = banners.length > 0 ? banners : [FALLBACK_BANNER];
 
-  const slide = banners[Math.min(index, banners.length - 1)];
+  const slide = slides[Math.min(index, slides.length - 1)];
   const hasPrimaryCta = Boolean(slide.linkLabel && slide.linkUrl);
   const hasSecondaryCta = Boolean(slide.link2Label && slide.link2Url);
 

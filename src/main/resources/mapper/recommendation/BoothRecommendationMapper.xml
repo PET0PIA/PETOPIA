@@ -44,6 +44,7 @@
         SELECT b.booth_id
              , h.hall_id
              , h.name       AS hall_name
+             , h.floor_plan_image_url
              , bs.slot_number
              , bs.pos_x
              , bs.pos_y
