@@ -36,8 +36,8 @@ public class RecommendationService {
 
     public List<BoothRecommendationItem> recommend(Long fairId, Long userId, BoothRecommendationRequest request) {
 
-        //petId/need 검증 + petId 있으면 로그인·소유권 검증까지 (recommendRoute()와 공유하는 로직)
-        PetResponse pet = resolveTarget(userId, request);
+        //petIds/need 검증 + petIds 있으면 로그인·소유권 검증까지 (recommendRoute()와 공유하는 로직)
+        List<PetResponse> pets = resolveTarget(userId, request);
 
         //행사 존재 확인
         if (!boothRecommendationMapper.existsFair(fairId)) {
@@ -52,7 +52,7 @@ public class RecommendationService {
 
         //Claude 호출
         List<ClaudeBoothRecommender.RecommendationEntry> entries =
-                claudeBoothRecommender.recommend(pet, request.getNeed(), candidates);
+                claudeBoothRecommender.recommend(pets, request.getNeed(), candidates);
 
         //Claude 결과(boothId+reason)에 부스 이름을 붙여서 최종 응답으로 변환
         return toResponse(entries, candidates);
@@ -113,26 +113,30 @@ public class RecommendationService {
                 ));
     }
 
-    //petId/need 검증 + petId가 있으면 로그인·소유권 검증까지 하고 PetResponse를 돌려준다 (없으면 null)
-    private PetResponse resolveTarget(Long userId, BoothRecommendationRequest request) {
-        boolean noPet = request.getPetId() == null;
+    //petIds/need 검증 + petIds가 있으면 로그인·소유권 검증까지 하고 PetResponse 목록을 돌려준다
+    //(없으면 빈 리스트). petService.getPet()이 본인 소유가 아닌 petId엔 PET_ACCESS_DENIED(403)를
+    //던지므로, 여러 마리 중 하나라도 남의 것이면 그 시점에 전체 요청이 막힌다.
+    private List<PetResponse> resolveTarget(Long userId, BoothRecommendationRequest request) {
+        boolean noPet = request.getPetIds() == null || request.getPetIds().isEmpty();
         boolean noNeed = request.getNeed() == null || request.getNeed().isBlank();
         if (noPet && noNeed) {
             throw new CommonException(ErrorCode.RECOMMENDATION_TARGET_REQUIRED);
         }
-        if (request.getPetId() == null) {
-            return null;
+        if (noPet) {
+            return List.of();
         }
         if (userId == null) {
             throw new CommonException(ErrorCode.UNAUTHORIZED);
         }
-        return petService.getPet(userId, request.getPetId());
+        return request.getPetIds().stream()
+                .map(petId -> petService.getPet(userId, petId))
+                .toList();
     }
 
     //동선 추천. 홀별로 그룹핑해서 각 홀 안에서 최단 동선 순서를 계산한다.
     public List<HallRoute> recommendRoute(Long fairId, Long userId, BoothRecommendationRequest request) {
 
-        PetResponse pet = resolveTarget(userId, request);
+        List<PetResponse> pets = resolveTarget(userId, request);
 
         //행사 존재 확인
         if (!boothRecommendationMapper.existsFair(fairId)) {
@@ -147,7 +151,7 @@ public class RecommendationService {
 
         //Claude 호출 (matched 최대 8 + extra 최대 3)
         List<ClaudeBoothRecommender.RouteRecommendationEntry> entries =
-                claudeBoothRecommender.recommendForRoute(pet, request.getNeed(), candidates);
+                claudeBoothRecommender.recommendForRoute(pets, request.getNeed(), candidates);
 
         return toHallRoutes(entries, candidates);
     }
@@ -219,11 +223,20 @@ public class RecommendationService {
                         entry.reason(),
                         entry.matched(),
                         slot.getSlotNumber(),
-                        order++
+                        order++,
+                        slot.getPosX(),
+                        slot.getPosY(),
+                        slot.getWidth(),
+                        slot.getHeight()
                 ));
             }
 
-            hallRoutes.add(new HallRoute(hallGroup.getKey(), slotsInHall.get(0).getHallName(), stops));
+            hallRoutes.add(new HallRoute(
+                    hallGroup.getKey(),
+                    slotsInHall.get(0).getHallName(),
+                    slotsInHall.get(0).getFloorPlanImageUrl(),
+                    stops
+            ));
         }
 
         //홀 나열 순서는 오름차순
