@@ -9,6 +9,9 @@ function formatReplyDate(iso: string): string {
   return /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10).replace(/-/g, ".") : iso;
 }
 
+// 백엔드 FairReviewReplyService.MAX_CONTENT_LENGTH(리뷰 내용 제한과 동일)와 맞춘 길이 제한.
+const MAX_CONTENT_LENGTH = 1000;
+
 interface AdminReviewReplyFormProps {
   fairId: number;
   reviewId: number;
@@ -61,6 +64,10 @@ export function AdminReviewReplyForm({ fairId, reviewId }: AdminReviewReplyFormP
       setError("답글 내용을 입력해주세요.");
       return;
     }
+    if (content.length > MAX_CONTENT_LENGTH) {
+      setError(`답글 내용은 ${MAX_CONTENT_LENGTH}자를 초과할 수 없어요.`);
+      return;
+    }
     setError(null);
     setSubmitting(true);
     const request = existingUpdatedAt != null ? updateFairReviewReply(fairId, reviewId, content) : createFairReviewReply(fairId, reviewId, content);
@@ -99,8 +106,12 @@ export function AdminReviewReplyForm({ fairId, reviewId }: AdminReviewReplyFormP
         value={content}
         onChange={(e) => setContent(e.target.value)}
         placeholder="리뷰에 답글을 남겨주세요."
+        maxLength={MAX_CONTENT_LENGTH}
         disabled={submitting}
       />
+      <p className="text-right text-xs text-muted">
+        {content.length}/{MAX_CONTENT_LENGTH}
+      </p>
       {error && <p className="text-sm font-bold text-primary-strong">{error}</p>}
       <div className="flex justify-end gap-2">
         {existingUpdatedAt != null && (

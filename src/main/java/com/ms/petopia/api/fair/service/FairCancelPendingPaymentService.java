@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 취소된 행사에 딸린 PENDING 예약금·참가비 결제를 취소한다({@code PaymentService
+ * 취소된 행사에 딸린 PENDING·WAITING_FOR_DEPOSIT 예약금·참가비 결제를 취소한다({@code PaymentService
  * #CALLER_PAYMENT_TYPES}에서 FAIR 캐스터가 이 두 유형까지 다룰 수 있게 확장한 권한을 실제로
  * 쓰는 쪽). 이미 완료(COMPLETED)된 결제를 환불하는 {@link FairCancelRefundOrchestrationService}와
  * 같은 방향("Fair 도메인이 취소된 행사의 결제 뒷정리를 전담")이지만, 별도 클래스로 뒀다.
@@ -38,6 +38,14 @@ public class FairCancelPendingPaymentService {
      * 결제라 여기서 자동 정리 대상으로 다루지 않는다(관리자 수동 처리). */
     private static final Set<String> PENDING_CANCELABLE_TYPES = Set.of("RESERVATION_DEPOSIT", "VENDOR_FEE");
 
+    /**
+     * 취소 대상으로 훑을 결제 상태. WAITING_FOR_DEPOSIT(가상계좌 발급, 아직 입금 전)도
+     * PENDING과 마찬가지로 아직 실제 돈은 안 움직였으므로 포함한다(PaymentService의
+     * cancelPayment가 실제로 받아주는 상태와 일치시켜야 한다 — 2026-08-18 CodeRabbit 리뷰
+     * 지적: 안 그러면 행사가 취소돼도 가상계좌 결제 건은 계속 대기 상태로 남는다).
+     */
+    private static final List<String> CANCELABLE_STATUSES = List.of("PENDING", "WAITING_FOR_DEPOSIT");
+
     private final FairMapper fairMapper;
     private final PaymentService paymentService;
 
@@ -56,32 +64,35 @@ public class FairCancelPendingPaymentService {
     private int cancelForFair(Long fairId) {
         int canceled = 0;
         for (String paymentType : PENDING_CANCELABLE_TYPES) {
-            try {
-                canceled += cancelForType(fairId, paymentType);
-            } catch (RuntimeException e) {
-                // 이 결제유형만 실패로 남기고 다음 유형·다음 행사로 계속 진행한다 - PENDING으로
-                // 남아있는 한 다음 스케줄에서 자연히 다시 시도된다.
-                log.warn("행사 취소 PENDING 결제 취소 실패. fairId={}, paymentType={}", fairId, paymentType, e);
+            for (String status : CANCELABLE_STATUSES) {
+                try {
+                    canceled += cancelForType(fairId, paymentType, status);
+                } catch (RuntimeException e) {
+                    // 이 (결제유형,상태) 조합만 실패로 남기고 계속 진행한다 - 대상 상태로
+                    // 남아있는 한 다음 스케줄에서 자연히 다시 시도된다.
+                    log.warn("행사 취소 결제 취소 실패. fairId={}, paymentType={}, status={}",
+                            fairId, paymentType, status, e);
+                }
             }
         }
         return canceled;
     }
 
     /**
-     * 같은 (fairId, paymentType, PENDING) 조건으로 반복 조회하며 취소한다. 페이지를 앞으로
+     * 같은 (fairId, paymentType, status) 조건으로 반복 조회하며 취소한다. 페이지를 앞으로
      * 넘기는(page++) 방식을 쓰지 않는 이유: 이 메서드는 조회 대상 자체를 취소로 바꿔버려서
-     * (조회 필터가 PENDING인데 취소하면 CANCELED가 됨) 일반적인 offset 페이징과 같이 쓰면
+     * (조회 필터가 대상 상태인데 취소하면 CANCELED가 됨) 일반적인 offset 페이징과 같이 쓰면
      * 방금 취소한 행이 결과에서 빠지면서 다음 페이지가 원래 있어야 할 행을 건너뛰는 문제가
      * 생긴다. 매번 0페이지를 다시 조회하면 취소한 만큼 자연히 줄어들어 이 문제가 없다.
      *
      * <p>한 페이지 전체가 취소에 실패하면(재시도해도 똑같이 실패할 결제가 섞여있을 수 있음)
      * 무한 루프를 피하려고 멈춘다 - 남은 건 다음 스케줄에서 다시 시도된다.
      */
-    private int cancelForType(Long fairId, String paymentType) {
+    private int cancelForType(Long fairId, String paymentType, String status) {
         int canceled = 0;
         while (true) {
             PaymentListResponse response =
-                    paymentService.getPayments(fairId, null, paymentType, "PENDING", 0, PAYMENT_PAGE_SIZE);
+                    paymentService.getPayments(fairId, null, paymentType, status, 0, PAYMENT_PAGE_SIZE);
             if (response.content().isEmpty()) {
                 break;
             }
@@ -107,8 +118,8 @@ public class FairCancelPendingPaymentService {
             return true;
         } catch (CommonException e) {
             // 그 사이 다른 요청(사용자 결제 confirm 등)이 먼저 상태를 바꿔버린 경우 등 -
-            // 다음 조회에서는 이미 PENDING이 아니라서 다시 안 걸린다.
-            log.warn("PENDING 결제 취소 실패. paymentId={}", paymentId, e);
+            // 다음 조회에서는 이미 대상 상태가 아니라서 다시 안 걸린다.
+            log.warn("결제 취소 실패. paymentId={}", paymentId, e);
             return false;
         }
     }

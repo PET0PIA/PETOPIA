@@ -1,5 +1,6 @@
 package com.ms.petopia.api.payment.controller;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.service.PaymentService;
@@ -9,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 // @RestController = @Controller + @ResponseBody 합친 것.
@@ -24,17 +26,16 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
-    // 결제 단건 상세 조회. paymentId로 PaymentRow를 그대로 조회해서 반환한다.
+    // 결제 단건 상세 조회. 소유자(payerUserId) 또는 EVENT_ADMIN/SUPER_ADMIN만 조회 가능
+    // (소유·행사담당 검증은 PaymentService.getPayment(paymentId, userId)가 한다).
     @GetMapping("/payments/{paymentId}")
     public PaymentResponse getPayment(
             @PathVariable Long paymentId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userID
+            @AuthenticationPrincipal Long userId
             ) {
-        // TODO 인증 도메인 완성 후: 조회한 결제가 이 userId 소유(또는 관리자 권한)인지
-        // 검증하는 로직 추가. 지금은 헤더 존재를 강제하는 수준까지만
-        // (다른 도메인 컨트롤러들과 최소한의 관례만 맞춘 것, 완전한 IDOR 방지는 아님).
-        return paymentService.getPayment(paymentId);
+        return paymentService.getPayment(paymentId, userId);
     }
 
     // 예약ID로 그 예약의 예약금 결제 조회. 예약 도메인이 취소 처리 중 환불 API(paymentId 기준)를
@@ -49,7 +50,7 @@ public class PaymentController {
     @PostMapping("/vendor-applications/{applicationId}/payment")
     public ResponseEntity<PaymentResponse>payVendorFee(
             @PathVariable Long applicationId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @Valid
             @RequestBody VendorFeePaymentRequest request
             ) {
@@ -67,7 +68,7 @@ public class PaymentController {
     @PostMapping("/payments/{paymentId}/confirm")
     public PaymentResponse confirmPayment(
             @PathVariable Long paymentId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @Valid @RequestBody ConfirmPaymentRequest request
     ) {
         return paymentService.confirmPayment(paymentId, userId, request);
@@ -78,7 +79,7 @@ public class PaymentController {
     @PostMapping("/reservations/{reservationId}/payment")
     public ResponseEntity<PaymentResponse> payReservationDeposit(
             @PathVariable Long reservationId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(paymentService.payReservationDeposit(reservationId, userId));
@@ -90,13 +91,17 @@ public class PaymentController {
     @PostMapping("/fairs/{fairId}/opening-payment")
     public ResponseEntity<PaymentResponse> payFairOpeningFee(
             @PathVariable Long fairId,
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId
+            @AuthenticationPrincipal Long userId
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(paymentService.payFairOpeningFee(fairId, userId));
     }
 
     // 조건별 결제 목록(관리자용). fairId·businessId·paymentType·status 전부 선택적 필터.
+    // fairId 없이 전체를 보는 건 SUPER_ADMIN만, fairId를 주면 그 행사 담당 EVENT_ADMIN(또는
+    // SUPER_ADMIN)만 — getPayments 자체는 FairCancelRefundOrchestrationService 등이 내부
+    // 빈 주입으로도 호출해서(SecurityContext 없음) 가드를 서비스 안에 못 넣고, HTTP 요청
+    // 경로인 여기서 ReservationDashboardController와 같은 패턴으로 확인한다.
     // page/size 범위 검증은 여기 어노테이션이 아니라 PaymentService에서 한다 — standaloneSetup
     // 기반 컨트롤러 테스트에서 메서드 파라미터 검증(@Min/@Max)이 실제로 안 걸리는 걸 확인해서
     // (CodeRabbit 리뷰 지적, PR #62), 프레임워크 동작에 기대지 않기로 함.
@@ -109,14 +114,18 @@ public class PaymentController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        // TODO 인증 도메인 완성 후 event_admin(담당행사)/super_admin 권한 검증 추가
+        if (fairId == null) {
+            fairAdminAccessGuard.requireSuperAdmin();
+        } else {
+            fairAdminAccessGuard.checkAssigned(fairId);
+        }
         return paymentService.getPayments(fairId, businessId, paymentType, status, page, size);
     }
 
     // 로그인 사용자 본인의 결제 내역(마이페이지). page/size 검증은 위와 동일하게 서비스 계층에서.
     @GetMapping("/me/payments")
     public PaymentListResponse getMyPayments(
-            @RequestHeader(PaymentTemporaryAuthHeaders.USER_ID) Long userId,
+            @AuthenticationPrincipal Long userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {

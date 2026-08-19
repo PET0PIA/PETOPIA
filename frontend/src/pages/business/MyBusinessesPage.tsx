@@ -6,20 +6,20 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Badge } from "../../components/ui/Badge";
 import { ApiError } from "../../api/client";
-import { getMyBusinesses, type Business, type BusinessVerifyStatus } from "../../api/business";
+import { getMyBusinesses, type Business } from "../../api/business";
 import { useAuth } from "../../contexts/AuthContext";
 
-const verifyStatusLabels: Record<BusinessVerifyStatus, string> = {
-  PENDING: "확인 대기",
-  VERIFIED: "확인 완료",
-  INVALID: "확인 실패",
-  RETRY_NEEDED: "재확인 필요",
+const approvalStatusLabels: Record<Business["approvalStatus"], string> = {
+  PENDING_REVIEW: "심사 대기중",
+  APPROVED: "승인됨",
+  REJECTED: "반려됨",
+  REVOKED: "취소됨",
 };
-const verifyStatusTones: Record<BusinessVerifyStatus, "primary" | "sun" | "leaf" | "neutral"> = {
-  PENDING: "sun",
-  VERIFIED: "leaf",
-  INVALID: "primary",
-  RETRY_NEEDED: "primary",
+const approvalStatusTones: Record<Business["approvalStatus"], "primary" | "sun" | "leaf" | "neutral"> = {
+  PENDING_REVIEW: "sun",
+  APPROVED: "leaf",
+  REJECTED: "primary",
+  REVOKED: "primary",
 };
 
 export function MyBusinessesPage() {
@@ -92,7 +92,7 @@ export function MyBusinessesPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone={verifyStatusTones[business.verifyStatus]}>{verifyStatusLabels[business.verifyStatus]}</Badge>
+                <Badge tone={approvalStatusTones[business.approvalStatus]}>{approvalStatusLabels[business.approvalStatus]}</Badge>
                 <ChevronRight size={16} className="text-muted" />
               </div>
             </Link>

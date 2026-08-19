@@ -78,15 +78,15 @@ function VendorFeeSection() {
         <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-4 sm:items-end">
           <div>
             <label htmlFor="vf-application-id" className="mb-1.5 block text-sm font-bold text-ink">신청 ID</label>
-            <Input id="vf-application-id" className="input-no-spinner" type="number" min={1} value={applicationId} onChange={(event) => setApplicationId(event.target.value)} placeholder="예: test1" />
+            <Input id="vf-application-id" className="input-no-spinner" type="number" min={1} value={applicationId} onChange={(event) => setApplicationId(event.target.value)} placeholder="예: 1" />
           </div>
           <div>
             <label htmlFor="vf-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-            <Input id="vf-fair-id" className="input-no-spinner" type="number" min={1} value={fairId} onChange={(event) => setFairId(event.target.value)} placeholder="예: test1" />
+            <Input id="vf-fair-id" className="input-no-spinner" type="number" min={1} value={fairId} onChange={(event) => setFairId(event.target.value)} placeholder="예: 1" />
           </div>
           <div>
             <label htmlFor="vf-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
-            <Input id="vf-business-id" className="input-no-spinner" type="number" min={1} value={businessId} onChange={(event) => setBusinessId(event.target.value)} placeholder="예: test1" />
+            <Input id="vf-business-id" className="input-no-spinner" type="number" min={1} value={businessId} onChange={(event) => setBusinessId(event.target.value)} placeholder="예: 1" />
           </div>
           <div>
             <label htmlFor="vf-amount" className="mb-1.5 block text-sm font-bold text-ink">금액</label>
@@ -153,7 +153,7 @@ function ConfirmSection() {
         <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-3 sm:items-end">
           <div>
             <label htmlFor="cf-payment-id" className="mb-1.5 block text-sm font-bold text-ink">결제 ID</label>
-            <Input id="cf-payment-id" className="input-no-spinner" type="number" min={1} value={paymentId} onChange={(event) => setPaymentId(event.target.value)} placeholder="예: test1" />
+            <Input id="cf-payment-id" className="input-no-spinner" type="number" min={1} value={paymentId} onChange={(event) => setPaymentId(event.target.value)} placeholder="예: 1" />
           </div>
           <div className="sm:col-span-2">
             <label htmlFor="cf-payment-key" className="mb-1.5 block text-sm font-bold text-ink">paymentKey</label>
@@ -215,7 +215,7 @@ function ReservationDepositSection() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
             <label htmlFor="rd-reservation-id" className="mb-1.5 block text-sm font-bold text-ink">예약 ID</label>
-            <Input id="rd-reservation-id" className="input-no-spinner" type="number" min={1} value={reservationId} onChange={(event) => setReservationId(event.target.value)} placeholder="예: test1" />
+            <Input id="rd-reservation-id" className="input-no-spinner" type="number" min={1} value={reservationId} onChange={(event) => setReservationId(event.target.value)} placeholder="예: 1" />
           </div>
           <Button type="submit" disabled={submitting}>
             <Banknote size={16} />
@@ -270,7 +270,7 @@ function FairOpeningFeeSection() {
         <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-3 sm:items-end">
           <div>
             <label htmlFor="of-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-            <Input id="of-fair-id" className="input-no-spinner" type="number" min={1} value={fairId} onChange={(event) => setFairId(event.target.value)} placeholder="예: test1" />
+            <Input id="of-fair-id" className="input-no-spinner" type="number" min={1} value={fairId} onChange={(event) => setFairId(event.target.value)} placeholder="예: 1" />
           </div>
           <div>
             <Button type="submit" disabled={submitting}>

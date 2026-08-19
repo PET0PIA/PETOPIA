@@ -3,6 +3,7 @@ package com.ms.petopia.api.payment.service;
 
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
@@ -14,6 +15,7 @@ import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.dto.ReservationPaymentCompletionResult;
 import com.ms.petopia.api.payment.dto.ReservationPaymentContext;
 import com.ms.petopia.api.payment.dto.TossPaymentResponse;
+import com.ms.petopia.api.payment.dto.TossWebhookEvent;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
@@ -84,6 +86,12 @@ class PaymentServiceTest {
     @Mock
     private RefundService refundService;
 
+    // getPayment(paymentId, userId) 오버로드가 소유자 아닐 때 확인하는 행사담당자 가드.
+    // Mock이라 기본적으로 아무것도 안 하므로(void 메서드 기본 no-op), 거부 케이스만
+    // willThrow로 스텁한다.
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+
     // PaymentService 생성자가 PaymentMapper를 받는 구조여야 동작함
     // (@RequiredArgsConstructor 패턴).
     @InjectMocks
@@ -114,11 +122,9 @@ class PaymentServiceTest {
 
         // row에서 값을 그대로 가져와서 expected를 만듦 (따로 값을 또 타이핑하면
         // paidAt/createdAt 같은 시간값이 미묘하게 달라질 수 있어서, row 기준으로 통일).
-        PaymentResponse expected = new PaymentResponse(
-                row.getPaymentId(), row.getOrderId(), row.getPaymentType(), row.getAmount(), row.getStatus(), row.getMethod(),
-                row.getPaidAt(), row.getCreatedAt(), row.getFairId(), row.getBusinessId(),
-                row.getPayerUserId(), row.getReservationId(), row.getApplicationId()
-        );
+        // PaymentResponse.from(row)를 그대로 써서, 나중에 필드가 추가돼도(예: 간편결제
+        // 제공사·가상계좌 정보) 이 테스트를 손댈 필요가 없게 한다.
+        PaymentResponse expected = PaymentResponse.from(row);
 
         // Act
         PaymentResponse result = paymentService.getPayment(1L);
@@ -207,6 +213,72 @@ class PaymentServiceTest {
         // assertThatThrownBy: 람다 안의 코드를 실행하다가 예외가 터지면 그 예외를 캡처해서
         // 이후 체이닝으로 검증할 수 있게 해줌.
         assertThatThrownBy(() -> paymentService.getPayment(999L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("결제 소유자가 조회하면 행사담당자 검증 없이 결제 상세를 반환한다")
+    void getPayment_소유자가조회_결제상세를반환한다() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPaymentType("VENDOR_FEE");
+        row.setStatus("COMPLETED");
+        row.setFairId(10L);
+        row.setPayerUserId(30L);
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        PaymentResponse result = paymentService.getPayment(1L, 30L);
+
+        assertThat(result.paymentId()).isEqualTo(1L);
+        // 소유자면 굳이 행사담당자인지까지 확인할 필요 없다.
+        verify(fairAdminAccessGuard, never()).checkAssigned(any());
+    }
+
+    @Test
+    @DisplayName("소유자가 아니면 그 행사 담당 관리자인지 확인한다")
+    void getPayment_소유자아님_행사담당자면조회허용() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPaymentType("VENDOR_FEE");
+        row.setStatus("COMPLETED");
+        row.setFairId(10L);
+        row.setPayerUserId(30L);
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        // fairAdminAccessGuard.checkAssigned(10L)이 Mock 기본 no-op이니 "담당자로 확인됨"을 흉내냄
+
+        PaymentResponse result = paymentService.getPayment(1L, 99L);
+
+        assertThat(result.paymentId()).isEqualTo(1L);
+        verify(fairAdminAccessGuard).checkAssigned(10L);
+    }
+
+    @Test
+    @DisplayName("소유자도, 행사 담당 관리자도 아니면 예외를 던진다")
+    void getPayment_소유자아님_관리자도아님_예외를던진다() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPaymentType("VENDOR_FEE");
+        row.setStatus("COMPLETED");
+        row.setFairId(10L);
+        row.setPayerUserId(30L);
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> paymentService.getPayment(1L, 77L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 결제ID를 (paymentId, userId)로 조회하면 예외를 던진다")
+    void getPayment_userId오버로드_존재하지않는결제_예외를던진다() {
+        given(paymentMapper.selectById(999L)).willReturn(null);
+
+        assertThatThrownBy(() -> paymentService.getPayment(999L, 30L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_NOT_FOUND);
@@ -440,7 +512,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(7L), any())).willReturn(1);
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(any(), any(), any()))
-                .willReturn(new TossPaymentResponse("toss-key", "PAYMENT_저장된주문번호", "DONE", 60000L, "CARD", null));
+                .willReturn(new TossPaymentResponse("toss-key", "PAYMENT_저장된주문번호", "DONE", 60000L, "CARD", null, null, null));
 
         paymentService.confirmPayment(7L, 90L, new ConfirmPaymentRequest("toss-key"));
 
@@ -655,7 +727,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
 
@@ -667,6 +739,74 @@ class PaymentServiceTest {
         assertThat(result.method()).isEqualTo("카드");
         assertThat(result.paidAt()).isNotNull();
         verify(paymentMapper).markCompleted(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("간편결제로 결제하면 제공사가 저장된다")
+    void confirmPayment_간편결제_제공사가저장된다() {
+        PaymentRow row = pendingRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드",
+                        OffsetDateTime.now(), new TossPaymentResponse.EasyPay("네이버페이"), null
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        assertThat(result.easyPayProvider()).isEqualTo("네이버페이");
+        // 저장 자체(마퍼 호출 인자)까지 확인 — 응답 DTO만 맞고 실제 UPDATE에는 안 실리는
+        // 버그(과거 markCompleted SQL에 컬럼 누락)를 이 검증이 잡는다.
+        verify(paymentMapper).markCompleted(argThat(saved -> "네이버페이".equals(saved.getEasyPayProvider())));
+    }
+
+    @Test
+    @DisplayName("일반 결제(카드 등)는 간편결제 제공사가 null로 저장된다")
+    void confirmPayment_일반결제_제공사는null() {
+        PaymentRow row = pendingRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now(), null, null
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        assertThat(result.easyPayProvider()).isNull();
+    }
+
+    @Test
+    @DisplayName("가상계좌로 결제하면 즉시 COMPLETED로 확정하지 않고 WAITING_FOR_DEPOSIT으로 남긴다")
+    void confirmPayment_가상계좌_입금대기로남는다() {
+        PaymentRow row = pendingRow();
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        LocalDateTime dueDate = LocalDateTime.of(2026, 9, 1, 23, 59);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_1", "WAITING_FOR_DEPOSIT", 50000L, "가상계좌",
+                        OffsetDateTime.now(), null,
+                        new TossPaymentResponse.VirtualAccount("020", "1234567890", dueDate, "secret-abc")
+                ));
+        given(paymentMapper.markWaitingForDeposit(any(PaymentRow.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.confirmPayment(1L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        assertThat(result.status()).isEqualTo("WAITING_FOR_DEPOSIT");
+        assertThat(result.virtualAccountBankCode()).isEqualTo("020");
+        assertThat(result.virtualAccountNumber()).isEqualTo("1234567890");
+        assertThat(result.virtualAccountDueDate()).isEqualTo(dueDate);
+        // secret이 저장되지 않으면 이후 입금 웹훅이 전부 무시된다 — 저장 인자까지 검증한다.
+        verify(paymentMapper).markWaitingForDeposit(argThat(
+                saved -> "secret-abc".equals(saved.getVirtualAccountSecret())
+                        && "020".equals(saved.getVirtualAccountBankCode())));
+        // 입금 전이니 결제완료 처리(markCompleted)도, 참가비 확정 통지도 아직 일어나면 안 된다
+        verify(paymentMapper, never()).markCompleted(any(PaymentRow.class));
+        verify(applicationService, never()).confirmVendorPayment(anyLong(), anyLong(), anyLong());
     }
 
     @Test
@@ -735,6 +875,22 @@ class PaymentServiceTest {
 
         assertThat(result.status()).isEqualTo("CANCELED");
         verify(paymentMapper).markCanceled(eq(1L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("WAITING_FOR_DEPOSIT 결제도 취소할 수 있다 — 아직 실제 입금 전이라 PENDING과 동일하게 안전함")
+    void cancelPayment_WAITING_FOR_DEPOSIT상태도_CANCELED로바뀐다() {
+        // 가상계좌 발급까지는 됐지만 아직 입금 전인 결제를, 그 원업무(예약 등)가 취소되면서
+        // 함께 정리하려는 상황(2026-08-18 CodeRabbit 리뷰 지적 — 이 상태를 못 다뤄서
+        // 원업무가 취소돼도 이 결제만 계속 대기 상태로 남는 사각지대였음).
+        PaymentRow row = pendingRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.markCanceled(eq(1L), any(LocalDateTime.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.cancelPayment(1L, "VENDOR_APPLICATION");
+
+        assertThat(result.status()).isEqualTo("CANCELED");
     }
 
     @Test
@@ -838,6 +994,19 @@ class PaymentServiceTest {
 
         assertThat(result.status()).isEqualTo("EXPIRED");
         verify(paymentMapper).markExpired(eq(2L), any(LocalDateTime.class));
+    }
+
+    @Test
+    @DisplayName("WAITING_FOR_DEPOSIT 결제도 만료 처리할 수 있다")
+    void expirePayment_WAITING_FOR_DEPOSIT상태도_EXPIRED로바뀐다() {
+        PaymentRow row = pendingReservationDepositRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        given(paymentMapper.markExpired(eq(2L), any(LocalDateTime.class))).willReturn(1);
+
+        PaymentResponse result = paymentService.expirePayment(2L, "RESERVATION");
+
+        assertThat(result.status()).isEqualTo("EXPIRED");
     }
 
     @Test
@@ -1003,7 +1172,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
 
@@ -1028,7 +1197,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_1", "DONE", 50000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
 
@@ -1048,7 +1217,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
         // 예약 도메인 통지 자체가 터지는 상황(네트워크 장애 등)을 흉내냄
@@ -1073,7 +1242,7 @@ class PaymentServiceTest {
         given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
                 .willReturn(new TossPaymentResponse(
-                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now()
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now(), null, null
                 ));
         given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
         // 첫 번째 시도만 실패하고 두 번째 시도부터는 성공하는 상황(일시적 네트워크 장애를 흉내냄).
@@ -1183,6 +1352,125 @@ class PaymentServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    // WAITING_FOR_DEPOSIT 상태의 결제 하나를 미리 만들어두는 헬퍼.
+    // handleDepositWebhook 테스트들이 전부 이 상황에서 시작한다.
+    private PaymentRow waitingForDepositRow() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setOrderId("PAYMENT_1");
+        row.setPaymentType("RESERVATION_DEPOSIT");
+        row.setAmount(30000L);
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setMethod("가상계좌");
+        row.setPayerUserId(90L);
+        row.setFairId(10L);
+        row.setReservationId(500L);
+        row.setVirtualAccountBankCode("020");
+        row.setVirtualAccountNumber("1234567890");
+        row.setVirtualAccountSecret("secret-abc");
+        return row;
+    }
+
+    private TossWebhookEvent depositCallback(String status, String secret) {
+        return new TossWebhookEvent("DEPOSIT_CALLBACK", new TossWebhookEvent.Data("PAYMENT_1", status, secret));
+    }
+
+    @Test
+    @DisplayName("입금완료 웹훅을 받으면 WAITING_FOR_DEPOSIT 결제가 COMPLETED로 전환된다")
+    void handleDepositWebhook_입금완료_COMPLETED로전환() {
+        PaymentRow row = waitingForDepositRow();
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(row);
+        given(paymentMapper.markVirtualAccountCompleted(eq(1L), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .willReturn(1);
+
+        paymentService.handleDepositWebhook(depositCallback("DONE", "secret-abc"));
+
+        verify(paymentMapper).markVirtualAccountCompleted(eq(1L), any(LocalDateTime.class), any(LocalDateTime.class));
+        // 예약금 결제 완료 후속처리(도메인 통지 등)까지 이어지는지 — confirmPayment의
+        // completePaymentAndNotify를 그대로 공유하는지 확인.
+        verify(reservationPaymentContractClient).completePayment(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("입금취소 웹훅을 받으면 WAITING_FOR_DEPOSIT 결제가 FAILED로 전환된다")
+    void handleDepositWebhook_입금취소_FAILED로전환() {
+        PaymentRow row = waitingForDepositRow();
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(row);
+        given(paymentMapper.markVirtualAccountDepositFailed(eq(1L), any(LocalDateTime.class))).willReturn(1);
+
+        paymentService.handleDepositWebhook(depositCallback("CANCELED", "secret-abc"));
+
+        verify(paymentMapper).markVirtualAccountDepositFailed(eq(1L), any(LocalDateTime.class));
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("secret이 일치하지 않으면 위조로 보고 무시한다")
+    void handleDepositWebhook_secret불일치_무시() {
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(waitingForDepositRow());
+
+        paymentService.handleDepositWebhook(depositCallback("DONE", "wrong-secret"));
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("저장된 secret이 없으면 웹훅 body에도 secret이 없어도(null==null) 통과시키지 않는다")
+    void handleDepositWebhook_저장된secret없음_웹훅도secret없음_통과안됨() {
+        // Objects.equals(null, null)이 true라서 저장된 secret이 비어있으면(예: 저장 버그로
+        // 빠졌거나) 검증 자체가 무의미하게 통과해버리던 보안 버그의 회귀 테스트
+        // (2026-08-18 CodeRabbit 리뷰 지적).
+        PaymentRow row = waitingForDepositRow();
+        row.setVirtualAccountSecret(null);
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(row);
+
+        paymentService.handleDepositWebhook(depositCallback("DONE", null));
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("웹훅 body에 secret이 빈 문자열로 오면 통과시키지 않는다")
+    void handleDepositWebhook_웹훅secret빈문자열_통과안됨() {
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(waitingForDepositRow());
+
+        paymentService.handleDepositWebhook(depositCallback("DONE", ""));
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 주문번호는 무시한다")
+    void handleDepositWebhook_대상없음_무시() {
+        given(paymentMapper.selectByOrderId("PAYMENT_999")).willReturn(null);
+
+        paymentService.handleDepositWebhook(
+                new TossWebhookEvent("DEPOSIT_CALLBACK", new TossWebhookEvent.Data("PAYMENT_999", "DONE", "secret")));
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("이미 처리된(WAITING_FOR_DEPOSIT이 아닌) 결제는 재전송된 웹훅이 와도 무시한다")
+    void handleDepositWebhook_이미처리됨_무시() {
+        PaymentRow row = waitingForDepositRow();
+        row.setStatus("COMPLETED");
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(row);
+
+        paymentService.handleDepositWebhook(depositCallback("DONE", "secret-abc"));
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("DEPOSIT_CALLBACK이 아닌 다른 eventType은 무시한다")
+    void handleDepositWebhook_다른이벤트타입_무시() {
+        paymentService.handleDepositWebhook(
+                new TossWebhookEvent("PAYMENT_STATUS_CHANGED", new TossWebhookEvent.Data("PAYMENT_1", "DONE", "secret")));
+
+        verify(paymentMapper, never()).selectByOrderId(any());
     }
 
 }

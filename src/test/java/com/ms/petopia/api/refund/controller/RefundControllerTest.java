@@ -6,16 +6,28 @@ import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -26,8 +38,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/*
+ * RefundController 통합 테스트. @AuthenticationPrincipal은 ApplicationControllerTest와
+ * 동일한 가짜 인증 필터 패턴으로 시뮬레이션한다. refundService.assertRequesterAuthorized는
+ * Mock이라 기본적으로 아무것도 안 하므로(void 메서드 기본 no-op) 거부 케이스만 willThrow로 스텁한다.
+ */
 @ExtendWith(MockitoExtension.class)
 class RefundControllerTest {
+
+    private static final String AUTHENTICATED_USER_ID_ATTRIBUTE = "authenticatedUserId";
 
     @Mock
     private RefundService refundService;
@@ -38,7 +57,39 @@ class RefundControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(new RefundController(refundService))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+                .addFilters(new TestAuthenticationFilter())
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private RequestPostProcessor authenticatedAs(Long userId) {
+        return request -> {
+            request.setAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE, userId);
+            return request;
+        };
+    }
+
+    private static final class TestAuthenticationFilter extends OncePerRequestFilter {
+        @Override
+        protected void doFilterInternal(
+                HttpServletRequest request, HttpServletResponse response, FilterChain filterChain
+        ) throws ServletException, IOException {
+            Long userId = (Long) request.getAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE);
+            if (userId != null) {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+            }
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        }
     }
 
     @Test
@@ -52,7 +103,7 @@ class RefundControllerTest {
         );
 
         mockMvc.perform(post("/api/payments/1/refunds")
-                        .header(RefundTemporaryAuthHeaders.USER_ID, 99)
+                        .with(authenticatedAs(99L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refundReason\":\"USER_CANCEL\",\"requestedByDomain\":\"RESERVATION\"}"))
                 .andExpect(status().isCreated())
@@ -61,12 +112,26 @@ class RefundControllerTest {
     }
 
     @Test
+    void returns403WhenRequestingSomeoneElsesRefund() throws Exception {
+        // 결제 소유자도, 그 행사 담당 관리자도 아닌 사용자가 환불을 요청하는 상황(IDOR 방지 확인)
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(refundService).assertRequesterAuthorized(1L, 77L);
+
+        mockMvc.perform(post("/api/payments/1/refunds")
+                        .with(authenticatedAs(77L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refundReason\":\"USER_CANCEL\",\"requestedByDomain\":\"RESERVATION\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("A002"));
+    }
+
+    @Test
     void returns404WhenRefundingNonExistentPayment() throws Exception {
         willThrow(new CommonException(ErrorCode.PAYMENT_NOT_FOUND))
                 .given(refundService).refund(eq(999L), eq(99L), any());
 
         mockMvc.perform(post("/api/payments/999/refunds")
-                        .header(RefundTemporaryAuthHeaders.USER_ID, 99)
+                        .with(authenticatedAs(99L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refundReason\":\"USER_CANCEL\",\"requestedByDomain\":\"RESERVATION\"}"))
                 .andExpect(status().isNotFound())
@@ -79,7 +144,7 @@ class RefundControllerTest {
                 .given(refundService).refund(eq(1L), eq(99L), any());
 
         mockMvc.perform(post("/api/payments/1/refunds")
-                        .header(RefundTemporaryAuthHeaders.USER_ID, 99)
+                        .with(authenticatedAs(99L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refundReason\":\"USER_CANCEL\",\"requestedByDomain\":\"RESERVATION\"}"))
                 .andExpect(status().isConflict())
@@ -89,7 +154,7 @@ class RefundControllerTest {
     @Test
     void returns400WhenRefundReasonIsBlank() throws Exception {
         mockMvc.perform(post("/api/payments/1/refunds")
-                        .header(RefundTemporaryAuthHeaders.USER_ID, 99)
+                        .with(authenticatedAs(99L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refundReason\":\"\",\"requestedByDomain\":\"RESERVATION\"}"))
                 .andExpect(status().isBadRequest());

@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
@@ -21,15 +22,17 @@ public class RefundController {
     private final RefundService refundService;
 
     // 환불 요청 수신 + 처리(모의 환불이라 접수와 동시에 완료). 5경로(USER_CANCEL 등) 공용 —
-    // refundReason으로 구분한다. actingUserId는 권한 검증용이 아니라 "누가 이 환불을 처리했는지"
-    // 감사 추적용(다른 컨트롤러들과 헤더 관례 통일). 세밀한 권한 검증은 인증 도메인 완성 후
-    // 추가 예정(TODO).
+    // refundReason으로 구분한다. actingUserId는 "누가 이 환불을 처리했는지" 감사 추적용으로
+    // refund()에 그대로 넘어가지만, 그 전에 assertRequesterAuthorized로 결제 소유자 또는
+    // 그 행사 담당 관리자인지 먼저 확인한다 — refund() 자체는 안 건드린다(채린님/승훈님
+    // 도메인이 시스템 명의(SYSTEM_ACTOR_USER_ID)로 직접 호출하는 내부 경로가 있어서).
     @PostMapping("/payments/{paymentId}/refunds")
     public ResponseEntity<RefundResponse> refund(
             @PathVariable Long paymentId,
-            @RequestHeader(RefundTemporaryAuthHeaders.USER_ID) Long actingUserId,
+            @AuthenticationPrincipal Long actingUserId,
             @Valid @RequestBody RefundRequest request
     ) {
+        refundService.assertRequesterAuthorized(paymentId, actingUserId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(refundService.refund(paymentId, actingUserId, request));
     }

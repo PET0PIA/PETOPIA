@@ -6,14 +6,25 @@ import com.ms.petopia.api.settlement.service.SettlementService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.exception.GlobalExceptionHandler;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -27,8 +38,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/*
+ * SettlementController 통합 테스트. @AuthenticationPrincipal은 ApplicationControllerTest와
+ * 동일한 가짜 인증 필터 패턴으로 시뮬레이션한다. 행사 담당자 검증(FairAdminAccessGuard)은
+ * SettlementService 내부에 있어서(Mock이라 여기선 관여 안 함) 이 컨트롤러 테스트에서는
+ * 다루지 않는다 — SettlementServiceTest 참고.
+ */
 @ExtendWith(MockitoExtension.class)
 class SettlementControllerTest {
+
+    private static final String AUTHENTICATED_USER_ID_ATTRIBUTE = "authenticatedUserId";
 
     @Mock
     private SettlementService settlementService;
@@ -42,7 +61,39 @@ class SettlementControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(new SettlementController(settlementService, settlementExportService))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+                .addFilters(new TestAuthenticationFilter())
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private RequestPostProcessor authenticatedAs(Long userId) {
+        return request -> {
+            request.setAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE, userId);
+            return request;
+        };
+    }
+
+    private static final class TestAuthenticationFilter extends OncePerRequestFilter {
+        @Override
+        protected void doFilterInternal(
+                HttpServletRequest request, HttpServletResponse response, FilterChain filterChain
+        ) throws ServletException, IOException {
+            Long userId = (Long) request.getAttribute(AUTHENTICATED_USER_ID_ATTRIBUTE);
+            if (userId != null) {
+                SecurityContextHolder.getContext().setAuthentication(
+                        new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+            }
+            try {
+                filterChain.doFilter(request, response);
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
+        }
     }
 
     private SettlementResponse sampleResponse(String status) {
@@ -77,7 +128,7 @@ class SettlementControllerTest {
         given(settlementService.confirm(eq(1L), eq(99L))).willReturn(sampleResponse("CONFIRMED"));
 
         mockMvc.perform(put("/api/settlements/1/confirm")
-                        .header(SettlementTemporaryAuthHeaders.USER_ID, 99))
+                        .with(authenticatedAs(99L)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CONFIRMED"));
     }
@@ -88,9 +139,21 @@ class SettlementControllerTest {
                 .given(settlementService).confirm(eq(999L), eq(99L));
 
         mockMvc.perform(put("/api/settlements/999/confirm")
-                        .header(SettlementTemporaryAuthHeaders.USER_ID, 99))
+                        .with(authenticatedAs(99L)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ST001"));
+    }
+
+    @Test
+    void returns403WhenConfirmingUnassignedFairSettlement() throws Exception {
+        // 다른 행사 담당 EVENT_ADMIN이 남의 행사 정산을 확정하려는 상황(IDOR 방지 확인)
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(settlementService).confirm(eq(1L), eq(99L));
+
+        mockMvc.perform(put("/api/settlements/1/confirm")
+                        .with(authenticatedAs(99L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("A002"));
     }
 
     @Test
@@ -99,7 +162,7 @@ class SettlementControllerTest {
                 .given(settlementService).confirm(eq(1L), eq(99L));
 
         mockMvc.perform(put("/api/settlements/1/confirm")
-                        .header(SettlementTemporaryAuthHeaders.USER_ID, 99))
+                        .with(authenticatedAs(99L)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ST003"));
     }

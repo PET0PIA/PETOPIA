@@ -84,6 +84,15 @@ public class ReservationCancellationService {
     /** 돈이 이미 움직였거나 움직이는 중이라, 예약만 취소해선 안 되는 결제 상태. */
     private static final List<String> PAYMENT_IN_FLIGHT_STATUSES = List.of("PROCESSING", "COMPLETED");
 
+    /**
+     * 예약 취소와 함께 안전하게 정리(취소)할 수 있는 결제 상태. WAITING_FOR_DEPOSIT(가상계좌
+     * 발급, 아직 입금 전)도 PENDING과 마찬가지로 아직 실제 돈은 안 움직였으므로 포함한다
+     * (결제 도메인 PaymentService.CANCELABLE_STATUSES와 동일 기준 — 2026-08-18 CodeRabbit
+     * 리뷰 지적: 가상계좌 결제 중인 예약이 이 상태를 못 만나 그냥 취소만 되고, 나중에 실제
+     * 입금이 들어와도 아무도 못 받아가는 사각지대였음).
+     */
+    private static final List<String> PAYMENT_CANCELABLE_STATUSES = List.of("PENDING", "WAITING_FOR_DEPOSIT");
+
     private final ReservationCancellationMapper cancellationMapper;
     private final ReservationCapacityMapper capacityMapper;
     private final ReservationTimeProvider timeProvider;
@@ -204,12 +213,19 @@ public class ReservationCancellationService {
     }
 
     /**
-     * 결제 전 예약에 딸린 PENDING 결제를 함께 취소한다. 이 정리를 빼면 예약은 취소됐는데 결제창을
-     * 이미 띄워둔 사용자가 그대로 결제를 완료해, 취소된 예약에 돈이 들어오는 상태가 된다.
+     * 결제 전 예약에 딸린 결제(PENDING 또는 WAITING_FOR_DEPOSIT)를 함께 취소한다. 이 정리를
+     * 빼면 예약은 취소됐는데 결제창을 이미 띄워둔 사용자가 그대로 결제를 완료해, 취소된
+     * 예약에 돈이 들어오는 상태가 된다.
      *
      * <p>PROCESSING(토스 승인 진행 중)이나 COMPLETED면 돈이 이미 움직인 뒤라 예약만 취소해선
      * 안 된다 — 취소를 거부하고 잠시 후 재시도를 안내한다. 결제 완료 통지가 들어오면 예약이
      * CONFIRMED로 올라가고, 그다음 취소 요청은 환불 경로({@link #refundDeposit})를 탄다.
+     *
+     * <p>WAITING_FOR_DEPOSIT(가상계좌 발급, 아직 입금 전)은 PROCESSING과 달리 여기서 그냥
+     * 취소한다 — 아직 실제 돈이 안 움직였기 때문이다. 다만 이미 발급된 가상계좌 자체가
+     * 사라지는 건 아니라서, 취소 이후에 사용자가 실제로 입금해버리면 그 돈은 자동으로
+     * 처리되지 않고 운영자가 수동 확인해야 한다(PaymentService.CANCELABLE_STATUSES 참고,
+     * 알려진 한계).
      */
     private void cancelPendingPayment(ReservationCancellationContext reservation) {
         PaymentRow payment = paymentMapper.selectByReservationId(reservation.getReservationId());
@@ -220,7 +236,7 @@ public class ReservationCancellationService {
         if (PAYMENT_IN_FLIGHT_STATUSES.contains(payment.getStatus())) {
             throw new CommonException(ErrorCode.RESERVATION_PAYMENT_IN_PROGRESS);
         }
-        if (!"PENDING".equals(payment.getStatus())) {
+        if (!PAYMENT_CANCELABLE_STATUSES.contains(payment.getStatus())) {
             // FAILED/CANCELED/EXPIRED — 이미 끝난 결제라 손댈 게 없다.
             return;
         }
