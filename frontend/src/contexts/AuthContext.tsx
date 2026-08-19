@@ -22,6 +22,7 @@ interface AuthContextValue {
   loginWithOAuthCode: (code: string) => Promise<void>;
   completeOAuthSignup: (payload: OAuthSignupCompleteRequest) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -88,8 +89,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function refreshUser() {
+  try {
+    // role은 JWT payload에 박혀있어서, 서버에서 사업자 취소 등으로 role이
+    // 바뀌어도 토큰을 다시 발급받기 전엔 프론트가 알 방법이 없다.
+    const token = await refreshAccessTokenOnce();
+    setUser(decodeAccessToken(token));
+  } catch {
+    // 리프레시 실패(토큰 만료 등)는 무시 — 기존 401 처리 흐름이 로그아웃을 담당
+  }
+}
+
   return (
-    <AuthContext.Provider value={{ user, status, login, loginAsAdmin, loginWithOAuthCode, completeOAuthSignup, logout }}>
+    <AuthContext.Provider value={{ user, status, login, loginAsAdmin, loginWithOAuthCode, completeOAuthSignup, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
