@@ -61,7 +61,6 @@ class FairReviewStatsServiceTest {
     @DisplayName("리뷰가 하나도 없으면 재방문율은 0이고 카테고리는 7개 전부 빈 목록으로 내려온다")
     void getStats_리뷰없으면_0으로_반환한다() {
         given(fairReviewMapper.countByFairId(FAIR_ID)).willReturn(0L);
-        given(fairReviewMapper.countRevisitByFairId(FAIR_ID)).willReturn(0L);
         given(fairReviewMapper.selectCompanionTypeDistribution(FAIR_ID)).willReturn(List.of());
         given(fairReviewMapper.selectVisitPurposeDistribution(FAIR_ID)).willReturn(List.of());
         given(fairReviewMapper.selectFairTagCounts(FAIR_ID)).willReturn(List.of());
@@ -75,6 +74,8 @@ class FairReviewStatsServiceTest {
             assertThat(ranking.positiveTop()).isEmpty();
             assertThat(ranking.negativeTop()).isEmpty();
         });
+        // reviewCount가 0이면 나누기 대상이 없으므로 재방문 집계 쿼리 자체를 호출하지 않는다(0으로 short-circuit).
+        verify(fairReviewMapper, never()).countRevisitByFairId(FAIR_ID);
     }
 
     @Test
