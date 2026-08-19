@@ -181,21 +181,17 @@ public enum ErrorCode {
     BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "AD001", "존재하지 않는 배너입니다."),
     POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "AD002", "존재하지 않는 팝업입니다."),
 
-    // ===== Review (페어 리뷰) =====
-    REVIEW_INVALID_RATING(HttpStatus.BAD_REQUEST, "RV001", "평점은 1~5 사이여야 합니다."),
-    REVIEW_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "RV002", "리뷰 내용을 입력해야 합니다."),
-    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "RV003", "존재하지 않는 리뷰이거나 해당 행사의 리뷰가 아닙니다."),
-    REVIEW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "RV004", "본인이 작성한 리뷰만 수정·삭제할 수 있습니다."),
-    REVIEW_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "RV005", "리뷰 내용은 1000자를 초과할 수 없습니다."),
-    REVIEW_INVALID_REPORT_REASON(HttpStatus.BAD_REQUEST, "RV006", "신고 사유가 올바르지 않습니다."),
-    REVIEW_REPORT_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "RV007", "기타 사유는 상세 내용을 입력해야 합니다."),
-    REVIEW_ALREADY_REPORTED(HttpStatus.CONFLICT, "RV008", "이미 신고한 리뷰입니다."),
-    REVIEW_REPLY_NOT_FOUND(HttpStatus.NOT_FOUND, "RV009", "존재하지 않는 답글이거나 해당 리뷰의 답글이 아닙니다."),
-    REVIEW_REPLY_ALREADY_EXISTS(HttpStatus.CONFLICT, "RV010", "이미 답글이 등록된 리뷰입니다. 기존 답글을 수정해주세요."),
-    REVIEW_REPORT_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "RV011", "신고 상세 사유는 500자를 초과할 수 없습니다."),
-    REVIEW_VERSION_CONFLICT(HttpStatus.CONFLICT, "RV012", "다른 곳에서 이미 이 리뷰를 수정했습니다. 새로고침 후 다시 시도해주세요."),
-    REVIEW_FAIR_NOT_PUBLISHED(HttpStatus.BAD_REQUEST, "RV013", "전체공개된 행사가 아닙니다. 아직 공개되지 않았거나 취소된 행사에는 리뷰를 작성·수정·삭제할 수 없습니다."),
-    REVIEW_REPLY_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "RV014", "답글 내용은 1000자를 초과할 수 없습니다."),
+    // ===== Review (통합 리뷰 - 태그 기반, V39) =====
+    REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "RV001", "이미 이 행사에 리뷰를 작성했습니다. 행사당 리뷰는 1건만 작성할 수 있습니다."),
+    REVIEW_REQUIRED_FIELD_MISSING(HttpStatus.BAD_REQUEST, "RV002", "동반유형·방문목적·재방문의향은 필수 입력입니다."),
+    BOOTH_FEEDBACK_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "RV003", "부스 평가는 리뷰 1건당 최대 3개까지 작성할 수 있습니다."),
+    BOOTH_NOT_IN_FAIR(HttpStatus.BAD_REQUEST, "RV004", "선택한 부스가 이 행사에 속하지 않습니다."),
+    FEEDBACK_TAG_NOT_FOUND(HttpStatus.NOT_FOUND, "RV005", "존재하지 않거나 이 용도로 사용할 수 없는 태그입니다."),
+    FEEDBACK_TAG_INACTIVE(HttpStatus.BAD_REQUEST, "RV006", "더 이상 선택할 수 없는 태그입니다."),
+    FEEDBACK_TAG_LABEL_DUPLICATE(HttpStatus.CONFLICT, "RV007", "같은 태그 문구가 이미 존재합니다."),
+    REVIEW_FAIR_NOT_PUBLISHED(HttpStatus.BAD_REQUEST, "RV008", "전체공개된 행사가 아닙니다. 아직 공개되지 않았거나 취소된 행사에는 리뷰를 작성할 수 없습니다."),
+    REVIEW_VISIT_REQUIRED(HttpStatus.FORBIDDEN, "RV009", "이 행사를 방문(입장)한 기록이 있어야 리뷰를 작성할 수 있습니다."),
+    BOOTH_VISIT_REQUIRED(HttpStatus.FORBIDDEN, "RV010", "이 부스를 방문한 기록이 있어야 평가를 작성할 수 있습니다."),
 
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),

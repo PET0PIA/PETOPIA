@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.review.mapper.FeedbackTagMapper">
+
+    <!-- is_active -> active로 명시 별칭(FairReview.verifiedVisit 관례). scope/sentiment는
+         VARCHAR 컬럼값(FAIR/BOOTH, POSITIVE/NEGATIVE)이 Java enum 상수명과 그대로 일치해서
+         MyBatis 기본 EnumTypeHandler로 별도 설정 없이 매핑된다(Booth.TargetAnimal과 같은 방식). -->
+    <sql id="columns">
+        tag_id, scope, category, sentiment, label, sort_order, is_active AS active, created_at, updated_at
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="tagId" keyColumn="tag_id">
+        INSERT INTO feedback_tags
+            (scope, category, sentiment, label, sort_order, is_active, created_at, updated_at)
+        VALUES
+            (#{scope}, #{category}, #{sentiment}, #{label}, #{sortOrder}, #{active}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <select id="selectById" resultType="FeedbackTag">
+        SELECT <include refid="columns" />
+          FROM feedback_tags
+         WHERE tag_id = #{tagId}
+    </select>
+
+    <select id="existsByScopeAndLabel" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1 FROM feedback_tags WHERE scope = #{scope} AND label = #{label}
+        )
+    </select>
+
+    <select id="selectActiveByScope" resultType="FeedbackTag">
+        SELECT <include refid="columns" />
+          FROM feedback_tags
+         WHERE scope = #{scope}
+           AND is_active = 1
+         ORDER BY category, sort_order, tag_id
+    </select>
+
+    <select id="selectByIdsAndScope" resultType="FeedbackTag">
+        SELECT <include refid="columns" />
+          FROM feedback_tags
+         WHERE scope = #{scope}
+           AND tag_id IN
+        <foreach collection="tagIds" item="tagId" open="(" separator="," close=")">
+            #{tagId}
+        </foreach>
+    </select>
+
+    <update id="update">
+        UPDATE feedback_tags
+           SET label = #{label},
+               sort_order = #{sortOrder},
+               is_active = #{active},
+               updated_at = #{updatedAt}
+         WHERE tag_id = #{tagId}
+    </update>
+
+    <!-- 태그는 scope에 따라 fair_review_tag_selections 또는 booth_feedback_selections
+         어느 한쪽에만 나타나므로 UNION ALL로 합쳐도 이중 집계가 되지 않는다. -->
+    <select id="countUsage" resultType="long">
+        SELECT
+            (SELECT COUNT(*) FROM fair_review_tag_selections WHERE tag_id = #{tagId}) +
+            (SELECT COUNT(*) FROM booth_feedback_selections WHERE tag_id = #{tagId})
+    </select>
+
+</mapper>
