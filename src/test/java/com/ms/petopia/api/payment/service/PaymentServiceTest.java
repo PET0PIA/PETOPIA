@@ -19,6 +19,8 @@ import com.ms.petopia.api.payment.dto.TossWebhookEvent;
 import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.refund.dto.RefundReason;
+import com.ms.petopia.api.refund.dto.RequestedByDomain;
 import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -30,6 +32,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -1259,6 +1265,61 @@ class PaymentServiceTest {
         // Assert: 결제는 정상 완료되고, 통지는 재시도 끝에 두 번째 시도에서 성공해서 멈췄는지
         assertThat(result.status()).isEqualTo("COMPLETED");
         verify(reservationPaymentContractClient, times(2)).completePayment(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("예약 도메인이 4xx로 결제완료 통지를 거부하면(제한시간 초과 등) 재시도 없이 바로 자동 환불한다")
+    void confirmPayment_예약도메인이4xx로거부_재시도없이자동환불한다() {
+        // Arrange: 가상계좌 입금이 늦어져 예약이 이미 만료된 뒤 뒤늦게 입금완료 통지가 가는 상황
+        // (이슈 #167 — 예약 10분 제한시간과 가상계좌 입금기한 불일치로 실제 발생 가능한 케이스).
+        // ReservationPaymentCompletionService가 RESERVATION_PAYMENT_EXPIRED(409)로 거부한다.
+        PaymentRow row = pendingReservationDepositRow();
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now(), null, null
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+        willThrow(HttpClientErrorException.create(
+                HttpStatus.CONFLICT, "Conflict", HttpHeaders.EMPTY, new byte[0], null))
+                .given(reservationPaymentContractClient).completePayment(any(), any(), any(), any(), any());
+
+        // Act: 결제 자체는 이미 성공했으므로 예외 없이 정상 응답(COMPLETED)이 나와야 한다
+        PaymentResponse result = paymentService.confirmPayment(2L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        // Assert
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        // 재시도 없이 딱 1번만 시도하고 바로 포기해야 한다 — 4xx는 재시도해도 결과가 똑같다.
+        verify(reservationPaymentContractClient, times(1)).completePayment(any(), any(), any(), any(), any());
+        // "예약도 없고 환불도 안 되는" 상태를 막기 위한 자동 환불이 걸렸는지
+        verify(refundService).refund(eq(2L), eq(0L), argThat(
+                req -> req.refundReason() == RefundReason.USER_CANCEL
+                        && req.requestedByDomain() == RequestedByDomain.PAYMENT_ADMIN));
+    }
+
+    @Test
+    @DisplayName("예약 도메인 5xx(서버 장애)는 4xx와 달리 자동 환불하지 않고 기존처럼 재시도만 한다")
+    void confirmPayment_예약도메인5xx는_자동환불하지않고재시도한다() {
+        // 5xx는 예약 도메인 쪽 일시적 장애일 수 있어, 짧은 재시도 창(200ms 간격) 안의 실패만으로
+        // "예약이 거부했다"고 단정해 정상 결제를 환불해버리면 더 위험하다 — 재시도만 하고 끝낸다.
+        PaymentRow row = pendingReservationDepositRow();
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_2", "DONE", 30000L, "카드", OffsetDateTime.now(), null, null
+                ));
+        given(paymentMapper.markCompleted(any(PaymentRow.class))).willReturn(1);
+        willThrow(HttpServerErrorException.create(
+                HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable", HttpHeaders.EMPTY, new byte[0], null))
+                .given(reservationPaymentContractClient).completePayment(any(), any(), any(), any(), any());
+
+        PaymentResponse result = paymentService.confirmPayment(2L, 90L, new ConfirmPaymentRequest("paymentKey123"));
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        verify(reservationPaymentContractClient, times(3)).completePayment(any(), any(), any(), any(), any());
+        verify(refundService, never()).refund(any(), any(), any());
     }
 
     @Test
