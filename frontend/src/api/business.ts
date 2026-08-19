@@ -13,6 +13,7 @@ export interface BusinessRegisterRequest {
   phone: string;
   website?: string;
   businessRegDocKey: string;
+  agreedTerms: boolean;
 }
 
 export interface Business {

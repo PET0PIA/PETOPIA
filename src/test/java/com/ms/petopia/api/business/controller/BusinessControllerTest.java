@@ -88,7 +88,8 @@ class BusinessControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"멍냥사료\",\"ceoName\":\"김대표\",\"bizRegNo\":\"1234567890\","
                                 + "\"startDate\":\"2020-01-01\",\"address\":\"서울시\","
-                                + "\"businessRegDocKey\":\"uploads/document/reg.pdf\",\"phone\":\"02-1234-5678\"}"))
+                                + "\"businessRegDocKey\":\"uploads/document/reg.pdf\",\"phone\":\"02-1234-5678\","
+                                + "\"agreedTerms\":true}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.name").value("멍냥사료"))
                 .andExpect(jsonPath("$.data.verifyStatus").value("VERIFIED"));
@@ -121,7 +122,8 @@ class BusinessControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"멍냥사료\",\"ceoName\":\"김대표\",\"bizRegNo\":\"1234567890\","
                                 + "\"startDate\":\"2020-01-01\",\"address\":\"서울시\","
-                                + "\"businessRegDocKey\":\"uploads/document/reg.pdf\",\"phone\":\"02-1234-5678\"}"))
+                                + "\"businessRegDocKey\":\"uploads/document/reg.pdf\",\"phone\":\"02-1234-5678\","
+                                + "\"agreedTerms\":true}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("V006"));
 
