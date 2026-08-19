@@ -101,6 +101,31 @@ class AuthServiceTest {
     }
 
     @Test
+    void signup_15일이내에_탈퇴한_이메일이면_WITHDRAWN_EMAIL_COOLDOWN을_던지고_아무것도_하지않는다() {
+        given(authMapper.existsVerifiedByEmail(EMAIL)).willReturn(false);
+        given(authMapper.existsWithdrawnEmailWithinCooldown(EMAIL, 15)).willReturn(true);
+
+        assertThatThrownBy(() -> authService.signup(buildRequest()))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.WITHDRAWN_EMAIL_COOLDOWN);
+
+        verify(authMapper, never()).selectUserByEmail(any());
+        verify(authMapper, never()).insertUser(any());
+        verify(emailVerificationService, never()).issueAndSend(any());
+    }
+
+    @Test
+    void isEmailAvailable_15일이내에_탈퇴한_이메일이면_사용불가로_응답한다() {
+        given(authMapper.existsVerifiedByEmail(EMAIL)).willReturn(false);
+        given(authMapper.existsWithdrawnEmailWithinCooldown(EMAIL, 15)).willReturn(true);
+
+        boolean available = authService.isEmailAvailable(EMAIL).available();
+
+        assertThat(available).isFalse();
+    }
+
+    @Test
     void signup_동시가입으로_UNIQUE제약에걸리면_DUPLICATED_EMAIL로변환한다() {
         given(authMapper.existsVerifiedByEmail(EMAIL)).willReturn(false);
         given(authMapper.selectUserByEmail(EMAIL)).willReturn(null);
