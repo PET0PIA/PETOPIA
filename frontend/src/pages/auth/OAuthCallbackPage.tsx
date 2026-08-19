@@ -10,6 +10,7 @@ import { ApiError } from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
 import { maxBirthDate, today } from "../../utils/date";
 import { SignupWelcomeCard } from "./SignupWelcomeCard";
+import { SignupAgreements } from "../../components/auth/SignupAgreements";
 
 const PHONE_PATTERN = /^01[0-9]-?\d{3,4}-?\d{4}$/;
 
@@ -213,16 +214,12 @@ function OAuthSignupCompleteForm({ tempKey }: { tempKey: string }) {
             <Input id="oauth-address" placeholder="예) 서울특별시 노원구" required value={form.address} onChange={(event) => update("address", event.target.value)} />
           </div>
 
-          <div className="space-y-2 border-t border-line pt-5">
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={form.agreedTerms} onChange={(event) => update("agreedTerms", event.target.checked)} />
-              이용약관에 동의합니다. <span className="text-primary-strong">*</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input type="checkbox" checked={form.agreedPrivacy} onChange={(event) => update("agreedPrivacy", event.target.checked)} />
-              개인정보 처리방침에 동의합니다. <span className="text-primary-strong">*</span>
-            </label>
-          </div>
+          <SignupAgreements
+            agreedTerms={form.agreedTerms}
+            agreedPrivacy={form.agreedPrivacy}
+            onTermsChange={(checked) => update("agreedTerms", checked)}
+            onPrivacyChange={(checked) => update("agreedPrivacy", checked)}
+          />
 
           <Button type="submit" className="w-full" disabled={submitting}>
             {submitting ? "가입 완료 중..." : "가입 완료"}
