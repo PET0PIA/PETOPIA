@@ -11,9 +11,14 @@ import com.ms.petopia.api.business.dto.response.BusinessReviewDetailResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewResultResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewSummaryResponse;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -22,6 +27,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,6 +38,7 @@ import static org.mockito.BDDMockito.given;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
@@ -61,8 +69,33 @@ class BusinessServiceTest {
     @Mock
     private ApplicationService applicationService;
 
+    @Mock
+    private NotificationService notificationService;
+
     @InjectMocks
     private BusinessService businessService;
+
+    /*
+     * approveBusiness/rejectBusiness/revokeBusiness는 알림 발송을 트랜잭션 커밋 후로
+     * 미루기 위해 TransactionSynchronizationManager에 콜백을 등록한다. 테스트에는 진짜
+     * DB 트랜잭션이 없어 동기화가 비활성 상태라 registerSynchronization()이 예외를
+     * 던지므로, ApplicationServiceTest와 동일하게 수동으로 활성화/정리한다.
+     */
+    @BeforeEach
+    void setUp() {
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
+    }
+
+    // afterCommit()만 오버라이드한 콜백(알림 발송용)을 실제 커밋된 것처럼 수동 실행
+    private void simulateTransactionCommit() {
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+    }
 
     /*
      * 테스트용 Business 도메인 객체를 만드는 헬퍼 메서드.
@@ -456,6 +489,29 @@ class BusinessServiceTest {
 
         }
 
+        @Test
+        @DisplayName("승인 성공 시 소유자에게 인앱+이메일로 BUSINESS_APPROVED 알림을 보낸다")
+        void notifiesOwnerWhenApproved() {
+
+            // given
+            Business business = createBusiness(1L, 10L, "멍냥사료", "VERIFIED");
+
+            given(businessMapper.selectByIdForReview(1L)).willReturn(business);
+            given(businessMapper.updateApprovalApproved(eq(1L), eq(2L), any())).willReturn(1);
+            given(businessMapper.existsApprovedBusinessForOwner(10L, 1L)).willReturn(false);
+
+            // when
+            businessService.approveBusiness(2L, 1L);
+            simulateTransactionCommit();
+
+            // then: 소유자(10L)에게 BUSINESS_APPROVED 타입으로, IN_APP+EMAIL 채널 모두 알림이 저장됐는지 확인
+            verify(notificationService).save(argThat(req ->
+                    req.userId().equals(10L)
+                            && req.type() == NotificationType.BUSINESS_APPROVED
+                            && req.channels().containsAll(List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL))));
+
+        }
+
     }
 
     @Nested
@@ -520,6 +576,31 @@ class BusinessServiceTest {
             assertThatThrownBy(() -> businessService.rejectBusiness(2L, 1L, request))
                     .isInstanceOf(CommonException.class)
                     .hasMessageContaining("심사 대기 중인 사업자만");
+
+        }
+
+        @Test
+        @DisplayName("반려 성공 시 소유자에게 인앱+이메일로 BUSINESS_REJECTED 알림을 보낸다")
+        void notifiesOwnerWhenRejected() {
+
+            // given
+            Business business = createBusiness(1L, 10L, "멍냥사료", "VERIFIED");
+            BusinessRejectRequest request = new BusinessRejectRequest();
+            request.setRejectReason("서류 불일치");
+
+            given(businessMapper.selectByIdForReview(1L)).willReturn(business);
+            given(businessMapper.updateApprovalRejected(eq(1L), eq(2L), eq("서류 불일치"), any())).willReturn(1);
+
+            // when
+            businessService.rejectBusiness(2L, 1L, request);
+            simulateTransactionCommit();
+
+            // then: 소유자(10L)에게 BUSINESS_REJECTED 타입으로, IN_APP+EMAIL 채널 모두 알림이 저장됐는지 확인
+            verify(notificationService).save(argThat(req ->
+                    req.userId().equals(10L)
+                            && req.type() == NotificationType.BUSINESS_REJECTED
+                            && req.body().contains("서류 불일치")
+                            && req.channels().containsAll(List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL))));
 
         }
 
@@ -615,6 +696,32 @@ class BusinessServiceTest {
 
             // UPDATE가 안 먹혔으니, 뒤이은 연쇄 취소는 시도되면 안 됨
             verify(applicationService, never()).cancelApplicationsForRevokedBusiness(any(), any());
+
+        }
+
+        @Test
+        @DisplayName("취소 성공 시 소유자에게 인앱+이메일로 BUSINESS_REVOKED 알림을 보낸다")
+        void notifiesOwnerWhenRevoked() {
+
+            // given
+            Business business = createBusiness(1L, 10L, "멍냥사료", "VERIFIED");
+            BusinessRevokeRequest request = new BusinessRevokeRequest();
+            request.setRevokeReason("조작 서류 발각");
+
+            given(businessMapper.selectByIdForReview(1L)).willReturn(business);
+            given(businessMapper.updateApprovalRevoked(eq(1L), eq(2L), eq("조작 서류 발각"), any())).willReturn(1);
+            given(businessMapper.existsApprovedBusinessForOwner(10L, 1L)).willReturn(false);
+
+            // when
+            businessService.revokeBusiness(2L, 1L, request);
+            simulateTransactionCommit();
+
+            // then: 소유자(10L)에게 BUSINESS_REVOKED 타입으로, IN_APP+EMAIL 채널 모두 알림이 저장됐는지 확인
+            verify(notificationService).save(argThat(req ->
+                    req.userId().equals(10L)
+                            && req.type() == NotificationType.BUSINESS_REVOKED
+                            && req.body().contains("조작 서류 발각")
+                            && req.channels().containsAll(List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL))));
 
         }
 

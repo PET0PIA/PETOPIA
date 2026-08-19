@@ -46,6 +46,12 @@ public interface PaymentMapper {
     PaymentRow selectByIdempotencyKey(@Param("idempotencyKey") String idempotencyKey);
 
     /**
+     * 주문번호(order_id)로 결제를 조회한다. 가상계좌 입금 완료 웹훅이 orderId만 들고 와서
+     * 대상 결제를 찾는 용도. 없으면 null.
+     */
+    PaymentRow selectByOrderId(@Param("orderId") String orderId);
+
+    /**
      * 참가신청 ID로 그 신청의 참가비 결제를 조회한다(VENDOR_FEE 전용). 채린님(참가업체) 도메인이
      * 참가 취소승인 처리 중 환불 대상 paymentId를 찾는 용도. 취소승인은 결제 전(신청만 하고
      * 아직 결제를 시작 안 한 상태)에도 가능하므로, 결제가 없으면 null을 그대로 반환한다
@@ -72,6 +78,26 @@ public interface PaymentMapper {
 
     /** PROCESSING -> COMPLETED. markProcessing으로 선점에 성공한 요청만 호출한다. */
     int markCompleted(PaymentRow row);
+
+    /**
+     * 토스 confirm 응답이 status="WAITING_FOR_DEPOSIT"(가상계좌 발급, 입금 전)일 때
+     * PROCESSING -> WAITING_FOR_DEPOSIT로 전이한다. row에 담긴 계좌정보·웹훅검증용 secret도
+     * 같이 저장한다.
+     */
+    int markWaitingForDeposit(PaymentRow row);
+
+    /**
+     * 가상계좌 입금 완료 웹훅이 WAITING_FOR_DEPOSIT -> COMPLETED로 전이할 때 호출한다.
+     * 웹훅이 재전송돼도 이 UPDATE는 한 번만 1을 반환한다(WHERE status='WAITING_FOR_DEPOSIT' 가드).
+     */
+    int markVirtualAccountCompleted(
+            @Param("paymentId") Long paymentId,
+            @Param("paidAt") LocalDateTime paidAt,
+            @Param("updatedAt") LocalDateTime updatedAt);
+
+    /** 입금기한 만료 등으로 가상계좌가 취소됐을 때 WAITING_FOR_DEPOSIT -> FAILED로 전이한다. */
+    int markVirtualAccountDepositFailed(
+            @Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
 
     /**
      * 토스가 확정적으로 승인을 거부했을 때(4xx) PROCESSING -> FAILED로 전이한다.

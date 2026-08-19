@@ -2,6 +2,7 @@ package com.ms.petopia.api.settlement.service;
 
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
@@ -67,6 +68,9 @@ class SettlementServiceTest {
 
     @Mock
     private FairContractClient fairContractClient;
+
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
 
     @InjectMocks
     private SettlementService settlementService;
@@ -212,6 +216,20 @@ class SettlementServiceTest {
         verify(settlementMapper, never()).insert(any(SettlementRow.class));
     }
 
+    @Test
+    @DisplayName("다른 행사 담당 EVENT_ADMIN은 정산을 계산할 수 없다")
+    void calculate_행사담당자아님_예외를던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> settlementService.calculate(10L, 20L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(settlementMapper, never()).insert(any(SettlementRow.class));
+    }
+
     private SettlementRow pendingSettlementRow() {
         SettlementRow row = new SettlementRow();
         row.setSettlementId(1L);
@@ -248,6 +266,21 @@ class SettlementServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SETTLEMENT_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("다른 행사 담당 EVENT_ADMIN은 정산을 확정할 수 없다")
+    void confirm_행사담당자아님_예외를던진다() {
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(settlementMapper, never()).confirm(any(), any(), any(), any());
     }
 
     @Test
@@ -350,6 +383,21 @@ class SettlementServiceTest {
     }
 
     @Test
+    @DisplayName("다른 행사 담당 EVENT_ADMIN은 정산을 재계산할 수 없다")
+    void recalculate_행사담당자아님_예외를던진다() {
+        given(settlementMapper.selectById(1L)).willReturn(pendingSettlementRow());
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> settlementService.recalculate(1L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(settlementMapper, never()).deleteItemsBySettlementId(any());
+    }
+
+    @Test
     @DisplayName("CONFIRMED 정산은 재계산할 수 없다 — 확정 이후 금액은 불변")
     void recalculate_CONFIRMED_예외를던진다() {
         SettlementRow row = pendingSettlementRow();
@@ -402,6 +450,20 @@ class SettlementServiceTest {
     }
 
     @Test
+    @DisplayName("다른 행사 담당 EVENT_ADMIN은 정산 단건을 조회할 수 없다")
+    void getByFairAndBusiness_행사담당자아님_예외를던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> settlementService.getByFairAndBusiness(10L, 20L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(settlementMapper, never()).selectByFairAndBusiness(any(), any());
+    }
+
+    @Test
     @DisplayName("행사 하나에 속한 정산 목록을 조회한다")
     void getByFair_목록반환() {
         SettlementRow other = pendingSettlementRow();
@@ -412,5 +474,19 @@ class SettlementServiceTest {
         List<SettlementResponse> results = settlementService.getByFair(10L);
 
         assertThat(results).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("다른 행사 담당 EVENT_ADMIN은 정산 목록을 조회할 수 없다")
+    void getByFair_행사담당자아님_예외를던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).checkAssigned(10L);
+
+        assertThatThrownBy(() -> settlementService.getByFair(10L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(settlementMapper, never()).selectByFairId(any());
     }
 }

@@ -1,5 +1,6 @@
 package com.ms.petopia.api.refund.service;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -60,6 +61,26 @@ public class RefundService {
     private final PaymentMapper paymentMapper;
     private final SettlementMapper settlementMapper;
     private final NotificationService notificationService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
+
+    /**
+     * 환불 요청자가 결제 소유자 또는 그 행사 담당 EVENT_ADMIN/SUPER_ADMIN인지 확인한다
+     * (HTTP 진입점 전용). {@link #refund}/{@link #refundOrReuse} 자체엔 이 검증을 넣지 않는다 —
+     * 채린님(참가업체)·승훈님(행사) 도메인이 시스템 명의({@code PaymentService.SYSTEM_ACTOR_USER_ID})로
+     * SecurityContext 없이 직접 빈 주입 호출하는 내부 경로가 있어서다.
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_NOT_FOUND} 대상 결제가 없을 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 소유자도, 그 행사 담당 관리자도 아닐 때
+     */
+    public void assertRequesterAuthorized(Long paymentId, Long actingUserId) {
+        PaymentRow payment = paymentMapper.selectById(paymentId);
+        if (payment == null) {
+            throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
+        }
+        if (!actingUserId.equals(payment.getPayerUserId())) {
+            fairAdminAccessGuard.checkAssigned(payment.getFairId());
+        }
+    }
 
     /**
      * 결제 한 건에 대한 환불을 접수하고 그 자리에서 바로 처리(모의 환불)한다.
@@ -182,9 +203,8 @@ public class RefundService {
     }
 
     /**
-     * 환불 완료를 알림함(IN_APP)에 남긴다. 이메일까지 보내려면 결제자 이메일 주소가 필요한데
-     * 결제 도메인엔 없어(회원 도메인 users 테이블 소관, 도메인 경계상 직접 조회 안 함) — 이메일
-     * 조회용 내부 계약이 생기면 EMAIL 채널을 추가할 예정(TODO).
+     * 환불 완료를 알림함(IN_APP)과 이메일로 남긴다. recipientContact를 null로 넘기면
+     * NotificationService가 userId로 회원 이메일을 자동 조회해서 보낸다.
      *
      * <p>문구에 "카드사 영업일 기준 반영" 안내가 들어가는데(CodeRabbit 리뷰 지적, PR #47),
      * 곧 진짜 PG(토스 결제취소 API) 연동될 거라 지금 문구가 미래 시점 기준으로는 맞음.
@@ -202,7 +222,7 @@ public class RefundService {
                     "환불 금액 " + refund.getRefundAmount() + "원이 처리되었습니다. "
                             + "카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.",
                     null,
-                    List.of(DeliveryChannel.IN_APP),
+                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                     null
             ));
         } catch (Exception e) {

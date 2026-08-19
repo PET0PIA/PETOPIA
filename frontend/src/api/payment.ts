@@ -18,7 +18,8 @@ export const TEMP_USER_ID_HEADER = "X-User-Id";
 export const TEMP_PAYER_USER_ID = 1;
 
 export type PaymentType = "RESERVATION_DEPOSIT" | "VENDOR_FEE" | "FAIR_OPENING_FEE";
-export type PaymentStatus = "PENDING" | "COMPLETED" | "FAILED" | "CANCELED" | "EXPIRED";
+// WAITING_FOR_DEPOSIT: 가상계좌 발급 완료, 아직 입금 전(토스 입금 웹훅이 오면 COMPLETED로 전환됨).
+export type PaymentStatus = "PENDING" | "WAITING_FOR_DEPOSIT" | "COMPLETED" | "FAILED" | "CANCELED" | "EXPIRED";
 
 export interface PaymentDetail {
   paymentId: number;
@@ -36,6 +37,12 @@ export interface PaymentDetail {
   payerUserId: number | null;
   reservationId: number | null;
   applicationId: number | null;
+  // 간편결제(네이버페이 등)로 결제했을 때만 값이 있다. 일반 카드/계좌이체 등이면 null.
+  easyPayProvider: string | null;
+  // 아래 3개는 가상계좌로 결제했을 때만 값이 있다(status가 WAITING_FOR_DEPOSIT/COMPLETED일 때).
+  virtualAccountBankCode: string | null;
+  virtualAccountNumber: string | null;
+  virtualAccountDueDate: string | null;
 }
 
 export interface PaymentListResult {

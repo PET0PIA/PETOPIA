@@ -113,6 +113,11 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.ACCESS_DENIED, "본인 소유의 사업자만 신청할 수 있습니다.");
         }
 
+        // 승인된 사업자만 신청 가능 - 프론트 필터링은 UX일 뿐, 서버가 직접 막아야 함
+        if (business.getApprovalStatus() != Business.ApprovalStatus.APPROVED) {
+            throw new CommonException(ErrorCode.BUSINESS_APPROVAL_REQUIRED);
+        }
+
         // 3) 행사 존재 확인 + 3-1) 모집 마감 여부 확인 (fairStatus 한 번 조회해서 같이 처리)
         FairStatusInfo fairStatus = recruitNoticeMapper.selectFairStatusByFairId(fairId);
 
@@ -885,7 +890,7 @@ public class ApplicationService {
                     title,
                     body,
                     null,
-                    List.of(DeliveryChannel.IN_APP),
+                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                     null
             ));
 

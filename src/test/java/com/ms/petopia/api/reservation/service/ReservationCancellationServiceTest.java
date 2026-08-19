@@ -130,6 +130,25 @@ class ReservationCancellationServiceTest {
     }
 
     @Test
+    void cancelsWaitingForDepositPaymentLedgerRowTogetherWithReservation() {
+        // 가상계좌 발급까지는 됐지만 아직 입금 전인 상태 — 아직 실제 돈은 안 움직였으므로
+        // PENDING과 동일하게 예약 취소와 함께 정리돼야 한다(2026-08-18 CodeRabbit 리뷰 지적,
+        // 이 상태를 못 다뤄서 예약은 취소됐는데 결제만 계속 대기로 남던 사각지대였음).
+        ReservationCancellationContext context = context("PENDING_PAYMENT", "ADVANCE", 10_000);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+        given(timeProvider.now()).willReturn(NOW);
+        given(paymentMapper.selectByReservationId(RESERVATION_ID)).willReturn(payment("WAITING_FOR_DEPOSIT"));
+        given(cancellationMapper.cancelReservation(
+                RESERVATION_ID, "PENDING_PAYMENT", null, USER_ID, NOW
+        )).willReturn(1);
+
+        service.cancel(RESERVATION_ID, USER_ID, null);
+
+        verify(paymentService).cancelPayment(PAYMENT_ID, "RESERVATION");
+        verifyNoInteractions(refundService);
+    }
+
+    @Test
     void rejectsCancellationWhilePaymentApprovalIsInFlight() {
         ReservationCancellationContext context = context("PENDING_PAYMENT", "ADVANCE", 10_000);
         given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);

@@ -1,9 +1,9 @@
 package com.ms.petopia.api.audit.mapper;
 
 import com.ms.petopia.api.audit.dto.AuditLogRow;
+import com.ms.petopia.api.audit.dto.AuditLogSearchCondition;
 import com.ms.petopia.api.audit.entity.AuditLog;
 import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
@@ -11,34 +11,8 @@ import java.util.List;
 public interface AuditLogMapper {
     void insert(AuditLog auditLog);
 
-    // 특정 엔티티에 무슨 일이 있었는지
-    List<AuditLogRow> selectByTarget(
-            @Param("targetType") String targetType,
-            @Param("targetId") Long targetId,
-            @Param("offset") long offset,
-            @Param("limit") int limit
-    );
+    // condition에 채워진 필드만 AND로 조합해 필터링한다. 전부 null이면 조건 없이 전체 조회.
+    List<AuditLogRow> search(AuditLogSearchCondition condition);
 
-    // 특정 관리자가 뭘 했는지
-    List<AuditLogRow> selectByActorUserId(
-            @Param("userId") Long userId,
-            @Param("offset") long offset,
-            @Param("limit") int limit
-    );
-
-    // 특정 액션 타입만 필터링
-    List<AuditLogRow> selectByActionType(
-            @Param("actionType") String actionType,
-            @Param("offset") long offset,
-            @Param("limit") int limit
-    );
-
-    Long countByTarget(
-            @Param("targetType") String targetType,
-            @Param("targetId") Long targetId
-    );
-
-    Long countByActorUserId(@Param("userId") Long userId);
-
-    Long countByActionType(@Param("actionType") String actionType);
+    long countSearch(AuditLogSearchCondition condition);
 }
