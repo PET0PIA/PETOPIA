@@ -421,6 +421,24 @@ class PaymentServiceTest {
 
         // idempotencyKey가 fairId 기준으로 만들어졌는지(같은 행사 중복결제 방지의 핵심 값)
         verify(paymentMapper).insert(argThat(row -> "FAIR_OPENING_FEE_10".equals(row.getIdempotencyKey())));
+
+        // SUPER_ADMIN role 검증을 거쳤는지(개설비는 신청자 본인이 아니라 SUPER_ADMIN만 결제 가능)
+        verify(fairAdminAccessGuard).requireSuperAdmin();
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN이 아니면 행사개설비 결제를 요청해도 예외를 던진다")
+    void payFairOpeningFee_SUPER_ADMIN아님_예외를던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).requireSuperAdmin();
+
+        assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 3L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        // role 검증에서 이미 막혔으니 행사 도메인 계약 조회조차 안 가야 한다
+        verify(fairOpeningFeePaymentContractClient, never()).getPaymentContext(any());
     }
 
     @Test

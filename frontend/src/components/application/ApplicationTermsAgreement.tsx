@@ -1,0 +1,106 @@
+import { useState } from "react";
+import { Dialog } from "../ui/Dialog";
+
+interface ApplicationTermsAgreementProps {
+  agreed: boolean;
+  onAgreedChange: (checked: boolean) => void;
+}
+
+// 법무 검토 전 QA용 초안이다. 운영 배포 전 실제 정책에 맞춰 검토·확정해야 한다.
+function ApplicationTermsContent() {
+  return (
+    <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-2 text-sm leading-6 text-muted">
+      <section>
+        <h3 className="font-extrabold text-ink">제1조 목적</h3>
+        <p className="mt-1">
+          이 유의사항은 승인된 참가업체(사업자)가 PETOPIA 행사의 부스 참가를 신청할 때 지켜야 할
+          절차와 회사와 신청자 간의 권리·의무를 정함을 목적으로 합니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">제2조 신청 자격</h3>
+        <p className="mt-1">
+          부스 참가 신청은 심사를 통과해 승인된 사업자만 할 수 있습니다. 사업자 등록이 반려되었거나
+          취소된 경우 해당 사업자로는 신청할 수 없습니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">제3조 부스 선택 및 임시 선점</h3>
+        <p className="mt-1">
+          신청 과정에서 선택한 부스 슬롯은 다른 신청자가 동시에 선택하지 못하도록 일시적으로
+          선점됩니다. 신청을 완료하지 않고 이탈하면 선점이 해제되어 다른 신청자가 선택할 수 있습니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">제4조 심사 및 확정</h3>
+        <p className="mt-1">
+          제출된 신청서는 담당자 심사를 거쳐 승인 또는 반려됩니다. 승인 전까지는 부스 참가가
+          확정되지 않으며, 반려된 경우 반려 사유가 통지됩니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">제5조 취소 요청</h3>
+        <p className="mt-1">
+          신청 취소는 취소 요청 제출 후 담당자 승인을 거쳐 처리됩니다. 한 번 제출한 취소 요청은
+          철회할 수 없으므로 신중하게 결정해야 합니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">제6조 환불</h3>
+        <p className="mt-1">
+          결제가 완료된 신청 건의 환불은 취소 요청이 승인된 경우에 한해 진행되며, 환불 금액 및
+          처리 절차는 결제 시 안내된 정책을 따릅니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">제7조 사업자 자격 상실에 따른 처리</h3>
+        <p className="mt-1">
+          신청에 사용된 사업자의 등록이 취소되는 경우, 아직 운영이 시작되지 않은 행사에 대한 참가
+          신청은 자동으로 취소되며 결제된 금액이 있으면 환불됩니다. 이미 운영이 시작된 행사의
+          신청 건은 자동으로 취소·환불되지 않으며, 회사가 별도로 확인 후 처리합니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">제8조 책임의 한계</h3>
+        <p className="mt-1">
+          신청서에 기재한 정보가 사실과 다르거나 허위인 경우 그에 따른 불이익은 신청자에게 있으며,
+          회사는 관련 법령이 정하는 범위에서만 책임을 부담합니다.
+        </p>
+      </section>
+      <p className="border-t border-line pt-4 text-xs">
+        시행 예정일: 2026년 8월 20일 · 본 내용은 QA용 초안이며 운영 배포 전 검토가 필요합니다.
+      </p>
+    </div>
+  );
+}
+
+export function ApplicationTermsAgreement({ agreed, onAgreedChange }: ApplicationTermsAgreementProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="flex items-center gap-2">
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(event) => onAgreedChange(event.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          이용약관 및 참가 신청 유의사항에 동의합니다. <span className="text-primary-strong">*</span>
+        </span>
+      </label>
+      <button
+        type="button"
+        className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
+        onClick={() => setOpen(true)}
+      >
+        내용 보기
+      </button>
+
+      <Dialog open={open} onClose={() => setOpen(false)} title="이용약관 및 참가 신청 유의사항">
+        <ApplicationTermsContent />
+      </Dialog>
+    </div>
+  );
+}
