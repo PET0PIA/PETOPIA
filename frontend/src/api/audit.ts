@@ -39,24 +39,28 @@ export interface AuditLogQuery {
   targetId?: number;
   actorUserId?: number;
   actionType?: ActionType;
+  /** YYYY-MM-DD, 둘 다 포함 범위 */
+  startDate?: string;
+  endDate?: string;
   page?: number;
   size?: number;
 }
 
 /**
- * 백엔드가 targetType+targetId / actorUserId / actionType 중 하나만 단일로 받으므로
- * 여기서도 채워진 조건 하나만 쿼리스트링에 실어 보낸다.
+ * 백엔드가 이제 targetType+targetId / actorUserId / actionType / 기간을 전부 독립적으로
+ * 조합해서 받으므로(AND 결합), 채워진 조건을 전부 같이 쿼리스트링에 실어 보낸다.
+ * targetType/targetId만 서로 짝으로만 의미가 있어 - 하나만 채워지면 둘 다 보내지 않는다.
  */
 export function getAuditLogs(query: AuditLogQuery) {
   const params = new URLSearchParams();
   if (query.targetType && query.targetId !== undefined) {
     params.set("targetType", query.targetType);
     params.set("targetId", String(query.targetId));
-  } else if (query.actorUserId !== undefined) {
-    params.set("actorUserId", String(query.actorUserId));
-  } else if (query.actionType) {
-    params.set("actionType", query.actionType);
   }
+  if (query.actorUserId !== undefined) params.set("actorUserId", String(query.actorUserId));
+  if (query.actionType) params.set("actionType", query.actionType);
+  if (query.startDate) params.set("startDate", query.startDate);
+  if (query.endDate) params.set("endDate", query.endDate);
   params.set("page", String(query.page ?? 0));
   params.set("size", String(query.size ?? 20));
 

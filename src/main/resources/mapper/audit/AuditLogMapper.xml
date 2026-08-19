@@ -14,53 +14,34 @@
         )
     </insert>
 
-    <select id="selectByTarget" resultType="AuditLogRow">
+    <!-- search/countSearch가 공유하는 필터 조건. targetType+targetId는 한 블록으로 묶어서
+         짝으로만 필터에 반영되게 한다(대상종류 없이 ID만 오면 서로 다른 대상 유형에 걸친
+         동일 번호가 섞일 수 있음). 나머지 필드는 서로 독립적으로 AND 조합된다. -->
+    <sql id="searchConditions">
+        <where>
+            <if test="targetType != null and targetId != null">
+                AND target_type = #{targetType} AND target_id = #{targetId}
+            </if>
+            <if test="actorUserId != null"> AND user_id = #{actorUserId} </if>
+            <if test="actionType != null"> AND action_type = #{actionType} </if>
+            <if test="startAt != null"> AND occurred_at &gt;= #{startAt} </if>
+            <if test="endAt != null"> AND occurred_at &lt; #{endAt} </if>
+        </where>
+    </sql>
+
+    <select id="search" resultType="AuditLogRow">
         SELECT audit_id, user_id, actor_type, actor_role,
             action_type, target_type, target_id,
             before_value, after_value, occurred_at
         FROM audit_log
-        WHERE target_type = #{targetType}
-            AND target_id = #{targetId}
+        <include refid="searchConditions"/>
         ORDER BY occurred_at DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
-    <select id="selectByActorUserId" resultType="AuditLogRow">
-        SELECT audit_id, user_id, actor_type, actor_role,
-            action_type, target_type, target_id,
-            before_value, after_value, occurred_at
-        FROM audit_log
-        WHERE user_id = #{userId}
-        ORDER BY occurred_at DESC
-        LIMIT #{limit} OFFSET #{offset}
-    </select>
-
-    <select id="selectByActionType" resultType="AuditLogRow">
-        SELECT audit_id, user_id, actor_type, actor_role,
-            action_type, target_type, target_id,
-            before_value, after_value, occurred_at
-        FROM audit_log
-        WHERE action_type = #{actionType}
-        ORDER BY occurred_at DESC
-        LIMIT #{limit} OFFSET #{offset}
-    </select>
-
-    <select id="countByTarget" resultType="long">
+    <select id="countSearch" resultType="long">
         SELECT COUNT(*)
         FROM audit_log
-        WHERE target_type = #{targetType}
-            AND target_id = #{targetId}
-    </select>
-
-    <select id="countByActorUserId" resultType="long">
-        SELECT COUNT(*)
-        FROM audit_log
-        WHERE user_id = #{userId}
-    </select>
-
-    <select id="countByActionType" resultType="long">
-        SELECT COUNT(*)
-        FROM audit_log
-        WHERE action_type = #{actionType}
+        <include refid="searchConditions"/>
     </select>
 </mapper>
