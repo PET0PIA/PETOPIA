@@ -23,6 +23,8 @@ public class NoticeAdminResponse {
     private String content;
     private Long fairId;
     private String fairName;
+    /** 공개 상세와 같은 값. 관리자 화면이 "이 행사는 아직 미공개"를 알아볼 수 있게 함께 내린다. */
+    private boolean fairPublic;
     private boolean published;
     private boolean pinned;
     private int viewCount;
@@ -38,6 +40,7 @@ public class NoticeAdminResponse {
                 .content(notice.getContent())
                 .fairId(notice.getFairId())
                 .fairName(notice.getFairName())
+                .fairPublic(notice.isFairPublic())
                 .published(notice.isPublished())
                 .pinned(notice.isPinned())
                 .viewCount(notice.getViewCount())

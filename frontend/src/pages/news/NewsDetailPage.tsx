@@ -13,11 +13,15 @@ import { formatShortDate } from "../../utils/date";
 export function NewsDetailPage() {
   const { noticeId } = useParams<{ noticeId: string }>();
   const currentId = Number(noticeId);
+  // /news/abc 처럼 숫자가 아닌 주소면 요청 자체를 보내지 않는다. 이 가드가 없으면 currentId가
+  // NaN이 되고, 아래 실패 상태 비교(NaN === NaN은 false)가 영원히 안 맞아 로딩 화면에 갇힌다.
+  const idValid = Number.isInteger(currentId) && currentId > 0;
   const [loaded, setLoaded] = useState<NoticeDetail | null>(null);
   // 어느 글의 오류인지까지 들고 있어야, 다른 글로 이동했을 때 남의 오류를 보여주지 않는다.
   const [failure, setFailure] = useState<{ noticeId: number; message: string } | null>(null);
 
   useEffect(() => {
+    if (!idValid) return;
     let ignore = false;
     getNotice(currentId)
       .then((data) => { if (!ignore) setLoaded(data); })
@@ -27,13 +31,13 @@ export function NewsDetailPage() {
         setFailure({ noticeId: currentId, message: error instanceof ApiError ? error.message : "공지를 불러오지 못했어요." });
       });
     return () => { ignore = true; };
-  }, [currentId]);
+  }, [currentId, idValid]);
 
   // 주소의 id와 들고 있는 값이 다르면 아직 이 글을 못 받은 것이다. 별도 loading 상태를 두는 대신
   // 이렇게 계산하면, 다른 글로 이동했을 때 이전 글이 잠깐 보이는 문제도 함께 사라진다.
   const notice = loaded?.noticeId === currentId ? loaded : null;
   const loadError = failure?.noticeId === currentId ? failure.message : null;
-  const loading = !notice && !loadError;
+  const loading = idValid && !notice && !loadError;
 
   if (loading) {
     return (
@@ -43,7 +47,7 @@ export function NewsDetailPage() {
     );
   }
 
-  if (loadError || !notice) {
+  if (!idValid || loadError || !notice) {
     return (
       <PageContainer className="py-10">
         <EmptyState
@@ -70,10 +74,16 @@ export function NewsDetailPage() {
             {notice.pinned && (
               <Badge tone="neutral" className="gap-1"><Pin size={11} />상단 고정</Badge>
             )}
+            {/* 아직 전체공개 안 된 행사는 상세가 404라서 링크를 걸지 않고 이름만 보여준다.
+                판정(fairPublic)은 서버가 공개 상세와 같은 기준으로 내려준다. */}
             {notice.fairId && notice.fairName && (
-              <Link to={`/fairs/${notice.fairId}`} className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-bold text-ink transition hover:bg-line">
-                {notice.fairName}
-              </Link>
+              notice.fairPublic ? (
+                <Link to={`/fairs/${notice.fairId}`} className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-bold text-ink transition hover:bg-line">
+                  {notice.fairName}
+                </Link>
+              ) : (
+                <span className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-bold text-ink">{notice.fairName}</span>
+              )
             )}
           </div>
           <h1 className="text-2xl font-extrabold leading-snug tracking-tight text-ink sm:text-3xl">{notice.title}</h1>

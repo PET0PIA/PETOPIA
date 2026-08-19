@@ -46,6 +46,11 @@ export interface NoticeDetail {
   content: string;
   fairId: number | null;
   fairName: string | null;
+  /**
+   * 연결된 행사를 관람객이 열어볼 수 있는지. 아직 전체공개 안 된 행사·취소된 행사는 공개 상세가
+   * 404라서, false면 행사 배지를 링크로 걸지 않는다. 판정은 서버가 한다(linkPath와 같은 이유).
+   */
+  fairPublic: boolean;
   pinned: boolean;
   viewCount: number;
   createdAt: string;

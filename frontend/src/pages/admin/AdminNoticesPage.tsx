@@ -12,6 +12,7 @@ import { useConfirm } from "../../components/ui/useConfirm";
 import { ApiError } from "../../api/client";
 import { uploadImage } from "../../api/files";
 import { getFairApplications, type FairApplicationSummary } from "../../api/fair";
+import { formatShortDate } from "../../utils/date";
 import {
   EDITABLE_NOTICE_CATEGORIES,
   NOTICE_CATEGORY_LABELS,
@@ -59,10 +60,6 @@ function label(text: string, required = false) {
       {required && <span className="ml-1 text-primary-strong">*</span>}
     </span>
   );
-}
-
-function formatDate(value: string): string {
-  return value.slice(0, 10).replace(/-/g, ".");
 }
 
 export function AdminNoticesPage() {
@@ -263,7 +260,7 @@ export function AdminNoticesPage() {
           <div className="space-y-2">
             {notices.map((notice) => (
               <div key={notice.noticeId} className={`surface flex items-center gap-3 p-3 ${notice.published ? "" : "opacity-70"}`}>
-                <Badge tone={notice.published ? "neutral" : "neutral"}>{NOTICE_CATEGORY_LABELS[notice.category]}</Badge>
+                <Badge>{NOTICE_CATEGORY_LABELS[notice.category]}</Badge>
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-1.5 truncate text-sm font-bold text-ink">
                     {notice.pinned && <Pin size={13} className="shrink-0" aria-label="상단 고정" />}
@@ -275,7 +272,7 @@ export function AdminNoticesPage() {
                     )}
                   </p>
                   <p className="truncate text-xs text-muted">
-                    {formatDate(notice.createdAt)} · 조회 {notice.viewCount}
+                    {formatShortDate(notice.createdAt)} · 조회 {notice.viewCount}
                     {notice.fairName && ` · ${notice.fairName}`}
                     {!notice.published && " · 비공개"}
                   </p>

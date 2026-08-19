@@ -27,6 +27,7 @@
     -->
     <select id="selectPublishedById" resultType="com.ms.petopia.api.notice.domain.Notice">
         SELECT n.notice_id, n.category, n.title, n.content, n.fair_id, f.name AS fair_name,
+            (f.published_at IS NOT NULL AND f.canceled_at IS NULL) AS fair_public,
             n.is_published, n.is_pinned, n.view_count, n.created_at, n.updated_at
         FROM notice n
         LEFT JOIN fairs f ON f.fair_id = n.fair_id
@@ -58,6 +59,7 @@
     <!--비공개 글까지 전부. 관리자 목록은 최신 등록순으로만 본다(고정 여부는 배지로 표시).-->
     <select id="selectAllForAdmin" resultType="com.ms.petopia.api.notice.domain.Notice">
         SELECT n.notice_id, n.category, n.title, n.content, n.fair_id, f.name AS fair_name,
+            (f.published_at IS NOT NULL AND f.canceled_at IS NULL) AS fair_public,
             n.is_published, n.is_pinned, n.view_count, n.created_at, n.updated_at
         FROM notice n
         LEFT JOIN fairs f ON f.fair_id = n.fair_id
@@ -66,6 +68,7 @@
 
     <select id="selectById" resultType="com.ms.petopia.api.notice.domain.Notice">
         SELECT n.notice_id, n.category, n.title, n.content, n.fair_id, f.name AS fair_name,
+            (f.published_at IS NOT NULL AND f.canceled_at IS NULL) AS fair_public,
             n.is_published, n.is_pinned, n.view_count, n.created_by, n.created_at, n.updated_at
         FROM notice n
         LEFT JOIN fairs f ON f.fair_id = n.fair_id
