@@ -289,6 +289,12 @@ public class SettlementService {
      * 이 메서드 자체는 상태를 되돌리고 감사기록을 남기는 것만 담당하고, 금액 재계산은 기존
      * recalculate()를 그대로 재사용한다(클래스 문서 "재계산 정정 절차는 이번 스코프 밖" 항목 해소).
      *
+     * <p>되돌리는 동시에 {@code needs_recalculation}을 TRUE로 세운다 — 이게 없으면 되돌린 직후
+     * recalculate 없이 바로 confirm()을 다시 불러도 그냥 통과돼버려서(CONFIRMED 시점엔 이 값이
+     * 이미 FALSE였으므로), 정정하려던 옛날 금액 그대로 재확정되는 구멍이 생긴다(CodeRabbit 리뷰
+     * 지적, PR #181). confirm()의 기존 needsRecalculation 체크가 이 값 덕분에 "reopen 이후엔
+     * 반드시 recalculate부터"를 강제한다.
+     *
      * <p>{@link #confirm}은 그 행사 담당 EVENT_ADMIN도 할 수 있지만, 되돌리기는
      * {@link FairAdminAccessGuard#requireSuperAdmin}으로 더 좁게 제한한다 — 이미 확정되어
      * 지급 근거가 됐을 수 있는 정산을 되돌리는 결정은 확정보다 더 신중해야 해서다.
@@ -339,6 +345,7 @@ public class SettlementService {
         row.setStatus(PENDING);
         row.setConfirmedAt(null);
         row.setConfirmedByUserId(null);
+        row.setNeedsRecalculation(true);
         row.setUpdatedAt(now);
 
         return SettlementResponse.from(row);

@@ -567,4 +567,29 @@ class SettlementServiceTest {
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SETTLEMENT_NOT_REOPENABLE);
     }
+
+    @Test
+    @DisplayName("되돌린 뒤 재계산 없이 바로 확정하려 하면 예외를 던진다 — 옛날 금액으로 재확정되는 걸 막는다")
+    void reopen_이후_재계산없이확정하면_예외를던진다() {
+        // Arrange: reopen() 성공 (CodeRabbit 리뷰 지적, PR #181 — reopen이 needs_recalculation을
+        // TRUE로 세우지 않으면, CONFIRMED 시점엔 이미 FALSE였던 이 값 때문에 recalculate 없이도
+        // confirm()이 그대로 통과해버려 정정 전 옛날 금액이 재확정될 수 있었다.)
+        given(settlementMapper.selectById(1L)).willReturn(confirmedSettlementRow());
+        given(settlementMapper.reopen(eq(1L), any(LocalDateTime.class))).willReturn(1);
+        settlementService.reopen(1L, 200L);
+
+        // Act: 실제 DB라면 reopen()이 needs_recalculation=TRUE로 세워둔 상태 — 그 상태를 반영한
+        // row로 다시 조회되는 상황을 시뮬레이션한다.
+        SettlementRow reopenedRow = pendingSettlementRow();
+        reopenedRow.setNeedsRecalculation(true);
+        given(settlementMapper.selectById(1L)).willReturn(reopenedRow);
+
+        // Assert: recalculate() 없이 바로 confirm()을 부르면 막혀야 한다.
+        assertThatThrownBy(() -> settlementService.confirm(1L, 99L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.SETTLEMENT_RECALCULATION_REQUIRED);
+
+        verify(settlementMapper, never()).confirm(any(), any(), any(), any());
+    }
 }
