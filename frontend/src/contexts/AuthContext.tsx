@@ -90,15 +90,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function refreshUser() {
-  try {
-    // role은 JWT payload에 박혀있어서, 서버에서 사업자 취소 등으로 role이
-    // 바뀌어도 토큰을 다시 발급받기 전엔 프론트가 알 방법이 없다.
-    const token = await refreshAccessTokenOnce();
-    setUser(decodeAccessToken(token));
-  } catch {
-    // 리프레시 실패(토큰 만료 등)는 무시 — 기존 401 처리 흐름이 로그아웃을 담당
+    try {
+      // role은 JWT payload에 박혀있어서, 서버에서 사업자 취소 등으로 role이
+      // 바뀌어도 토큰을 다시 발급받기 전엔 프론트가 알 방법이 없다.
+      // 토큰을 다시 발급받아 새 payload로 role을 재확인한다.
+      const token = await refreshAccessTokenOnce();
+      setUser(decodeAccessToken(token));
+    } catch {
+      // 여기서 실패해도 로그아웃 처리는 하지 않는다 - 일시적인 네트워크 오류일 수 있고,
+      // 세션이 실제로 끊겼다면 다음 API 호출이 401을 맞아 기존 흐름이 로그아웃을 처리한다.
+    }
   }
-}
 
   return (
     <AuthContext.Provider value={{ user, status, login, loginAsAdmin, loginWithOAuthCode, completeOAuthSignup, logout, refreshUser }}>
