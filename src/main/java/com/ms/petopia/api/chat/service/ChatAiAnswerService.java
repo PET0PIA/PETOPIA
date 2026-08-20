@@ -70,18 +70,14 @@ public class ChatAiAnswerService {
     /** @return 실제로 AI 답변을 남겼는지. 거짓이면 호출자가 한도를 되돌린다. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean tryAnswer(ChatAiAnswerRequestedEvent event) {
-        // 한 번 읽어 프롬프트와 중복 안내 판정에 함께 쓴다. 두 번 읽으면 그 사이 들어온
-        // 메시지 때문에 두 판단이 서로 다른 대화를 보게 된다.
-        List<ChatMessage> recent =
-                messageMapper.selectRecentByConversation(event.conversationId(), TRANSCRIPT_SIZE);
-        Optional<String> answer =
-                responder.answer(event.conversationId(), buildTranscript(recent), event.aiContext());
+        Optional<String> answer = responder.answer(
+                event.conversationId(), buildTranscript(event.conversationId()), event.aiContext());
 
         if (answer.isEmpty()) {
             // 답하지 않기로 했거나(에스컬레이션) 호출이 실패했다. 여기서 조용히 끝내면
             // 사용자는 입력창이 열려 있는데 답도 안 오는 상태에 남는다 - 왜 기다려야 하는지
             // 모르는 채 같은 질문을 반복하다 한도를 다 쓴다. 그래서 이유를 남긴다.
-            appendEscalateNotice(event.conversationId(), recent);
+            appendEscalateNotice(event.conversationId());
             return false;
         }
 
@@ -108,15 +104,18 @@ public class ChatAiAnswerService {
     /**
      * 답변을 남기지 못했다는 사실과 그래서 무엇을 기다리면 되는지 알린다.
      *
-     * <p>최근 대화에 같은 안내가 이미 있으면 붙이지 않는다. 이관 판정은 연달아 나오기 쉬운데
-     * (같은 주제를 다시 물으면 같은 판정이 나온다) 그때마다 같은 문장을 쌓으면 창이 안내로만
-     * 채워져, 정작 뒤에 붙을 상담사 답변이 묻힌다.
+     * <p>같은 안내가 이미 있으면 붙이지 않는다. 이관 판정은 연달아 나오기 쉬운데(같은 주제를
+     * 다시 물으면 같은 판정이 나온다) 그때마다 같은 문장을 쌓으면 창이 안내로만 채워져,
+     * 정작 뒤에 붙을 상담사 답변이 묻힌다.
+     *
+     * <p>확인 전에 대화 행을 잠그는 이유는 {@link ChatConversationMapper#lockById}에 적었다.
+     * 요약하면 같은 대화의 AI 작업이 둘 동시에 돌 수 있어, 잠그지 않으면 둘 다 "없다"로
+     * 읽고 둘 다 붙인다.
      */
-    private void appendEscalateNotice(Long conversationId, List<ChatMessage> recent) {
+    private void appendEscalateNotice(Long conversationId) {
         String notice = setting(SETTING_AI_ESCALATE_NOTICE, DEFAULT_AI_ESCALATE_NOTICE);
-        boolean alreadyNoticed = recent.stream()
-                .anyMatch(m -> m.getSenderType() == ChatSenderType.SYSTEM && notice.equals(m.getContent()));
-        if (!alreadyNoticed) {
+        conversationMapper.lockById(conversationId);
+        if (!messageMapper.existsSystemMessage(conversationId, notice)) {
             messageWriter.append(conversationId, ChatSenderType.SYSTEM, null, null, notice);
         }
     }
@@ -127,7 +126,9 @@ public class ChatAiAnswerService {
      * <p>SYSTEM 메시지(접수 안내·운영시간 안내)는 뺀다. 대화 내용이 아니라 화면 안내라
      * 넣어봐야 AI가 답할 거리가 아니고, 오히려 그걸 사용자 발화로 오해할 수 있다.
      */
-    private List<String> buildTranscript(List<ChatMessage> messages) {
+    private List<String> buildTranscript(Long conversationId) {
+        List<ChatMessage> messages =
+                messageMapper.selectRecentByConversation(conversationId, TRANSCRIPT_SIZE);
         return messages.stream()
                 .filter(m -> m.getSenderType() != ChatSenderType.SYSTEM)
                 .map(m -> switch (m.getSenderType()) {
