@@ -468,6 +468,20 @@ export function ParticipationReviewPage() {
         </form>
       </Dialog>
 
+      <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} title="신청 반려">
+        <form onSubmit={handleRejectSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="rejectReason" className="mb-1.5 block text-sm font-bold text-ink">반려 사유<span className="ml-1 text-primary-strong">*</span></label>
+            <Textarea id="rejectReason" value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="신청자에게 안내할 반려 사유를 입력해 주세요." required />
+          </div>
+          {reviewError && <p className="text-sm font-bold text-primary-strong">{reviewError}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setRejectDialogOpen(false)}>취소</Button>
+            <Button type="submit" disabled={reviewing}>{reviewing ? "처리 중..." : "반려 확정"}</Button>
+          </div>
+        </form>
+      </Dialog>
+
       {confirmDialog}
     </div>
   );
