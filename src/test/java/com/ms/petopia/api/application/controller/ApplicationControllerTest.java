@@ -116,7 +116,7 @@ class ApplicationControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"businessId\":1,\"boothSlotIds\":[1],\"purpose\":\"\","
                                 + "\"itemsDesc\":\"사료\",\"managerName\":\"김담당\",\"managerPhone\":\"010-1234-5678\","
-                                + "\"managerEmail\":\"manager@petopia.com\"}"))
+                                + "\"managerEmail\":\"manager@petopia.com\",\"agreedTerms\":true,\"agreedPrivacy\":true}"))
                 .andExpect(status().isBadRequest());
 
     }

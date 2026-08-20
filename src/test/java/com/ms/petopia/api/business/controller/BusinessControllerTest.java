@@ -105,7 +105,7 @@ class BusinessControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"멍냥사료\",\"ceoName\":\"김대표\",\"bizRegNo\":\"abc\","
                                 + "\"startDate\":\"2020-01-01\",\"address\":\"서울시\","
-                                + "\"businessRegDocKey\":\"uploads/document/reg.pdf\",\"phone\":\"02-1234-5678\"}"
+                                + "\"businessRegDocKey\":\"uploads/document/reg.pdf\",\"phone\":\"02-1234-5678\","
                                 + "\"agreedTerms\":true,\"agreedPrivacy\":true}"))
                 .andExpect(status().isBadRequest());
 

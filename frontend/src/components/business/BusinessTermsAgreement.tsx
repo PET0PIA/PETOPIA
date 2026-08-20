@@ -146,10 +146,12 @@ export function BusinessTermsAgreement({ agreedTerms, agreedPrivacy, onTermsChan
   return (
     <div className="space-y-3 border-t border-line pt-5">
       <div className="flex items-center gap-2">
-        <input type="checkbox" checked={agreedTerms} onChange={(event) => onTermsChange(event.target.checked)} />
-        <span className="text-sm text-ink">
-          사업자 등록 이용약관에 동의합니다. <span className="text-primary-strong">*</span>
-        </span>
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input type="checkbox" checked={agreedTerms} onChange={(event) => onTermsChange(event.target.checked)} />
+          <span>
+            사업자 등록 이용약관에 동의합니다. <span className="text-primary-strong">*</span>
+          </span>
+        </label>
         <button
           type="button"
           className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
@@ -160,10 +162,12 @@ export function BusinessTermsAgreement({ agreedTerms, agreedPrivacy, onTermsChan
       </div>
 
       <div className="flex items-center gap-2">
-        <input type="checkbox" checked={agreedPrivacy} onChange={(event) => onPrivacyChange(event.target.checked)} />
-        <span className="text-sm text-ink">
-          개인정보 수집·이용에 동의합니다. <span className="text-primary-strong">*</span>
-        </span>
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input type="checkbox" checked={agreedPrivacy} onChange={(event) => onPrivacyChange(event.target.checked)} />
+          <span>
+            개인정보 수집·이용에 동의합니다. <span className="text-primary-strong">*</span>
+          </span>
+        </label>
         <button
           type="button"
           className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"

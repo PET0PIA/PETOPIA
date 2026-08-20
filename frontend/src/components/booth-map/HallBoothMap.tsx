@@ -84,7 +84,7 @@ export function HallBoothMap({ hallName, backgroundImageUrl, slots, onSlotClick 
               {slot.locked && <Lock size={11} className="mb-0.5" />}
               <span className="truncate leading-tight [font-size:clamp(7px,26cqmin,11px)]">{slot.slotNumber}</span>
               {slot.caption && (
-                <span className="whitespace-pre-line text-center font-normal leading-tight opacity-80 [font-size:clamp(6px,18cqmin,10px)]">
+                <span className="w-full whitespace-pre-line break-words text-center font-normal leading-tight opacity-80 [font-size:clamp(6px,18cqmin,10px)]">
                   {slot.caption}
                 </span>
               )}
