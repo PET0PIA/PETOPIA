@@ -6,9 +6,14 @@ import com.ms.petopia.api.review.dto.BoothFairBusinessRow;
 import com.ms.petopia.api.review.dto.BoothFeedback;
 import com.ms.petopia.api.review.dto.BoothFeedbackSubmission;
 import com.ms.petopia.api.review.dto.FairReview;
+import com.ms.petopia.api.review.dto.FairReviewListItemResponse;
+import com.ms.petopia.api.review.dto.FairReviewListResponse;
+import com.ms.petopia.api.review.dto.FairReviewListRow;
 import com.ms.petopia.api.review.dto.FairReviewResponse;
+import com.ms.petopia.api.review.dto.FairReviewSummaryResponse;
 import com.ms.petopia.api.review.dto.FeedbackTag;
 import com.ms.petopia.api.review.dto.MyReviewStatusResponse;
+import com.ms.petopia.api.review.dto.ReviewTagLabelRow;
 import com.ms.petopia.api.review.dto.SubmitFairReviewRequest;
 import com.ms.petopia.api.review.mapper.BoothFeedbackMapper;
 import com.ms.petopia.api.review.mapper.FairReviewMapper;
@@ -23,7 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 통합 리뷰(태그 기반) 제출 서비스. 마법사 전체(페르소나 → 행사 태그 → 부스 선택·평가 →
@@ -37,6 +44,7 @@ import java.util.Set;
 public class FairReviewService {
 
     private static final int MAX_BOOTH_FEEDBACKS = 3;
+    private static final int MAX_PAGE_SIZE = 50;
 
     private final FairReviewMapper fairReviewMapper;
     private final BoothFeedbackMapper boothFeedbackMapper;
@@ -102,10 +110,56 @@ public class FairReviewService {
     @Transactional(readOnly = true)
     public MyReviewStatusResponse checkStatus(Long fairId, Long userId) {
         FairReview review = fairReviewMapper.selectByFairIdAndUserId(fairId, userId);
+        boolean hasVisited = fairReviewMapper.existsEntryRecord(fairId, userId);
         if (review == null) {
-            return new MyReviewStatusResponse(false, null);
+            return new MyReviewStatusResponse(false, null, hasVisited);
         }
-        return new MyReviewStatusResponse(true, review.getReviewId());
+        return new MyReviewStatusResponse(true, review.getReviewId(), hasVisited);
+    }
+
+    /**
+     * 공개 리뷰 목록(최신순 페이지네이션). 별점+자유서술 대신 각 리뷰가 고른 scope=FAIR
+     * 태그 라벨을 함께 보여준다. 목록 조회 1번 + 태그 라벨 배치 조회 1번, 총 쿼리 2번으로
+     * N+1을 피한다(NotificationQueryService의 페이지네이션 방식과 동일).
+     */
+    @Transactional(readOnly = true)
+    public FairReviewListResponse listPublic(Long fairId, int page, int size) {
+        if (page < 0 || size <= 0 || size > MAX_PAGE_SIZE) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        long totalElements = fairReviewMapper.countByFairId(fairId);
+        int totalPages = (int) ((totalElements + size - 1) / size);
+        List<FairReviewListRow> rows = fairReviewMapper.selectListByFairId(fairId, (long) page * size, size);
+
+        List<Long> reviewIds = rows.stream().map(FairReviewListRow::getReviewId).toList();
+        Map<Long, List<String>> labelsByReviewId = reviewIds.isEmpty()
+                ? Map.of()
+                : fairReviewMapper.selectFairTagLabelsByReviewIds(reviewIds).stream()
+                        .collect(Collectors.groupingBy(ReviewTagLabelRow::getReviewId,
+                                Collectors.mapping(ReviewTagLabelRow::getLabel, Collectors.toList())));
+
+        List<FairReviewListItemResponse> items = rows.stream()
+                .map(row -> new FairReviewListItemResponse(
+                        row.getReviewId(),
+                        row.getNickname(),
+                        row.getCompanionType(),
+                        row.getVisitPurpose(),
+                        row.isWouldRevisit(),
+                        labelsByReviewId.getOrDefault(row.getReviewId(), List.of()),
+                        row.getCreatedAt()
+                ))
+                .toList();
+
+        return new FairReviewListResponse(items, page, size, totalElements, totalPages, page + 1 < totalPages);
+    }
+
+    /** 공개 리뷰 요약. 별점 평균 자리를 재방문 의향 비율이 대신한다. */
+    @Transactional(readOnly = true)
+    public FairReviewSummaryResponse getPublicSummary(Long fairId) {
+        long reviewCount = fairReviewMapper.countByFairId(fairId);
+        double revisitRate = reviewCount == 0 ? 0.0
+                : (double) fairReviewMapper.countRevisitByFairId(fairId) / reviewCount;
+        return new FairReviewSummaryResponse(fairId, reviewCount, revisitRate);
     }
 
     private void submitBoothFeedback(Long fairId, Long userId, Long reviewId, LocalDateTime now,
