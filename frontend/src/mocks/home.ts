@@ -26,15 +26,6 @@ export const currentUser: CurrentUser = {
   notificationCount: 3,
 };
 
-// 배너 아래 검정 마퀴 띠에 흐르는 공지 문구
-export const homeNotices: string[] = [
-  "제2회 대구 펫 페스티벌이 성황리에 종료되었습니다. 함께해주셔서 감사합니다",
-  "2026 서울 펫페어 얼리버드 티켓 오픈",
-  "부산 댕냥 산책 페스타 참가 부스 모집 중",
-  "인천 반려동물 박람회 참가 신청 마감 임박",
-  "대전 펫 패밀리데이 반려동물 동반 입장 안내",
-];
-
 export const upcomingFairs: Fair[] = [
   { id: "seoul-autumn", name: "2026 서울 펫페어", imageUrl: fairPoster1, status: "RESERVATION_OPEN", dates: "2026. 09. 18 - 09. 20", location: "서울 코엑스 C홀", exhibitorCount: 168, accent: "primary" },
   { id: "busan-walk", name: "부산 댕냥 산책 페스타", imageUrl: fairPoster2, status: "UPCOMING", dates: "2026. 10. 03 - 10. 04", location: "벡스코 제2전시장", exhibitorCount: 82, accent: "leaf" },
@@ -71,24 +62,6 @@ export const fairReviews: FairReview[] = [
   { id: "dogwithspa", author: "코코맘", rating: 5, title: "이번 광주 펫페어 v.7을 다녀오며", content: "강아지 팩을 샀는데 스파할 때 사용하니까 좋은 것 같아요. 눈물도 덜 나고 확실히 순한 게 느껴져요. 다음에도 또 방문하고 싶은 박람회였어요!", fairName: "광주 펫페어 v.7", image: reviewSpa },
   { id: "happydog", author: "구름이집사", rating: 5, title: "울산 강아지 축제 후기!", content: "실외에 울타리가 쳐져 있어서 우리 강아지가 신나게 뛰어놀았어요! 운영 시설도 편하게 잘 되어 있어서 하루 종일 편하게 즐기다 왔습니다.", fairName: "울산 강아지 축제", image: reviewHappy },
   { id: "playdog", author: "보리아빠", rating: 5, title: "일산 펫페어 다녀온 후기", content: "저희 아이는 휴지 뜯는 걸 좋아하는데 마침 딱 좋은 장난감을 팔더라구요. 지금도 너무 잘 놀아요. 내부도 깔끔하고 질서 있게 정돈되어 있어 둘러보기 편했어요.", fairName: "일산 펫페어", image: reviewPlay },
-];
-
-// PETOPIA 소식(ocreo 소식 섹션 대응): 카테고리 pill 필터 + 공지 리스트.
-export type NewsCategory = "공지" | "이벤트" | "안내";
-interface NewsItem {
-  id: string;
-  category: NewsCategory;
-  title: string;
-  date: string;
-}
-
-export const petopiaNews: NewsItem[] = [
-  { id: "news-1", category: "공지", title: "2026 서울 펫페어 예매가 오픈되었습니다", date: "2026.08.05" },
-  { id: "news-2", category: "이벤트", title: "얼리버드 티켓 20% 할인 이벤트 (~8/20)", date: "2026.08.02" },
-  { id: "news-3", category: "안내", title: "반려동물 동반 입장 시 필수 준비물 안내", date: "2026.07.28" },
-  { id: "news-4", category: "공지", title: "부산 댕냥 산책 페스타 부스 참가 신청 접수", date: "2026.07.22" },
-  { id: "news-5", category: "이벤트", title: "SNS 후기 인증하고 한정 굿즈 받아가세요", date: "2026.07.15" },
-  { id: "news-6", category: "안내", title: "현장 QR 입장 방법 및 유의사항 안내", date: "2026.07.08" },
 ];
 
 export const personalActivities: ActivityItem[] = [

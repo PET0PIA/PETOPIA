@@ -182,6 +182,8 @@ public enum ErrorCode {
     // ===== Banner & Popup =====
     BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "AD001", "존재하지 않는 배너입니다."),
     POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "AD002", "존재하지 않는 팝업입니다."),
+    NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "AD003", "존재하지 않는 공지사항입니다."),
+    NOTICE_ATTACHMENT_LIMIT(HttpStatus.BAD_REQUEST, "AD004", "첨부파일은 최대 5개까지 등록할 수 있습니다."),
 
     // ===== Review (페어 리뷰) =====
     REVIEW_INVALID_RATING(HttpStatus.BAD_REQUEST, "RV001", "평점은 1~5 사이여야 합니다."),

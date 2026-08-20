@@ -43,9 +43,11 @@ import { TicketReservationPage } from "../pages/reservation/TicketReservationPag
 import { BoothVisitScanPage } from "../pages/vendor/BoothVisitScanPage";
 import { FairReservationsPage } from "../pages/fair-admin/FairReservationsPage";
 import { NotFoundPage, PlaceholderPage } from "../pages/PlaceholderPage";
-import { NotImplementedPage } from "../pages/NotImplementedPage";
 import { AdminBannersPage } from "../pages/admin/AdminBannersPage";
 import { AdminPopupsPage } from "../pages/admin/AdminPopupsPage";
+import { AdminNoticesPage } from "../pages/admin/AdminNoticesPage";
+import { NewsListPage } from "../pages/news/NewsListPage";
+import { NewsDetailPage } from "../pages/news/NewsDetailPage";
 import { MyVisitedBoothsPage } from "../pages/booth/MyVisitedBoothsPage";
 import { LoginPage } from "../pages/auth/LoginPage";
 import { SignupPage } from "../pages/auth/SignupPage";
@@ -122,7 +124,6 @@ const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).fil
     item.path !== "/admin/accounts" &&
     item.path !== "/admin/banners" &&
     item.path !== "/admin/popups" &&
-    item.path !== "/admin/notices" &&
     item.path !== "/admin/chat" &&
     item.path !== "/admin/businesses"
 );
@@ -187,8 +188,10 @@ export function AppRouter() {
           <Route path="/fairs/recruiting" element={<Navigate to="/participations/new" replace />} />
           {/* 비즈니스 ▾ "광고 문의". 문의 전용 백엔드가 없어 이메일 안내(정적) 화면으로 연결한다. */}
           <Route path="/advertising" element={<AdvertisingInquiryPage />} />
-          {/* 소식·이벤트(공지사항). 백엔드(notice)부터 미구현이라 자리표시만 둔다. */}
-          <Route path="/news" element={<NotImplementedPage title="소식·이벤트" />} />
+          {/* 소식·이벤트. 목록에는 공지와 진행 중인 모집공고가 함께 나오고, 모집공고를 누르면
+              기존 /fairs/:fairId/recruit-notice 화면으로 간다(서버가 linkPath로 정해준다). */}
+          <Route path="/news" element={<NewsListPage />} />
+          <Route path="/news/:noticeId" element={<NewsDetailPage />} />
           <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
           {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}
           <Route path="/payments/success" element={<PaymentSuccessPage />} />
@@ -281,10 +284,10 @@ export function AppRouter() {
             <Route path="settlements" element={<SettlementPage />} />
             <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
             <Route path="accounts" element={<AdminAccountsPage />} />
-            {/* 콘텐츠·홍보: 배너·팝업은 실제 화면, 공지는 미구현 자리표시(백엔드 없음). */}
+            {/* 콘텐츠·홍보 */}
             <Route path="banners" element={<AdminBannersPage />} />
             <Route path="popups" element={<AdminPopupsPage />} />
-            <Route path="notices" element={<NotImplementedPage title="공지사항 관리" admin />} />
+            <Route path="notices" element={<AdminNoticesPage />} />
             {/* 고객지원 */}
             <Route path="chat" element={<AdminChatPage />} />
             <Route path="chat/settings" element={<AdminChatSettingsPage />} />
@@ -314,7 +317,7 @@ export function AppRouter() {
             <Route path="participations" element={<MyApplicationsPage />} />
             <Route path="scan" element={<BoothVisitScanPage />} />
             {/* 부스 콘솔은 사이드바 메뉴 전부가 구현돼 있어, 여기 닿는 경우는 잘못된 주소뿐이다.
-                그래서 다른 콘솔처럼 "미구현" 자리표시를 보여주는 대신 콘솔 홈으로 되돌린다
+                그래서 다른 콘솔처럼 자리표시(PlaceholderPage)를 보여주는 대신 콘솔 홈으로 되돌린다
                 (없으면 최상위 /* 에 걸려 공개 레이아웃 404로 콘솔 밖으로 튕겨 나간다). */}
             <Route path="*" element={<Navigate to="/vendor" replace />} />
           </Route>

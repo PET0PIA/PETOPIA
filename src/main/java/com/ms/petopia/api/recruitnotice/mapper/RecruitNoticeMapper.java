@@ -3,6 +3,7 @@ package com.ms.petopia.api.recruitnotice.mapper;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.dto.response.BoothSlotStatusResponse;
+import com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeNewsItem;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -30,5 +31,8 @@ public interface RecruitNoticeMapper {
 
     // 넘긴 fairId들 중 모집중(isClosed 반대 기준)인 것만 반환
     Set<Long> selectRecruitingFairIds(@Param("fairIds") List<Long> fairIds, @Param("now") LocalDateTime now);
+
+    // 소식 목록(notice 도메인)에 섞을 모집중인 공고들. selectRecruitingFairIds와 같은 "모집중" 기준을 쓴다.
+    List<RecruitNoticeNewsItem> selectNewsItems(@Param("now") LocalDateTime now);
 
 }

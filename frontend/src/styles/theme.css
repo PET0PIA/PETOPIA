@@ -61,3 +61,34 @@
 @keyframes heroPosterIn { from { opacity: 0; transform: translateX(32px) scale(0.97); } to { opacity: 1; transform: translateX(0) scale(1); } }
 /* 공지 마퀴: 좌우로 끊김 없이 흐르는 띠 (콘텐츠 2벌 복제 후 -50% 이동) */
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/*
+ * 공지 본문(에디터로 쓴 HTML)의 서식. 쓰는 화면(RichTextEditor)과 읽는 화면(RichTextView)이
+ * 같은 클래스를 공유해서, 관리자가 본 모습과 방문자가 보는 모습이 어긋나지 않게 한다.
+ */
+.rich-text :where(p) { margin: 0 0 0.75em; line-height: 1.7; }
+.rich-text :where(p:last-child) { margin-bottom: 0; }
+.rich-text :where(h2) { margin: 1.4em 0 0.5em; font-size: 1.25em; font-weight: 800; }
+.rich-text :where(h3) { margin: 1.2em 0 0.4em; font-size: 1.1em; font-weight: 800; }
+.rich-text :where(h2:first-child, h3:first-child) { margin-top: 0; }
+.rich-text :where(ul, ol) { margin: 0 0 0.75em; padding-left: 1.25em; line-height: 1.7; }
+.rich-text :where(ul) { list-style: disc; }
+.rich-text :where(ol) { list-style: decimal; }
+.rich-text :where(blockquote) {
+  margin: 0 0 0.75em;
+  padding: 0.25em 0 0.25em 0.9em;
+  border-left: 3px solid var(--color-line);
+  color: var(--color-muted);
+}
+.rich-text :where(a) { text-decoration: underline; text-underline-offset: 2px; }
+.rich-text :where(img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1em 0;
+  border-radius: var(--radius-card);
+}
+.rich-text :where(hr) { margin: 1.25em 0; border: 0; border-top: 1px solid var(--color-line); }
+.rich-text :where(code) { padding: 0.1em 0.35em; border-radius: 4px; background: var(--color-surface-alt); font-size: 0.9em; }
+.rich-text :where(pre) { margin: 0 0 0.75em; padding: 0.9em; border-radius: var(--radius-card); background: var(--color-surface-alt); overflow-x: auto; }
+.rich-text :where(pre code) { padding: 0; background: transparent; }

@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.notice.mapper.NoticeMapper">
+
+    <!--
+         게시된 공지 목록. 고정(is_pinned) 글이 항상 위에 오고 그 안에서 최신순이다.
+         fairs는 LEFT JOIN이다 - 행사와 무관한 전체 공지(fair_id IS NULL)가 더 흔하다.
+         본문(content)은 목록에서 쓰지 않으므로 일부러 빼서, HTML 통째로 실려 나가지 않게 한다.
+    -->
+    <select id="selectPublishedList" resultType="com.ms.petopia.api.notice.domain.Notice">
+        SELECT n.notice_id, n.category, n.title, n.fair_id, f.name AS fair_name,
+            n.is_published, n.is_pinned, n.view_count, n.created_at, n.updated_at
+        FROM notice n
+        LEFT JOIN fairs f ON f.fair_id = n.fair_id
+        WHERE n.is_published = 1
+        <if test="category != null">
+            AND n.category = #{category}
+        </if>
+        ORDER BY n.is_pinned DESC, n.created_at DESC
+    </select>
+
+    <!--
+         게시된 공지 단건. is_published = 0인 글은 조건에서 걸러 404로 이어지게 한다
+         (관리자 화면은 별도 조회를 쓴다).
+    -->
+    <select id="selectPublishedById" resultType="com.ms.petopia.api.notice.domain.Notice">
+        SELECT n.notice_id, n.category, n.title, n.content, n.fair_id, f.name AS fair_name,
+            (f.published_at IS NOT NULL AND f.canceled_at IS NULL) AS fair_public,
+            n.is_published, n.is_pinned, n.view_count, n.created_at, n.updated_at
+        FROM notice n
+        LEFT JOIN fairs f ON f.fair_id = n.fair_id
+        WHERE n.notice_id = #{noticeId}
+        AND n.is_published = 1
+    </select>
+
+    <!--첨부파일 목록-->
+    <select id="selectAttachments" resultType="com.ms.petopia.api.notice.domain.NoticeAttachment">
+        SELECT attachment_id, notice_id, file_url, original_name, file_size, sort_order, created_at
+        FROM notice_attachment
+        WHERE notice_id = #{noticeId}
+        ORDER BY sort_order, attachment_id
+    </select>
+
+    <!--
+         조회수 +1. updated_at은 "관리자가 글을 고친 시각"이라 조회수 때문에 흔들리면 안 되므로
+         현재 값 그대로 다시 넣어 ON UPDATE CURRENT_TIMESTAMP가 동작하지 않게 막는다.
+    -->
+    <update id="increaseViewCount">
+        UPDATE notice
+        SET view_count = view_count + 1,
+            updated_at = updated_at
+        WHERE notice_id = #{noticeId}
+    </update>
+
+    <!-- ===== 관리자용 ===== -->
+
+    <!--비공개 글까지 전부. 관리자 목록은 최신 등록순으로만 본다(고정 여부는 배지로 표시).-->
+    <select id="selectAllForAdmin" resultType="com.ms.petopia.api.notice.domain.Notice">
+        SELECT n.notice_id, n.category, n.title, n.content, n.fair_id, f.name AS fair_name,
+            (f.published_at IS NOT NULL AND f.canceled_at IS NULL) AS fair_public,
+            n.is_published, n.is_pinned, n.view_count, n.created_at, n.updated_at
+        FROM notice n
+        LEFT JOIN fairs f ON f.fair_id = n.fair_id
+        ORDER BY n.created_at DESC
+    </select>
+
+    <select id="selectById" resultType="com.ms.petopia.api.notice.domain.Notice">
+        SELECT n.notice_id, n.category, n.title, n.content, n.fair_id, f.name AS fair_name,
+            (f.published_at IS NOT NULL AND f.canceled_at IS NULL) AS fair_public,
+            n.is_published, n.is_pinned, n.view_count, n.created_by, n.created_at, n.updated_at
+        FROM notice n
+        LEFT JOIN fairs f ON f.fair_id = n.fair_id
+        WHERE n.notice_id = #{noticeId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="noticeId">
+        INSERT INTO notice(category, title, content, fair_id, is_published, is_pinned, created_by)
+        VALUES (#{category}, #{title}, #{content}, #{fairId}, #{isPublished}, #{isPinned}, #{createdBy})
+    </insert>
+
+    <!--
+         폼 전체 덮어쓰기. 배너·팝업의 update와 달리 <if>로 골라 넣지 않는다 - 공지 수정 화면은
+         항상 폼 전체를 보내므로, 비어 있는 값은 "생략"이 아니라 "지움"이 맞다.
+         view_count는 여기서 건드리지 않는다(조회수는 조회 쪽에서만 올린다).
+    -->
+    <update id="update">
+        UPDATE notice
+        SET category = #{category},
+            title = #{title},
+            content = #{content},
+            fair_id = #{fairId},
+            is_pinned = #{isPinned}
+        WHERE notice_id = #{noticeId}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM notice WHERE notice_id = #{noticeId}
+    </delete>
+
+    <update id="updatePublished">
+        UPDATE notice SET is_published = #{isPublished}
+        WHERE notice_id = #{noticeId}
+    </update>
+
+    <update id="updatePinned">
+        UPDATE notice SET is_pinned = #{isPinned}
+        WHERE notice_id = #{noticeId}
+    </update>
+
+    <insert id="insertAttachments">
+        INSERT INTO notice_attachment(notice_id, file_url, original_name, file_size, sort_order)
+        VALUES
+        <foreach item="item" collection="attachments" separator=",">
+            (#{item.noticeId}, #{item.fileUrl}, #{item.originalName}, #{item.fileSize}, #{item.sortOrder})
+        </foreach>
+    </insert>
+
+    <delete id="deleteAttachmentsByIds">
+        DELETE FROM notice_attachment
+        WHERE attachment_id IN
+        <foreach item="id" collection="attachmentIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+</mapper>
