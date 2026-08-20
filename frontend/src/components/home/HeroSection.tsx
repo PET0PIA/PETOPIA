@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { getActiveBanners, type Banner } from "../../api/banner";
 import { SmartLink } from "../common/SmartLink";
-import homeHeroPetfair from "../../assets/home-hero-petfair.png";
+import homeHeroPetfair from "../../assets/home_basic_ad.png";
 
 const SLIDE_MS = 3000;
 const prefersReducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
