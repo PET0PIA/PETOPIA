@@ -6,9 +6,13 @@ import com.ms.petopia.api.review.dto.BoothFairBusinessRow;
 import com.ms.petopia.api.review.dto.BoothFeedback;
 import com.ms.petopia.api.review.dto.BoothFeedbackSubmission;
 import com.ms.petopia.api.review.dto.FairReview;
+import com.ms.petopia.api.review.dto.FairReviewListResponse;
+import com.ms.petopia.api.review.dto.FairReviewListRow;
 import com.ms.petopia.api.review.dto.FairReviewResponse;
+import com.ms.petopia.api.review.dto.FairReviewSummaryResponse;
 import com.ms.petopia.api.review.dto.FeedbackTag;
 import com.ms.petopia.api.review.dto.MyReviewStatusResponse;
+import com.ms.petopia.api.review.dto.ReviewTagLabelRow;
 import com.ms.petopia.api.review.dto.SubmitFairReviewRequest;
 import com.ms.petopia.api.review.mapper.BoothFeedbackMapper;
 import com.ms.petopia.api.review.mapper.FairReviewMapper;
@@ -309,27 +313,112 @@ class FairReviewServiceTest {
     // ===== checkStatus =====
 
     @Test
-    @DisplayName("작성한 리뷰가 없으면 alreadyReviewed=false를 반환한다")
-    void checkStatus_리뷰없으면_false를_반환한다() {
+    @DisplayName("작성한 리뷰가 없고 방문 기록도 없으면 alreadyReviewed=false, hasVisited=false를 반환한다")
+    void checkStatus_리뷰없고_미방문이면_false를_반환한다() {
         given(fairReviewMapper.selectByFairIdAndUserId(FAIR_ID, USER_ID)).willReturn(null);
+        given(fairReviewMapper.existsEntryRecord(FAIR_ID, USER_ID)).willReturn(false);
 
         MyReviewStatusResponse response = fairReviewService.checkStatus(FAIR_ID, USER_ID);
 
         assertThat(response.alreadyReviewed()).isFalse();
         assertThat(response.reviewId()).isNull();
+        assertThat(response.hasVisited()).isFalse();
     }
 
     @Test
-    @DisplayName("작성한 리뷰가 있으면 reviewId와 함께 alreadyReviewed=true를 반환한다")
+    @DisplayName("작성한 리뷰는 없지만 방문 기록이 있으면 hasVisited=true를 반환한다")
+    void checkStatus_리뷰없고_방문했으면_hasVisited_true를_반환한다() {
+        given(fairReviewMapper.selectByFairIdAndUserId(FAIR_ID, USER_ID)).willReturn(null);
+        given(fairReviewMapper.existsEntryRecord(FAIR_ID, USER_ID)).willReturn(true);
+
+        MyReviewStatusResponse response = fairReviewService.checkStatus(FAIR_ID, USER_ID);
+
+        assertThat(response.alreadyReviewed()).isFalse();
+        assertThat(response.hasVisited()).isTrue();
+    }
+
+    @Test
+    @DisplayName("작성한 리뷰가 있으면 reviewId·hasVisited와 함께 alreadyReviewed=true를 반환한다")
     void checkStatus_리뷰있으면_true와_reviewId를_반환한다() {
         FairReview review = new FairReview();
         review.setReviewId(REVIEW_ID);
         given(fairReviewMapper.selectByFairIdAndUserId(FAIR_ID, USER_ID)).willReturn(review);
+        given(fairReviewMapper.existsEntryRecord(FAIR_ID, USER_ID)).willReturn(true);
 
         MyReviewStatusResponse response = fairReviewService.checkStatus(FAIR_ID, USER_ID);
 
         assertThat(response.alreadyReviewed()).isTrue();
         assertThat(response.reviewId()).isEqualTo(REVIEW_ID);
+        assertThat(response.hasVisited()).isTrue();
+    }
+
+    // ===== 공개 목록/요약 조회 =====
+
+    @Test
+    @DisplayName("page가 음수면 INVALID_INPUT_VALUE를 던진다")
+    void listPublic_page가음수면_예외를_던진다() {
+        assertErrorCode(() -> fairReviewService.listPublic(FAIR_ID, -1, 10), ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    @Test
+    @DisplayName("size가 0 이하이거나 상한을 초과하면 INVALID_INPUT_VALUE를 던진다")
+    void listPublic_size가유효하지않으면_예외를_던진다() {
+        assertErrorCode(() -> fairReviewService.listPublic(FAIR_ID, 0, 0), ErrorCode.INVALID_INPUT_VALUE);
+        assertErrorCode(() -> fairReviewService.listPublic(FAIR_ID, 0, 51), ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    @Test
+    @DisplayName("목록 항목에 review_id 기준으로 묶은 태그 라벨을 붙여서 반환한다")
+    void listPublic_태그라벨을_review_id기준으로_묶어서_반환한다() {
+        given(fairReviewMapper.countByFairId(FAIR_ID)).willReturn(2L);
+        given(fairReviewMapper.selectListByFairId(FAIR_ID, 0L, 10))
+                .willReturn(List.of(listRow(1L, "닉네임1"), listRow(2L, "닉네임2")));
+        given(fairReviewMapper.selectFairTagLabelsByReviewIds(List.of(1L, 2L)))
+                .willReturn(List.of(tagLabelRow(1L, "안내가 친절해요"), tagLabelRow(1L, "대기시간이 짧아요"), tagLabelRow(2L, "주차가 편리해요")));
+
+        FairReviewListResponse response = fairReviewService.listPublic(FAIR_ID, 0, 10);
+
+        assertThat(response.items()).hasSize(2);
+        assertThat(response.items().get(0).nickname()).isEqualTo("닉네임1");
+        assertThat(response.items().get(0).fairTagLabels()).containsExactly("안내가 친절해요", "대기시간이 짧아요");
+        assertThat(response.items().get(1).fairTagLabels()).containsExactly("주차가 편리해요");
+        assertThat(response.totalElements()).isEqualTo(2L);
+        assertThat(response.hasNext()).isFalse();
+    }
+
+    @Test
+    @DisplayName("목록이 비어있으면 태그 라벨 배치 조회를 호출하지 않는다")
+    void listPublic_목록이비어있으면_태그조회를_호출하지않는다() {
+        given(fairReviewMapper.countByFairId(FAIR_ID)).willReturn(0L);
+        given(fairReviewMapper.selectListByFairId(FAIR_ID, 0L, 10)).willReturn(List.of());
+
+        FairReviewListResponse response = fairReviewService.listPublic(FAIR_ID, 0, 10);
+
+        assertThat(response.items()).isEmpty();
+        verify(fairReviewMapper, never()).selectFairTagLabelsByReviewIds(any());
+    }
+
+    @Test
+    @DisplayName("리뷰가 하나도 없으면 재방문율은 0이고 재방문 집계 쿼리는 호출하지 않는다")
+    void getPublicSummary_리뷰없으면_0을_반환한다() {
+        given(fairReviewMapper.countByFairId(FAIR_ID)).willReturn(0L);
+
+        FairReviewSummaryResponse response = fairReviewService.getPublicSummary(FAIR_ID);
+
+        assertThat(response.reviewCount()).isZero();
+        assertThat(response.revisitRate()).isZero();
+        verify(fairReviewMapper, never()).countRevisitByFairId(any());
+    }
+
+    @Test
+    @DisplayName("재방문 의향 비율을 리뷰 수 대비로 계산한다")
+    void getPublicSummary_재방문비율을_계산한다() {
+        given(fairReviewMapper.countByFairId(FAIR_ID)).willReturn(10L);
+        given(fairReviewMapper.countRevisitByFairId(FAIR_ID)).willReturn(6L);
+
+        FairReviewSummaryResponse response = fairReviewService.getPublicSummary(FAIR_ID);
+
+        assertThat(response.revisitRate()).isEqualTo(0.6);
     }
 
     // ===== fixtures =====
@@ -367,6 +456,24 @@ class FairReviewServiceTest {
         row.setBoothId(BOOTH_ID);
         row.setFairId(fairId);
         row.setBusinessId(BUSINESS_ID);
+        return row;
+    }
+
+    private FairReviewListRow listRow(Long reviewId, String nickname) {
+        FairReviewListRow row = new FairReviewListRow();
+        row.setReviewId(reviewId);
+        row.setNickname(nickname);
+        row.setCompanionType(FairReview.CompanionType.ALONE);
+        row.setVisitPurpose(FairReview.VisitPurpose.SHOPPING);
+        row.setWouldRevisit(true);
+        row.setCreatedAt(LocalDateTime.now());
+        return row;
+    }
+
+    private ReviewTagLabelRow tagLabelRow(Long reviewId, String label) {
+        ReviewTagLabelRow row = new ReviewTagLabelRow();
+        row.setReviewId(reviewId);
+        row.setLabel(label);
         return row;
     }
 

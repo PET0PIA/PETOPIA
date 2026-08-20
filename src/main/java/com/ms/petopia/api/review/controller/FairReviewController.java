@@ -1,6 +1,8 @@
 package com.ms.petopia.api.review.controller;
 
+import com.ms.petopia.api.review.dto.FairReviewListResponse;
 import com.ms.petopia.api.review.dto.FairReviewResponse;
+import com.ms.petopia.api.review.dto.FairReviewSummaryResponse;
 import com.ms.petopia.api.review.dto.MyReviewStatusResponse;
 import com.ms.petopia.api.review.dto.SubmitFairReviewRequest;
 import com.ms.petopia.api.review.service.FairReviewService;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -35,12 +38,28 @@ public class FairReviewController {
         return ResponseEntity.status(HttpStatus.CREATED).body(fairReviewService.submit(fairId, userId, request));
     }
 
-    /** FairDetailPage의 "리뷰 남기기"/"내 리뷰 보기" 버튼 라벨 분기용(Phase 5). */
+    /** FairDetailPage의 리뷰 버튼 상태(작성/작성완료/작성불가) 분기용(Phase 5). */
     @GetMapping("/status")
     public MyReviewStatusResponse status(
             @PathVariable Long fairId,
             @AuthenticationPrincipal Long userId
     ) {
         return fairReviewService.checkStatus(fairId, userId);
+    }
+
+    /** 공개 리뷰 목록(최신순 페이지네이션, 인증 불필요). page는 0부터. */
+    @GetMapping
+    public FairReviewListResponse list(
+            @PathVariable Long fairId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return fairReviewService.listPublic(fairId, page, size);
+    }
+
+    /** 공개 리뷰 요약(리뷰 수·재방문 의향 비율, 인증 불필요). */
+    @GetMapping("/summary")
+    public FairReviewSummaryResponse summary(@PathVariable Long fairId) {
+        return fairReviewService.getPublicSummary(fairId);
     }
 }

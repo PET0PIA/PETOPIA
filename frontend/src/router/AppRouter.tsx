@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { fairAdminNavigation, superAdminNavigation, vendorNavigation, flattenNavigation } from "../config/navigation";
 import { ConsoleHome } from "../components/layout/ConsoleHome";
 import { FairAdminLayout } from "../layouts/FairAdminLayout";
@@ -12,6 +12,7 @@ import { MyFairApplicationsPage } from "../pages/fair/MyFairApplicationsPage";
 import { MyFairApplicationDetailPage } from "../pages/fair/MyFairApplicationDetailPage";
 import { FairListPage } from "../pages/fair/FairListPage";
 import { FairDetailPage } from "../pages/fair/FairDetailPage";
+import { FairReviewWizardPage } from "../pages/fair/FairReviewWizardPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
 import { BoothLayoutEditPage } from "../pages/fair-admin/BoothLayoutEditPage";
 import { FairDateManagementPage } from "../pages/fair-admin/FairDateManagementPage";
@@ -126,12 +127,6 @@ const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).fil
     item.path !== "/admin/chat" &&
     item.path !== "/admin/businesses"
 );
-/** 후기 작성은 행사 상세의 리뷰 섹션이 담당한다. 옛 주소로 들어와도 그쪽으로 넘긴다. */
-function ReviewWriteRedirect() {
-  const { fairId } = useParams();
-  return <Navigate to={`/fairs/${fairId}?write-review=1`} replace />;
-}
-
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
   const nav = kind === "fair" ? flattenNavigation(fairAdminNavigation) : flattenNavigation(superAdminNavigation);
@@ -203,8 +198,10 @@ export function AppRouter() {
           <Route path="/fairs/:fairId/booths" element={<FairBoothsPage />} />
           {/* 부스 추천 + 동선 추천(같은 입력으로 API 2개를 호출해 탭으로 결과를 나눠 보여준다). */}
           <Route path="/fairs/:fairId/booth-recommendations" element={<BoothRecommendationPage />} />
-          {/* 옛 후기 작성 주소. 전용 화면 대신 행사 상세의 리뷰 섹션을 작성 상태로 연다. */}
-          <Route path="/fairs/:fairId/reviews/new" element={<ReviewWriteRedirect />} />
+          {/* 태그 기반 통합 리뷰(V39) 작성 마법사. 로그인 필요. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/fairs/:fairId/reviews/new" element={<FairReviewWizardPage />} />
+          </Route>
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
           <Route path="/businesses/me" element={<MyBusinessesPage />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
