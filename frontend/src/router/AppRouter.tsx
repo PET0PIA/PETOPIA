@@ -55,7 +55,10 @@ import { SignupPage } from "../pages/auth/SignupPage";
 import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
-import { MyPage } from "../pages/mypage/MyPage";
+import { MyPageLayout } from "../components/mypage/MyPageLayout";
+import { MyPageHome } from "../pages/mypage/MyPageHome";
+import { MyPetsPage } from "../pages/mypage/MyPetsPage";
+import { AccountSettingsPage } from "../pages/mypage/AccountSettingsPage";
 import { EditProfilePage } from "../pages/mypage/EditProfilePage";
 import { PasswordChangePage } from "../pages/mypage/PasswordChangePage";
 import { PetFormPage } from "../pages/mypage/PetFormPage";
@@ -145,30 +148,50 @@ export function AppRouter() {
           <Route element={<ProtectedRoute />}>
             <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />
           </Route>
-          <Route path="/fair-applications/me" element={<MyFairApplicationsPage />} />
-          <Route path="/fair-applications/me/:fairId" element={<MyFairApplicationDetailPage />} />
-          <Route path="/fair-applications/me/:fairId/edit" element={<FairApplicationEditPage />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
+          {/* 내 신청 현황은 마이페이지 사이드바 안으로 옮겼다. 옛 경로는 호환용 리다이렉트. */}
+          <Route path="/fair-applications/me" element={<Navigate to="/mypage/fair-applications" replace />} />
+          {/* 내 신청 상세·수정과 알림은 본인 데이터만 보이는 화면이라 로그인 필수. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/fair-applications/me/:fairId" element={<MyFairApplicationDetailPage />} />
+            <Route path="/fair-applications/me/:fairId/edit" element={<FairApplicationEditPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+          </Route>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
           <Route element={<ProtectedRoute />}>
-            <Route path="/mypage" element={<MyPage />} />
-            <Route path="/mypage/edit" element={<EditProfilePage />} />
+            {/* 마이페이지 = 내 계정 홈. 예약·부스·신청처럼 이미 있는 화면을 이 아래에서 그대로
+                재사용해, 화면을 옮겨 다녀도 왼쪽 사이드바가 계속 붙어 있게 한다(MyPageLayout). */}
+            <Route path="/mypage" element={<MyPageLayout />}>
+              <Route index element={<MyPageHome />} />
+              <Route path="reservations" element={<MyReservationsPage />} />
+              <Route path="booths/visited" element={<MyVisitedBoothsPage />} />
+              <Route path="favorites" element={<BoothFavoritesPage />} />
+              <Route path="reviews" element={<MyReviewsPage />} />
+              <Route path="fair-applications" element={<MyFairApplicationsPage />} />
+              <Route path="businesses" element={<MyBusinessesPage />} />
+              <Route path="pets" element={<MyPetsPage />} />
+              <Route path="edit" element={<EditProfilePage />} />
+              <Route path="account" element={<AccountSettingsPage />} />
+            </Route>
+            {/* 상세·입력 폼은 넓게 봐야 하는 화면이라 사이드바 밖에 둔다. */}
             <Route path="/mypage/password" element={<PasswordChangePage />} />
             <Route path="/mypage/pets/new" element={<PetFormPage />} />
             <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
-            <Route path="/mypage/reviews" element={<MyReviewsPage />} />
             <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
-            <Route path="/booths/favorites/me" element={<BoothFavoritesPage />} />
-            <Route path="/booths/visited/me" element={<MyVisitedBoothsPage />} />
+            {/* 옛 경로는 마이페이지 안의 새 위치로 리다이렉트(북마크·내부 링크 호환). */}
+            <Route path="/booths/favorites/me" element={<Navigate to="/mypage/favorites" replace />} />
+            <Route path="/booths/visited/me" element={<Navigate to="/mypage/booths/visited" replace />} />
             {/* 부스 콘솔로 이관: 옛 경로는 콘솔로 리다이렉트(북마크·내부 링크 호환). */}
             <Route path="/booths/me" element={<Navigate to="/vendor/booths" replace />} />
           </Route>
-          <Route path="/reservations/me" element={<MyReservationsPage />} />
-          <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
+          <Route path="/reservations/me" element={<Navigate to="/mypage/reservations" replace />} />
+          {/* 예약 상세는 내 예약만 보이는 화면이라 로그인 필수(QR·환불 정보가 들어 있다). */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
+          </Route>
           {/* 행사 목록은 예정·진행·종료를 상태 배지로 구분하는 통합 목록 하나뿐이다.
               옛 "지난 행사" 경로(북마크·외부 링크)로 들어와도 같은 목록으로 넘긴다. */}
           <Route path="/fairs/upcoming" element={<FairListPage />} />
@@ -185,7 +208,11 @@ export function AppRouter() {
               기존 /fairs/:fairId/recruit-notice 화면으로 간다(서버가 linkPath로 정해준다). */}
           <Route path="/news" element={<NewsListPage />} />
           <Route path="/news/:noticeId" element={<NewsDetailPage />} />
-          <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
+          {/* 예매는 로그인 필수. 미로그인으로 화면을 열면 날짜·유형을 다 고르고 마지막
+              예약 API에서 401로 막히므로, 들어오는 순간 /login으로 보냈다가 복귀시킨다. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
+          </Route>
           {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}
           <Route path="/payments/success" element={<PaymentSuccessPage />} />
           <Route path="/payments/fail" element={<PaymentFailPage />} />
@@ -202,8 +229,11 @@ export function AppRouter() {
           <Route element={<ProtectedRoute />}>
             <Route path="/fairs/:fairId/reviews/new" element={<FairReviewWizardPage />} />
           </Route>
-          <Route path="/businesses/new" element={<BusinessRegisterPage />} />
-          <Route path="/businesses/me" element={<MyBusinessesPage />} />
+          {/* 사업자 등록은 내 계정에 사업자를 붙이는 작업이라 로그인 필수. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/businesses/new" element={<BusinessRegisterPage />} />
+          </Route>
+          <Route path="/businesses/me" element={<Navigate to="/mypage/businesses" replace />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
           <Route path="/participations/new" element={<ParticipationNewPage />} />
           <Route path="/fairs/:fairId/recruit-notice" element={<RecruitNoticeDetailPage />} />
@@ -213,8 +243,11 @@ export function AppRouter() {
             <Route path="/fairs/:fairId/apply" element={<ApplicationSubmitPage />} />
           </Route>
           <Route path="/participations/me" element={<Navigate to="/vendor/participations" replace />} />
-          <Route path="/participations/me/:applicationId" element={<ApplicationDetailPage />} />
-          <Route path="/participations/me/:applicationId/edit" element={<ApplicationEditPage />} />
+          {/* 내 참가 신청 상세·수정도 본인 데이터 화면이라 로그인 필수. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/participations/me/:applicationId" element={<ApplicationDetailPage />} />
+            <Route path="/participations/me/:applicationId/edit" element={<ApplicationEditPage />} />
+          </Route>
           <Route path="/booths/:boothId" element={<BoothDetailPage />} />
           {Object.entries(publicPages).map(([path, title]) => (
             <Route key={path} path={path} element={<PlaceholderPage title={title} />} />

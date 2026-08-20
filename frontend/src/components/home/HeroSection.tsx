@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { getActiveBanners, type Banner } from "../../api/banner";
 import { SmartLink } from "../common/SmartLink";
-import homeHeroPetfair from "../../assets/home_basic_ad.png";
+import homeHeroPets from "../../assets/home_banner_basic.png";
 
 const SLIDE_MS = 3000;
 const prefersReducedMotion = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -14,17 +14,17 @@ const FALLBACK_BANNER: Banner = {
   title: "우리 브랜드를\nPETOPIA에 소개해보세요",
   eyebrow: "광고 문의",
   subtitle: "반려동물을 사랑하는 방문자들에게 홈 화면 배너로 브랜드를 알릴 수 있어요.",
-  imageKey: homeHeroPetfair,
+  imageKey: homeHeroPets,
   linkUrl: "/advertising",
   linkTarget: "SELF",
   linkLabel: "광고 문의하기",
   link2Label: null,
   link2Url: null,
   link2Target: null,
-  // 실제 행사 배너들은 각자 화사한 파스텔(--color-point-*)을 쓰지만, 이건 진짜 행사가
-  // 아니라 광고 영업용 기본 배너라 사이트 전반의 무채색 톤(카드·서피스에 쓰는 회색)과
-  // 맞춰 차분하게 둔다 - 다른 진짜 배너들 사이에 섞였을 때도 튀지 않게.
-  bgColor: "var(--color-surface-alt)",
+  // 노출할 배너가 하나도 없을 때만 뜨는 화면이라 다른 배너와 섞일 일이 없어서, 파스텔 대신
+  // 진한 앰버를 쓴다. 일러스트가 흰 털/밝은 털 위주에 외곽선이 검정이라 이 색 위에서 또렷하게
+  // 뜨고, 밝은 배경이라 본문 글자(검정 계열)도 대비가 넉넉하게 남는다.
+  bgColor: "var(--color-point-amber)",
   sortOrder: 0,
   active: true,
   startedAt: null,
@@ -97,7 +97,7 @@ export function HeroSection() {
             </div>
           )}
         </div>
-        <div className="relative mx-auto flex h-64 w-full items-center justify-center sm:h-80 md:h-[26rem] md:justify-end lg:h-[28rem]">
+        <div className="relative mx-auto flex h-64 w-full items-center justify-center sm:h-80 md:h-[26rem] md:translate-x-6 md:scale-105 md:justify-end lg:h-[30rem] lg:translate-x-14 lg:scale-110">
           <img key={index} src={slide.imageKey} alt="" className="max-h-full max-w-full animate-[heroPosterIn_600ms_ease-out_both] object-contain motion-reduce:animate-none" />
         </div>
       </div>
