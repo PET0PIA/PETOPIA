@@ -438,6 +438,7 @@ public class PaymentService {
         // WAITING_FOR_DEPOSIT은 별도 상태로 남겨서 입금 웹훅(handleDepositWebhook)이 나중에
         // COMPLETED로 전환한다.
         if ("WAITING_FOR_DEPOSIT".equals(tossResponse.status())) {
+            rejectVirtualAccountForReservationDeposit(row, tossResponse);
             return markWaitingForDeposit(row, tossResponse, now);
         }
 
@@ -458,6 +459,41 @@ public class PaymentService {
         completePaymentAndNotify(row, userId);
 
         return PaymentResponse.from(row);
+    }
+
+    /**
+     * 예약금(RESERVATION_DEPOSIT) 결제는 가상계좌를 지원하지 않는다 — 예약 결제 제한시간은 10분
+     * ({@code ReservationPaymentPolicy.PAYMENT_WAIT})인데 가상계좌 입금기한은 하루 단위라, 뒤늦게
+     * 입금되면 "결제는 COMPLETED인데 예약은 EXPIRED"가 되어 돈만 받은 상태가 된다(이슈 #167).
+     * 참가비·개설비는 결제 기한이 일 단위여서 계속 가상계좌를 쓸 수 있으므로, 결제유형으로만 가른다.
+     *
+     * <p>1차 차단은 화면이다 — 예약금 결제 화면에는 가상계좌 선택지가 없고, 프론트도 타입으로
+     * 막아둔다(frontend/src/payments/toss.ts의 {@code ReservationPaymentMethod}). 여기는 그 화면을
+     * 우회한 요청을 위한 최종 방어선이다.
+     *
+     * <p><b>알려진 한계</b>: confirm 시점엔 토스가 이미 계좌를 발급한 뒤라, 우리가 거절해도 계좌
+     * 자체는 은행에 남는다. 발급된 계좌를 실제로 닫으려면 토스 결제취소 API
+     * ({@code POST /v1/payments/{paymentKey}/cancel}, 입금 전이면 cancelReason만 필요) 연동이
+     * 있어야 하는데 이 프로젝트엔 아직 없다(환불도 PG 미연동). 그래서 여기서는
+     * (1) 계좌정보·secret을 저장하지 않아 이후 입금 웹훅이 secret 대조에서 걸러지게 하고,
+     * (2) 운영자가 토스 콘솔에서 그 계좌를 찾아 닫을 수 있도록 paymentKey까지 로그로 남긴다.
+     *
+     * @throws CommonException {@link ErrorCode#PAYMENT_METHOD_NOT_ALLOWED} 예약금 결제인데
+     *         가상계좌로 승인 요청이 들어왔을 때
+     */
+    private void rejectVirtualAccountForReservationDeposit(PaymentRow row, TossPaymentResponse tossResponse) {
+        if (!"RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
+            return;
+        }
+
+        // 이 결제는 여기서 끝낸다(재시도 가능한 FAILED). 계좌정보는 저장하지 않는다.
+        paymentMapper.markFailed(row.getPaymentId(), LocalDateTime.now());
+        TossPaymentResponse.VirtualAccount virtualAccount = tossResponse.virtualAccount();
+        log.error("예약금 결제에 가상계좌가 시도돼 승인을 거절함 - 토스 콘솔에서 발급된 계좌를 닫아야 한다. "
+                        + "paymentId={}, reservationId={}, orderId={}, paymentKey={}, bankCode={}",
+                row.getPaymentId(), row.getReservationId(), row.getOrderId(), tossResponse.paymentKey(),
+                virtualAccount != null ? virtualAccount.bankCode() : null);
+        throw new CommonException(ErrorCode.PAYMENT_METHOD_NOT_ALLOWED);
     }
 
     /**
@@ -516,6 +552,20 @@ public class PaymentService {
         }
         if (!"WAITING_FOR_DEPOSIT".equals(row.getStatus())) {
             // 이미 처리됐거나(웹훅 재전송) 애초에 가상계좌 결제가 아닌 경우 — 멱등하게 무시한다.
+            //
+            // 다만 "예약금인데 입금완료가 들어왔고 결제는 COMPLETED가 아닌" 조합은 조용히 넘기면
+            // 안 된다. 예약금은 가상계좌를 지원하지 않으므로(rejectVirtualAccountForReservationDeposit)
+            // 승인 단계에서 거절해 FAILED로 남긴 계좌에 뒤늦게 입금이 들어온 상황이고, 우리 원장에는
+            // 안 남는 돈이라 자동 복구가 불가능하다. 여기는 secret 대조 전 단계여서 위조 웹훅으로도
+            // 찍힐 수 있으니, 로그를 보고 토스 콘솔에서 실제 입금을 확인한 뒤 수동 환불해야 한다.
+            if ("RESERVATION_DEPOSIT".equals(row.getPaymentType())
+                    && "DONE".equals(data.status())
+                    && !"COMPLETED".equals(row.getStatus())) {
+                log.error("지원하지 않는 예약금 가상계좌에 입금완료 웹훅이 도착함(secret 미검증 단계) - "
+                                + "토스 콘솔에서 실제 입금 확인 후 수동 환불 필요. paymentId={}, reservationId={}, "
+                                + "orderId={}, paymentStatus={}",
+                        row.getPaymentId(), row.getReservationId(), data.orderId(), row.getStatus());
+            }
             return;
         }
         // Objects.equals(null, null)이 true라서, 저장된 secret이 비어있는 결제(버그로 저장이

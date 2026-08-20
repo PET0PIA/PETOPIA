@@ -21,6 +21,20 @@ export function maxBirthDate(): string {
 }
 
 /**
+ * 브라우저의 날짜 입력은 연/월/일을 각각 선택해 지우도록 동작한다.
+ * 이미 완성된 날짜에서 Backspace 또는 Delete를 누르면 전체 날짜를 한 번에 비운다.
+ */
+export function clearDateOnDelete(
+  event: KeyboardEvent<HTMLInputElement>,
+  value: string,
+  onClear: () => void,
+): void {
+  if (value === "" || (event.key !== "Backspace" && event.key !== "Delete")) return;
+  event.preventDefault();
+  onClear();
+}
+
+/**
  * 오늘 날짜(YYYY-MM-DD)를 Asia/Seoul 기준으로 만든다.
  * 서비스·서버·DB가 모두 KST 전제이므로, 백엔드가 준 날짜 문자열과 문자열 비교로 오늘을
  * 판정할 때는 이 값을 쓴다. 브라우저 로컬 시간대를 쓰면 해외 기기에서 자정 근처에 하루
@@ -35,3 +49,9 @@ export function todayInSeoul(): string {
     day: "2-digit",
   }).format(new Date());
 }
+
+/** 목록·상세에 쓰는 짧은 날짜 표기. "2026-08-19T10:00:00" -> "2026.08.19" */
+export function formatShortDate(value: string): string {
+  return value.slice(0, 10).replace(/-/g, ".");
+}
+import type { KeyboardEvent } from "react";

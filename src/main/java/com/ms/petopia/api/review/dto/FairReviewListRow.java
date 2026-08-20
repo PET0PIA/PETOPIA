@@ -6,22 +6,17 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * 리뷰 목록 조회 전용 조회 행. {@link FairReview}(순수 테이블 매핑)와 달리 작성자 닉네임을
- * users 테이블과 JOIN해서 함께 담는다 - NotificationMapper#selectByUserId(NotificationListRow)와
- * 같은 패턴이다.
+ * 공개 리뷰 목록 조회의 원본 row(users 조인 포함). 태그 라벨은 별도 배치 쿼리
+ * (selectFairTagLabelsByReviewIds)로 가져와 서비스 계층에서 review_id 기준으로 묶는다 -
+ * FairReviewStatsService가 TagCountRow를 카테고리별로 묶는 것과 같은 방식.
  */
 @Getter
 @Setter
 public class FairReviewListRow {
-
     private Long reviewId;
-    private Long fairId;
-    private Long userId;
     private String nickname;
-    private Integer rating;
-    private String content;
-    private boolean verifiedVisit;
+    private FairReview.CompanionType companionType;
+    private FairReview.VisitPurpose visitPurpose;
+    private boolean wouldRevisit;
     private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-    private Long version;
 }

@@ -27,6 +27,19 @@ function useUnreadNotificationCount() {
   return status === "authenticated" ? count : 0;
 }
 
+function useRoleSync() {
+  const { status, refreshUser } = useAuth();
+  const { pathname } = useLocation();
+
+  // 사업자 취소로 role이 VENDOR -> USER로 바뀌어도 기존 JWT는 만료 전까지
+  // 그대로 유효해서, 콘솔 링크가 새로고침 전까지 안 사라지는 문제가 있었다.
+  // 페이지 이동마다 토큰을 재발급받아 role을 다시 읽어와 이를 보정한다.
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    refreshUser();
+  }, [status, pathname]);
+}
+
 // requiredRole이 지정된 메뉴는 그 role로 로그인했을 때만 보인다. 없으면 비로그인 포함 누구나.
 function isVisibleForRole(item: NavigationItem, role: UserRole | null) {
   if (!item.requiredRole) return true;
@@ -158,6 +171,7 @@ export function PublicHeader() {
   const navigate = useNavigate();
   const { user, status, logout } = useAuth();
   const unreadCount = useUnreadNotificationCount();
+  useRoleSync();
   const [nickname, setNickname] = useState<string | null>(null);
 
   // 로그인 상태면 프로필(닉네임)을 한 번 불러온다. JWT엔 이름이 없어 /users/me로 가져온다.

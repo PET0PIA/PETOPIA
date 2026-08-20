@@ -144,11 +144,13 @@ export function MyPage() {
               </div>
             </dl>
             <div className="flex shrink-0 gap-2">
-              <Link to="/mypage/password">
-                <Button variant="outline">비밀번호 변경</Button>
-              </Link>
+              {me.passwordChangeAvailable && (
+                <Link to="/mypage/password">
+                  <Button variant="outline" className="shadow-sm hover:bg-[#EFEFED]!">비밀번호 변경</Button>
+                </Link>
+              )}
               <Link to="/mypage/edit">
-                <Button variant="outline">내 정보 수정</Button>
+                <Button variant="outline" className="shadow-sm hover:bg-[#EFEFED]!">내 정보 수정</Button>
               </Link>
             </div>
           </div>
@@ -184,7 +186,7 @@ export function MyPage() {
           <>
             <Table>
               <thead>
-                <tr className="border-b border-line text-xs font-bold text-muted">
+                <tr className="border-b border-line bg-[#FAF7F2] text-xs font-bold text-ink">
                   <th className="px-8 py-4">이름</th>
                   <th className="px-8 py-4">종</th>
                   <th className="px-8 py-4">생년월일</th>
@@ -193,10 +195,13 @@ export function MyPage() {
               </thead>
               <tbody>
                 {pets.map((pet) => (
-                  <tr key={pet.petId} className="border-b border-line last:border-0 hover:bg-page">
+                  <tr
+                    key={pet.petId}
+                    className="border-b border-line last:border-0 hover:bg-[#FCFAF7]"
+                  >
                     <td className="px-8 py-4">
-                      <Link to={`/mypage/pets/${pet.petId}`} className="inline-flex items-center gap-1.5 font-bold text-ink hover:underline">
-                        <Heart size={14} className="shrink-0 fill-primary-strong text-primary-strong" aria-hidden="true" />
+                      <Link to={`/mypage/pets/${pet.petId}`} className="inline-flex items-center gap-2 font-bold text-ink hover:underline">
+                        <Heart size={13} className="shrink-0 fill-primary-strong text-primary-strong" aria-hidden="true" />
                         {pet.name}
                       </Link>
                     </td>
@@ -218,7 +223,7 @@ export function MyPage() {
             </Table>
             <div className="mt-4 text-right">
               <Link to="/mypage/pets/new">
-                <Button variant="outline">반려동물 등록</Button>
+                <Button variant="outline" className="shadow-sm hover:bg-[#EFEFED]!">반려동물 등록</Button>
               </Link>
             </div>
           </>
@@ -228,21 +233,21 @@ export function MyPage() {
       <section>
         <SectionHeader title="바로가기" />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Link to="/reservations/me" className="surface flex items-center gap-3 p-5 hover:bg-page">
+          <Link to="/reservations/me" className="surface flex items-center gap-3 p-5 hover:bg-[#FCFAF7]">
             <Ticket size={20} className="shrink-0 text-primary-strong" />
             <div>
               <p className="font-bold text-ink">내 예약 목록</p>
               <p className="text-sm text-muted">예매한 행사와 입장 QR을 확인해요.</p>
             </div>
           </Link>
-          <Link to="/fair-applications/me" className="surface flex items-center gap-3 p-5 hover:bg-page">
+          <Link to="/fair-applications/me" className="surface flex items-center gap-3 p-5 hover:bg-[#FCFAF7]">
             <CalendarDays size={20} className="shrink-0 text-primary-strong" />
             <div>
               <p className="font-bold text-ink">내 행사 신청 목록</p>
               <p className="text-sm text-muted">신청한 행사의 심사 현황을 확인해요.</p>
             </div>
           </Link>
-          <Link to="/mypage/reviews" className="surface flex items-center gap-3 p-5 hover:bg-page">
+          <Link to="/mypage/reviews" className="surface flex items-center gap-3 p-5 hover:bg-[#FCFAF7]">
             <Star size={20} className="shrink-0 text-primary-strong" />
             <div>
               <p className="font-bold text-ink">내 리뷰</p>
@@ -255,7 +260,7 @@ export function MyPage() {
       {/* 위험한 액션이라 다른 버튼들과 나란히 두지 않고 페이지 맨 아래에 따로 둔다(오클릭 방지). */}
       <section className="mt-12 border-t border-line pt-6 text-right">
         {withdrawError && <p className="mb-2 text-sm font-bold text-primary-strong">{withdrawError}</p>}
-        <Button variant="ghost" onClick={handleWithdraw} disabled={withdrawing}>
+        <Button className="text-red-600 hover:bg-red-50 hover:text-red-700" variant="ghost" onClick={handleWithdraw} disabled={withdrawing}>
           {withdrawing ? "탈퇴 처리 중…" : "회원 탈퇴"}
         </Button>
       </section>

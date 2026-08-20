@@ -22,7 +22,12 @@ import {
   type ReservationDetail,
 } from "../../api/reservation";
 import { useAuth } from "../../contexts/AuthContext";
-import { isTossConfigured, requestReservationPayment, type PaymentMethodOption } from "../../payments/toss";
+import {
+  isTossConfigured,
+  requestReservationPayment,
+  RESERVATION_PAYMENT_METHODS,
+  type ReservationPaymentMethod,
+} from "../../payments/toss";
 import {
   formatEntryTime,
   formatVisitDateDow,
@@ -91,7 +96,8 @@ export function ReservationDetailPage() {
   // 결제 대기 예약을 이어서 결제하는 흐름(예매 화면의 결제 단계와 동일).
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
+  // 예약금은 가상계좌를 쓸 수 없어서 타입부터 좁혀 둔다(ReservationPaymentMethod 주석 참고).
+  const [paymentMethod, setPaymentMethod] = useState<ReservationPaymentMethod>("CARD");
 
   // 입장 QR은 별도 API로 실제 토큰을 받아 그린다.
   const [qrToken, setQrToken] = useState<string | null>(null);
@@ -318,10 +324,9 @@ export function ReservationDetailPage() {
   if (reservation.canCancel) {
     menuItems.push({ label: "예약 취소", onSelect: handleCancel });
   }
-  // 후기 작성 진입. 전용 화면을 새로 만들지 않고 행사 상세의 리뷰 섹션을 작성 상태로 연다
-  // (같은 작성 폼이 두 군데 생기는 중복을 피한다). 백엔드는 예매·방문 여부로 작성을 막지
-  // 않으므로 예약 상태와 무관하게 항상 띄운다.
-  menuItems.push({ label: "후기 작성", onSelect: () => navigate(`/fairs/${reservation.fairId}?write-review=1`) });
+  // 후기 작성 진입. 태그 기반 통합 리뷰 마법사 전용 페이지로 바로 연결한다. 실제 작성
+  // 가능 여부(행사 방문 이력 등)는 그 페이지에서 확인하므로 예약 상태와 무관하게 항상 띄운다.
+  menuItems.push({ label: "후기 작성", onSelect: () => navigate(`/fairs/${reservation.fairId}/reviews/new`) });
 
   return (
     <div className="mx-auto max-w-3xl py-2">
@@ -367,7 +372,12 @@ export function ReservationDetailPage() {
           </div>
           {isTossConfigured() ? (
             <div className="mt-4">
-              <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+              <PaymentMethodPicker
+                value={paymentMethod}
+                onChange={setPaymentMethod}
+                options={RESERVATION_PAYMENT_METHODS}
+                disabled={paying}
+              />
               <div className="mt-4 flex justify-end">
                 <Button disabled={paying} onClick={handleResumePayment}>
                   {paying ? "결제창을 여는 중…" : "결제 계속하기"}

@@ -120,4 +120,23 @@
         AND f.status != 'ENDED'
     </select>
 
+    <!--
+         소식 목록(/api/notices)에 섞어 내보낼 모집중인 공고들.
+         "모집중" 기준은 위 selectRecruitingFairIds와 동일하게 유지한다 - 한쪽만 고치면
+         행사 목록의 '모집중' 배지와 소식 목록이 서로 어긋난다.
+    -->
+    <select id="selectNewsItems" resultType="com.ms.petopia.api.recruitnotice.dto.response.RecruitNoticeNewsItem">
+        SELECT rn.recruit_notice_id AS recruitNoticeId,
+            rn.fair_id AS fairId,
+            f.name AS fairName,
+            rn.title AS title,
+            rn.created_at AS createdAt
+        FROM recruit_notice rn
+        JOIN fairs f ON f.fair_id = rn.fair_id
+        WHERE rn.recruit_deadline > #{now}
+        AND f.canceled_at IS NULL
+        AND f.status != 'ENDED'
+        ORDER BY rn.created_at DESC
+    </select>
+
 </mapper>

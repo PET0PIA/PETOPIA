@@ -4,41 +4,51 @@
 
 <mapper namespace="com.ms.petopia.api.review.mapper.FairReviewMapper">
 
+    <!-- would_revisit -> wouldRevisit로 map-underscore-to-camel-case가 그대로 매핑한다
+         (is_active/active 같은 접두사 불일치가 없어 별도 별칭이 필요 없다). companion_type/
+         visit_purpose는 컬럼값이 Java enum 상수명과 일치해 기본 EnumTypeHandler로 매핑된다. -->
     <sql id="columns">
-        review_id, fair_id, user_id, rating, content, is_verified_visit AS verifiedVisit, created_at, updated_at, version
+        review_id, fair_id, user_id, companion_type, visit_purpose, would_revisit, created_at, updated_at
     </sql>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="reviewId" keyColumn="review_id">
         INSERT INTO fair_reviews
-            (fair_id, user_id, rating, content, is_verified_visit, created_at, updated_at)
+            (fair_id, user_id, companion_type, visit_purpose, would_revisit, created_at, updated_at)
         VALUES
-            (#{fairId}, #{userId}, #{rating}, #{content}, #{verifiedVisit}, #{createdAt}, #{updatedAt})
+            (#{fairId}, #{userId}, #{companionType}, #{visitPurpose}, #{wouldRevisit}, #{createdAt}, #{updatedAt})
     </insert>
 
-    <select id="selectById" resultType="FairReview">
-        SELECT <include refid="columns" />
-          FROM fair_reviews
-         WHERE review_id = #{reviewId}
+    <select id="existsByFairIdAndUserId" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1 FROM fair_reviews WHERE fair_id = #{fairId} AND user_id = #{userId}
+        )
     </select>
 
-    <select id="selectByFairId" resultType="FairReview">
+    <select id="selectByFairIdAndUserId" resultType="FairReview">
         SELECT <include refid="columns" />
           FROM fair_reviews
          WHERE fair_id = #{fairId}
-         ORDER BY created_at DESC, review_id DESC
-         LIMIT #{limit} OFFSET #{offset}
+           AND user_id = #{userId}
     </select>
 
-    <select id="countByFairId" resultType="long">
-        SELECT COUNT(*)
-          FROM fair_reviews
-         WHERE fair_id = #{fairId}
+    <select id="existsEntryRecord" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1 FROM entry_records WHERE fair_id = #{fairId} AND user_id = #{userId}
+        )
     </select>
+
+    <insert id="insertTagSelections">
+        INSERT INTO fair_review_tag_selections (review_id, tag_id)
+        VALUES
+        <foreach collection="tagIds" item="tagId" separator=",">
+            (#{reviewId}, #{tagId})
+        </foreach>
+    </insert>
+
+    <!-- ===== 공개 목록/요약 조회 ===== -->
 
     <select id="selectListByFairId" resultType="FairReviewListRow">
-        SELECT fr.review_id, fr.fair_id, fr.user_id, u.nickname,
-               fr.rating, fr.content, fr.is_verified_visit AS verifiedVisit,
-               fr.created_at, fr.updated_at, fr.version
+        SELECT fr.review_id, u.nickname, fr.companion_type, fr.visit_purpose, fr.would_revisit, fr.created_at
           FROM fair_reviews fr
           JOIN users u ON u.user_id = fr.user_id
          WHERE fr.fair_id = #{fairId}
@@ -46,52 +56,51 @@
          LIMIT #{limit} OFFSET #{offset}
     </select>
 
-    <select id="selectSummaryByFairId" resultType="FairReviewSummaryRow">
-        SELECT AVG(rating) AS averageRating, COUNT(*) AS reviewCount
+    <select id="selectFairTagLabelsByReviewIds" resultType="ReviewTagLabelRow">
+        SELECT s.review_id, ft.label
+          FROM fair_review_tag_selections s
+          JOIN feedback_tags ft ON ft.tag_id = s.tag_id AND ft.scope = 'FAIR'
+         WHERE s.review_id IN
+        <foreach collection="reviewIds" item="reviewId" open="(" separator="," close=")">
+            #{reviewId}
+        </foreach>
+         ORDER BY ft.sort_order
+    </select>
+
+    <!-- ===== 행사관리자 통계(Phase 6) ===== -->
+
+    <select id="countByFairId" resultType="long">
+        SELECT COUNT(*)
+          FROM fair_reviews fr
+          JOIN users u ON u.user_id = fr.user_id
+         WHERE fr.fair_id = #{fairId}
+    </select>
+
+    <select id="countRevisitByFairId" resultType="long">
+        SELECT COUNT(*) FROM fair_reviews WHERE fair_id = #{fairId} AND would_revisit = 1
+    </select>
+
+    <select id="selectCompanionTypeDistribution" resultType="LabeledCountRow">
+        SELECT companion_type AS label, COUNT(*) AS count
           FROM fair_reviews
          WHERE fair_id = #{fairId}
+         GROUP BY companion_type
     </select>
 
-    <select id="selectByUserId" resultType="FairReview">
-        SELECT <include refid="columns" />
+    <select id="selectVisitPurposeDistribution" resultType="LabeledCountRow">
+        SELECT visit_purpose AS label, COUNT(*) AS count
           FROM fair_reviews
-         WHERE user_id = #{userId}
-         ORDER BY created_at DESC, review_id DESC
-         LIMIT #{limit} OFFSET #{offset}
+         WHERE fair_id = #{fairId}
+         GROUP BY visit_purpose
     </select>
 
-    <select id="countByUserId" resultType="long">
-        SELECT COUNT(*)
-          FROM fair_reviews
-         WHERE user_id = #{userId}
+    <select id="selectFairTagCounts" resultType="TagCountRow">
+        SELECT ft.tag_id, ft.label, ft.category, ft.sentiment, COUNT(*) AS count
+          FROM fair_review_tag_selections s
+          JOIN fair_reviews fr ON fr.review_id = s.review_id
+          JOIN feedback_tags ft ON ft.tag_id = s.tag_id
+         WHERE fr.fair_id = #{fairId}
+         GROUP BY ft.tag_id, ft.label, ft.category, ft.sentiment
     </select>
-
-    <select id="selectMyReviews" resultType="MyFairReviewRow">
-        SELECT fr.review_id, fr.fair_id, f.name AS fairName, f.poster_image_url AS fairPosterImageUrl,
-               fr.rating, fr.content, fr.is_verified_visit AS verifiedVisit,
-               fr.created_at, fr.updated_at, fr.version
-          FROM fair_reviews fr
-          JOIN fairs f ON f.fair_id = fr.fair_id
-         WHERE fr.user_id = #{userId}
-         ORDER BY fr.created_at DESC, fr.review_id DESC
-         LIMIT #{limit} OFFSET #{offset}
-    </select>
-
-    <!-- version(#{version})은 호출부가 "기대 버전"(클라이언트가 조회 시점에 받은 값)을 담아
-         넘긴다. 그 사이 다른 수정이 있었으면 WHERE 절에서 걸려 영향받은 행이 0건이 되고,
-         호출부(FairReviewService)가 그걸 REVIEW_VERSION_CONFLICT로 처리한다. -->
-    <update id="update">
-        UPDATE fair_reviews
-           SET rating = #{rating},
-               content = #{content},
-               updated_at = #{updatedAt},
-               version = version + 1
-         WHERE review_id = #{reviewId}
-           AND version = #{version}
-    </update>
-
-    <delete id="deleteById">
-        DELETE FROM fair_reviews WHERE review_id = #{reviewId}
-    </delete>
 
 </mapper>

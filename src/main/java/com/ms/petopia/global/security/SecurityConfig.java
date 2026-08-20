@@ -132,22 +132,24 @@ public class SecurityConfig {
                         // Fair 도메인 - 개설비 결제 페이지 전용 요약 조회. 담당 EVENT_ADMIN인지는
                         // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/opening-fee").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        // Review 도메인 - 리뷰 작성은 로그인만 하면 누구나 가능(예매·방문 여부로 막지 않음).
+                        // Review 도메인(V39 재설계 - 태그 기반 통합 리뷰) - 로그인만 하면 호출은
+                        // 가능하지만, 실제 제출은 해당 행사 방문 이력(entry_records)이 있어야
+                        // 하고 행사당 1건 제한이다 - FairReviewService가 서비스 계층에서 검증한다.
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews").authenticated()
-                        // Review 도메인 - 목록·요약 조회는 로그인 없이 누구나(방문 전 리뷰를 미리 볼 수 있게).
-                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews", "/api/fairs/*/reviews/summary").permitAll()
-                        // Review 도메인 - 수정/삭제는 로그인만 요구(본인 작성 리뷰인지는 서비스 계층에서 검증).
-                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/reviews/*").authenticated()
-                        .requestMatchers(HttpMethod.DELETE, "/api/fairs/*/reviews/*").authenticated()
-                        // Review 도메인 - 마이페이지 "내 리뷰" 목록(로그인한 본인 것만).
-                        .requestMatchers(HttpMethod.GET, "/api/users/me/reviews").authenticated()
-                        // Review 도메인 - 리뷰 신고는 로그인만 요구(중복 신고 여부는 서비스 계층에서 검증).
-                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews/*/reports").authenticated()
-                        // Review 도메인 - 답글 조회는 리뷰처럼 공개. 작성·수정은 EVENT_ADMIN/SUPER_ADMIN만,
-                        // "이 행사 담당자인지"는 FairReviewReplyService가 FairAdminAccessGuard로 한 번 더 확인한다.
-                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/*/reply").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews/*/reply").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/reviews/*/reply").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Review 도메인 - "이미 작성했는지" 상태 조회는 로그인한 본인 것만.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/status").authenticated()
+                        // Review 도메인 - 공개 리뷰 목록·요약 조회는 인증 불필요.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/summary").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews").permitAll()
+                        // Review 도메인 - 행사관리자 통계(카테고리별 태그 TOP5 등)는 그 행사 담당
+                        // EVENT_ADMIN 또는 SUPER_ADMIN만 - FairAdminAccessGuard가 서비스 계층에서 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/stats").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // FeedbackTag 도메인 - 태그 마스터 활성 목록 조회는 누구나(리뷰 마법사에서 사용).
+                        // 등록·수정·사용현황 조회는 SUPER_ADMIN만.
+                        .requestMatchers(HttpMethod.GET, "/api/feedback-tags").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/feedback-tags").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/feedback-tags/*").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/feedback-tags/*/usage").hasRole("SUPER_ADMIN")
                         // Statistics 도메인 - 행사 하나에 대한 예약/방문 통계 대시보드(ReservationDashboardController).
                         // halls/fair-dates와 같은 이유로 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 접근.
                         .requestMatchers(HttpMethod.GET,
@@ -187,6 +189,9 @@ public class SecurityConfig {
                         // 행에서 읽은 fairId를 기준으로).
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/vendors/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/*/confirm", "/api/settlements/*/recalculate").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // reopen(확정취소)은 confirm/recalculate보다 더 신중해야 하는 결정이라
+                        // EVENT_ADMIN은 빼고 SUPER_ADMIN만 허용한다(서비스 계층 requireSuperAdmin과 이중 방어).
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/*/reopen").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // CommissionRate 도메인 - 현재 요율 조회는 결제 화면 등에서 누구나 볼 수 있게

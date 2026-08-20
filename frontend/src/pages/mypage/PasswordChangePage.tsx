@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -7,16 +7,37 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
 import { changePassword } from "../../api/auth";
+import { getMe } from "../../api/user";
 
 const PASSWORD_PATTERN = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/;
 
 export function PasswordChangePage() {
   const navigate = useNavigate();
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getMe()
+      .then((me) => {
+        if (!active) return;
+        if (!me.passwordChangeAvailable) {
+          navigate("/mypage", { replace: true });
+          return;
+        }
+        setCheckingAccess(false);
+      })
+      .catch(() => {
+        if (active) navigate("/mypage", { replace: true });
+      });
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,6 +67,14 @@ export function PasswordChangePage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (checkingAccess) {
+    return (
+      <PageContainer className="py-10">
+        <p className="py-16 text-center text-sm text-muted">계정 정보를 확인하고 있어요...</p>
+      </PageContainer>
+    );
   }
 
   return (
