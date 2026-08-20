@@ -12,8 +12,8 @@ import java.time.LocalDateTime;
  * 평가는 booth_feedbacks로 분리돼 있다.
  *
  * <p>행사당 사용자 1건으로 제한한다(UNIQUE(fair_id,user_id), V39) - 재작성이 아니라
- * "새로 작성"만 지원하고 수정·삭제 API는 이번 범위에 없다(petopia-review-feature-plan
- * 스킬 참고).
+ * "새로 작성"만 지원하고 수정 API는 없다. 관리자 하드 삭제({@code FairReviewService#adminDeleteReview})는
+ * 지원한다(petopia-review-feature-plan 스킬 참고).
  */
 @Getter
 @Setter

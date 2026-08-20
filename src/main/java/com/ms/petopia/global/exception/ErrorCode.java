@@ -99,6 +99,7 @@ public enum ErrorCode {
     PAYMENT_APPROVAL_FAILED(HttpStatus.PAYMENT_REQUIRED, "P003", "결제 승인에 실패했습니다."),
     PAYMENT_GATEWAY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "P004", "결제 서비스에 일시적으로 연결할 수 없습니다."),
     PAYMENT_METHOD_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "P005", "이 결제는 가상계좌로 결제할 수 없습니다."),
+    PAYMENT_CANCELLATION_FAILED(HttpStatus.CONFLICT, "P006", "가상계좌 취소에 실패했습니다."),
 
     // ===== Fair =====
     FAIR_INVALID_VENDOR_RECRUIT_PERIOD(HttpStatus.BAD_REQUEST, "F001", "참가업체 모집 종료일이 시작일보다 빠릅니다."),
@@ -130,6 +131,9 @@ public enum ErrorCode {
     FAIR_OPENING_FEE_AMOUNT_REQUIRED(HttpStatus.BAD_REQUEST, "F027", "승인 시 개설비 금액을 입력해야 합니다."),
     FAIR_OPENING_FEE_NOT_PAYABLE(HttpStatus.CONFLICT, "F028", "개설비를 결제할 수 없는 상태의 행사입니다."),
     FAIR_PAYMENT_DUE_DAYS_INVALID(HttpStatus.BAD_REQUEST, "F029", "결제 기한 일수는 1일 이상 365일 이하여야 합니다."),
+    FAIR_VENDOR_RECRUIT_START_IN_PAST(HttpStatus.BAD_REQUEST, "F030", "참가업체 모집 시작일은 오늘 이후여야 합니다."),
+    FAIR_RESERVATION_START_IN_PAST(HttpStatus.BAD_REQUEST, "F031", "예약 시작일은 오늘 이후여야 합니다."),
+    FAIR_OPERATION_START_IN_PAST(HttpStatus.BAD_REQUEST, "F032", "행사 운영 시작일은 오늘 이후여야 합니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -196,6 +200,7 @@ public enum ErrorCode {
     REVIEW_FAIR_NOT_PUBLISHED(HttpStatus.BAD_REQUEST, "RV008", "전체공개된 행사가 아닙니다. 아직 공개되지 않았거나 취소된 행사에는 리뷰를 작성할 수 없습니다."),
     REVIEW_VISIT_REQUIRED(HttpStatus.FORBIDDEN, "RV009", "이 행사를 방문(입장)한 기록이 있어야 리뷰를 작성할 수 있습니다."),
     BOOTH_VISIT_REQUIRED(HttpStatus.FORBIDDEN, "RV010", "이 부스를 방문한 기록이 있어야 평가를 작성할 수 있습니다."),
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "RV011", "존재하지 않거나 이 행사의 리뷰가 아닙니다."),
 
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),

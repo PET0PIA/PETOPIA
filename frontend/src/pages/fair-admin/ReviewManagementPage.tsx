@@ -132,7 +132,7 @@ export function ReviewManagementPage() {
 
   return (
     <div className="mx-auto max-w-[1600px] py-2">
-      <PageHeader eyebrow="박람회 관리자" title="리뷰 관리" description="태그 기반으로 남긴 방문객 리뷰 통계와 방문 지표를 함께 확인해요." />
+      <PageHeader eyebrow="박람회 관리자" title="리뷰 통계" description="태그 기반으로 남긴 방문객 리뷰 통계와 방문 지표를 함께 확인해요." />
 
       {loadError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
