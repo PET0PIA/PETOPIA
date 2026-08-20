@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -61,5 +62,13 @@ public class FairReviewController {
     @GetMapping("/summary")
     public FairReviewSummaryResponse summary(@PathVariable Long fairId) {
         return fairReviewService.getPublicSummary(fairId);
+    }
+
+    /** 행사담당자/최고관리자의 부적절한 리뷰 삭제(하드 삭제, 딸린 부스 평가까지 함께 삭제).
+     * 권한 검증은 서비스 계층의 FairAdminAccessGuard가 담당한다. */
+    @DeleteMapping("/{reviewId}")
+    public ResponseEntity<Void> delete(@PathVariable Long fairId, @PathVariable Long reviewId) {
+        fairReviewService.adminDeleteReview(fairId, reviewId);
+        return ResponseEntity.noContent().build();
     }
 }

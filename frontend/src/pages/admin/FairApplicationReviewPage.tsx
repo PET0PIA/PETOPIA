@@ -437,7 +437,22 @@ export function FairApplicationReviewPage() {
             <h3 className="text-sm font-extrabold text-muted">기본 정보</h3>
             <dl className="grid gap-4 sm:grid-cols-2">
               <Field label="카테고리" value={detail.category ?? "-"} />
-              <Field label="포스터 이미지" value={detail.posterImageUrl ?? "-"} />
+              <div>
+                <dt className="text-xs font-bold text-muted">포스터 이미지</dt>
+                <dd className="mt-1 text-sm text-ink">
+                  {detail.posterImageUrl ? (
+                    <a href={detail.posterImageUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                      <img
+                        src={detail.posterImageUrl}
+                        alt="행사 포스터"
+                        className="h-24 w-auto rounded-card border border-line object-cover transition hover:opacity-80"
+                      />
+                    </a>
+                  ) : (
+                    "-"
+                  )}
+                </dd>
+              </div>
               <Field label="행사 소개" value={detail.description ?? "-"} />
               <Field label="유의사항" value={detail.noticeText ?? "-"} />
             </dl>
