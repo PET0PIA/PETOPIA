@@ -32,7 +32,7 @@ function formatDeadline(value: string) {
 // 슬롯이 속한 booth_slots.locked_at 여부가 아니라, 우리 도메인이 계산한 status로 배치도 잠금 표시를 결정한다.
 function toSlotCaption(slot: RecruitNoticeBoothSlot): string {
   if (slot.status === "CONFIRMED" && slot.businessName) return slot.businessName;
-  return slotStatusLabels[slot.status];
+  return `${slotStatusLabels[slot.status]}\n${slot.price.toLocaleString()}원`;
 }
 
 // 홀별로 그룹핑한다 - posX/posY가 홀마다 다른 도면 기준 좌표라 섞어서 그리면 안 된다.
@@ -126,8 +126,12 @@ export function RecruitNoticeDetailPage() {
       />
 
       {notice.imageUrl && (
-        <div className="surface mb-6 overflow-hidden">
-          <img src={notice.imageUrl} alt={`${notice.title} 공고 이미지`} className="max-h-80 w-full object-cover" />
+        <div className="surface mb-6 overflow-hidden bg-page">
+          <img
+            src={notice.imageUrl}
+            alt={`${notice.title} 공고 이미지`}
+            className="mx-auto max-h-[32rem] w-full object-contain"
+          />
         </div>
       )}
 
