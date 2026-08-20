@@ -11,6 +11,7 @@ import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.client.ApplicationPaymentContractClient;
 import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
@@ -56,6 +57,7 @@ public class PaymentService {
     private final TossPaymentClient tossPaymentClient;
     private final ReservationPaymentContractClient reservationPaymentContractClient;
     private final FairOpeningFeePaymentContractClient fairOpeningFeePaymentContractClient;
+    private final ApplicationPaymentContractClient applicationPaymentContractClient;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
     private final ApplicationService applicationService;
@@ -127,30 +129,39 @@ public class PaymentService {
     }
 
     /**
-     * 참가비 결제를 생성한다. application 테이블은 조회하지 않으므로(애그리거트 간
-     * ID 참조 원칙 유지) 금액·소속 정보는 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
+     * 참가비 결제를 생성한다. 참가업체 도메인의 결제 컨텍스트 조회로 승인 시 확정된 진짜 금액을
+     * 받아온다 — 예약금/개설비와 동일하게, 클라이언트가 보낸 금액은 더 이상 신뢰하지 않는다
+     * (2026-08-20 해소. 채린님이 {@code ApplicationPaymentContractController}를 먼저 열어주셔서
+     * 이제 결제 3종이 전부 같은 패턴으로 통일됨 — 원래는 application 테이블을 조회하지 않는다는
+     * 원칙 때문에 클라이언트 입력을 그대로 썼던 트레이드오프였다).
      *
      * <p>동일 참가신청에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
      * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
      *
-     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 참가신청일 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 사업자 소유주가 아닐 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 신청이 결제 가능한
+     *         상태가 아니거나 이미 결제된 참가신청일 때
      */
-
     @Transactional
-    public PaymentResponse payVendorFee(Long applicationId,Long userId, VendorFeePaymentRequest request) {
+    public PaymentResponse payVendorFee(Long applicationId, Long userId) {
+        ApplicationVendorFeePaymentContext context = applicationPaymentContractClient.getPaymentContext(applicationId);
+        if (!userId.equals(context.payerUserId())) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+
         String idempotencyKey = "VENDOR_FEE_" + applicationId;
-        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
+        PaymentRow row = createOrRetryPayment(idempotencyKey, context.amount(), userId, () -> {
             LocalDateTime now = LocalDateTime.now();
             PaymentRow newRow = new PaymentRow();
             newRow.setPaymentType("VENDOR_FEE");
-            newRow.setAmount(request.amount());
+            newRow.setAmount(context.amount());
             newRow.setStatus("PENDING");
             newRow.setMethod("TOSS");
             newRow.setIdempotencyKey(idempotencyKey);
             newRow.setCreatedAt(now);
             newRow.setUpdatedAt(now);
-            newRow.setFairId(request.fairId());
-            newRow.setBusinessId(request.businessId());
+            newRow.setFairId(context.fairId());
+            newRow.setBusinessId(context.businessId());
             newRow.setPayerUserId(userId);
             newRow.setApplicationId(applicationId);
             return newRow;
