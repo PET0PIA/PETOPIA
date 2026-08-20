@@ -215,11 +215,11 @@ public class PaymentService {
      * 도메인의 내부 계약({@link FairOpeningFeePaymentContractClient})을 호출해 승인 시 확정된
      * 금액을 받아온다. fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
      *
-     * <p>개설비는 행사 신청자 본인이 아니라 <b>SUPER_ADMIN만</b> 결제할 수 있다(2026-08-19,
-     * 주원 결정) - 예약금·참가비처럼 신청 당사자가 스스로 내는 구조가 아니라, 플랫폼
-     * 최고관리자가 대행 결제하는 구조라서 {@link FairAdminAccessGuard#requireSuperAdmin()}으로
-     * role만 검증한다(특정 행사 담당자 배정 여부는 안 본다 - fairId 단위 검증이 필요하면
-     * {@link FairAdminAccessGuard#checkAssigned}를 쓰는 {@link #getPayment}과 다른 지점).
+     * <p>개설비는 승인받은 당사자(그 행사 담당 EVENT_ADMIN) 또는 SUPER_ADMIN이 결제할 수 있다
+     * ({@link FairAdminAccessGuard#checkAssigned}, 2026-08-21 정정 — 원래 "SUPER_ADMIN만 대행
+     * 결제"로 좁혀뒀었는데, 다시 보니 승인(SUPER_ADMIN의 심사 액션)과 결제(승인받은 당사자가
+     * 내는 돈)를 혼동한 설계였다. 예약금·참가비처럼 그 일의 당사자가 직접 내는 흐름으로
+     * 맞추고, SUPER_ADMIN도 관리 목적상 계속 결제할 수 있게 뒀다).
      *
      * <p>결제 완료 후 행사 상태를 "준비중"으로 전이하는 건 이 메서드 책임이 아니다 - 행사
      * 도메인이 폴링 방식으로 직접 감지해서 전이한다({@link
@@ -231,13 +231,14 @@ public class PaymentService {
      * <p>동일 행사에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
      * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
      *
-     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} SUPER_ADMIN이 아닐 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 EVENT_ADMIN도
+     *         SUPER_ADMIN도 아닐 때
      * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사이거나,
      *         존재하지 않거나 개설비를 결제할 수 없는 상태의 행사일 때
      */
     @Transactional
     public PaymentResponse payFairOpeningFee(Long fairId, Long userId) {
-        fairAdminAccessGuard.requireSuperAdmin();
+        fairAdminAccessGuard.checkAssigned(fairId);
         FairOpeningFeePaymentContext context = fairOpeningFeePaymentContractClient.getPaymentContext(fairId);
 
         String idempotencyKey = "FAIR_OPENING_FEE_" + fairId;

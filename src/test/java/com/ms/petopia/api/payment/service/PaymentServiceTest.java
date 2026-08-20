@@ -464,22 +464,23 @@ class PaymentServiceTest {
         // idempotencyKey가 fairId 기준으로 만들어졌는지(같은 행사 중복결제 방지의 핵심 값)
         verify(paymentMapper).insert(argThat(row -> "FAIR_OPENING_FEE_10".equals(row.getIdempotencyKey())));
 
-        // SUPER_ADMIN role 검증을 거쳤는지(개설비는 신청자 본인이 아니라 SUPER_ADMIN만 결제 가능)
-        verify(fairAdminAccessGuard).requireSuperAdmin();
+        // 담당자 검증을 거쳤는지(개설비는 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 결제 가능,
+        // 2026-08-21 정정 — 예약금·참가비처럼 당사자가 직접 내는 흐름으로 통일)
+        verify(fairAdminAccessGuard).checkAssigned(10L);
     }
 
     @Test
-    @DisplayName("SUPER_ADMIN이 아니면 행사개설비 결제를 요청해도 예외를 던진다")
-    void payFairOpeningFee_SUPER_ADMIN아님_예외를던진다() {
+    @DisplayName("그 행사 담당 EVENT_ADMIN도 SUPER_ADMIN도 아니면 행사개설비 결제를 요청해도 예외를 던진다")
+    void payFairOpeningFee_담당자아님_예외를던진다() {
         willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
-                .given(fairAdminAccessGuard).requireSuperAdmin();
+                .given(fairAdminAccessGuard).checkAssigned(10L);
 
         assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 3L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
 
-        // role 검증에서 이미 막혔으니 행사 도메인 계약 조회조차 안 가야 한다
+        // 담당자 검증에서 이미 막혔으니 행사 도메인 계약 조회조차 안 가야 한다
         verify(fairOpeningFeePaymentContractClient, never()).getPaymentContext(any());
     }
 
