@@ -178,11 +178,85 @@ export async function downloadVisitStatsExcel(fairId: number): Promise<void> {
  * 예약 현황 SSE 구독. 백엔드가 예약 상태 변경(결제완료·취소·QR 스캔 등)이 있을 때마다
  * "dashboard-update" 이벤트로 해당 행사의 전체 운영일 최신 요약을 다시 밀어준다.
  * 연결 직후에도 현재 상태를 한 번 즉시 받는다(서버 쪽 초기 전송).
+ *
+ * 네이티브 EventSource는 커스텀 헤더를 못 붙여서 Authorization: Bearer 인증을 쓰는
+ * 이 API에는 못 쓴다 - fetch + ReadableStream으로 SSE 프레임을 직접 파싱한다.
+ * 연결이 끊기면(네트워크 오류, 서버 재시작 등) EventSource와 동일하게 자동 재연결한다.
  */
 export function subscribeReservationDashboard(fairId: number, onUpdate: (data: ReservationDateSummary[]) => void) {
-  const source = new EventSource(`/api/fairs/${fairId}/reservation-dashboard/stream`);
-  source.addEventListener("dashboard-update", (event) => {
-    onUpdate(JSON.parse((event as MessageEvent<string>).data) as ReservationDateSummary[]);
-  });
-  return () => source.close();
+  const path = `/api/fairs/${fairId}/reservation-dashboard/stream`;
+  let stopped = false;
+  let abortController: AbortController | null = null;
+
+  async function readStream(isRetry: boolean): Promise<void> {
+    abortController = new AbortController();
+    const headers: Record<string, string> = { Accept: "text/event-stream" };
+    const accessToken = getAccessToken();
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(path, { headers, credentials: "include", signal: abortController.signal });
+
+    // Access Token 만료(401)면 apiClient.request()와 동일하게 한 번만 재발급 후 재시도한다.
+    if (response.status === 401 && !isRetry) {
+      try {
+        setAccessToken(await refreshAccessTokenOnce());
+        return readStream(true);
+      } catch {
+        setAccessToken(null);
+      }
+    }
+
+    if (!response.ok || !response.body) {
+      throw new ApiError("예약 현황 스트림 연결에 실패했어요.", response.status);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let frameEnd: number;
+      while ((frameEnd = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, frameEnd);
+        buffer = buffer.slice(frameEnd + 2);
+
+        const eventName = frame.match(/^event:\s*(.*)$/m)?.[1]?.trim();
+        const data = frame
+          .split("\n")
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim())
+          .join("\n");
+
+        if (eventName === "dashboard-update" && data) {
+          onUpdate(JSON.parse(data) as ReservationDateSummary[]);
+        }
+      }
+    }
+  }
+
+  async function connectWithRetry() {
+    while (!stopped) {
+      try {
+        await readStream(false);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+      }
+      if (!stopped) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      }
+    }
+  }
+
+  connectWithRetry();
+
+  return () => {
+    stopped = true;
+    abortController?.abort();
+  };
 }
