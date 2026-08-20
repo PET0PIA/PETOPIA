@@ -11,6 +11,7 @@ import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.client.ApplicationPaymentContractClient;
 import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
@@ -56,6 +57,7 @@ public class PaymentService {
     private final TossPaymentClient tossPaymentClient;
     private final ReservationPaymentContractClient reservationPaymentContractClient;
     private final FairOpeningFeePaymentContractClient fairOpeningFeePaymentContractClient;
+    private final ApplicationPaymentContractClient applicationPaymentContractClient;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
     private final ApplicationService applicationService;
@@ -127,30 +129,46 @@ public class PaymentService {
     }
 
     /**
-     * 참가비 결제를 생성한다. application 테이블은 조회하지 않으므로(애그리거트 간
-     * ID 참조 원칙 유지) 금액·소속 정보는 호출자가 요청에 실어보낸 값을 그대로 신뢰한다.
+     * 참가비 결제를 생성한다. 참가업체 도메인의 결제 컨텍스트 조회로 승인 시 확정된 진짜 금액을
+     * 받아온다 — 예약금/개설비와 동일하게, 클라이언트가 보낸 금액은 더 이상 신뢰하지 않는다
+     * (2026-08-20 해소. 채린님이 {@code ApplicationPaymentContractController}를 먼저 열어주셔서
+     * 이제 결제 3종이 전부 같은 패턴으로 통일됨 — 원래는 application 테이블을 조회하지 않는다는
+     * 원칙 때문에 클라이언트 입력을 그대로 썼던 트레이드오프였다).
      *
      * <p>동일 참가신청에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
      * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
      *
-     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 참가신청일 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 사업자 소유주가 아닐 때
+     * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 신청이 결제 가능한
+     *         상태가 아니거나 이미 결제된 참가신청이거나, 컨텍스트 응답의 applicationId가
+     *         요청한 값과 다를 때(참가업체 도메인 쪽 버그 방어, CodeRabbit 리뷰 지적)
      */
-
     @Transactional
-    public PaymentResponse payVendorFee(Long applicationId,Long userId, VendorFeePaymentRequest request) {
+    public PaymentResponse payVendorFee(Long applicationId, Long userId) {
+        ApplicationVendorFeePaymentContext context = applicationPaymentContractClient.getPaymentContext(applicationId);
+        // 정상적이라면 항상 같아야 한다(같은 ID로 조회를 요청했으니까) — 그래도 상대 도메인의
+        // 응답 로직에 버그가 있거나 나중에 바뀌었을 때 엉뚱한 신청의 금액으로 결제가 만들어지는
+        // 사고를 막기 위한 방어선이다.
+        if (!applicationId.equals(context.applicationId())) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+        if (!userId.equals(context.payerUserId())) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+
         String idempotencyKey = "VENDOR_FEE_" + applicationId;
-        PaymentRow row = createOrRetryPayment(idempotencyKey, request.amount(), userId, () -> {
+        PaymentRow row = createOrRetryPayment(idempotencyKey, context.amount(), userId, () -> {
             LocalDateTime now = LocalDateTime.now();
             PaymentRow newRow = new PaymentRow();
             newRow.setPaymentType("VENDOR_FEE");
-            newRow.setAmount(request.amount());
+            newRow.setAmount(context.amount());
             newRow.setStatus("PENDING");
             newRow.setMethod("TOSS");
             newRow.setIdempotencyKey(idempotencyKey);
             newRow.setCreatedAt(now);
             newRow.setUpdatedAt(now);
-            newRow.setFairId(request.fairId());
-            newRow.setBusinessId(request.businessId());
+            newRow.setFairId(context.fairId());
+            newRow.setBusinessId(context.businessId());
             newRow.setPayerUserId(userId);
             newRow.setApplicationId(applicationId);
             return newRow;
@@ -745,8 +763,10 @@ public class PaymentService {
      * 다른 도메인이 자기 업무(예약/신청/행사)를 취소 처리하면서, 그에 딸린 결제를 함께
      * 취소시키는 용도(WBS 1.7). {@link #CANCELABLE_STATUSES}에서만 허용한다 —
      * PROCESSING(토스 승인 진행중)·COMPLETED는 이미 돈이 움직였을 수 있어 건드리지 않는다.
-     * CANCELED/EXPIRED는 영구 종료 상태라 재결제는 새 결제 생성으로 처리한다(FAILED처럼
-     * 재사용하지 않음).
+     * CANCELED/EXPIRED로 바뀐 뒤에도 원업무가 재결제를 요청하면 {@link #createOrRetryPayment}가
+     * {@link #RETRYABLE_TERMINAL_STATUSES}를 통해 FAILED와 동일하게 PENDING으로 되살려 재사용한다
+     * (2026-08-20 해소 — 참가비/개설비처럼 원업무 ID가 고정된 유형은 그전까지 영구히 재결제
+     * 불가능했음).
      *
      * @param callerDomain 호출 도메인(RESERVATION/FAIR/VENDOR_APPLICATION) — 그 결제의
      *                     paymentType이 이 도메인이 다룰 수 있는 유형에 없으면 남의 결제를

@@ -42,6 +42,22 @@
     </select>
 
     <!--
+      같은 안내가 이미 붙었는지. 호출부가 대화 행을 잠근 뒤 부르므로, 같은 대화의 다른
+      작업과 겹쳐 둘 다 "없다"로 읽는 일은 없다. idx_chat_message_cursor의 앞 컬럼으로
+      대화를 좁힌 뒤 sender_type/content를 걸러낸다 - 한 대화의 메시지는 많아도 수백 건이라
+      이 확인만을 위한 인덱스를 더할 이유는 없다.
+    -->
+    <select id="existsSystemMessage" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+              FROM chat_message
+             WHERE conversation_id = #{conversationId}
+               AND sender_type = 'SYSTEM'
+               AND content = #{content}
+        )
+    </select>
+
+    <!--
       소유자 조건은 chat_conversation을 통해 건다. 메시지 테이블에는 소유자 정보가 없고,
       넣어서 중복 보관하면 승계(게스트 → 로그인) 때 두 곳을 함께 고쳐야 한다.
 

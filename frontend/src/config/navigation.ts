@@ -119,6 +119,7 @@ export const fairAdminNavigation: NavigationItem[] = [
     icon: CreditCard,
     children: [
       { label: "개설비 결제", path: "/payments/fair-opening-fee", icon: CreditCard },
+      { label: "참가업체 결제·정산", path: "/fair-admin/payments", icon: ReceiptText },
       { label: "행사 취소 신청", path: "/fair-admin/cancellation", icon: Ban },
     ],
   },

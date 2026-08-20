@@ -69,6 +69,17 @@
     </update>
 
     <!--
+      대화 행 잠금. 값을 바꾸지 않으므로 UPDATE가 아니라 FOR UPDATE로 잡는다.
+      같은 대화의 AI 답변 작업이 둘 동시에 돌 때, 안내 중복 판정을 직렬화하는 데 쓴다.
+    -->
+    <select id="lockById" resultType="long">
+        SELECT conversation_id
+          FROM chat_conversation
+         WHERE conversation_id = #{conversationId}
+           FOR UPDATE
+    </select>
+
+    <!--
       AI가 답한 직후 잠근다. WAITING_AGENT일 때만 넘어가는 이유:
       비동기로 답이 도착하는 사이 상담사가 먼저 답했거나(IN_PROGRESS) 사용자가 종료했을 수
       있는데, 그때 뒤늦게 잠그면 이미 풀린 대화를 다시 잠그는 셈이 된다.

@@ -72,6 +72,7 @@ import { ApplicationSubmitPage } from "../pages/application/ApplicationSubmitPag
 import { MyApplicationsPage } from "../pages/application/MyApplicationsPage";
 import { ApplicationDetailPage } from "../pages/application/ApplicationDetailPage";
 import { ParticipationReviewPage } from "../pages/fair-admin/ParticipationReviewPage";
+import { FairPaymentSettlementPage } from "../pages/fair-admin/FairPaymentSettlementPage";
 import { CancelRequestReviewPage } from "../pages/fair-admin/CancelRequestReviewPage";
 import { BoothDetailPage } from "../pages/booth/BoothDetailPage";
 import { BoothEditPage } from "../pages/booth/BoothEditPage";
@@ -100,6 +101,7 @@ const fairAdminImplementedPaths = [
   "/fair-admin/onsite-sales",
   "/fair-admin/qr",
   "/fair-admin/reservations",
+  "/fair-admin/payments",
   "/fair-admin/reviews",
   "/fair-admin/reviews/manage",
   "/fair-admin/statistics",
@@ -243,6 +245,7 @@ export function AppRouter() {
             <Route path="qr" element={<GateEntryScanPage />} />
             <Route path="reservations" element={<ReservationStatusPage />} />
             <Route path="reservations/list" element={<FairReservationsPage />} />
+            <Route path="payments" element={<FairPaymentSettlementPage />} />
             <Route path="reviews" element={<ReviewManagementPage />} />
             <Route path="reviews/manage" element={<ReviewDeletionPage />} />
             <Route path="statistics" element={<VisitStatisticsPage />} />

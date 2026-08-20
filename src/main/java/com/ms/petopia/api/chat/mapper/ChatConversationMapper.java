@@ -37,6 +37,19 @@ public interface ChatConversationMapper {
                          @Param("now") LocalDateTime now);
 
     /**
+     * 대화 행을 잠근다(값은 쓰지 않는다).
+     *
+     * <p>같은 대화에 AI 답변 작업이 둘 동시에 돌 수 있다 - {@link #claimAiAnswer}는 한도가
+     * 남아 있으면 연달아 들어온 두 요청을 모두 통과시킨다. 그래서 "이미 붙었는지 읽어보고
+     * 없으면 붙인다" 식의 판정은 둘이 같은 스냅샷을 보고 둘 다 붙이는 창이 있다.
+     *
+     * <p>읽기 전에 이 잠금을 잡으면 뒤에 온 쪽이 앞의 커밋을 기다린 뒤 판정하므로 그 창이
+     * 닫힌다. 잠금 구간은 Claude 호출 <b>이후</b>의 쓰기 몇 줄뿐이고, 잠그는 순서도
+     * 다른 경로와 같아(대화 → 메시지) 순서 역전이 없다.
+     */
+    void lockById(@Param("conversationId") Long conversationId);
+
+    /**
      * AI가 답한 뒤 입력을 잠근다.
      *
      * @return 1이면 잠금 성공. 0이면 그 사이 상담사가 답했거나 대화가 끝난 것이라
