@@ -13,6 +13,7 @@ import { toPetFormValues } from "../../components/mypage/petFormValues";
 import { ApiError } from "../../api/client";
 import { deletePet, getPet, updatePet, type Pet, type PetRequest } from "../../api/pet";
 import { getMe } from "../../api/user";
+import petopiaHeaderLogo from "../../assets/logo/petopiaLOGO.png";
 
 const genderLabels: Record<string, string> = { MALE: "남", FEMALE: "여" };
 
@@ -176,9 +177,9 @@ export function PetDetailPage() {
               backgroundPosition: "right -6px bottom -3px",
             }}
           >
-            <div className="flex items-center justify-between bg-primary-soft px-6 py-3">
+            <div className="flex items-center justify-between bg-[#FAF7F2] px-6 py-3">
               <div className="flex items-center gap-2">
-                <PawPrint size={18} className="text-primary-strong" aria-hidden="true" />
+                <img src={petopiaHeaderLogo} alt="" className="h-6 w-auto" aria-hidden="true" />
                 <span className="text-base font-black tracking-tight text-ink">동물등록증</span>
               </div>
               <span className="text-xs font-bold tracking-widest text-primary-strong">PETOPIA</span>

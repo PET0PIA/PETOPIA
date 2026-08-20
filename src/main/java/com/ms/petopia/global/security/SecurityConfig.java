@@ -138,6 +138,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews").authenticated()
                         // Review 도메인 - "이미 작성했는지" 상태 조회는 로그인한 본인 것만.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/status").authenticated()
+                        // Review 도메인 - 공개 리뷰 목록·요약 조회는 인증 불필요.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/summary").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews").permitAll()
                         // Review 도메인 - 행사관리자 통계(카테고리별 태그 TOP5 등)는 그 행사 담당
                         // EVENT_ADMIN 또는 SUPER_ADMIN만 - FairAdminAccessGuard가 서비스 계층에서 확인한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/stats").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
