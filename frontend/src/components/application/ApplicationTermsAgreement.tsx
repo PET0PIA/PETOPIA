@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { Dialog } from "../ui/Dialog";
 
+type AgreementKind = "terms" | "privacy";
+
 interface ApplicationTermsAgreementProps {
-  agreed: boolean;
-  onAgreedChange: (checked: boolean) => void;
+  agreedTerms: boolean;
+  agreedPrivacy: boolean;
+  onTermsChange: (checked: boolean) => void;
+  onPrivacyChange: (checked: boolean) => void;
 }
 
 // 법무 검토 전 QA용 초안이다. 운영 배포 전 실제 정책에 맞춰 검토·확정해야 한다.
@@ -74,16 +78,56 @@ function ApplicationTermsContent() {
   );
 }
 
-export function ApplicationTermsAgreement({ agreed, onAgreedChange }: ApplicationTermsAgreementProps) {
-  const [open, setOpen] = useState(false);
+// 법무 검토 전 QA용 초안이다. 운영 배포 전 실제 정책·수집 항목에 맞춰 검토·확정해야 한다.
+function ApplicationPrivacyContent() {
+  return (
+    <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-2 text-sm leading-6 text-muted">
+      <section>
+        <h3 className="font-extrabold text-ink">1. 수집하는 개인정보</h3>
+        <p className="mt-1">
+          신청 담당자 이름, 연락처, 이메일, 참가 목적, 판매·전시 품목, 첨부파일(선택)을 수집합니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">2. 수집·이용 목적</h3>
+        <ul className="mt-1 list-disc space-y-1 pl-5">
+          <li>부스 참가 신청 심사 및 승인 여부 통지</li>
+          <li>참가비 결제 안내 및 신청 관련 연락</li>
+          <li>취소 요청 처리 및 환불 관련 안내</li>
+        </ul>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">3. 보유 및 이용 기간</h3>
+        <p className="mt-1">
+          신청이 종료(취소·반려·행사 종료 등)되거나 관련 계정이 탈퇴할 때까지 보유하며, 목적이 달성되면
+          지체 없이 파기합니다. 다만 관계 법령에 따라 보존할 필요가 있는 결제·환불 기록은 해당 법령이
+          정한 기간 동안 별도로 보관할 수 있습니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">4. 동의 거부 권리</h3>
+        <p className="mt-1">
+          개인정보 수집·이용 동의를 거부할 수 있습니다. 다만 필수 정보 수집에 동의하지 않으면 부스 참가
+          신청을 진행할 수 없습니다.
+        </p>
+      </section>
+      <p className="border-t border-line pt-4 text-xs">
+        시행 예정일: 2026년 8월 20일 · 본 내용은 QA용 초안이며 운영 배포 전 검토가 필요합니다.
+      </p>
+    </div>
+  );
+}
+
+export function ApplicationTermsAgreement({ agreedTerms, agreedPrivacy, onTermsChange, onPrivacyChange }: ApplicationTermsAgreementProps) {
+  const [openAgreement, setOpenAgreement] = useState<AgreementKind | null>(null);
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="space-y-2">
       <label className="flex items-center gap-2 text-sm text-ink">
         <input
           type="checkbox"
-          checked={agreed}
-          onChange={(event) => onAgreedChange(event.target.checked)}
+          checked={agreedTerms}
+          onChange={(event) => onTermsChange(event.target.checked)}
           className="mt-0.5"
         />
         <span>
@@ -93,13 +137,35 @@ export function ApplicationTermsAgreement({ agreed, onAgreedChange }: Applicatio
       <button
         type="button"
         className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenAgreement("terms")}
       >
         내용 보기
       </button>
 
-      <Dialog open={open} onClose={() => setOpen(false)} title="이용약관 및 참가 신청 유의사항">
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          checked={agreedPrivacy}
+          onChange={(event) => onPrivacyChange(event.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          개인정보 수집·이용에 동의합니다. <span className="text-primary-strong">*</span>
+        </span>
+      </label>
+      <button
+        type="button"
+        className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
+        onClick={() => setOpenAgreement("privacy")}
+      >
+        내용 보기
+      </button>
+
+      <Dialog open={openAgreement === "terms"} onClose={() => setOpenAgreement(null)} title="이용약관 및 참가 신청 유의사항">
         <ApplicationTermsContent />
+      </Dialog>
+      <Dialog open={openAgreement === "privacy"} onClose={() => setOpenAgreement(null)} title="개인정보 수집·이용 안내">
+        <ApplicationPrivacyContent />
       </Dialog>
     </div>
   );

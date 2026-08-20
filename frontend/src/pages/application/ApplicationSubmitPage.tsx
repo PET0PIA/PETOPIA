@@ -33,6 +33,7 @@ interface FormState {
   managerPhone: string;
   managerEmail: string;
   agreedTerms: boolean;
+  agreedPrivacy: boolean;
 }
 
 const initialForm: FormState = {
@@ -43,6 +44,7 @@ const initialForm: FormState = {
   managerPhone: "",
   managerEmail: "",
   agreedTerms: false,
+  agreedPrivacy: false,
 };
 
 function label(htmlFor: string, text: string, required = false) {
@@ -80,6 +82,7 @@ function validate(form: FormState, selectedSlotIds: number[]): string[] {
   if (form.managerEmail.trim() === "") errors.push("신청 담당자 이메일을 입력해 주세요.");
   else if (form.managerEmail.length > 100) errors.push("신청 담당자 이메일은 100자 이하로 입력해 주세요.");
   if (!form.agreedTerms) errors.push("이용약관에 동의해야 신청할 수 있어요.");
+  if (!form.agreedPrivacy) errors.push("개인정보 수집·이용에 동의해야 신청할 수 있어요.");
   return errors;
 }
 
@@ -385,8 +388,10 @@ export function ApplicationSubmitPage() {
         </section>
 
         <ApplicationTermsAgreement
-          agreed={form.agreedTerms}
-          onAgreedChange={(checked) => update("agreedTerms", checked)}
+          agreedTerms={form.agreedTerms}
+          agreedPrivacy={form.agreedPrivacy}
+          onTermsChange={(checked) => update("agreedTerms", checked)}
+          onPrivacyChange={(checked) => update("agreedPrivacy", checked)}
         />
 
         <div className="flex justify-end">

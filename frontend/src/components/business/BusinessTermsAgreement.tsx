@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { Dialog } from "../ui/Dialog";
 
+type AgreementKind = "terms" | "privacy";
+
 interface BusinessTermsAgreementProps {
-  agreed: boolean;
-  onAgreedChange: (checked: boolean) => void;
+  agreedTerms: boolean;
+  agreedPrivacy: boolean;
+  onTermsChange: (checked: boolean) => void;
+  onPrivacyChange: (checked: boolean) => void;
 }
 
 // 법무 검토 전 QA용 초안이다. 운영 배포 전 실제 정책에 맞춰 검토·확정해야 한다.
@@ -96,27 +100,84 @@ function BusinessTermsContent() {
   );
 }
 
-export function BusinessTermsAgreement({ agreed, onAgreedChange }: BusinessTermsAgreementProps) {
-  const [open, setOpen] = useState(false);
+// 법무 검토 전 QA용 초안이다. 운영 배포 전 실제 정책·수집 항목에 맞춰 검토·확정해야 한다.
+function BusinessPrivacyContent() {
+  return (
+    <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-2 text-sm leading-6 text-muted">
+      <section>
+        <h3 className="font-extrabold text-ink">1. 수집하는 개인정보</h3>
+        <p className="mt-1">
+          사업자등록번호, 대표자명, 개업일자, 사업장 주소, 연락처, 사업자등록증 첨부파일을 수집합니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">2. 수집·이용 목적</h3>
+        <ul className="mt-1 list-disc space-y-1 pl-5">
+          <li>국세청 사업자등록정보 진위확인 및 등록 심사</li>
+          <li>참가업체(VENDOR) 자격 관리 및 부스 참가 신청 처리</li>
+          <li>심사 결과·공지사항 통지</li>
+        </ul>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">3. 보유 및 이용 기간</h3>
+        <p className="mt-1">
+          사업자 등록이 취소되거나 관련 계정이 탈퇴할 때까지 보유하며, 목적이 달성되면 지체 없이 파기합니다.
+          다만 관계 법령에 따라 보존할 필요가 있는 거래 기록은 해당 법령이 정한 기간 동안 별도로 보관할 수
+          있습니다.
+        </p>
+      </section>
+      <section>
+        <h3 className="font-extrabold text-ink">4. 동의 거부 권리</h3>
+        <p className="mt-1">
+          개인정보 수집·이용 동의를 거부할 수 있습니다. 다만 필수 정보 수집에 동의하지 않으면 사업자 등록을
+          진행할 수 없습니다.
+        </p>
+      </section>
+      <p className="border-t border-line pt-4 text-xs">
+        시행 예정일: 2026년 8월 20일 · 본 내용은 QA용 초안이며 운영 배포 전 검토가 필요합니다.
+      </p>
+    </div>
+  );
+}
+
+export function BusinessTermsAgreement({ agreedTerms, agreedPrivacy, onTermsChange, onPrivacyChange }: BusinessTermsAgreementProps) {
+  const [openAgreement, setOpenAgreement] = useState<AgreementKind | null>(null);
 
   return (
     <div className="space-y-3 border-t border-line pt-5">
       <div className="flex items-center gap-2">
-        <input type="checkbox" checked={agreed} onChange={(event) => onAgreedChange(event.target.checked)} />
+        <input type="checkbox" checked={agreedTerms} onChange={(event) => onTermsChange(event.target.checked)} />
         <span className="text-sm text-ink">
           사업자 등록 이용약관에 동의합니다. <span className="text-primary-strong">*</span>
         </span>
         <button
           type="button"
           className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
-          onClick={() => setOpen(true)}
+          onClick={() => setOpenAgreement("terms")}
         >
           내용 보기
         </button>
       </div>
 
-      <Dialog open={open} onClose={() => setOpen(false)} title="사업자 등록 이용약관">
+      <div className="flex items-center gap-2">
+        <input type="checkbox" checked={agreedPrivacy} onChange={(event) => onPrivacyChange(event.target.checked)} />
+        <span className="text-sm text-ink">
+          개인정보 수집·이용에 동의합니다. <span className="text-primary-strong">*</span>
+        </span>
+        <button
+          type="button"
+          className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
+          onClick={() => setOpenAgreement("privacy")}
+        >
+          내용 보기
+        </button>
+      </div>
+
+      <Dialog open={openAgreement === "terms"} onClose={() => setOpenAgreement(null)} title="사업자 등록 이용약관">
         <BusinessTermsContent />
+      </Dialog>
+      <Dialog open={openAgreement === "privacy"} onClose={() => setOpenAgreement(null)} title="개인정보 수집·이용 안내">
+        <BusinessPrivacyContent />
       </Dialog>
     </div>
   );
