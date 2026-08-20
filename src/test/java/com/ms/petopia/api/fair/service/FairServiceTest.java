@@ -18,6 +18,8 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.auth.service.AdminAccountService;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
@@ -88,6 +90,9 @@ class FairServiceTest {
 
     @Mock
     private FairMapper fairMapper;
+
+    @Mock
+    private AuthMapper authMapper;
 
     @Mock
     private FairTimeProvider timeProvider;
@@ -280,6 +285,51 @@ class FairServiceTest {
                 "김담당", null, "manager@petopia.example"
         );
         assertErrorCode(() -> fairService.createApplication(USER_ID, request), ErrorCode.FAIR_INVALID_OPERATION_PERIOD);
+    }
+
+    @Test
+    @DisplayName("담당자 이메일이 이미 가입된 회원 계정이면 DUPLICATED_EMAIL을 던진다")
+    void createApplication_담당자이메일이_이미가입된회원이면_예외를_던진다() {
+        given(authMapper.selectUserByEmail("manager@petopia.example")).willReturn(User.builder().build());
+
+        assertErrorCode(() -> fairService.createApplication(USER_ID, validRequest()), ErrorCode.DUPLICATED_EMAIL);
+        verify(fairMapper, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("참가업체 모집 시작일이 오늘보다 이전이면 FAIR_VENDOR_RECRUIT_START_IN_PAST를 던진다")
+    void createApplication_모집시작일이_오늘보다이전이면_예외를_던진다() {
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                NOW.toLocalDate().minusDays(1), FUTURE_END, null, null, null, null,
+                null, null, null,
+                "김담당", null, "manager@petopia.example"
+        );
+        assertErrorCode(() -> fairService.createApplication(USER_ID, request), ErrorCode.FAIR_VENDOR_RECRUIT_START_IN_PAST);
+    }
+
+    @Test
+    @DisplayName("예약 시작일이 오늘보다 이전이면 FAIR_RESERVATION_START_IN_PAST를 던진다")
+    void createApplication_예약시작일이_오늘보다이전이면_예외를_던진다() {
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                null, null, NOW.toLocalDate().minusDays(1), FUTURE_END, null, null,
+                null, null, null,
+                "김담당", null, "manager@petopia.example"
+        );
+        assertErrorCode(() -> fairService.createApplication(USER_ID, request), ErrorCode.FAIR_RESERVATION_START_IN_PAST);
+    }
+
+    @Test
+    @DisplayName("행사 운영 시작일이 오늘보다 이전이면 FAIR_OPERATION_START_IN_PAST를 던진다")
+    void createApplication_운영시작일이_오늘보다이전이면_예외를_던진다() {
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                null, null, null, null, NOW.toLocalDate().minusDays(1), FUTURE_END,
+                null, null, null,
+                "김담당", null, "manager@petopia.example"
+        );
+        assertErrorCode(() -> fairService.createApplication(USER_ID, request), ErrorCode.FAIR_OPERATION_START_IN_PAST);
     }
 
     // ===== getApplication =====
