@@ -140,11 +140,18 @@ public class PaymentService {
      *
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 사업자 소유주가 아닐 때
      * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 신청이 결제 가능한
-     *         상태가 아니거나 이미 결제된 참가신청일 때
+     *         상태가 아니거나 이미 결제된 참가신청이거나, 컨텍스트 응답의 applicationId가
+     *         요청한 값과 다를 때(참가업체 도메인 쪽 버그 방어, CodeRabbit 리뷰 지적)
      */
     @Transactional
     public PaymentResponse payVendorFee(Long applicationId, Long userId) {
         ApplicationVendorFeePaymentContext context = applicationPaymentContractClient.getPaymentContext(applicationId);
+        // 정상적이라면 항상 같아야 한다(같은 ID로 조회를 요청했으니까) — 그래도 상대 도메인의
+        // 응답 로직에 버그가 있거나 나중에 바뀌었을 때 엉뚱한 신청의 금액으로 결제가 만들어지는
+        // 사고를 막기 위한 방어선이다.
+        if (!applicationId.equals(context.applicationId())) {
+            throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
         if (!userId.equals(context.payerUserId())) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }

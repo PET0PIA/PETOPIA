@@ -324,6 +324,23 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("컨텍스트 응답의 applicationId가 요청한 값과 다르면 예외를 던지고 결제를 만들지 않는다")
+    void payVendorFee_컨텍스트applicationId불일치_예외를던진다() {
+        // 참가업체 도메인 쪽 응답 로직에 버그가 있거나(엉뚱한 신청 정보를 돌려줌), 40번 신청을
+        // 조회했는데 응답엔 다른 신청(99번) 정보가 담겨온 상황을 흉내낸다(CodeRabbit 리뷰 지적) —
+        // 이걸 그냥 쓰면 엉뚱한 신청의 금액·소속으로 결제가 만들어질 수 있다.
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(99L, 10L, 20L, 90L, 50000L));
+
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
     @DisplayName("사업자 소유주가 아닌 사용자가 참가비 결제를 요청하면 예외를 던진다")
     void payVendorFee_소유주아님_예외를던진다() {
         // 사업자 소유주는 90L인데 다른 사용자(999L)가 결제를 시도하는 상황(IDOR 방지 확인,
