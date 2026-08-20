@@ -53,6 +53,21 @@ class UserServiceTest {
         assertThat(result.nickname()).isEqualTo("나경");
         assertThat(result.role()).isEqualTo("USER");
         assertThat(result.emailVerified()).isTrue();
+        assertThat(result.passwordChangeAvailable()).isTrue();
+    }
+
+    @Test
+    void getMe_비밀번호가없는_소셜전용계정이면_비밀번호변경이불가능하다() {
+        User socialUser = User.builder()
+                .userId(USER_ID)
+                .email("social@petopia.com")
+                .passwordHash(null)
+                .build();
+        given(userMapper.selectUserById(USER_ID)).willReturn(socialUser);
+
+        UserMeResponse result = userService.getMe(USER_ID);
+
+        assertThat(result.passwordChangeAvailable()).isFalse();
     }
 
     @Test
@@ -184,6 +199,7 @@ class UserServiceTest {
         return User.builder()
                 .userId(USER_ID)
                 .email("test@petopia.com")
+                .passwordHash("hashed")
                 .nickname("나경")
                 .birthDate(LocalDate.of(1998, 3, 15))
                 .phone("01011112222")
