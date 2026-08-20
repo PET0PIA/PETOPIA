@@ -111,6 +111,7 @@ public class UserService {
                 user.getRole(),
                 user.getStatus(),
                 user.isEmailVerified(),
+                user.getPasswordHash() != null,
                 user.getCreatedAt()
         );
     }

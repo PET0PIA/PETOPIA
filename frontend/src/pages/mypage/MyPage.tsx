@@ -144,9 +144,11 @@ export function MyPage() {
               </div>
             </dl>
             <div className="flex shrink-0 gap-2">
-              <Link to="/mypage/password">
-                <Button variant="outline" className="shadow-sm hover:bg-[#EFEFED]!">비밀번호 변경</Button>
-              </Link>
+              {me.passwordChangeAvailable && (
+                <Link to="/mypage/password">
+                  <Button variant="outline" className="shadow-sm hover:bg-[#EFEFED]!">비밀번호 변경</Button>
+                </Link>
+              )}
               <Link to="/mypage/edit">
                 <Button variant="outline" className="shadow-sm hover:bg-[#EFEFED]!">내 정보 수정</Button>
               </Link>

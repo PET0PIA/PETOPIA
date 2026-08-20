@@ -29,9 +29,11 @@ interface ErrorResponseBody {
  * refreshAccessToken()으로 다시 복구한다.
  */
 let accessToken: string | null = null;
+let accessTokenGeneration = 0;
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
+  accessTokenGeneration += 1;
 }
 
 export function getAccessToken(): string | null {
@@ -70,9 +72,12 @@ export function refreshAccessTokenOnce(): Promise<string> {
 }
 
 async function request<TResponse>(path: string, init?: RequestInit, isRetry = false): Promise<TResponse> {
+  // Keep the auth generation used by this request so a stale refresh cannot overwrite a newer login.
+  const tokenAtRequest = accessToken;
+  const generationAtRequest = accessTokenGeneration;
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(init?.headers as Record<string, string>) };
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
+  if (tokenAtRequest) {
+    headers.Authorization = `Bearer ${tokenAtRequest}`;
   }
 
   // refreshToken은 httpOnly 쿠키라 JS가 직접 못 읽지만, credentials: "include"로 보내야
@@ -85,10 +90,14 @@ async function request<TResponse>(path: string, init?: RequestInit, isRetry = fa
   if (response.status === 401 && !isRetry && !isAuthEndpoint && refreshHandler) {
     try {
       const newToken = await refreshAccessTokenOnce();
-      setAccessToken(newToken);
+      if (accessTokenGeneration === generationAtRequest) setAccessToken(newToken);
       return request<TResponse>(path, init, true);
     } catch {
-      setAccessToken(null);
+      if (accessTokenGeneration === generationAtRequest) {
+        setAccessToken(null);
+      } else {
+        return request<TResponse>(path, init, true);
+      }
       // 재발급도 실패하면 원래 401 응답을 그대로 아래에서 처리하도록 흘려보낸다.
     }
   }

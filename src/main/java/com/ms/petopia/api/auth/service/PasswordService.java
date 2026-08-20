@@ -41,7 +41,8 @@ public class PasswordService {
         User user = authMapper.selectUserById(userId);
 
 
-        if(user == null || !passwordEncoder.matches(currentPassword, user.getPasswordHash())){
+        if(user == null || user.getPasswordHash() == null
+                || !passwordEncoder.matches(currentPassword, user.getPasswordHash())){
             throw new CommonException(ErrorCode.INVALID_PASSWORD);
         }
         String newHash = passwordEncoder.encode(newPassword);
