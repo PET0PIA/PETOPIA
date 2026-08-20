@@ -41,6 +41,10 @@ public class ApplicationSubmitRequest {
 
     private Boolean agreedTerms; // 제출 시 true 필수
 
+    @NotNull(message = "개인정보 수집·이용 동의 여부를 확인할 수 없습니다.")
+    @AssertTrue(message = "개인정보 수집·이용에 동의해야 신청할 수 있습니다.")
+    private Boolean agreedPrivacy; // 제출 시 true 필수
+
     @Size(max = 500, message = "첨부파일 키는 500자 이하여야 합니다.")
     private String attachmentObjectKey; // presigned-upload로 받은 임시 객체 키, 선택 입력
 

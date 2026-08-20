@@ -48,4 +48,8 @@ public class BusinessRegisterRequest {
     @AssertTrue(message = "이용약관에 동의해야 등록할 수 있습니다.")
     private Boolean agreedTerms;
 
+    @NotNull(message = "개인정보 수집·이용 동의 여부를 확인할 수 없습니다.")
+    @AssertTrue(message = "개인정보 수집·이용에 동의해야 등록할 수 있습니다.")
+    private Boolean agreedPrivacy;
+
 }

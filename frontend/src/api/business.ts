@@ -14,6 +14,7 @@ export interface BusinessRegisterRequest {
   website?: string;
   businessRegDocKey: string;
   agreedTerms: boolean;
+  agreedPrivacy: boolean;
 }
 
 export interface Business {
