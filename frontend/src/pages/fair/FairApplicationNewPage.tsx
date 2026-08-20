@@ -13,6 +13,10 @@ import { Textarea } from "../../components/ui/Textarea";
 import { HelpTip } from "../../components/ui/HelpTip";
 import { ApiError } from "../../api/client";
 import { createFairApplication, type CreateFairApplicationRequest, type CreateFairApplicationResponse } from "../../api/fair";
+import { todayInSeoul } from "../../utils/date";
+
+// EditProfilePage.tsx의 PHONE_PATTERN과 동일 - 이 프로젝트의 휴대폰 번호 형식 검증 관례.
+const PHONE_PATTERN = /^01[0-9]-?\d{3,4}-?\d{4}$/;
 
 interface FormState {
   name: string;
@@ -94,8 +98,12 @@ function validate(form: FormState): string[] {
   if (form.name.trim() === "") errors.push("행사명을 입력해 주세요.");
   if (form.managerName.trim() === "") errors.push("담당자 이름을 입력해 주세요.");
   if (form.managerEmail.trim() === "") errors.push("담당자 이메일을 입력해 주세요.");
+  if (form.managerPhone.trim() !== "" && !PHONE_PATTERN.test(form.managerPhone.trim())) {
+    errors.push("담당자 연락처 형식이 올바르지 않아요. (예: 010-1234-5678)");
+  }
   if (form.reservationFee !== "" && Number(form.reservationFee) < 0) errors.push("예약금은 0 이상이어야 해요.");
 
+  const today = todayInSeoul();
   const periods: Array<[string, string, string]> = [
     [form.vendorRecruitStartDate, form.vendorRecruitEndDate, "참가업체 모집 기간"],
     [form.reservationStartDate, form.reservationEndDate, "예약 기간"],
@@ -104,6 +112,9 @@ function validate(form: FormState): string[] {
   for (const [start, end, periodLabel] of periods) {
     if (start !== "" && end !== "" && end < start) {
       errors.push(`${periodLabel}의 종료일이 시작일보다 빠를 수 없어요.`);
+    }
+    if (start !== "" && start < today) {
+      errors.push(`${periodLabel}의 시작일은 오늘 이후여야 해요.`);
     }
   }
   return errors;
