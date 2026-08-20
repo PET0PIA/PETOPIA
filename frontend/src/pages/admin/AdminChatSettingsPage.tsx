@@ -110,6 +110,14 @@ export function AdminChatSettingsPage() {
   const [stats, setStats] = useState<ChatMenuStat[]>([]);
   const [draft, setDraft] = useState(EMPTY_MENU);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /**
+   * 초기 조회 네 건이 전부 성공했는지.
+   *
+   * 하나라도 실패하면 아래 then이 통째로 스킵되고 hours·settings가 빈 배열로 남는다.
+   * 서버는 받은 행만 upsert/update하므로 빈 배열을 보내도 DB는 안 바뀌지만, 화면에는
+   * "저장했어요"가 뜬다 - 운영자는 저장된 줄 안다. 스냅샷을 받기 전에는 저장을 받지 않는다.
+   */
+  const [loaded, setLoaded] = useState(false);
   /** 진행 중인 동작. 저장이 겹치면 어느 결과가 화면에 남는지 알 수 없어 한 번에 하나만 받는다. */
   const [running, setRunning] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -123,9 +131,13 @@ export function AdminChatSettingsPage() {
         setHours(fillMissingDays(hourList));
         setSettings(settingList);
         setStats(statList);
+        setLoaded(true);
       })
       .catch(() => {
-        if (!canceled) setLoadError("설정을 불러오지 못했어요.");
+        // 왜 버튼이 다 잠겼는지 여기서 말해줘야 한다. 이유 없이 죽은 화면으로 보인다.
+        if (!canceled) {
+          setLoadError("설정을 불러오지 못했어요. 화면에 없는 값을 저장하지 않도록 저장 버튼을 잠갔어요. 새로고침해 주세요.");
+        }
       });
     return () => {
       canceled = true;
@@ -146,7 +158,7 @@ export function AdminChatSettingsPage() {
     fallback: string,
     task: () => Promise<void>,
   ) => {
-    if (running) return;
+    if (running || !loaded) return;
     setRunning(action);
     setFeedback(null);
     try {
@@ -257,7 +269,16 @@ export function AdminChatSettingsPage() {
       saveChatSettings(settings),
     );
 
-  const busy = running !== null;
+  const canSubmit = loaded && running === null;
+
+  /**
+   * 이 메뉴의 요청이 도는 중.
+   *
+   * 응답으로 메뉴를 통째로 교체하므로(saveMenu/restoreMenu) 그 사이 편집을 허용하면
+   * 완료 처리에서 그 편집이 사라진다. 메뉴 단위로만 잠가서, B를 저장하는 동안 A는
+   * 계속 고칠 수 있게 둔다.
+   */
+  const menuBusy = (menuId: number) => running === `save:${menuId}` || running === `toggle:${menuId}`;
 
   return (
     <div className="space-y-10">
@@ -327,8 +348,9 @@ export function AdminChatSettingsPage() {
                   <input
                     id={`label-${menu.menuId}`}
                     value={menu.label}
+                    disabled={menuBusy(menu.menuId)}
                     onChange={(event) => patchMenu(menu.menuId, { label: event.target.value })}
-                    className="mt-1 min-h-11 w-full rounded-button border border-line bg-card px-3 text-sm"
+                    className="mt-1 min-h-11 w-full rounded-button border border-line bg-card px-3 text-sm disabled:opacity-60"
                   />
                 </div>
                 <div>
@@ -338,10 +360,11 @@ export function AdminChatSettingsPage() {
                   <select
                     id={`type-${menu.menuId}`}
                     value={menu.answerType}
+                    disabled={menuBusy(menu.menuId)}
                     onChange={(event) =>
                       patchMenu(menu.menuId, { answerType: event.target.value as ChatAnswerType })
                     }
-                    className="mt-1 min-h-11 w-full rounded-button border border-line bg-card px-3 text-sm"
+                    className="mt-1 min-h-11 w-full rounded-button border border-line bg-card px-3 text-sm disabled:opacity-60"
                   >
                     {Object.entries(ANSWER_TYPE_LABELS).map(([value, label]) => (
                       <option key={value} value={value}>
@@ -361,8 +384,9 @@ export function AdminChatSettingsPage() {
                     id={`fixed-${menu.menuId}`}
                     rows={3}
                     value={menu.fixedAnswer ?? ""}
+                    disabled={menuBusy(menu.menuId)}
                     onChange={(event) => patchMenu(menu.menuId, { fixedAnswer: event.target.value })}
-                    className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm disabled:opacity-60"
                   />
                 </div>
               )}
@@ -379,21 +403,22 @@ export function AdminChatSettingsPage() {
                     id={`ai-${menu.menuId}`}
                     rows={4}
                     value={menu.aiContext ?? ""}
+                    disabled={menuBusy(menu.menuId)}
                     onChange={(event) => patchMenu(menu.menuId, { aiContext: event.target.value })}
-                    className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm disabled:opacity-60"
                   />
                 </div>
               )}
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button onClick={() => saveMenu(menu)} disabled={busy} className="min-h-9 text-xs">
+                <Button onClick={() => saveMenu(menu)} disabled={!canSubmit} className="min-h-9 text-xs">
                   {running === `save:${menu.menuId}` ? "저장중…" : "저장"}
                 </Button>
                 {menu.isActive ? (
                   <Button
                     variant="outline"
                     onClick={() => removeMenu(menu)}
-                    disabled={busy}
+                    disabled={!canSubmit}
                     className="min-h-9 text-xs"
                   >
                     {running === `toggle:${menu.menuId}` ? "내리는 중…" : "내리기"}
@@ -402,7 +427,7 @@ export function AdminChatSettingsPage() {
                   <Button
                     variant="outline"
                     onClick={() => restoreMenu(menu)}
-                    disabled={busy}
+                    disabled={!canSubmit}
                     className="min-h-9 text-xs"
                   >
                     {running === `toggle:${menu.menuId}` ? "올리는 중…" : "다시 올리기"}
@@ -418,26 +443,30 @@ export function AdminChatSettingsPage() {
         {/* 새 버튼 */}
         <div className="surface mt-4 p-4">
           <p className="mb-3 text-sm font-bold text-ink">새 버튼 추가</p>
+          {/* 추가 요청이 끝나면 draft를 비운다. 그 사이 편집을 허용하면 방금 타이핑한 게 사라진다. */}
           <div className="grid gap-3 sm:grid-cols-3">
             <input
               value={draft.code}
+              disabled={running === "create"}
               onChange={(event) => setDraft({ ...draft, code: event.target.value.toUpperCase() })}
               placeholder="코드 (예: REFUND_INQUIRY)"
               aria-label="새 버튼 코드"
-              className="min-h-11 rounded-button border border-line bg-card px-3 text-sm"
+              className="min-h-11 rounded-button border border-line bg-card px-3 text-sm disabled:opacity-60"
             />
             <input
               value={draft.label}
+              disabled={running === "create"}
               onChange={(event) => setDraft({ ...draft, label: event.target.value })}
               placeholder="버튼 문구"
               aria-label="새 버튼 문구"
-              className="min-h-11 rounded-button border border-line bg-card px-3 text-sm"
+              className="min-h-11 rounded-button border border-line bg-card px-3 text-sm disabled:opacity-60"
             />
             <select
               value={draft.answerType}
+              disabled={running === "create"}
               onChange={(event) => setDraft({ ...draft, answerType: event.target.value as ChatAnswerType })}
               aria-label="새 버튼 답변 유형"
-              className="min-h-11 rounded-button border border-line bg-card px-3 text-sm"
+              className="min-h-11 rounded-button border border-line bg-card px-3 text-sm disabled:opacity-60"
             >
               {Object.entries(ANSWER_TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -449,7 +478,7 @@ export function AdminChatSettingsPage() {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               onClick={addMenu}
-              disabled={busy || !draft.code.trim() || !draft.label.trim()}
+              disabled={!canSubmit || !draft.code.trim() || !draft.label.trim()}
               className="min-h-9 text-xs"
             >
               {running === "create" ? "추가중…" : "추가"}
@@ -474,6 +503,7 @@ export function AdminChatSettingsPage() {
                   <input
                     type="checkbox"
                     checked={hour.isActive}
+                    disabled={running === "hours"}
                     onChange={(event) => patchHour(hour.dayOfWeek, { isActive: event.target.checked })}
                   />
                   운영
@@ -481,27 +511,29 @@ export function AdminChatSettingsPage() {
                 <input
                   type="time"
                   value={hour.startTime.slice(0, 5)}
+                  disabled={running === "hours"}
                   aria-label={`${DAY_LABELS[hour.dayOfWeek - 1]}요일 시작 시각`}
                   onChange={(event) =>
                     patchHour(hour.dayOfWeek, { startTime: toApiTime(event.target.value, hour.startTime) })
                   }
-                  className="min-h-11 rounded-button border border-line bg-card px-3 text-sm"
+                  className="min-h-11 rounded-button border border-line bg-card px-3 text-sm disabled:opacity-60"
                 />
                 <span className="text-muted">~</span>
                 <input
                   type="time"
                   value={hour.endTime.slice(0, 5)}
+                  disabled={running === "hours"}
                   aria-label={`${DAY_LABELS[hour.dayOfWeek - 1]}요일 종료 시각`}
                   onChange={(event) =>
                     patchHour(hour.dayOfWeek, { endTime: toApiTime(event.target.value, hour.endTime) })
                   }
-                  className="min-h-11 rounded-button border border-line bg-card px-3 text-sm"
+                  className="min-h-11 rounded-button border border-line bg-card px-3 text-sm disabled:opacity-60"
                 />
               </div>
             ))}
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Button onClick={saveHours} disabled={busy} className="min-h-9 text-xs">
+            <Button onClick={saveHours} disabled={!canSubmit} className="min-h-9 text-xs">
               {running === "hours" ? "저장중…" : "운영시간 저장"}
             </Button>
             {feedbackFor("hours")}
@@ -522,13 +554,14 @@ export function AdminChatSettingsPage() {
                 id={`setting-${setting.settingKey}`}
                 rows={2}
                 value={setting.settingValue}
+                disabled={running === "texts"}
                 onChange={(event) => patchSetting(setting.settingKey, event.target.value)}
-                className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm disabled:opacity-60"
               />
             </div>
           ))}
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={saveTexts} disabled={busy} className="min-h-9 text-xs">
+            <Button onClick={saveTexts} disabled={!canSubmit} className="min-h-9 text-xs">
               {running === "texts" ? "저장중…" : "문구 저장"}
             </Button>
             {feedbackFor("texts")}
