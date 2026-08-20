@@ -22,7 +22,12 @@ import {
   type ReservationDetail,
 } from "../../api/reservation";
 import { useAuth } from "../../contexts/AuthContext";
-import { isTossConfigured, requestReservationPayment, type PaymentMethodOption } from "../../payments/toss";
+import {
+  isTossConfigured,
+  requestReservationPayment,
+  RESERVATION_PAYMENT_METHODS,
+  type ReservationPaymentMethod,
+} from "../../payments/toss";
 import {
   formatEntryTime,
   formatVisitDateDow,
@@ -91,7 +96,8 @@ export function ReservationDetailPage() {
   // 결제 대기 예약을 이어서 결제하는 흐름(예매 화면의 결제 단계와 동일).
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
+  // 예약금은 가상계좌를 쓸 수 없어서 타입부터 좁혀 둔다(ReservationPaymentMethod 주석 참고).
+  const [paymentMethod, setPaymentMethod] = useState<ReservationPaymentMethod>("CARD");
 
   // 입장 QR은 별도 API로 실제 토큰을 받아 그린다.
   const [qrToken, setQrToken] = useState<string | null>(null);
@@ -367,7 +373,12 @@ export function ReservationDetailPage() {
           </div>
           {isTossConfigured() ? (
             <div className="mt-4">
-              <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+              <PaymentMethodPicker
+                value={paymentMethod}
+                onChange={setPaymentMethod}
+                options={RESERVATION_PAYMENT_METHODS}
+                disabled={paying}
+              />
               <div className="mt-4 flex justify-end">
                 <Button disabled={paying} onClick={handleResumePayment}>
                   {paying ? "결제창을 여는 중…" : "결제 계속하기"}

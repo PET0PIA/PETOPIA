@@ -9,7 +9,12 @@ import { ApiError } from "../../api/client";
 import { getFairOpeningFeeSummary, type FairOpeningFeeSummary } from "../../api/fair";
 import { createFairOpeningPayment } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
-import { isTossConfigured, requestFairOpeningFeePayment, type PaymentMethodOption } from "../../payments/toss";
+import {
+  ALL_PAYMENT_METHODS,
+  isTossConfigured,
+  requestFairOpeningFeePayment,
+  type PaymentMethodOption,
+} from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 
 // PAYMENT_PENDING이면서 결제 가능(payable)한 상태가 아닐 때 보여줄 안내. PAYMENT_PENDING인데
@@ -180,7 +185,12 @@ export function FairOpeningFeePaymentPage() {
           </div>
           {tossReady ? (
             <>
-              <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+              <PaymentMethodPicker
+                value={paymentMethod}
+                onChange={setPaymentMethod}
+                options={ALL_PAYMENT_METHODS}
+                disabled={paying}
+              />
               <p className="mt-3 text-xs leading-5 text-muted">
                 <b className="text-ink">결제하기</b>를 누르면 토스페이먼츠 결제창이 열려요.
               </p>
