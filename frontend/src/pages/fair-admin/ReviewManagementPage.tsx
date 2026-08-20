@@ -13,7 +13,7 @@ export function ReviewManagementPage() {
 
   return (
     <div className="mx-auto max-w-3xl py-2">
-      <PageHeader eyebrow="박람회 관리자" title="리뷰 관리" description="담당 행사에 달린 리뷰 통계를 확인해요." />
+      <PageHeader eyebrow="박람회 관리자" title="리뷰 관리" description="담당 행사에 달린 리뷰 통계 화면을 준비하고 있어요." />
       {fairId === null ? (
         <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 리뷰 통계가 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       ) : (

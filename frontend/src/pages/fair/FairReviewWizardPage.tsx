@@ -9,7 +9,7 @@ export function FairReviewWizardPage() {
   const navigate = useNavigate();
   const numericFairId = Number(fairId);
 
-  if (!Number.isFinite(numericFairId)) {
+  if (!Number.isInteger(numericFairId) || numericFairId <= 0) {
     return (
       <PageContainer className="py-10">
         <PageHeader eyebrow="리뷰 작성" title="잘못된 접근이에요" description="행사 정보를 확인할 수 없어요." />

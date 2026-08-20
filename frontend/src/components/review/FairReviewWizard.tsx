@@ -102,8 +102,10 @@ export function FairReviewWizard({ fairId, onComplete }: { fairId: number; onCom
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // 이미 작성했는지 + 태그 마스터(FAIR·BOOTH) + 방문한 부스 목록을 한 번에 불러온다.
+  // reloadKey가 바뀌면(재시도 버튼) 다시 불러온다.
   useEffect(() => {
     let alive = true;
     Promise.all([getMyReviewStatus(fairId), getActiveFeedbackTags("FAIR"), getActiveFeedbackTags("BOOTH"), getMyVisitedBooths(fairId)])
@@ -130,7 +132,7 @@ export function FairReviewWizard({ fairId, onComplete }: { fairId: number; onCom
     return () => {
       alive = false;
     };
-  }, [fairId]);
+  }, [fairId, reloadKey]);
 
   const fairTagsByCategory = useMemo(() => groupByCategory(fairTags), [fairTags]);
   const boothTagsByCategory = useMemo(() => groupByCategory(boothTags), [boothTags]);
@@ -215,7 +217,26 @@ export function FairReviewWizard({ fairId, onComplete }: { fairId: number; onCom
   }
 
   if (step === "load-error") {
-    return <div className="surface p-6 text-sm font-bold text-primary-strong">{loadError}</div>;
+    return (
+      <Card className="p-6 text-center">
+        <p className="text-sm font-bold text-primary-strong">{loadError}</p>
+        <div className="mt-4 flex justify-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setStep("loading");
+              setLoadError(null);
+              setReloadKey((k) => k + 1);
+            }}
+          >
+            다시 시도
+          </Button>
+          {onComplete && (
+            <Button onClick={onComplete}>행사로 돌아가기</Button>
+          )}
+        </div>
+      </Card>
+    );
   }
 
   if (step === "already-reviewed") {
@@ -223,6 +244,11 @@ export function FairReviewWizard({ fairId, onComplete }: { fairId: number; onCom
       <Card className="p-6 text-center">
         <p className="text-sm font-bold text-ink">이미 이 행사에 리뷰를 남겼어요.</p>
         <p className="mt-1 text-sm text-muted">행사당 리뷰는 1건만 작성할 수 있어요.</p>
+        {onComplete && (
+          <Button className="mt-4" onClick={onComplete}>
+            행사로 돌아가기
+          </Button>
+        )}
       </Card>
     );
   }
@@ -232,6 +258,11 @@ export function FairReviewWizard({ fairId, onComplete }: { fairId: number; onCom
       <Card className="p-6 text-center">
         <p className="text-sm font-bold text-ink">아직 이 행사를 방문하지 않으셨어요.</p>
         <p className="mt-1 text-sm text-muted">행사에 입장한 기록이 있어야 리뷰를 작성할 수 있어요.</p>
+        {onComplete && (
+          <Button className="mt-4" onClick={onComplete}>
+            행사로 돌아가기
+          </Button>
+        )}
       </Card>
     );
   }
