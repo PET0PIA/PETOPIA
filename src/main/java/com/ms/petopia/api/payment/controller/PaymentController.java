@@ -5,7 +5,6 @@ import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
-import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -45,20 +44,18 @@ public class PaymentController {
         return paymentService.getByReservationId(reservationId);
     }
 
-    // 참가비 결제 생성. application 테이블은 조회하지 않고, 요청 바디로 받은
-    // 금액을 그대로 신뢰해서 PENDING 상태 결제 건을 만든다(결제 승인은 별도 confirm 호출).
+    // 참가비 결제 생성. 예약금·개설비와 동일하게 요청 바디가 없다 - 참가업체 도메인의 내부
+    // 계약(ApplicationPaymentContractClient)에서 승인 시 확정된 금액을 조회해 쓴다.
     @PostMapping("/vendor-applications/{applicationId}/payment")
-    public ResponseEntity<PaymentResponse>payVendorFee(
+    public ResponseEntity<PaymentResponse> payVendorFee(
             @PathVariable Long applicationId,
-            @AuthenticationPrincipal Long userId,
-            @Valid
-            @RequestBody VendorFeePaymentRequest request
+            @AuthenticationPrincipal Long userId
             ) {
         // 조회(GET)는 그냥 객체를 리턴해도 스프링이 200 OK로 응답하지만,
         // "새로 만들었다"는 의미를 명확히 하려고 리소스 생성 성공은
         // 관례적으로 201 Created를 씀. 그래서 ResponseEntity로 감싸서 상태코드 직접 지정.
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(paymentService.payVendorFee(applicationId,userId, request));
+                .body(paymentService.payVendorFee(applicationId, userId));
 
     }
 

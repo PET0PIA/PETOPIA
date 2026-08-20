@@ -138,11 +138,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
     setPaying(true);
     setPayError(null);
     try {
-      const created = await createVendorFeePayment(
-        detail.applicationId,
-        { fairId: detail.fairId, businessId: detail.businessId, amount: detail.finalPrice },
-        user.userId
-      );
+      const created = await createVendorFeePayment(detail.applicationId, user.userId);
       await requestVendorFeePayment({
         paymentId: created.paymentId,
         applicationId: detail.applicationId,

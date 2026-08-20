@@ -36,13 +36,12 @@ function ResultCard({ result }: { result: PaymentDetail }) {
   );
 }
 
-// 참가비 결제. 다른 두 결제유형과 달리 즉시 COMPLETED가 아니라 PENDING + orderId로 응답이 오고,
+// 참가비 결제. 금액은 서버가 승인 시 확정된 application.finalPrice를 그대로 쓴다(더 이상
+// 요청으로 금액을 받지 않음, 2026-08-20 해소 — 예약금·개설비와 동일한 패턴으로 통일).
+// 다른 두 결제유형과 달리 즉시 COMPLETED가 아니라 PENDING + orderId로 응답이 오고,
 // 실제 완료는 아래 "결제 승인 확정" 섹션(토스 confirm)까지 이어져야 한다.
 function VendorFeeSection() {
   const [applicationId, setApplicationId] = useState("");
-  const [fairId, setFairId] = useState("");
-  const [businessId, setBusinessId] = useState("");
-  const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PaymentDetail | null>(null);
@@ -50,18 +49,16 @@ function VendorFeeSection() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedApplicationId = Number(applicationId);
-    const parsedFairId = Number(fairId);
-    const parsedBusinessId = Number(businessId);
-    const parsedAmount = Number(amount);
-    if (![parsedApplicationId, parsedFairId, parsedBusinessId, parsedAmount].every((value) => Number.isInteger(value) && value > 0)) {
-      setError("신청 ID·행사 ID·업체 ID·금액 전부 1 이상의 숫자로 입력해 주세요.");
+    if (!Number.isInteger(parsedApplicationId) || parsedApplicationId <= 0) {
+      setError("신청 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
 
     setSubmitting(true);
     setError(null);
     try {
-      const created = await createVendorFeePayment(parsedApplicationId, { fairId: parsedFairId, businessId: parsedBusinessId, amount: parsedAmount });
+      // 관리자 테스트 도구라 로그인 사용자가 아니라 임시 결제자 ID로 호출한다.
+      const created = await createVendorFeePayment(parsedApplicationId, TEMP_PAYER_USER_ID);
       setResult(created);
     } catch (err) {
       setResult(null);
@@ -73,31 +70,17 @@ function VendorFeeSection() {
 
   return (
     <section className="mb-10">
-      <SectionHeader title="참가비 결제 생성" description="신청 상태가 승인(APPROVED)이어야 해요. 성공하면 PENDING 상태로 생성되고, 실제 완료는 아래 승인 확정까지 필요해요." />
+      <SectionHeader title="참가비 결제 생성" description="신청이 결제 대기(PAYMENT_PENDING) 상태이고 참가비가 확정돼 있어야 해요. 성공하면 PENDING 상태로 생성되고, 실제 완료는 아래 승인 확정까지 필요해요." />
       <Card className="p-6">
-        <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-4 sm:items-end">
-          <div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex-1">
             <label htmlFor="vf-application-id" className="mb-1.5 block text-sm font-bold text-ink">신청 ID</label>
             <Input id="vf-application-id" className="input-no-spinner" type="number" min={1} value={applicationId} onChange={(event) => setApplicationId(event.target.value)} placeholder="예: 1" />
           </div>
-          <div>
-            <label htmlFor="vf-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-            <Input id="vf-fair-id" className="input-no-spinner" type="number" min={1} value={fairId} onChange={(event) => setFairId(event.target.value)} placeholder="예: 1" />
-          </div>
-          <div>
-            <label htmlFor="vf-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
-            <Input id="vf-business-id" className="input-no-spinner" type="number" min={1} value={businessId} onChange={(event) => setBusinessId(event.target.value)} placeholder="예: 1" />
-          </div>
-          <div>
-            <label htmlFor="vf-amount" className="mb-1.5 block text-sm font-bold text-ink">금액</label>
-            <Input id="vf-amount" type="number" min={1} value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="예: 300000" />
-          </div>
-          <div className="sm:col-span-4">
-            <Button type="submit" disabled={submitting}>
-              <Store size={16} />
-              {submitting ? "생성 중..." : "참가비 결제 생성"}
-            </Button>
-          </div>
+          <Button type="submit" disabled={submitting}>
+            <Store size={16} />
+            {submitting ? "생성 중..." : "참가비 결제 생성"}
+          </Button>
         </form>
         {error && (
           <p className="mt-3 flex items-start gap-2 text-sm text-primary-strong">
