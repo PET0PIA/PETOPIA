@@ -250,19 +250,26 @@ public class PaymentService {
      *   <li>없으면 새로 insert(기존과 동일, 동시 첫 시도 경쟁은 DuplicateKeyException으로 처리)</li>
      *   <li>PENDING(결제창을 띄웠다 닫은 진행 중 결제)이고 요청자가 원래 결제자면, 그 행을 '그대로'
      *       (같은 orderId·금액) 돌려줘 결제창을 다시 열 수 있게 함. 결과 미상이라 새 orderId를 발급하면
-     *       이미 승인된 건을 재결제할 위험이 있어, 일부러 orderId를 바꾸지 않는다(FAILED 재시도와 다른 점)</li>
-     *   <li>FAILED로 남아있고 요청자가 그 결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용, 새 orderId 발급)</li>
-     *   <li>PENDING·FAILED인데 요청자가 원래 결제자가 아니면 ACCESS_DENIED(남의 결제 재개/재시도 금지)</li>
+     *       이미 승인된 건을 재결제할 위험이 있어, 일부러 orderId를 바꾸지 않는다(RETRYABLE_TERMINAL_STATUSES
+     *       재시도와 다른 점)</li>
+     *   <li>{@link #RETRYABLE_TERMINAL_STATUSES}(FAILED/CANCELED/EXPIRED)로 남아있고 요청자가 그
+     *       결제의 원래 결제자면, 그 행을 PENDING으로 되돌려 재사용(재결제 허용, 새 orderId 발급).
+     *       원래는 FAILED만 허용했는데(2026-08-06), CANCELED/EXPIRED는 영구종료로 남겨뒀던 걸
+     *       2026-08-20에 같이 풀었다 — 참가비/개설비처럼 원업무 ID(applicationId/fairId)가 고정된
+     *       유형은, 취소·만료된 신청을 나중에 다시 결제해야 하는 상황이 있으면 지금까지는 그
+     *       idempotencyKey가 영영 막혀서 새 결제 자체를 못 만들었다</li>
+     *   <li>PENDING이거나 RETRYABLE_TERMINAL_STATUSES인데 요청자가 원래 결제자가 아니면
+     *       ACCESS_DENIED(남의 결제 재개/재시도 금지)</li>
      *   <li>PROCESSING/COMPLETED면 여전히 중복결제로 막음</li>
      * </ul>
      *
      * @param idempotencyKey 원업무 식별자 기준 키(예: {@code "VENDOR_FEE_" + applicationId})
      * @param amount 이번 시도의 결제 금액 — 재사용 시에도 이 값으로 갱신한다(재시도 시점에
      *               금액이 달라질 수 있어서, 예: 참가비 재승인 등)
-     * @param userId 재시도를 요청한 사용자. 기존 FAILED 행의 payerUserId와 다르면 남의 결제를
+     * @param userId 재시도를 요청한 사용자. 기존 재시도가능 행의 payerUserId와 다르면 남의 결제를
      *               멋대로 PENDING으로 되돌리는 셈이라 막는다(CodeRabbit 지적, PR #63).
      * @param newRowSupplier 이전 시도가 아예 없을 때 삽입할 새 PaymentRow를 만드는 함수
-     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 기존 FAILED 결제의 결제자가 아닐 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 기존 재시도가능 결제의 결제자가 아닐 때
      * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제 진행/완료 중이거나,
      *         다른 요청이 먼저 재시도를 선점했을 때
      */
@@ -280,6 +287,13 @@ public class PaymentService {
     private String newOrderId() {
         return "PAYMENT_" + UUID.randomUUID().toString().replace("-", "");
     }
+
+    /**
+     * createOrRetryPayment이 PENDING으로 되살려 재시도를 허용하는 종료 상태.
+     * PROCESSING(승인 진행 중)·COMPLETED(이미 결제됨)는 여기 없다 — 돈이 이미 움직였거나
+     * 움직이는 중이라 절대 되살리면 안 된다.
+     */
+    private static final Set<String> RETRYABLE_TERMINAL_STATUSES = Set.of("FAILED", "CANCELED", "EXPIRED");
 
     private PaymentRow createOrRetryPayment(
             String idempotencyKey, Long amount, Long userId, Supplier<PaymentRow> newRowSupplier
@@ -300,7 +314,7 @@ public class PaymentService {
                 }
                 return existing;
             }
-            if (!"FAILED".equals(existing.getStatus())) {
+            if (!RETRYABLE_TERMINAL_STATUSES.contains(existing.getStatus())) {
                 // PROCESSING(승인 진행 중)·COMPLETED(이미 결제됨) 등은 계속 중복결제로 막는다.
                 throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
             }
@@ -309,10 +323,11 @@ public class PaymentService {
             }
 
             LocalDateTime now = LocalDateTime.now();
-            // 재시도는 새 주문번호로 나간다. 실패한 시도의 주문번호에는 토스 쪽에 이미
-            // 승인 건이 잡혀 있을 수 있어, 재사용하면 "이미 처리된 주문번호"로 거부당한다.
+            // 재시도는 새 주문번호로 나간다. 이전 시도의 주문번호에는 토스 쪽에 이미
+            // 승인 건이 잡혀 있을 수 있어(CANCELED/EXPIRED는 가상계좌 발급까지 됐던 것일 수
+            // 있음), 재사용하면 "이미 처리된 주문번호"로 거부당한다.
             String retryOrderId = newOrderId();
-            int reset = paymentMapper.resetFailedToPending(
+            int reset = paymentMapper.resetRetryableToPending(
                     existing.getPaymentId(), amount, retryOrderId, now);
             if (reset == 0) {
                 // 우리가 조회한 뒤, 다른 요청이 먼저 재시도를 선점했거나 상태가 바뀐 경우 — 충돌로 처리.
@@ -323,8 +338,14 @@ public class PaymentService {
             existing.setAmount(amount);
             existing.setOrderId(retryOrderId);
             existing.setUpdatedAt(now);
+            existing.setMethod("TOSS");
             existing.setTossPaymentKey(null);
             existing.setPaidAt(null);
+            existing.setEasyPayProvider(null);
+            existing.setVirtualAccountBankCode(null);
+            existing.setVirtualAccountNumber(null);
+            existing.setVirtualAccountDueDate(null);
+            existing.setVirtualAccountSecret(null);
             return existing;
         }
 
@@ -712,12 +733,11 @@ public class PaymentService {
      * 종료시킬 수 있다(PROCESSING·COMPLETED와 다른 점 — 이 둘은 카드 승인이 진행 중이거나
      * 이미 끝나 돈이 움직였으므로 여전히 건드리지 않는다).
      *
-     * <p><b>알려진 한계(트레이드오프)</b>: 여기서 WAITING_FOR_DEPOSIT을 CANCELED/EXPIRED로
-     * 바꿔도, 실제로 발급된 가상계좌 자체가 은행에서 사라지는 건 아니다 — 이미 취소·만료
-     * 처리한 뒤에 사용자가 그 계좌로 실제 입금을 하면, {@link #handleDepositWebhook}의
-     * {@code WHERE status = 'WAITING_FOR_DEPOSIT'} 가드에 더 이상 걸리지 않아 조용히
-     * 무시된다(멱등하게 안전하지만, 그 돈은 자동으로 처리되지 않으므로 운영자가 수동으로
-     * 확인·환불해야 한다). 가상계좌를 실제로 취소하는 PG API 연동은 이번 스코프 밖.
+     * <p>WAITING_FOR_DEPOSIT을 CANCELED/EXPIRED로 바꾸기 직전에 {@link #changeToTerminalStatus}가
+     * 토스 결제취소 API({@link com.ms.petopia.api.payment.client.TossPaymentClient#cancelVirtualAccount})를
+     * 먼저 호출해 실제 은행 가상계좌도 함께 닫는다(2026-08-20 해소 — 예전엔 로컬 상태만 바뀌고
+     * 실제 계좌는 열려있어 뒤늦은 입금을 아무도 못 잡아내는 known limitation이었음). 토스 호출이
+     * 실패하면 로컬 상태도 바꾸지 않고 예외를 던진다.
      */
     private static final Set<String> CANCELABLE_STATUSES = Set.of("PENDING", "WAITING_FOR_DEPOSIT");
 
@@ -766,6 +786,25 @@ public class PaymentService {
         }
         if (!CANCELABLE_STATUSES.contains(row.getStatus())) {
             throw new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+        }
+
+        // WAITING_FOR_DEPOSIT(가상계좌 발급, 입금 전)이면 로컬 상태를 바꾸기 전에 먼저 토스
+        // 쪽 계좌를 실제로 닫는다. 순서가 중요하다 — 토스 호출이 실패했는데도 로컬을 먼저
+        // CANCELED/EXPIRED로 바꿔버리면, 실제로는 아직 열려있는 계좌로 뒤늦게 입금이 들어와도
+        // handleDepositWebhook의 WHERE status='WAITING_FOR_DEPOSIT' 가드에 안 걸려 조용히
+        // 무시된다(예전에 알려진 한계로 남겨뒀던 문제, 이제 여기서 막는다). 토스 실패는
+        // CommonException을 그대로 던져 로컬 상태도 안 바꾼다 — 호출한 배치(FairCancelPendingPaymentService
+        // 등)는 이미 각 건을 try-catch로 개별 처리하므로, 이 한 건만 다음 배치 주기에 재시도된다.
+        if ("WAITING_FOR_DEPOSIT".equals(row.getStatus())) {
+            String tossPaymentKey = row.getTossPaymentKey();
+            if (tossPaymentKey == null) {
+                log.error("WAITING_FOR_DEPOSIT인데 tossPaymentKey가 없음 — 데이터 이상, 가상계좌 취소를 건너뜀. paymentId={}", paymentId);
+            } else {
+                String cancelReason = "CANCELED".equals(targetStatus)
+                        ? "결제 대상이 취소되어 가상계좌를 닫습니다."
+                        : "입금 기한이 지나 가상계좌를 닫습니다.";
+                tossPaymentClient.cancelVirtualAccount(tossPaymentKey, cancelReason);
+            }
         }
 
         LocalDateTime now = LocalDateTime.now();

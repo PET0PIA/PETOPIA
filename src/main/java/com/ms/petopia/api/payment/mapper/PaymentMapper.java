@@ -119,14 +119,20 @@ public interface PaymentMapper {
     int markExpired(@Param("paymentId") Long paymentId, @Param("updatedAt") LocalDateTime updatedAt);
 
     /**
-     * 이전 시도가 FAILED로 끝난 결제 행을 PENDING으로 되돌려 재사용한다(결제 3종 공통 —
-     * 실패한 원업무가 idempotencyKey UNIQUE 제약에 막혀 영영 재결제 불가능해지는 문제 해결,
-     * 2026-08-06 CodeRabbit 지적). markProcessing과 동일하게 {@code WHERE status = 'FAILED'}
-     * 가드가 원자적이라, 동시에 두 재시도 요청이 들어와도 하나만 1을 받는다 — 0을 받은 쪽은
-     * 이미 다른 요청이 선점했다는 뜻이므로 충돌로 처리해야 한다.
-     * 재시도 시점에 금액이 달라질 수 있어(참가비 등 클라이언트가 다시 보내는 값) amount도 같이 갱신한다.
+     * 이전 시도가 FAILED/CANCELED/EXPIRED로 끝난 결제 행을 PENDING으로 되돌려 재사용한다
+     * (결제 3종 공통 — 종료된 원업무가 idempotencyKey UNIQUE 제약에 막혀 영영 재결제
+     * 불가능해지는 문제 해결). 원래 FAILED만 다뤘는데(2026-08-06 CodeRabbit 지적),
+     * CANCELED/EXPIRED는 영구종료로 남겨뒀던 걸 2026-08-20에 같이 풀었다 — 예약금은
+     * reservationId가 매번 새로 생겨 문제없지만, 참가비/개설비(applicationId/fairId 고정)는
+     * 취소·만료된 신청을 나중에 다시 결제하게 해줘야 하는 상황이 있을 수 있어서다.
+     * markProcessing과 동일하게 {@code WHERE status IN (...)} 가드가 원자적이라, 동시에 두
+     * 재시도 요청이 들어와도 하나만 1을 받는다 — 0을 받은 쪽은 이미 다른 요청이 선점했다는
+     * 뜻이므로 충돌로 처리해야 한다.
+     * 재시도 시점에 금액이 달라질 수 있어(참가비 등 클라이언트가 다시 보내는 값) amount도 같이
+     * 갱신하고, 이전 시도의 결제수단 상세(가상계좌 정보·간편결제사)도 다음 확정 전까지 낡은
+     * 값을 보여주지 않도록 같이 지운다.
      */
-    int resetFailedToPending(
+    int resetRetryableToPending(
             @Param("paymentId") Long paymentId,
             @Param("amount") Long amount,
             @Param("orderId") String orderId,
