@@ -763,8 +763,10 @@ public class PaymentService {
      * 다른 도메인이 자기 업무(예약/신청/행사)를 취소 처리하면서, 그에 딸린 결제를 함께
      * 취소시키는 용도(WBS 1.7). {@link #CANCELABLE_STATUSES}에서만 허용한다 —
      * PROCESSING(토스 승인 진행중)·COMPLETED는 이미 돈이 움직였을 수 있어 건드리지 않는다.
-     * CANCELED/EXPIRED는 영구 종료 상태라 재결제는 새 결제 생성으로 처리한다(FAILED처럼
-     * 재사용하지 않음).
+     * CANCELED/EXPIRED로 바뀐 뒤에도 원업무가 재결제를 요청하면 {@link #createOrRetryPayment}가
+     * {@link #RETRYABLE_TERMINAL_STATUSES}를 통해 FAILED와 동일하게 PENDING으로 되살려 재사용한다
+     * (2026-08-20 해소 — 참가비/개설비처럼 원업무 ID가 고정된 유형은 그전까지 영구히 재결제
+     * 불가능했음).
      *
      * @param callerDomain 호출 도메인(RESERVATION/FAIR/VENDOR_APPLICATION) — 그 결제의
      *                     paymentType이 이 도메인이 다룰 수 있는 유형에 없으면 남의 결제를
