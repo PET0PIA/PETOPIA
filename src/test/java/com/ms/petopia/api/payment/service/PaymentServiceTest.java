@@ -1037,6 +1037,26 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("WAITING_FOR_DEPOSIT인데 tossPaymentKey가 없으면 예외를 던지고 로컬 상태도 안 바뀐다")
+    void cancelPayment_WAITING_FOR_DEPOSIT_tossPaymentKey없으면_예외를던진다() {
+        // 있으면 안 되는 데이터 이상 상황(markWaitingForDeposit이 항상 채워야 하는 값) — 로그만
+        // 남기고 넘어가면 실제 계좌 확인 없이 로컬만 취소로 표시되는, 이 기능 전체가 막으려던
+        // 문제가 재발한다(CodeRabbit 리뷰 지적, 2026-08-20 수정).
+        PaymentRow row = pendingRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setTossPaymentKey(null);
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(1L, "VENDOR_APPLICATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_CANCELLATION_FAILED);
+
+        verify(tossPaymentClient, never()).cancelVirtualAccount(any(), any());
+        verify(paymentMapper, never()).markCanceled(anyLong(), any());
+    }
+
+    @Test
     @DisplayName("PENDING 결제 취소는 가상계좌가 없으므로 토스 취소 API를 부르지 않는다")
     void cancelPayment_PENDING상태는_토스취소API를안부른다() {
         given(paymentMapper.selectById(1L)).willReturn(pendingRow());

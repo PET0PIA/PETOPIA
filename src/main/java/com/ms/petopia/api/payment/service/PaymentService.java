@@ -798,13 +798,17 @@ public class PaymentService {
         if ("WAITING_FOR_DEPOSIT".equals(row.getStatus())) {
             String tossPaymentKey = row.getTossPaymentKey();
             if (tossPaymentKey == null) {
-                log.error("WAITING_FOR_DEPOSIT인데 tossPaymentKey가 없음 — 데이터 이상, 가상계좌 취소를 건너뜀. paymentId={}", paymentId);
-            } else {
-                String cancelReason = "CANCELED".equals(targetStatus)
-                        ? "결제 대상이 취소되어 가상계좌를 닫습니다."
-                        : "입금 기한이 지나 가상계좌를 닫습니다.";
-                tossPaymentClient.cancelVirtualAccount(tossPaymentKey, cancelReason);
+                // 있으면 안 되는 데이터 이상 상황(markWaitingForDeposit이 항상 채워야 하는 값) —
+                // 로그만 남기고 넘어가면 실제 계좌 상태 확인 없이 로컬만 취소로 표시되는, 이번 PR이
+                // 막으려던 바로 그 문제가 재발한다(CodeRabbit 리뷰 지적). 재시도로 자연 복구되지
+                // 않는 상황이라 사람이 보게 예외로 막는다.
+                log.error("WAITING_FOR_DEPOSIT인데 tossPaymentKey가 없음 — 데이터 이상, 가상계좌 취소 불가. paymentId={}", paymentId);
+                throw new CommonException(ErrorCode.PAYMENT_CANCELLATION_FAILED);
             }
+            String cancelReason = "CANCELED".equals(targetStatus)
+                    ? "결제 대상이 취소되어 가상계좌를 닫습니다."
+                    : "입금 기한이 지나 가상계좌를 닫습니다.";
+            tossPaymentClient.cancelVirtualAccount(tossPaymentKey, cancelReason);
         }
 
         LocalDateTime now = LocalDateTime.now();
