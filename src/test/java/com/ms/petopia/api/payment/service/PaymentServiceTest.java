@@ -834,6 +834,37 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("예약금 결제에 가상계좌가 시도되면 승인을 거절하고 FAILED로 남긴다 - 입금 대기로 저장하지 않는다")
+    void confirmPayment_예약금가상계좌_거절한다() {
+        // 예약 결제 제한시간(10분)과 가상계좌 입금기한(하루 단위)이 애초에 맞지 않아 예약금 결제
+        // 화면에서는 가상계좌 선택지를 없앴다(프론트 타입으로도 막았음). 여기서 막는 건 그 화면을
+        // 우회한 요청(브라우저에 남은 옛 번들·SDK 직접 호출)이다.
+        PaymentRow row = pendingReservationDepositRow();
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        given(paymentMapper.markProcessing(eq(2L), any(LocalDateTime.class))).willReturn(1);
+        given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_2"), eq(30000L)))
+                .willReturn(new TossPaymentResponse(
+                        "paymentKey123", "PAYMENT_2", "WAITING_FOR_DEPOSIT", 30000L, "가상계좌",
+                        OffsetDateTime.now(), null,
+                        new TossPaymentResponse.VirtualAccount(
+                                "020", "1234567890", LocalDateTime.of(2026, 9, 1, 23, 59), "secret-abc")
+                ));
+
+        assertThatThrownBy(() -> paymentService.confirmPayment(2L, 90L, new ConfirmPaymentRequest("paymentKey123")))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_METHOD_NOT_ALLOWED);
+
+        // 재시도할 수 있게 FAILED로 남기고, 계좌정보·secret은 저장하지 않아야 한다 - 저장하면
+        // 이후 입금 웹훅이 secret 대조를 통과해 "예약 없는 결제"가 완료로 바뀐다.
+        verify(paymentMapper).markFailed(eq(2L), any(LocalDateTime.class));
+        verify(paymentMapper, never()).markWaitingForDeposit(any(PaymentRow.class));
+        verify(paymentMapper, never()).markCompleted(any(PaymentRow.class));
+        verify(reservationPaymentContractClient, never())
+                .completePayment(any(), any(), any(), any(), any());
+    }
+
+    @Test
     @DisplayName("존재하지 않는 결제를 승인하려 하면 예외를 던진다")
     void confirmPayment_결제없음_예외를던진다() {
         given(paymentMapper.selectById(999L)).willReturn(null);
@@ -1435,6 +1466,11 @@ class PaymentServiceTest {
 
     // WAITING_FOR_DEPOSIT 상태의 결제 하나를 미리 만들어두는 헬퍼.
     // handleDepositWebhook 테스트들이 전부 이 상황에서 시작한다.
+    //
+    // 결제유형이 예약금인데, 예약금은 이제 가상계좌를 지원하지 않는다
+    // (PaymentService.rejectVirtualAccountForReservationDeposit). 즉 정상 경로에서는 더 이상
+    // 만들어지지 않는 조합이지만, 이미 DB에 남아있는 과거 데이터와 우회 시도 잔여물이 이 상태로
+    // 존재할 수 있어 웹훅 처리 자체는 계속 동작해야 한다 - 그래서 픽스처를 그대로 둔다.
     private PaymentRow waitingForDepositRow() {
         PaymentRow row = new PaymentRow();
         row.setPaymentId(1L);
@@ -1454,6 +1490,24 @@ class PaymentServiceTest {
 
     private TossWebhookEvent depositCallback(String status, String secret) {
         return new TossWebhookEvent("DEPOSIT_CALLBACK", new TossWebhookEvent.Data("PAYMENT_1", status, secret));
+    }
+
+    @Test
+    @DisplayName("승인 단계에서 거절한 예약금 가상계좌에 뒤늦게 입금완료 웹훅이 와도 완료로 바꾸지 않는다")
+    void handleDepositWebhook_거절된예약금결제는_완료로바꾸지않는다() {
+        // 우회로 계좌가 발급됐다가 승인 거절로 FAILED가 된 건에 실제 입금이 들어온 상황.
+        // 여기서 결제를 완료로 바꿔버리면 예약은 없는데 결제만 완료된 상태가 된다 - 상태는 그대로
+        // 두고(멱등 무시) 운영자가 볼 수 있게 log.error만 남긴다.
+        PaymentRow row = waitingForDepositRow();
+        row.setStatus("FAILED");
+        given(paymentMapper.selectByOrderId("PAYMENT_1")).willReturn(row);
+
+        paymentService.handleDepositWebhook(depositCallback("DONE", "secret-abc"));
+
+        verify(paymentMapper, never()).markVirtualAccountCompleted(
+                anyLong(), any(LocalDateTime.class), any(LocalDateTime.class));
+        verify(reservationPaymentContractClient, never())
+                .completePayment(any(), any(), any(), any(), any());
     }
 
     @Test

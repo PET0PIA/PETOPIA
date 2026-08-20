@@ -24,7 +24,12 @@ import { releaseWaitingSlot, WAITING_ROOM_REQUIRED_CODE } from "../../api/waitin
 import { useAuth } from "../../contexts/AuthContext";
 import { todayInSeoul } from "../../utils/date";
 import { WaitingRoomPanel } from "./WaitingRoomPanel";
-import { isTossConfigured, requestReservationPayment, type PaymentMethodOption } from "../../payments/toss";
+import {
+  isTossConfigured,
+  requestReservationPayment,
+  RESERVATION_PAYMENT_METHODS,
+  type ReservationPaymentMethod,
+} from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 import { formatEntryTime, formatVisitDateDow, reservationTypeLabels } from "./reservationDisplay";
 
@@ -126,7 +131,8 @@ export function TicketReservationPage() {
 
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
+  // 예약금은 가상계좌를 쓸 수 없어서 타입부터 좁혀 둔다(ReservationPaymentMethod 주석 참고).
+  const [paymentMethod, setPaymentMethod] = useState<ReservationPaymentMethod>("CARD");
   const [now, setNow] = useState(() => Date.now());
 
   // 카운트다운은 결제 팝업이 열렸을 때만 돌린다 - 폼/완료 화면에서 1초마다 리렌더할 이유가 없다.
@@ -680,7 +686,12 @@ export function TicketReservationPage() {
                   <CreditCard size={16} />
                   결제 수단
                 </div>
-                <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+                <PaymentMethodPicker
+                  value={paymentMethod}
+                  onChange={setPaymentMethod}
+                  options={RESERVATION_PAYMENT_METHODS}
+                  disabled={paying}
+                />
               </div>
             ) : (
               <div className="grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-8 text-center text-sm text-muted">

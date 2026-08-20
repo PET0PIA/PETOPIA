@@ -98,6 +98,7 @@ public enum ErrorCode {
     PAYMENT_TARGET_NOT_PAYABLE(HttpStatus.CONFLICT, "P002", "결제할 수 없는 상태입니다."),
     PAYMENT_APPROVAL_FAILED(HttpStatus.PAYMENT_REQUIRED, "P003", "결제 승인에 실패했습니다."),
     PAYMENT_GATEWAY_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "P004", "결제 서비스에 일시적으로 연결할 수 없습니다."),
+    PAYMENT_METHOD_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "P005", "이 결제는 가상계좌로 결제할 수 없습니다."),
 
     // ===== Fair =====
     FAIR_INVALID_VENDOR_RECRUIT_PERIOD(HttpStatus.BAD_REQUEST, "F001", "참가업체 모집 종료일이 시작일보다 빠릅니다."),
@@ -181,6 +182,8 @@ public enum ErrorCode {
     // ===== Banner & Popup =====
     BANNER_NOT_FOUND(HttpStatus.NOT_FOUND, "AD001", "존재하지 않는 배너입니다."),
     POPUP_NOT_FOUND(HttpStatus.NOT_FOUND, "AD002", "존재하지 않는 팝업입니다."),
+    NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "AD003", "존재하지 않는 공지사항입니다."),
+    NOTICE_ATTACHMENT_LIMIT(HttpStatus.BAD_REQUEST, "AD004", "첨부파일은 최대 5개까지 등록할 수 있습니다."),
 
     // ===== Review (통합 리뷰 - 태그 기반, V39) =====
     REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "RV001", "이미 이 행사에 리뷰를 작성했습니다. 행사당 리뷰는 1건만 작성할 수 있습니다."),
