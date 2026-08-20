@@ -7,12 +7,13 @@ import lombok.ToString;
 import java.time.LocalDateTime;
 
 /**
- * fair_reviews 테이블 매핑 객체. 스키마·설계 결정은
- * {@code V17__fair_reviews.sql}의 헤더 주석을 따른다.
+ * fair_reviews 테이블 매핑 객체(V39 재설계). 별점+자유서술 텍스트를 완전히 대체한 통합
+ * 리뷰의 "행사 전체" 응답 부분만 담는다 - 태그 선택은 fair_review_tag_selections, 부스별
+ * 평가는 booth_feedbacks로 분리돼 있다.
  *
- * <p>record가 아니라 세터가 있는 클래스인 이유는 {@link com.ms.petopia.api.fair.dto.Fair}와
- * 동일하다 - MyBatis 기본 매핑이 세터 기반이라서다. API 요청/응답 DTO에는 이 객체를 그대로
- * 노출하지 않는다.
+ * <p>행사당 사용자 1건으로 제한한다(UNIQUE(fair_id,user_id), V39) - 재작성이 아니라
+ * "새로 작성"만 지원하고 수정·삭제 API는 이번 범위에 없다(petopia-review-feature-plan
+ * 스킬 참고).
  */
 @Getter
 @Setter
@@ -27,18 +28,21 @@ public class FairReview {
     /** 작성자 users.user_id */
     private Long userId;
 
-    /** 평점(1~5). 범위 검증은 서비스 계층에서 한다 */
-    private Integer rating;
+    private CompanionType companionType;
 
-    private String content;
+    private VisitPurpose visitPurpose;
 
-    /** 작성 시점에 이 사용자의 예매·방문 이력이 있었는지(뱃지 표시용 스냅샷). 이후 그 예약이
-     * 취소되더라도 이 값은 소급 변경하지 않는다. */
-    private boolean verifiedVisit;
+    /** 재방문 의향. 조직자 통계의 "재방문의향 %" 지표에 그대로 쓰인다. */
+    private boolean wouldRevisit;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    /** 낙관적 락 버전(V35). 수정 시 이 값이 요청의 기대 버전과 일치할 때만 반영된다. */
-    private Long version;
+    public enum CompanionType {
+        ALONE, WITH_PET, WITH_FAMILY, WITH_FRIEND
+    }
+
+    public enum VisitPurpose {
+        SHOPPING, EXPERIENCE, INFO, ETC
+    }
 }

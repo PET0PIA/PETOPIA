@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.review.mapper.BoothFeedbackMapper">
+
+    <!-- booth 테이블은 business_id만 직접 들고 fair_id는 없어서 application을 거쳐 조인한다
+         (booth.application_id -> application.fair_id). booth 도메인 소유는 아니지만 이
+         프로젝트는 FK가 없고 도메인마다 필요한 조회를 직접 짜는 구조라, review 도메인
+         매퍼에서 booth/application을 읽기 전용으로 조인하는 건 booth 도메인이 booth_visits를
+         참조하는 것과 같은 방식이다. -->
+    <select id="selectFairAndBusinessByBoothId" resultType="BoothFairBusinessRow">
+        SELECT b.booth_id, a.fair_id, b.business_id
+          FROM booth b
+          JOIN application a ON a.application_id = b.application_id
+         WHERE b.booth_id = #{boothId}
+    </select>
+
+    <select id="existsBoothVisit" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1 FROM booth_visits WHERE booth_id = #{boothId} AND user_id = #{userId}
+        )
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="boothFeedbackId" keyColumn="booth_feedback_id">
+        INSERT INTO booth_feedbacks
+            (review_id, booth_id, fair_id, business_id, user_id, purchase_behavior, created_at, updated_at)
+        VALUES
+            (#{reviewId}, #{boothId}, #{fairId}, #{businessId}, #{userId}, #{purchaseBehavior}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <insert id="insertSelections">
+        INSERT INTO booth_feedback_selections (booth_feedback_id, tag_id)
+        VALUES
+        <foreach collection="tagIds" item="tagId" separator=",">
+            (#{boothFeedbackId}, #{tagId})
+        </foreach>
+    </insert>
+
+</mapper>
