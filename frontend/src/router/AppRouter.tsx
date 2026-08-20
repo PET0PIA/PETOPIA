@@ -62,6 +62,7 @@ import { PetFormPage } from "../pages/mypage/PetFormPage";
 import { PetDetailPage } from "../pages/mypage/PetDetailPage";
 import { MyReviewsPage } from "../pages/mypage/MyReviewsPage";
 import { ReviewManagementPage } from "../pages/fair-admin/ReviewManagementPage";
+import { ReviewDeletionPage } from "../pages/fair-admin/ReviewDeletionPage";
 import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
 import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
 import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
@@ -100,6 +101,7 @@ const fairAdminImplementedPaths = [
   "/fair-admin/qr",
   "/fair-admin/reservations",
   "/fair-admin/reviews",
+  "/fair-admin/reviews/manage",
   "/fair-admin/statistics",
   "/fair-admin/cancellation",
   "/fair-admin/recruit-notice",
@@ -242,6 +244,7 @@ export function AppRouter() {
             <Route path="reservations" element={<ReservationStatusPage />} />
             <Route path="reservations/list" element={<FairReservationsPage />} />
             <Route path="reviews" element={<ReviewManagementPage />} />
+            <Route path="reviews/manage" element={<ReviewDeletionPage />} />
             <Route path="statistics" element={<VisitStatisticsPage />} />
             <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
             <Route path="cancellation" element={<FairCancelRequestPage />} />

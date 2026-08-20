@@ -16,6 +16,7 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.auth.service.AdminAccountService;
 import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
@@ -75,6 +76,7 @@ public class FairService {
             EnumSet.of(FairStatus.PREPARING, FairStatus.IN_PROGRESS);
 
     private final FairMapper fairMapper;
+    private final AuthMapper authMapper;
     private final FairTimeProvider timeProvider;
     private final StorageService storageService;
     private final AdminAccountService adminAccountService;
@@ -665,19 +667,46 @@ public class FairService {
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        validateManagerEmailNotTaken(request.managerEmail());
 
+        LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
                 request.vendorRecruitStartDate(), request.vendorRecruitEndDate(),
                 ErrorCode.FAIR_INVALID_VENDOR_RECRUIT_PERIOD
         );
+        validateNotInPast(request.vendorRecruitStartDate(), today, ErrorCode.FAIR_VENDOR_RECRUIT_START_IN_PAST);
         validatePeriod(
                 request.reservationStartDate(), request.reservationEndDate(),
                 ErrorCode.FAIR_INVALID_RESERVATION_PERIOD
         );
+        validateNotInPast(request.reservationStartDate(), today, ErrorCode.FAIR_RESERVATION_START_IN_PAST);
         validatePeriod(
                 request.operationStartDate(), request.operationEndDate(),
                 ErrorCode.FAIR_INVALID_OPERATION_PERIOD
         );
+        validateNotInPast(request.operationStartDate(), today, ErrorCode.FAIR_OPERATION_START_IN_PAST);
+    }
+
+    /**
+     * 담당자 이메일이 이미 가입된 회원 계정과 겹치는지 미리 확인한다. 승인 시점에
+     * {@link AdminAccountService#issueEventAdminAccount}가 같은 검증을 한 번 더 하지만, 그때는
+     * 이미 심사가 끝난 뒤라 관리자가 승인을 눌러야만 신청 자체가 애초에 불가능했다는 사실이
+     * 드러난다 - 신청 접수 단계에서 미리 막아 관리자가 뒤늦게 반려하지 않아도 되게 한다.
+     */
+    private void validateManagerEmailNotTaken(String managerEmail) {
+        if (isBlank(managerEmail)) {
+            return;
+        }
+        if (authMapper.selectUserByEmail(managerEmail) != null) {
+            throw new CommonException(ErrorCode.DUPLICATED_EMAIL);
+        }
+    }
+
+    /** startDate가 있는데 오늘보다 이전이면 막는다. 참가업체 모집·예약·운영 세 기간에 공통으로 쓴다. */
+    private void validateNotInPast(LocalDate startDate, LocalDate today, ErrorCode errorCode) {
+        if (startDate != null && startDate.isBefore(today)) {
+            throw new CommonException(errorCode);
+        }
     }
 
     /**
@@ -703,19 +732,28 @@ public class FairService {
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        // managerEmail이 이번 요청에 실제로 포함돼(=바뀌려는 시도) 있을 때만 중복 확인한다.
+        // 생략된 경우(기존 값 유지)까지 매번 재확인할 필요는 없다.
+        if (setFields.contains("managerEmail")) {
+            validateManagerEmailNotTaken(request.managerEmail());
+        }
 
+        LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
                 request.vendorRecruitStartDate(), request.vendorRecruitEndDate(),
                 ErrorCode.FAIR_INVALID_VENDOR_RECRUIT_PERIOD
         );
+        validateNotInPast(request.vendorRecruitStartDate(), today, ErrorCode.FAIR_VENDOR_RECRUIT_START_IN_PAST);
         validatePeriod(
                 request.reservationStartDate(), request.reservationEndDate(),
                 ErrorCode.FAIR_INVALID_RESERVATION_PERIOD
         );
+        validateNotInPast(request.reservationStartDate(), today, ErrorCode.FAIR_RESERVATION_START_IN_PAST);
         validatePeriod(
                 request.operationStartDate(), request.operationEndDate(),
                 ErrorCode.FAIR_INVALID_OPERATION_PERIOD
         );
+        validateNotInPast(request.operationStartDate(), today, ErrorCode.FAIR_OPERATION_START_IN_PAST);
     }
 
     private void validatePeriod(LocalDate startDate, LocalDate endDate, ErrorCode errorCode) {

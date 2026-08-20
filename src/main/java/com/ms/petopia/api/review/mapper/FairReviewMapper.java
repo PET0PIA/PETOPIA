@@ -30,6 +30,10 @@ public interface FairReviewMapper {
     /** "이미 작성했는지" 확인 API가 reviewId까지 내려주기 위해 쓴다. 없으면 null. */
     FairReview selectByFairIdAndUserId(@Param("fairId") Long fairId, @Param("userId") Long userId);
 
+    /** 관리자 삭제 시 대상 리뷰가 이 행사 소속인지 확인하고 감사 로그 스냅샷을 남기기 위해 쓴다.
+     * 없으면 null. */
+    FairReview selectById(@Param("reviewId") Long reviewId);
+
     /** 리뷰가 고른 scope=FAIR 태그들을 한 번에 저장한다(다중행 INSERT). tagIds가 비어있으면
      * 호출하지 않는다(서비스 계층에서 가드). */
     void insertTagSelections(@Param("reviewId") Long reviewId, @Param("tagIds") List<Long> tagIds);
@@ -56,4 +60,10 @@ public interface FairReviewMapper {
     /** scope=FAIR 태그별 선택 건수. 카테고리·긍정부정 TOP5 계산 재료 - 정렬·자르기는
      * FairReviewStatsService에서 한다. */
     List<TagCountRow> selectFairTagCounts(@Param("fairId") Long fairId);
+
+    // ===== 관리자 삭제 =====
+
+    void deleteTagSelectionsByReviewId(@Param("reviewId") Long reviewId);
+
+    int deleteById(@Param("reviewId") Long reviewId);
 }
