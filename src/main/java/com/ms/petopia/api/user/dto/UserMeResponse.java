@@ -14,6 +14,7 @@ public record UserMeResponse(
         String role,
         String status,
         boolean emailVerified,
+        boolean passwordChangeAvailable,
         LocalDateTime createdAt
 ) {
 }

@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { refreshAccessTokenOnce, setAccessToken } from "../api/client";
 import {
-  adminLogin as adminLoginRequest,
   completeOAuthSignup as completeOAuthSignupRequest,
   decodeAccessToken,
   exchangeOAuthLogin,
@@ -18,7 +17,6 @@ interface AuthContextValue {
   user: AccessTokenPayload | null;
   status: AuthStatus;
   login: (payload: EmailLoginRequest) => Promise<void>;
-  loginAsAdmin: (payload: EmailLoginRequest) => Promise<void>;
   loginWithOAuthCode: (code: string) => Promise<void>;
   completeOAuthSignup: (payload: OAuthSignupCompleteRequest) => Promise<void>;
   logout: () => Promise<void>;
@@ -42,15 +40,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 요청이 401을 맞고 자기 나름대로 재발급을 시도하더라도 실제 네트워크 요청은 하나로
     // 합쳐지게 한다(안 그러면 Rotation 방식인 Refresh Token을 두 번 동시에 쓰려다 하나가 실패한다).
     let cancelled = false;
+    const generation = authGeneration.current;
     (async () => {
       try {
         const accessToken = await refreshAccessTokenOnce();
-        if (cancelled) return;
+        // A newer login/logout wins over this bootstrap refresh response.
+        if (cancelled || authGeneration.current !== generation) return;
         setAccessToken(accessToken);
         setUser(decodeAccessToken(accessToken));
         setStatus("authenticated");
       } catch {
-        if (cancelled) return;
+        if (cancelled || authGeneration.current !== generation) return;
         setStatus("unauthenticated");
       }
     })();
@@ -62,13 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(payload: EmailLoginRequest) {
     authGeneration.current += 1;
     const decoded = await loginRequest(payload);
-    setUser(decoded);
-    setStatus("authenticated");
-  }
-
-  async function loginAsAdmin(payload: EmailLoginRequest) {
-    authGeneration.current += 1;
-    const decoded = await adminLoginRequest(payload);
     setUser(decoded);
     setStatus("authenticated");
   }
@@ -116,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, status, login, loginAsAdmin, loginWithOAuthCode, completeOAuthSignup, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, status, login, loginWithOAuthCode, completeOAuthSignup, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

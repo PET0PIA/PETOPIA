@@ -13,6 +13,7 @@ export interface UserMe {
   role: "USER" | "VENDOR" | "EVENT_ADMIN" | "SUPER_ADMIN";
   status: string;
   emailVerified: boolean;
+  passwordChangeAvailable: boolean;
   createdAt: string;
 }
 

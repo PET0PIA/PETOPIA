@@ -8,7 +8,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
 import { checkEmailAvailable, resendVerification, signup, verifyEmail, type EmailSignupRequest } from "../../api/auth";
-import { maxBirthDate, today } from "../../utils/date";
+import { clearDateOnDelete, maxBirthDate, today } from "../../utils/date";
 import { SignupWelcomeCard } from "./SignupWelcomeCard";
 import { SignupAgreements } from "../../components/auth/SignupAgreements";
 
@@ -285,7 +285,15 @@ export function SignupPage() {
           </div>
           <div>
             {label("생년월일", "signup-birth-date", true)}
-            <Input id="signup-birth-date" type="date" max={maxBirthDate()} required value={form.birthDate} onChange={(event) => update("birthDate", event.target.value)} />
+            <Input
+              id="signup-birth-date"
+              type="date"
+              max={maxBirthDate()}
+              required
+              value={form.birthDate}
+              onChange={(event) => update("birthDate", event.target.value)}
+              onKeyDown={(event) => clearDateOnDelete(event, form.birthDate, () => update("birthDate", ""))}
+            />
           </div>
           <div>
             {label("휴대폰 번호", "signup-phone", true)}
