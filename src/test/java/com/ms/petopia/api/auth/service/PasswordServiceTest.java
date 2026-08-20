@@ -75,6 +75,20 @@ class PasswordServiceTest {
     }
 
     @Test
+    void changePassword_비밀번호가없는_소셜전용계정이면_INVALID_PASSWORD를_던진다() {
+        given(authMapper.selectUserById(USER_ID)).willReturn(
+                User.builder().userId(USER_ID).email(EMAIL).passwordHash(null).build());
+
+        assertThatThrownBy(() -> passwordService.changePassword(USER_ID, "current", "newPassword1!"))
+                .isInstanceOf(CommonException.class)
+                .extracting(ex -> ((CommonException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_PASSWORD);
+
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+        verify(authMapper, never()).updateUserPassword(any(), any());
+    }
+
+    @Test
     void changePassword_정상이면_새비밀번호를_BCrypt로_암호화해서_저장한다() {
         given(authMapper.selectUserById(USER_ID)).willReturn(user());
         given(passwordEncoder.matches("current", "hashed")).willReturn(true);

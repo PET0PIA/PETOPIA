@@ -8,7 +8,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
-import { maxBirthDate, today } from "../../utils/date";
+import { clearDateOnDelete, maxBirthDate, today } from "../../utils/date";
 import { SignupWelcomeCard } from "./SignupWelcomeCard";
 import { SignupAgreements } from "../../components/auth/SignupAgreements";
 
@@ -192,7 +192,15 @@ function OAuthSignupCompleteForm({ tempKey }: { tempKey: string }) {
           </div>
           <div>
             {label("생년월일", "oauth-birth-date", true)}
-            <Input id="oauth-birth-date" type="date" max={maxBirthDate()} required value={form.birthDate} onChange={(event) => update("birthDate", event.target.value)} />
+            <Input
+              id="oauth-birth-date"
+              type="date"
+              max={maxBirthDate()}
+              required
+              value={form.birthDate}
+              onChange={(event) => update("birthDate", event.target.value)}
+              onKeyDown={(event) => clearDateOnDelete(event, form.birthDate, () => update("birthDate", ""))}
+            />
           </div>
           <div>
             {label("휴대폰 번호", "oauth-phone", true)}
