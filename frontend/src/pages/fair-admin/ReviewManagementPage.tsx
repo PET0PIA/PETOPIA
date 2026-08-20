@@ -174,6 +174,53 @@ export function ReviewManagementPage() {
             </div>
           </div>
 
+          {/* 시간대별 방문자 수·방문 부스 수 분포는 리뷰와 무관한 예약·입장 통계라, 리뷰가
+              0건이어도(reviewStats.reviewCount === 0) 항상 보여준다. 리뷰 자체에서 나오는
+              지표(방문객 특성·만족도 상세 분석·카테고리별 태그 랭킹)만 아래 조건부에 둔다. */}
+          <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
+            <Card className="min-w-0 p-6">
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-extrabold text-ink">시간대별 방문자 수</h2>
+                  <p className="mt-1 text-sm text-muted">선택한 운영일에 실제로 입장(QR 체크인)한 시각 기준 시간대별 건수예요.</p>
+                </div>
+                {fairDates.length > 0 && (
+                  <div className="w-40 shrink-0">
+                    <Select value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
+                      {fairDates.map((date) => <option key={date.fairDateId} value={date.operationDate}>{date.operationDate}</option>)}
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {fairDates.length === 0 && (
+                <EmptyState title="등록된 운영일이 없어요." description="운영일이 먼저 등록돼야 입장 추이를 볼 수 있어요." />
+              )}
+              {fairDates.length > 0 && trendError && (
+                <p className="text-sm font-bold text-primary-strong">{trendError}</p>
+              )}
+              {fairDates.length > 0 && !trendError && trendLoading && (
+                <div className="grid min-h-40 place-items-center text-sm text-muted">불러오는 중이에요...</div>
+              )}
+              {fairDates.length > 0 && !trendError && !trendLoading && (
+                <>
+                  <HourlyEntryTrendChart data={hourlyTrend} />
+                  {hourlyTrend.length === 0 && (
+                    <p className="mt-4 text-center text-sm text-muted">이 운영일에는 아직 입장 기록이 없어요.</p>
+                  )}
+                </>
+              )}
+            </Card>
+
+            <Card className="min-w-0 p-6">
+              <div className="mb-5">
+                <h2 className="text-lg font-extrabold text-ink">방문 부스 수 분포</h2>
+                <p className="mt-1 text-sm text-muted">방문객이 이번 행사에서 몇 개의 부스를 방문했는지 분포예요.</p>
+              </div>
+              <DonutChart data={boothVisitPattern} unit="명" />
+            </Card>
+          </div>
+
           {reviewStats.reviewCount === 0 ? (
             <EmptyState title="아직 리뷰가 없어요." description="방문객이 리뷰를 남기면 이곳에서 만족도 통계를 확인할 수 있어요." />
           ) : (
@@ -211,50 +258,6 @@ export function ReviewManagementPage() {
                       <TopTagBars items={topNegative} color="coral" />
                     </div>
                   </div>
-                </Card>
-              </div>
-
-              <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
-                <Card className="min-w-0 p-6">
-                  <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-                    <div>
-                      <h2 className="text-lg font-extrabold text-ink">시간대별 방문자 수</h2>
-                      <p className="mt-1 text-sm text-muted">선택한 운영일에 실제로 입장(QR 체크인)한 시각 기준 시간대별 건수예요.</p>
-                    </div>
-                    {fairDates.length > 0 && (
-                      <div className="w-40 shrink-0">
-                        <Select value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
-                          {fairDates.map((date) => <option key={date.fairDateId} value={date.operationDate}>{date.operationDate}</option>)}
-                        </Select>
-                      </div>
-                    )}
-                  </div>
-
-                  {fairDates.length === 0 && (
-                    <EmptyState title="등록된 운영일이 없어요." description="운영일이 먼저 등록돼야 입장 추이를 볼 수 있어요." />
-                  )}
-                  {fairDates.length > 0 && trendError && (
-                    <p className="text-sm font-bold text-primary-strong">{trendError}</p>
-                  )}
-                  {fairDates.length > 0 && !trendError && trendLoading && (
-                    <div className="grid min-h-40 place-items-center text-sm text-muted">불러오는 중이에요...</div>
-                  )}
-                  {fairDates.length > 0 && !trendError && !trendLoading && (
-                    <>
-                      <HourlyEntryTrendChart data={hourlyTrend} />
-                      {hourlyTrend.length === 0 && (
-                        <p className="mt-4 text-center text-sm text-muted">이 운영일에는 아직 입장 기록이 없어요.</p>
-                      )}
-                    </>
-                  )}
-                </Card>
-
-                <Card className="min-w-0 p-6">
-                  <div className="mb-5">
-                    <h2 className="text-lg font-extrabold text-ink">방문 부스 수 분포</h2>
-                    <p className="mt-1 text-sm text-muted">방문객이 이번 행사에서 몇 개의 부스를 방문했는지 분포예요.</p>
-                  </div>
-                  <DonutChart data={boothVisitPattern} unit="명" />
                 </Card>
               </div>
 
