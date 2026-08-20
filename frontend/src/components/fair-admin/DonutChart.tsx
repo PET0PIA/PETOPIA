@@ -56,7 +56,9 @@ export function DonutChart({ data, unit = "명" }: DonutChartProps) {
   return (
     <div className="flex flex-wrap items-center gap-6">
       <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
-        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="-rotate-90">
+        {/* 호버 시 슬라이스 strokeWidth가 STROKE_WIDTH+4로 두꺼워져 viewBox 경계를 살짝 넘긴다.
+            overflow-visible을 줘서 그 여분이 잘리지 않고 그대로 보이게 한다. */}
+        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="-rotate-90 overflow-visible">
           <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="var(--color-page)" strokeWidth={STROKE_WIDTH} />
           {arcs.map((arc, index) => (
             <circle
