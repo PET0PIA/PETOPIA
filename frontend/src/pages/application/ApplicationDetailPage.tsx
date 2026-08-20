@@ -13,7 +13,12 @@ import { ApiError } from "../../api/client";
 import { createVendorFeePayment } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
 import { getApplicationDetail, submitCancelRequest, type ApplicationDetail, type ApplicationStatus } from "../../api/application";
-import { isTossConfigured, requestVendorFeePayment, type PaymentMethodOption } from "../../payments/toss";
+import {
+  ALL_PAYMENT_METHODS,
+  isTossConfigured,
+  requestVendorFeePayment,
+  type PaymentMethodOption,
+} from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 
 const statusLabels: Record<ApplicationStatus, string> = {
@@ -258,7 +263,12 @@ function ApplicationDetailContent({ id }: { id: number }) {
           {detail.status === "PAYMENT_PENDING" && detail.cancelRequestStatus !== "REQUESTED" && (
             <div className="border-t border-line pt-4">
               {tossReady ? (
-                <PaymentMethodPicker value={paymentMethod} onChange={setPaymentMethod} disabled={paying} />
+                <PaymentMethodPicker
+                  value={paymentMethod}
+                  onChange={setPaymentMethod}
+                  options={ALL_PAYMENT_METHODS}
+                  disabled={paying}
+                />
               ) : (
                 <p className="rounded-button border border-dashed border-line bg-page p-4 text-center text-sm text-muted">
                   결제 설정이 없어요. 결제 클라이언트 키가 주입되지 않았어요.

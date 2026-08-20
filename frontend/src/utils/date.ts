@@ -35,3 +35,8 @@ export function todayInSeoul(): string {
     day: "2-digit",
   }).format(new Date());
 }
+
+/** 목록·상세에 쓰는 짧은 날짜 표기. "2026-08-19T10:00:00" -> "2026.08.19" */
+export function formatShortDate(value: string): string {
+  return value.slice(0, 10).replace(/-/g, ".");
+}

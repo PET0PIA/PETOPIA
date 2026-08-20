@@ -51,6 +51,16 @@ public class SettlementController {
         return settlementService.recalculate(settlementId);
     }
 
+    // 확정된 정산을 PENDING으로 되돌린다(SUPER_ADMIN 전용, SecurityConfig에서도 강제).
+    // 확정 후 오류 정정 절차: reopen → recalculate → confirm 순서로 다시 거친다.
+    @PutMapping("/settlements/{settlementId}/reopen")
+    public SettlementResponse reopen(
+            @PathVariable Long settlementId,
+            @AuthenticationPrincipal Long userId
+    ) {
+        return settlementService.reopen(settlementId, userId);
+    }
+
     // 정산 단건 조회(EVENT_ADMIN/SUPER_ADMIN). 원래 "참가업체 본인 조회"까지 염두에 둔
     // 경로지만, 실제로 붙어있는 프론트(SettlementPage.tsx)는 관리자 화면뿐이라 지금은
     // export와 동일하게 그 행사 담당 EVENT_ADMIN/SUPER_ADMIN만 허용한다(VENDOR 본인 열람은
