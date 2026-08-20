@@ -38,7 +38,7 @@ interface BoothCanvasProps {
   showGrid?: boolean;
   /** 격자 한 칸의 크기(%). 값이 작을수록 촘촘하다. */
   gridSize?: number;
-  /** 확대 배율. 1이면 원래 크기(뷰포트에 꽉 채움), 1보다 크면 확대된 만큼 스크롤해서 봐야 한다. */
+  /** 확대 배율. 1(기본값)이면 도면 전체가 빈 공간 없이 뷰포트에 꽉 차고, 1보다 크면 확대된 만큼 드래그·스크롤해서 봐야 한다. */
   zoom?: number;
   onSelect: (key: string) => void;
   onGeometryChange: (key: string, patch: Partial<Pick<DraftSlot, "posX" | "posY" | "width" | "height">>) => void;

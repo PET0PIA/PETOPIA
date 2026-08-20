@@ -10,7 +10,7 @@ import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Textarea";
 import { useConfirm } from "../../components/ui/useConfirm";
 
-const ZOOM_MIN = 0.5;
+const ZOOM_MIN = 1;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.25;
 
@@ -389,7 +389,7 @@ export function BoothLayoutEditPage() {
                 onSelect={setSelectedKey}
                 onGeometryChange={updateDraft}
               />
-              {zoom !== 1 && <p className="mt-2 text-xs text-muted">캔버스를 드래그하거나 스크롤해서 확대된 영역을 볼 수 있어요.</p>}
+              {zoom > 1 && <p className="mt-2 text-xs text-muted">캔버스를 드래그하거나 스크롤해서 확대된 영역을 볼 수 있어요.</p>}
             </div>
           </div>
 
