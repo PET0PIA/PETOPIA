@@ -255,10 +255,30 @@ function ApplicationDetailContent({ id }: { id: number }) {
               </li>
             ))}
           </ul>
-          <div className="flex justify-between border-t border-line pt-3 text-sm font-bold text-ink">
-            <span>합계</span>
-            <span>{detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0).toLocaleString()}원</span>
-          </div>
+          {(() => {
+            const originalTotal = detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0);
+            const discount = detail.finalPrice !== null ? originalTotal - detail.finalPrice : 0;
+            return (
+              <>
+                <div className="flex justify-between border-t border-line pt-3 text-sm font-bold text-ink">
+                  <span>합계</span>
+                  <span>{originalTotal.toLocaleString()}원</span>
+                </div>
+                {detail.finalPrice !== null && discount > 0 && (
+                  <div className="flex justify-between text-sm text-primary-strong">
+                    <span>할인 적용</span>
+                    <span>-{discount.toLocaleString()}원</span>
+                  </div>
+                )}
+                {detail.finalPrice !== null && (
+                  <div className="flex justify-between border-t border-line pt-3 text-sm font-extrabold text-ink">
+                    <span>최종 참가비</span>
+                    <span>{detail.finalPrice.toLocaleString()}원</span>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {detail.status === "PAYMENT_PENDING" && detail.cancelRequestStatus !== "REQUESTED" && (
             <div className="border-t border-line pt-4">

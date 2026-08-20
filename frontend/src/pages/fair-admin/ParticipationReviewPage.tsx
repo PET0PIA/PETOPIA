@@ -75,6 +75,7 @@ export function ParticipationReviewPage() {
 
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [finalPriceInput, setFinalPriceInput] = useState("");
+  const [discountPercentInput, setDiscountPercentInput] = useState("");
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [reviewError, setReviewError] = useState<string | null>(null);
@@ -128,7 +129,9 @@ export function ParticipationReviewPage() {
 
   function openApproveDialog() {
     setReviewError(null);
-    setFinalPriceInput("");
+    const originalTotal = detail ? detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0) : 0;
+    setFinalPriceInput(detail ? String(originalTotal) : "");
+    setDiscountPercentInput("");
     setApproveDialogOpen(true);
   }
 
@@ -142,7 +145,6 @@ export function ParticipationReviewPage() {
     event.preventDefault();
     if (!selectedId || fairId === null) return;
 
-    // 비워두면 슬롯 가격 합계로 서버가 자동 계산한다(ApplicationApproveRequest.finalPrice 참고).
     let finalPrice: number | undefined;
     if (finalPriceInput.trim() !== "") {
       const parsed = Number(finalPriceInput);
@@ -153,11 +155,17 @@ export function ParticipationReviewPage() {
       finalPrice = parsed;
     }
 
+    const originalTotal = detail ? detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0) : 0;
+    const discount = finalPrice !== undefined ? originalTotal - finalPrice : 0;
+
     const proceed = await confirm({
       title: "신청을 승인할까요?",
-      description: finalPrice !== undefined
-        ? `참가비 ${finalPrice.toLocaleString()}원으로 승인해요. 승인하면 신청자에게 결제 안내가 발송돼요.`
-        : "참가비는 선택한 슬롯 가격 합계로 자동 계산돼요. 승인하면 신청자에게 결제 안내가 발송돼요.",
+      description:
+        finalPrice !== undefined
+          ? discount !== 0
+            ? `원가 ${originalTotal.toLocaleString()}원에서 ${discount > 0 ? `${discount.toLocaleString()}원 할인된` : `${Math.abs(discount).toLocaleString()}원 추가된`} ${finalPrice.toLocaleString()}원으로 승인해요. 금액을 다시 한 번 확인해 주세요. 승인하면 신청자에게 결제 안내가 발송돼요.`
+            : `참가비 ${finalPrice.toLocaleString()}원(할인 없음)으로 승인해요. 승인하면 신청자에게 결제 안내가 발송돼요.`
+          : "참가비는 선택한 슬롯 가격 합계로 자동 계산돼요. 승인하면 신청자에게 결제 안내가 발송돼요.",
       confirmLabel: "승인",
       danger: false,
     });
@@ -304,7 +312,16 @@ export function ParticipationReviewPage() {
                 </Badge>
               </div>
               {detail.rejectReason && <p className="mt-2 text-sm text-primary-strong">반려 사유: {detail.rejectReason}</p>}
-              {detail.finalPrice !== null && <p className="mt-2 text-sm text-muted">참가비: {detail.finalPrice.toLocaleString()}원</p>}
+              {detail.finalPrice !== null && (() => {
+                const originalTotal = detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0);
+                const discount = originalTotal - detail.finalPrice;
+                return (
+                  <p className="mt-2 text-sm text-muted">
+                    참가비: {detail.finalPrice.toLocaleString()}원
+                    {discount > 0 && <span className="ml-1 text-primary-strong">(원가 {originalTotal.toLocaleString()}원에서 {discount.toLocaleString()}원 할인)</span>}
+                  </p>
+                );
+              })()}
             </div>
             <div className="flex shrink-0 gap-2">
               {isPendingReview && (
@@ -342,10 +359,30 @@ export function ParticipationReviewPage() {
                 </li>
               ))}
             </ul>
-            <div className="flex justify-between border-t border-line pt-3 text-sm font-bold text-ink">
-              <span>합계</span>
-              <span>{detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0).toLocaleString()}원</span>
-            </div>
+            {(() => {
+              const originalTotal = detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0);
+              const discount = detail.finalPrice !== null ? originalTotal - detail.finalPrice : 0;
+              return (
+                <>
+                  <div className="flex justify-between border-t border-line pt-3 text-sm font-bold text-ink">
+                    <span>합계</span>
+                    <span>{originalTotal.toLocaleString()}원</span>
+                  </div>
+                  {detail.finalPrice !== null && discount > 0 && (
+                    <div className="flex justify-between text-sm text-primary-strong">
+                      <span>할인 적용</span>
+                      <span>-{discount.toLocaleString()}원</span>
+                    </div>
+                  )}
+                  {detail.finalPrice !== null && (
+                    <div className="flex justify-between border-t border-line pt-3 text-sm font-extrabold text-ink">
+                      <span>최종 참가비</span>
+                      <span>{detail.finalPrice.toLocaleString()}원</span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </Card>
 
           <Card className="space-y-4 p-6">
@@ -385,6 +422,33 @@ export function ParticipationReviewPage() {
 
       <Dialog open={approveDialogOpen} onClose={() => setApproveDialogOpen(false)} title="신청 승인">
         <form onSubmit={handleApproveSubmit} className="space-y-4">
+          {detail && (
+            <div>
+              <label htmlFor="discountPercentInput" className="mb-1.5 block text-sm font-bold text-ink">할인율(%, 선택)</label>
+              <Input
+                id="discountPercentInput"
+                type="number"
+                min={0}
+                max={100}
+                value={discountPercentInput}
+                onChange={(event) => {
+                  const pctInput = event.target.value;
+                  setDiscountPercentInput(pctInput);
+                  const originalTotal = detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0);
+                  if (pctInput.trim() === "") {
+                    // 할인율을 지우면 참가비도 원가로 되돌린다.
+                    setFinalPriceInput(String(originalTotal));
+                    return;
+                  }
+                  const pct = Number(pctInput);
+                  if (Number.isFinite(pct) && pct >= 0 && pct <= 100) {
+                    setFinalPriceInput(String(Math.round(originalTotal * (1 - pct / 100))));
+                  }
+                }}
+                placeholder={`원가 ${detail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0).toLocaleString()}원 기준`}
+              />
+            </div>
+          )}
           <div>
             <label htmlFor="finalPriceInput" className="mb-1.5 block text-sm font-bold text-ink">참가비(원, 선택)</label>
             <Input
@@ -400,20 +464,6 @@ export function ParticipationReviewPage() {
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setApproveDialogOpen(false)}>취소</Button>
             <Button type="submit" disabled={reviewing}>{reviewing ? "처리 중..." : "승인"}</Button>
-          </div>
-        </form>
-      </Dialog>
-
-      <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} title="신청 반려">
-        <form onSubmit={handleRejectSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="rejectReason" className="mb-1.5 block text-sm font-bold text-ink">반려 사유<span className="ml-1 text-primary-strong">*</span></label>
-            <Textarea id="rejectReason" value={rejectReason} onChange={(event) => setRejectReason(event.target.value)} placeholder="신청자에게 안내할 반려 사유를 입력해 주세요." required />
-          </div>
-          {reviewError && <p className="text-sm font-bold text-primary-strong">{reviewError}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setRejectDialogOpen(false)}>취소</Button>
-            <Button type="submit" disabled={reviewing}>{reviewing ? "처리 중..." : "반려 확정"}</Button>
           </div>
         </form>
       </Dialog>

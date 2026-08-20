@@ -123,43 +123,45 @@ export function ApplicationTermsAgreement({ agreedTerms, agreedPrivacy, onTermsC
 
   return (
     <div className="space-y-2">
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          checked={agreedTerms}
-          onChange={(event) => onTermsChange(event.target.checked)}
-          className="mt-0.5"
-        />
-        <span>
-          이용약관 및 참가 신청 유의사항에 동의합니다. <span className="text-primary-strong">*</span>
-        </span>
-      </label>
-      <button
-        type="button"
-        className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
-        onClick={() => setOpenAgreement("terms")}
-      >
-        내용 보기
-      </button>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={agreedTerms}
+            onChange={(event) => onTermsChange(event.target.checked)}
+          />
+          <span>
+            이용약관 및 참가 신청 유의사항에 동의합니다. <span className="text-primary-strong">*</span>
+          </span>
+        </label>
+        <button
+          type="button"
+          className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
+          onClick={() => setOpenAgreement("terms")}
+        >
+          내용 보기
+        </button>
+      </div>
 
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          checked={agreedPrivacy}
-          onChange={(event) => onPrivacyChange(event.target.checked)}
-          className="mt-0.5"
-        />
-        <span>
-          개인정보 수집·이용에 동의합니다. <span className="text-primary-strong">*</span>
-        </span>
-      </label>
-      <button
-        type="button"
-        className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
-        onClick={() => setOpenAgreement("privacy")}
-      >
-        내용 보기
-      </button>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={agreedPrivacy}
+            onChange={(event) => onPrivacyChange(event.target.checked)}
+          />
+          <span>
+            개인정보 수집·이용에 동의합니다. <span className="text-primary-strong">*</span>
+          </span>
+        </label>
+        <button
+          type="button"
+          className="text-xs font-bold text-muted underline underline-offset-4 hover:text-primary-strong"
+          onClick={() => setOpenAgreement("privacy")}
+        >
+          내용 보기
+        </button>
+      </div>
 
       <Dialog open={openAgreement === "terms"} onClose={() => setOpenAgreement(null)} title="이용약관 및 참가 신청 유의사항">
         <ApplicationTermsContent />

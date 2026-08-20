@@ -96,6 +96,7 @@ function toRequest(form: FormState, selectedSlotIds: number[], attachmentObjectK
     managerPhone: form.managerPhone.trim(),
     managerEmail: form.managerEmail.trim(),
     agreedTerms: form.agreedTerms,
+    agreedPrivacy: form.agreedPrivacy, // 추가
     attachmentObjectKey: attachmentObjectKey ?? undefined,
   };
 }

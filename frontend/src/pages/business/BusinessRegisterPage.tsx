@@ -64,7 +64,8 @@ function toRequest(form: FormState, documentObjectKey: string): BusinessRegister
     phone: form.phone.trim(),
     website: form.website.trim() || undefined,
     businessRegDocKey: documentObjectKey,
-    agreedTerms: form.agreedTerms, // 추가
+    agreedTerms: form.agreedTerms,
+    agreedPrivacy: form.agreedPrivacy, // 추가
   };
 }
 
