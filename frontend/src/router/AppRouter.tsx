@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { fairAdminNavigation, superAdminNavigation, vendorNavigation, flattenNavigation } from "../config/navigation";
 import { ConsoleHome } from "../components/layout/ConsoleHome";
 import { FairAdminLayout } from "../layouts/FairAdminLayout";
@@ -12,6 +12,7 @@ import { MyFairApplicationsPage } from "../pages/fair/MyFairApplicationsPage";
 import { MyFairApplicationDetailPage } from "../pages/fair/MyFairApplicationDetailPage";
 import { FairListPage } from "../pages/fair/FairListPage";
 import { FairDetailPage } from "../pages/fair/FairDetailPage";
+import { FairReviewWizardPage } from "../pages/fair/FairReviewWizardPage";
 import { HallManagementPage } from "../pages/fair-admin/HallManagementPage";
 import { BoothLayoutEditPage } from "../pages/fair-admin/BoothLayoutEditPage";
 import { FairDateManagementPage } from "../pages/fair-admin/FairDateManagementPage";
@@ -54,7 +55,6 @@ import { SignupPage } from "../pages/auth/SignupPage";
 import { ForgotPasswordPage } from "../pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/auth/ResetPasswordPage";
 import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
-import { AdminLoginPage } from "../pages/auth/AdminLoginPage";
 import { MyPage } from "../pages/mypage/MyPage";
 import { EditProfilePage } from "../pages/mypage/EditProfilePage";
 import { PasswordChangePage } from "../pages/mypage/PasswordChangePage";
@@ -62,6 +62,7 @@ import { PetFormPage } from "../pages/mypage/PetFormPage";
 import { PetDetailPage } from "../pages/mypage/PetDetailPage";
 import { MyReviewsPage } from "../pages/mypage/MyReviewsPage";
 import { ReviewManagementPage } from "../pages/fair-admin/ReviewManagementPage";
+import { ReviewDeletionPage } from "../pages/fair-admin/ReviewDeletionPage";
 import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
 import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
 import { MyBusinessesPage } from "../pages/business/MyBusinessesPage";
@@ -71,6 +72,7 @@ import { ApplicationSubmitPage } from "../pages/application/ApplicationSubmitPag
 import { MyApplicationsPage } from "../pages/application/MyApplicationsPage";
 import { ApplicationDetailPage } from "../pages/application/ApplicationDetailPage";
 import { ParticipationReviewPage } from "../pages/fair-admin/ParticipationReviewPage";
+import { FairPaymentSettlementPage } from "../pages/fair-admin/FairPaymentSettlementPage";
 import { CancelRequestReviewPage } from "../pages/fair-admin/CancelRequestReviewPage";
 import { BoothDetailPage } from "../pages/booth/BoothDetailPage";
 import { BoothEditPage } from "../pages/booth/BoothEditPage";
@@ -99,7 +101,9 @@ const fairAdminImplementedPaths = [
   "/fair-admin/onsite-sales",
   "/fair-admin/qr",
   "/fair-admin/reservations",
+  "/fair-admin/payments",
   "/fair-admin/reviews",
+  "/fair-admin/reviews/manage",
   "/fair-admin/statistics",
   "/fair-admin/cancellation",
   "/fair-admin/recruit-notice",
@@ -127,12 +131,6 @@ const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).fil
     item.path !== "/admin/chat" &&
     item.path !== "/admin/businesses"
 );
-/** 후기 작성은 행사 상세의 리뷰 섹션이 담당한다. 옛 주소로 들어와도 그쪽으로 넘긴다. */
-function ReviewWriteRedirect() {
-  const { fairId } = useParams();
-  return <Navigate to={`/fairs/${fairId}?write-review=1`} replace />;
-}
-
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
   const nav = kind === "fair" ? flattenNavigation(fairAdminNavigation) : flattenNavigation(superAdminNavigation);
@@ -144,7 +142,6 @@ export function AppRouter() {
     <BrowserRouter>
       <Routes>
         {/* PublicLayout(공개 헤더/푸터) 밖에 독립 라우트로 둔다 - 일반 홈페이지 어디에도 링크 안 걸린 숨겨진 진입점 */}
-        <Route path="/admin/login" element={<AdminLoginPage />} />
         <Route element={<PublicLayout />}>
           <Route index element={<HomePage />} />
           {/* 개최 신청은 로그인 필수(백엔드 POST /api/fairs = authenticated). 미로그인은 /login으로
@@ -205,8 +202,10 @@ export function AppRouter() {
           <Route path="/fairs/:fairId/booths" element={<FairBoothsPage />} />
           {/* 부스 추천 + 동선 추천(같은 입력으로 API 2개를 호출해 탭으로 결과를 나눠 보여준다). */}
           <Route path="/fairs/:fairId/booth-recommendations" element={<BoothRecommendationPage />} />
-          {/* 옛 후기 작성 주소. 전용 화면 대신 행사 상세의 리뷰 섹션을 작성 상태로 연다. */}
-          <Route path="/fairs/:fairId/reviews/new" element={<ReviewWriteRedirect />} />
+          {/* 태그 기반 통합 리뷰(V39) 작성 마법사. 로그인 필요. */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/fairs/:fairId/reviews/new" element={<FairReviewWizardPage />} />
+          </Route>
           <Route path="/businesses/new" element={<BusinessRegisterPage />} />
           <Route path="/businesses/me" element={<MyBusinessesPage />} />
           <Route path="/businesses/:businessId" element={<BusinessDetailPage />} />
@@ -246,7 +245,9 @@ export function AppRouter() {
             <Route path="qr" element={<GateEntryScanPage />} />
             <Route path="reservations" element={<ReservationStatusPage />} />
             <Route path="reservations/list" element={<FairReservationsPage />} />
+            <Route path="payments" element={<FairPaymentSettlementPage />} />
             <Route path="reviews" element={<ReviewManagementPage />} />
+            <Route path="reviews/manage" element={<ReviewDeletionPage />} />
             <Route path="statistics" element={<VisitStatisticsPage />} />
             <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
             <Route path="cancellation" element={<FairCancelRequestPage />} />

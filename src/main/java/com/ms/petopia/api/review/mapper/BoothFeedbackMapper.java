@@ -24,4 +24,15 @@ public interface BoothFeedbackMapper {
     int insert(BoothFeedback feedback);
 
     void insertSelections(@Param("boothFeedbackId") Long boothFeedbackId, @Param("tagIds") List<Long> tagIds);
+
+    // ===== 관리자 리뷰 삭제(딸린 부스 평가까지 연쇄 삭제) =====
+
+    /** 리뷰 삭제 시 함께 지울 부스 평가 id 목록. 없으면 빈 리스트. */
+    List<Long> selectIdsByReviewId(@Param("reviewId") Long reviewId);
+
+    /** boothFeedbackIds가 비어있으면 호출하지 않는다(서비스 계층에서 가드, insertSelections와
+     * 동일한 관례). */
+    void deleteSelectionsByBoothFeedbackIds(@Param("boothFeedbackIds") List<Long> boothFeedbackIds);
+
+    void deleteByIds(@Param("boothFeedbackIds") List<Long> boothFeedbackIds);
 }

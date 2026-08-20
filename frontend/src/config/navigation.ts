@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Ban, BarChart3, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardX, CreditCard, FileCheck2, Headset, Image, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Star, Store, Ticket, UsersRound } from "lucide-react";
+import { Ban, BarChart3, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardX, CreditCard, FileCheck2, Headset, Image, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Star, Store, Ticket, Trash2, UsersRound } from "lucide-react";
 import type { UserRole } from "../api/auth";
 
 export interface NavigationItem {
@@ -28,7 +28,6 @@ export const publicNavigation: NavigationItem[] = [
   },
   // 관리자·부스 콘솔 진입은 공개 메뉴가 아니라, 로그인한 사용자의 역할에 따라 헤더의 "전환" 버튼으로
   // 노출한다(PublicHeader). 로그인 사용자의 "내 업무"(내 예약·내 행사 신청)는 프로필 드롭다운에 둔다.
-  // 최고 관리자 로그인 입구는 푸터의 작은 링크(PublicLayout)로 둔다.
 ];
 
 // ── 콘솔(관리자/부스) 네비게이션 ────────────────────────────────────────────────
@@ -111,7 +110,8 @@ export const fairAdminNavigation: NavigationItem[] = [
       { label: "예약 현황", path: "/fair-admin/reservations", icon: Ticket },
       { label: "QR 입장 스캔", path: "/fair-admin/qr", icon: QrCode },
       { label: "방문 통계", path: "/fair-admin/statistics", icon: BarChart3 },
-      { label: "리뷰 관리", path: "/fair-admin/reviews", icon: Star },
+      { label: "리뷰 통계", path: "/fair-admin/reviews", icon: Star },
+      { label: "리뷰 관리", path: "/fair-admin/reviews/manage", icon: Trash2 },
     ],
   },
   {
@@ -119,6 +119,7 @@ export const fairAdminNavigation: NavigationItem[] = [
     icon: CreditCard,
     children: [
       { label: "개설비 결제", path: "/payments/fair-opening-fee", icon: CreditCard },
+      { label: "참가업체 결제·정산", path: "/fair-admin/payments", icon: ReceiptText },
       { label: "행사 취소 신청", path: "/fair-admin/cancellation", icon: Ban },
     ],
   },

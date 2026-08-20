@@ -71,6 +71,8 @@ public class ClaudeSupportResponder {
     }
 
     /**
+     * @param conversationId 로그 상관키. 답을 남기지 않은 경우 화면에는 아무 흔적이 없으므로,
+     *                       어느 상담에서 왜 그랬는지는 로그로만 되짚을 수 있다.
      * @param transcript 지금까지의 대화(오래된 순). 마지막 줄이 이번에 답할 질문이다.
      *                   한 번만 답하던 시절엔 질문 한 줄이면 됐지만, 여러 번 주고받게 되면
      *                   "그럼 그건요?" 같은 이어지는 질문이 나온다. 앞선 문답을 함께 주지
@@ -78,7 +80,7 @@ public class ClaudeSupportResponder {
      * @return 답변 본문. 답하지 않기로 했거나(escalate) 호출에 실패하면 빈 값 -
      *         호출자는 이 경우 상담사 대기 상태를 그대로 유지한다.
      */
-    public Optional<String> answer(List<String> transcript, String aiContext) {
+    public Optional<String> answer(Long conversationId, List<String> transcript, String aiContext) {
         if (!enabled) {
             return Optional.empty();
         }
@@ -98,14 +100,27 @@ public class ClaudeSupportResponder {
                     .map(structuredText -> structuredText.text())
                     .orElse(null);
 
-            if (result == null || result.escalate() || result.answer() == null || result.answer().isBlank()) {
+            // 세 경우를 나눠 남긴다. 밖에서는 모두 "빈 값"으로 같아 보이지만, 이관은 정상
+            // 동작이고 나머지 둘은 고쳐야 할 신호다. 뭉쳐두면 답이 없었던 이유를 알 수 없다.
+            if (result == null) {
+                log.warn("상담 AI 응답에 본문 블록이 없다. 상담사 대기로 넘긴다. conversationId={}",
+                        conversationId);
+                return Optional.empty();
+            }
+            if (result.escalate()) {
+                log.info("상담 AI가 상담사 이관을 선택했다. conversationId={}", conversationId);
+                return Optional.empty();
+            }
+            if (result.answer() == null || result.answer().isBlank()) {
+                log.warn("상담 AI가 이관 없이 빈 답변을 냈다. 상담사 대기로 넘긴다. conversationId={}",
+                        conversationId);
                 return Optional.empty();
             }
             return Optional.of(result.answer().trim());
         } catch (AnthropicServiceException | AnthropicIoException e) {
             // 예외를 위로 던지지 않는다. AI는 어디까지나 덤이고, 실패하더라도 문의는 이미
             // 상담사 대기열에 들어가 있다. 사용자에게 오류를 보여줄 이유가 없다.
-            log.warn("상담 AI 답변 실패. 상담사 대기로 넘긴다.", e);
+            log.warn("상담 AI 답변 실패. 상담사 대기로 넘긴다. conversationId={}", conversationId, e);
             return Optional.empty();
         }
     }

@@ -4,9 +4,11 @@ package com.ms.petopia.api.payment.service;
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
+import com.ms.petopia.api.payment.client.ApplicationPaymentContractClient;
 import com.ms.petopia.api.payment.client.FairOpeningFeePaymentContractClient;
 import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
+import com.ms.petopia.api.payment.dto.ApplicationVendorFeePaymentContext;
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.dto.FairOpeningFeePaymentContext;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
@@ -16,7 +18,6 @@ import com.ms.petopia.api.payment.dto.ReservationPaymentCompletionResult;
 import com.ms.petopia.api.payment.dto.ReservationPaymentContext;
 import com.ms.petopia.api.payment.dto.TossPaymentResponse;
 import com.ms.petopia.api.payment.dto.TossWebhookEvent;
-import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.refund.dto.RefundReason;
@@ -79,6 +80,11 @@ class PaymentServiceTest {
     // payFairOpeningFee(컨텍스트 조회)에서 씀.
     @Mock
     private FairOpeningFeePaymentContractClient fairOpeningFeePaymentContractClient;
+
+    // 참가업체 도메인 내부 계약 API를 실제로 호출하지 않도록 가짜로 대체.
+    // payVendorFee(컨텍스트 조회)에서 씀.
+    @Mock
+    private ApplicationPaymentContractClient applicationPaymentContractClient;
 
     @Mock
     private NotificationService notificationService;
@@ -293,13 +299,15 @@ class PaymentServiceTest {
     @Test
     @DisplayName("참가비 결제를 요청하면 결제가 생성된다")
     void payVendorFee_결제생성_성공() {
-        // Arrange: application 테이블을 안 보니까, 프론트가 금액/fairId/businessId를 실어서 보낸 상황 흉내
-        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L,20L, 50000L);
+        // Arrange: 참가업체 도메인 컨텍스트 조회로 진짜 금액/소속을 받아오는 상황 흉내
+        // (2026-08-20 해소 — 예전엔 클라이언트가 실어보낸 값을 그대로 썼음).
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 50000L));
 
         //Act
-        PaymentResponse result = paymentService.payVendorFee(40L,90L,request);
+        PaymentResponse result = paymentService.payVendorFee(40L, 90L);
 
-        // Assert: 응답에 요청값·기본값(COMPLETED/MOCK)이 제대로 들어갔는지
+        // Assert: 응답에 컨텍스트 값·기본값(PENDING/TOSS)이 제대로 들어갔는지
         assertThat(result.paymentType()).isEqualTo("VENDOR_FEE");
         assertThat(result.amount()).isEqualTo(50000L);
         assertThat(result.status()).isEqualTo("PENDING");
@@ -316,18 +324,52 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("컨텍스트 응답의 applicationId가 요청한 값과 다르면 예외를 던지고 결제를 만들지 않는다")
+    void payVendorFee_컨텍스트applicationId불일치_예외를던진다() {
+        // 참가업체 도메인 쪽 응답 로직에 버그가 있거나(엉뚱한 신청 정보를 돌려줌), 40번 신청을
+        // 조회했는데 응답엔 다른 신청(99번) 정보가 담겨온 상황을 흉내낸다(CodeRabbit 리뷰 지적) —
+        // 이걸 그냥 쓰면 엉뚱한 신청의 금액·소속으로 결제가 만들어질 수 있다.
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(99L, 10L, 20L, 90L, 50000L));
+
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
+
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("사업자 소유주가 아닌 사용자가 참가비 결제를 요청하면 예외를 던진다")
+    void payVendorFee_소유주아님_예외를던진다() {
+        // 사업자 소유주는 90L인데 다른 사용자(999L)가 결제를 시도하는 상황(IDOR 방지 확인,
+        // 예약금 payReservationDeposit과 동일한 검증).
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 50000L));
+
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 999L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
     @DisplayName("이미 결제된 참가신청에 다시 결제를 요청하면 예외를 던진다")
     void payVendorFee_중복결제_예외를던진다() {
 
         // Arrange: 실제로는 DB의 idempotency_key UNIQUE 제약 위반이
         // DuplicateKeyException으로 올라옴 — 여기선 insert 호출 시 그 예외를 던지도록
         // 미리 세팅해서 "이미 결제된 상황"을 흉내냄.
-        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L,20L,50000L);
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 50000L));
         willThrow(new DuplicateKeyException("idempotency key violation"))
                 .given(paymentMapper).insert(any(PaymentRow.class));
 
         // Act & Assert
-        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L, request))
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
@@ -465,23 +507,95 @@ class PaymentServiceTest {
     void payVendorFee_FAILED재시도_기존행을PENDING으로재사용한다() {
         // Arrange: 같은 applicationId로 이전에 시도했다가 실패한 행이 이미 있는 상황
         // (요청자 90L 본인이 결제자였던 행이라 재시도 가능)
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 60000L));
+
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(1L);
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
-
-        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
+        given(paymentMapper.resetRetryableToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
 
         // Act
-        PaymentResponse result = paymentService.payVendorFee(40L, 90L, request);
+        PaymentResponse result = paymentService.payVendorFee(40L, 90L);
 
         // Assert: 새 행을 insert하지 않고 기존 FAILED 행을 재사용해서 PENDING으로 응답
         assertThat(result.paymentId()).isEqualTo(1L);
         assertThat(result.status()).isEqualTo("PENDING");
         assertThat(result.amount()).isEqualTo(60000L);
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("이전 시도가 CANCELED로 남은 참가비 결제를 다시 요청하면 그 행을 PENDING으로 재사용한다")
+    void payVendorFee_CANCELED재시도_기존행을PENDING으로재사용한다() {
+        // 2026-08-20 해소 — 원래는 CANCELED/EXPIRED가 영구종료라 이 applicationId로는 영영
+        // 새 결제를 못 만들었다. 취소된 신청을 나중에 다시 결제해야 하는 상황을 위해 FAILED와
+        // 동일하게 재시도를 허용한다.
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 60000L));
+
+        PaymentRow canceledRow = new PaymentRow();
+        canceledRow.setPaymentId(1L);
+        canceledRow.setStatus("CANCELED");
+        canceledRow.setPayerUserId(90L);
+        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(canceledRow);
+        given(paymentMapper.resetRetryableToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
+
+        PaymentResponse result = paymentService.payVendorFee(40L, 90L);
+
+        assertThat(result.paymentId()).isEqualTo(1L);
+        assertThat(result.status()).isEqualTo("PENDING");
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("이전 시도가 EXPIRED로 남은 참가비 결제를 다시 요청하면 그 행을 PENDING으로 재사용한다")
+    void payVendorFee_EXPIRED재시도_기존행을PENDING으로재사용한다() {
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 60000L));
+
+        PaymentRow expiredRow = new PaymentRow();
+        expiredRow.setPaymentId(1L);
+        expiredRow.setStatus("EXPIRED");
+        expiredRow.setPayerUserId(90L);
+        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(expiredRow);
+        given(paymentMapper.resetRetryableToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
+
+        PaymentResponse result = paymentService.payVendorFee(40L, 90L);
+
+        assertThat(result.paymentId()).isEqualTo(1L);
+        assertThat(result.status()).isEqualTo("PENDING");
+        verify(paymentMapper, never()).insert(any(PaymentRow.class));
+    }
+
+    @Test
+    @DisplayName("CANCELED 재시도는 이전 시도의 가상계좌·간편결제 정보를 응답에서 지운다")
+    void payVendorFee_CANCELED재시도_이전결제수단정보를지운다() {
+        // WAITING_FOR_DEPOSIT까지 갔다가 취소된 행 — 가상계좌 정보가 남아있는 상황을 흉내낸다.
+        // 지우지 않으면 confirm 전까지 화면에 이미 닫힌 옛 가상계좌 번호가 그대로 보이게 된다.
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 60000L));
+
+        PaymentRow canceledRow = new PaymentRow();
+        canceledRow.setPaymentId(1L);
+        canceledRow.setStatus("CANCELED");
+        canceledRow.setPayerUserId(90L);
+        canceledRow.setEasyPayProvider("네이버페이");
+        canceledRow.setVirtualAccountBankCode("020");
+        canceledRow.setVirtualAccountNumber("1234567890");
+        canceledRow.setVirtualAccountDueDate(LocalDateTime.now());
+        canceledRow.setVirtualAccountSecret("old-secret");
+        given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(canceledRow);
+        given(paymentMapper.resetRetryableToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
+
+        PaymentResponse result = paymentService.payVendorFee(40L, 90L);
+
+        assertThat(result.easyPayProvider()).isNull();
+        assertThat(result.virtualAccountBankCode()).isNull();
+        assertThat(result.virtualAccountNumber()).isNull();
+        assertThat(result.virtualAccountDueDate()).isNull();
     }
 
     /**
@@ -495,16 +609,18 @@ class PaymentServiceTest {
     @Test
     @DisplayName("FAILED 재시도는 이전 주문번호를 재사용하지 않고 새로 발급한다")
     void payVendorFee_FAILED재시도_주문번호를새로발급한다() {
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 60000L));
+
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(1L);
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(90L);
         failedRow.setOrderId("PAYMENT_이전시도에서쓴값");
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
+        given(paymentMapper.resetRetryableToPending(eq(1L), eq(60000L), any(), any())).willReturn(1);
 
-        PaymentResponse result = paymentService.payVendorFee(
-                40L, 90L, new VendorFeePaymentRequest(10L, 20L, 60000L));
+        PaymentResponse result = paymentService.payVendorFee(40L, 90L);
 
         // 응답으로 나가는 값(프론트가 결제창에 넘길 값)이 이전 시도와 달라야 한다.
         assertThat(result.orderId()).isNotEqualTo("PAYMENT_이전시도에서쓴값");
@@ -512,7 +628,7 @@ class PaymentServiceTest {
 
         // DB에도 그 새 값이 저장돼야 한다. 응답만 바뀌고 저장이 안 되면 승인 단계에서 어긋난다.
         ArgumentCaptor<String> savedOrderId = ArgumentCaptor.forClass(String.class);
-        verify(paymentMapper).resetFailedToPending(
+        verify(paymentMapper).resetRetryableToPending(
                 eq(1L), eq(60000L), savedOrderId.capture(), any());
         assertThat(savedOrderId.getValue()).isEqualTo(result.orderId());
     }
@@ -546,17 +662,18 @@ class PaymentServiceTest {
     @Test
     @DisplayName("FAILED 재시도 중 다른 요청이 먼저 선점하면(재시도 경쟁) 예외를 던진다")
     void payVendorFee_FAILED재시도경쟁_선점실패시예외를던진다() {
-        // Arrange: resetFailedToPending의 WHERE status='FAILED' 가드에서 밀린 상황을 흉내냄
+        // Arrange: resetRetryableToPending의 WHERE status='FAILED' 가드에서 밀린 상황을 흉내냄
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 60000L));
+
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(1L);
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(1L), any(), any(), any())).willReturn(0);
+        given(paymentMapper.resetRetryableToPending(eq(1L), any(), any(), any())).willReturn(0);
 
-        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
-
-        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L, request))
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
@@ -565,32 +682,37 @@ class PaymentServiceTest {
     @Test
     @DisplayName("다른 사용자가 남의 FAILED 참가비 결제를 재시도하면 예외를 던진다")
     void payVendorFee_FAILED재시도_결제자아님_예외를던진다() {
-        // Arrange: 원래 결제자는 90L인데, 다른 사용자(999L)가 같은 applicationId로 재시도하는 상황
-        // (CodeRabbit 지적, PR #63 — 남의 FAILED 결제를 PENDING으로 되돌려 잠가버릴 수 있던 문제)
+        // Arrange: 컨텍스트상 지금 결제자는 999L(1차 소유주 검증은 통과)인데, 이전에 90L이
+        // 시도했다가 FAILED로 남은 행이 있는 상황 — createOrRetryPayment 내부의 2차 방어선
+        // (CodeRabbit 지적, PR #63 — 남의 FAILED 결제를 PENDING으로 되돌려 잠가버릴 수 있던 문제)이
+        // 여전히 살아있는지 확인한다.
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 999L, 60000L));
+
         PaymentRow failedRow = new PaymentRow();
         failedRow.setPaymentId(1L);
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(failedRow);
 
-        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
-
-        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 999L, request))
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 999L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
 
         // 결제자가 아니면 재시도 자체(선점 시도)를 하면 안 됨
-        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
+        verify(paymentMapper, never()).resetRetryableToPending(any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("다른 사용자가 남의 PENDING 참가비 결제를 재개하려 하면 예외를 던진다")
     void payVendorFee_PENDING재개_결제자아님_예외를던진다() {
-        // 원래 결제자는 90L인데 다른 사용자(999L)가 같은 applicationId로 "결제 계속하기"를 누른 상황.
-        // 예약금(payReservationDeposit)은 앞단에 소유자 검증이 따로 있지만, 참가비에는 없어서
-        // createOrRetryPayment의 PENDING 분기가 유일한 방어선이다 — 남의 진행 중 결제(같은 orderId)를
-        // 넘겨받아 결제창을 열지 못하게 막아야 한다.
+        // 컨텍스트상 지금 결제자는 999L(1차 소유주 검증은 통과)인데, 90L이 이미 열어둔 PENDING
+        // 결제(같은 orderId)가 있는 상황 — createOrRetryPayment의 PENDING 분기(2차 방어선)가
+        // 남의 진행 중 결제를 넘겨받아 결제창을 열지 못하게 막는지 확인한다.
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 999L, 60000L));
+
         PaymentRow pendingRow = new PaymentRow();
         pendingRow.setPaymentId(1L);
         pendingRow.setStatus("PENDING");
@@ -598,34 +720,33 @@ class PaymentServiceTest {
         pendingRow.setOrderId("PAYMENT_original");
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(pendingRow);
 
-        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
-
-        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 999L, request))
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 999L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
 
-        // 남의 결제이므로 새 결제 insert도, FAILED 재사용(resetFailedToPending)도 하면 안 된다.
+        // 남의 결제이므로 새 결제 insert도, FAILED 재사용(resetRetryableToPending)도 하면 안 된다.
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
-        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
+        verify(paymentMapper, never()).resetRetryableToPending(any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("이미 PROCESSING/COMPLETED인 참가비 결제가 있으면 재사용 불가라서 여전히 중복결제로 막는다")
     void payVendorFee_재사용불가상태기존결제있으면_예외를던진다() {
         // PROCESSING(승인 진행 중)은 PENDING과 달리 재개 대상이 아니다 — 계속 막아야 한다.
+        given(applicationPaymentContractClient.getPaymentContext(40L))
+                .willReturn(vendorFeeContext(40L, 10L, 20L, 90L, 60000L));
+
         PaymentRow processingRow = new PaymentRow();
         processingRow.setPaymentId(1L);
         processingRow.setStatus("PROCESSING");
         given(paymentMapper.selectByIdempotencyKey("VENDOR_FEE_40")).willReturn(processingRow);
 
-        VendorFeePaymentRequest request = new VendorFeePaymentRequest(10L, 20L, 60000L);
-
-        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L, request))
+        assertThatThrownBy(() -> paymentService.payVendorFee(40L, 90L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE);
-        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
+        verify(paymentMapper, never()).resetRetryableToPending(any(), any(), any(), any());
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
     }
 
@@ -642,7 +763,7 @@ class PaymentServiceTest {
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(90L);
         given(paymentMapper.selectByIdempotencyKey("RESERVATION_DEPOSIT_500")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(2L), eq(30000L), any(), any())).willReturn(1);
+        given(paymentMapper.resetRetryableToPending(eq(2L), eq(30000L), any(), any())).willReturn(1);
 
         PaymentResponse result = paymentService.payReservationDeposit(500L, 90L);
 
@@ -675,9 +796,9 @@ class PaymentServiceTest {
         assertThat(result.status()).isEqualTo("PENDING");
         // ★ orderId를 새로 발급하지 않고 기존 값을 그대로 유지해야 한다(이중결제 방지 핵심).
         assertThat(result.orderId()).isEqualTo("PAYMENT_original");
-        // 기존 PENDING을 그대로 돌려줄 뿐 — 새 결제 insert도, FAILED 재사용(resetFailedToPending)도 하지 않는다.
+        // 기존 PENDING을 그대로 돌려줄 뿐 — 새 결제 insert도, FAILED 재사용(resetRetryableToPending)도 하지 않는다.
         verify(paymentMapper, never()).insert(any(PaymentRow.class));
-        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
+        verify(paymentMapper, never()).resetRetryableToPending(any(), any(), any(), any());
     }
 
     @Test
@@ -693,7 +814,7 @@ class PaymentServiceTest {
         failedRow.setStatus("FAILED");
         failedRow.setPayerUserId(3L);
         given(paymentMapper.selectByIdempotencyKey("FAIR_OPENING_FEE_10")).willReturn(failedRow);
-        given(paymentMapper.resetFailedToPending(eq(3L), eq(500000L), any(), any())).willReturn(1);
+        given(paymentMapper.resetRetryableToPending(eq(3L), eq(500000L), any(), any())).willReturn(1);
 
         PaymentResponse result = paymentService.payFairOpeningFee(10L, 3L);
 
@@ -720,7 +841,7 @@ class PaymentServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
-        verify(paymentMapper, never()).resetFailedToPending(any(), any(), any(), any());
+        verify(paymentMapper, never()).resetRetryableToPending(any(), any(), any(), any());
     }
 
     // PENDING 상태의 결제 하나를 미리 만들어두는 헬퍼. confirmPayment 테스트들이
@@ -740,6 +861,15 @@ class PaymentServiceTest {
         row.setBusinessId(20L);
         row.setApplicationId(40L);
         return row;
+    }
+
+    // 참가업체 도메인의 참가비 결제 컨텍스트 조회 응답을 만드는 헬퍼. payVendorFee 테스트들이
+    // 전부 이 컨텍스트 조회로 시작하므로(2026-08-20 해소 - 클라이언트 amount 신뢰 제거) 중복을 줄이려고 뺐음.
+    private ApplicationVendorFeePaymentContext vendorFeeContext(
+            Long applicationId, Long fairId, Long businessId, Long payerUserId, long amount
+    ) {
+        return new ApplicationVendorFeePaymentContext(
+                applicationId, fairId, businessId, payerUserId, amount, LocalDateTime.now().plusDays(3));
     }
 
     @Test
@@ -940,12 +1070,66 @@ class PaymentServiceTest {
         // 원업무가 취소돼도 이 결제만 계속 대기 상태로 남는 사각지대였음).
         PaymentRow row = pendingRow();
         row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setTossPaymentKey("tossKey-1");
         given(paymentMapper.selectById(1L)).willReturn(row);
         given(paymentMapper.markCanceled(eq(1L), any(LocalDateTime.class))).willReturn(1);
 
         PaymentResponse result = paymentService.cancelPayment(1L, "VENDOR_APPLICATION");
 
         assertThat(result.status()).isEqualTo("CANCELED");
+        // 로컬 상태를 바꾸기 전에 토스 가상계좌도 실제로 닫아야 한다(2026-08-20 해소).
+        verify(tossPaymentClient).cancelVirtualAccount(eq("tossKey-1"), any());
+    }
+
+    @Test
+    @DisplayName("WAITING_FOR_DEPOSIT 결제 취소 시 토스 가상계좌 취소가 실패하면 로컬 상태도 안 바뀐다")
+    void cancelPayment_WAITING_FOR_DEPOSIT_토스취소실패시_로컬상태도안바뀐다() {
+        PaymentRow row = pendingRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setTossPaymentKey("tossKey-1");
+        given(paymentMapper.selectById(1L)).willReturn(row);
+        willThrow(new CommonException(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE))
+                .given(tossPaymentClient).cancelVirtualAccount(eq("tossKey-1"), any());
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(1L, "VENDOR_APPLICATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_GATEWAY_UNAVAILABLE);
+
+        // 실제 계좌가 안 닫혔는데 로컬만 취소로 표시되면 뒤늦은 입금을 못 잡아내므로,
+        // 토스 호출이 실패하면 markCanceled 자체를 시도하지 않아야 한다.
+        verify(paymentMapper, never()).markCanceled(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("WAITING_FOR_DEPOSIT인데 tossPaymentKey가 없으면 예외를 던지고 로컬 상태도 안 바뀐다")
+    void cancelPayment_WAITING_FOR_DEPOSIT_tossPaymentKey없으면_예외를던진다() {
+        // 있으면 안 되는 데이터 이상 상황(markWaitingForDeposit이 항상 채워야 하는 값) — 로그만
+        // 남기고 넘어가면 실제 계좌 확인 없이 로컬만 취소로 표시되는, 이 기능 전체가 막으려던
+        // 문제가 재발한다(CodeRabbit 리뷰 지적, 2026-08-20 수정).
+        PaymentRow row = pendingRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setTossPaymentKey(null);
+        given(paymentMapper.selectById(1L)).willReturn(row);
+
+        assertThatThrownBy(() -> paymentService.cancelPayment(1L, "VENDOR_APPLICATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_CANCELLATION_FAILED);
+
+        verify(tossPaymentClient, never()).cancelVirtualAccount(any(), any());
+        verify(paymentMapper, never()).markCanceled(anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("PENDING 결제 취소는 가상계좌가 없으므로 토스 취소 API를 부르지 않는다")
+    void cancelPayment_PENDING상태는_토스취소API를안부른다() {
+        given(paymentMapper.selectById(1L)).willReturn(pendingRow());
+        given(paymentMapper.markCanceled(eq(1L), any(LocalDateTime.class))).willReturn(1);
+
+        paymentService.cancelPayment(1L, "VENDOR_APPLICATION");
+
+        verify(tossPaymentClient, never()).cancelVirtualAccount(any(), any());
     }
 
     @Test
@@ -1056,12 +1240,32 @@ class PaymentServiceTest {
     void expirePayment_WAITING_FOR_DEPOSIT상태도_EXPIRED로바뀐다() {
         PaymentRow row = pendingReservationDepositRow();
         row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setTossPaymentKey("tossKey-2");
         given(paymentMapper.selectById(2L)).willReturn(row);
         given(paymentMapper.markExpired(eq(2L), any(LocalDateTime.class))).willReturn(1);
 
         PaymentResponse result = paymentService.expirePayment(2L, "RESERVATION");
 
         assertThat(result.status()).isEqualTo("EXPIRED");
+        verify(tossPaymentClient).cancelVirtualAccount(eq("tossKey-2"), any());
+    }
+
+    @Test
+    @DisplayName("WAITING_FOR_DEPOSIT 결제 만료 시 토스 가상계좌 취소가 실패하면 로컬 상태도 안 바뀐다")
+    void expirePayment_WAITING_FOR_DEPOSIT_토스취소실패시_로컬상태도안바뀐다() {
+        PaymentRow row = pendingReservationDepositRow();
+        row.setStatus("WAITING_FOR_DEPOSIT");
+        row.setTossPaymentKey("tossKey-2");
+        given(paymentMapper.selectById(2L)).willReturn(row);
+        willThrow(new CommonException(ErrorCode.PAYMENT_CANCELLATION_FAILED))
+                .given(tossPaymentClient).cancelVirtualAccount(eq("tossKey-2"), any());
+
+        assertThatThrownBy(() -> paymentService.expirePayment(2L, "RESERVATION"))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PAYMENT_CANCELLATION_FAILED);
+
+        verify(paymentMapper, never()).markExpired(anyLong(), any());
     }
 
     @Test

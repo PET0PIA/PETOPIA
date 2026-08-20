@@ -31,6 +31,12 @@
            AND user_id = #{userId}
     </select>
 
+    <select id="selectById" resultType="FairReview">
+        SELECT <include refid="columns" />
+          FROM fair_reviews
+         WHERE review_id = #{reviewId}
+    </select>
+
     <select id="existsEntryRecord" resultType="boolean">
         SELECT EXISTS(
             SELECT 1 FROM entry_records WHERE fair_id = #{fairId} AND user_id = #{userId}
@@ -45,10 +51,35 @@
         </foreach>
     </insert>
 
+    <!-- ===== 공개 목록/요약 조회 ===== -->
+
+    <select id="selectListByFairId" resultType="FairReviewListRow">
+        SELECT fr.review_id, u.nickname, fr.companion_type, fr.visit_purpose, fr.would_revisit, fr.created_at
+          FROM fair_reviews fr
+          JOIN users u ON u.user_id = fr.user_id
+         WHERE fr.fair_id = #{fairId}
+         ORDER BY fr.created_at DESC, fr.review_id DESC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectFairTagLabelsByReviewIds" resultType="ReviewTagLabelRow">
+        SELECT s.review_id, ft.label
+          FROM fair_review_tag_selections s
+          JOIN feedback_tags ft ON ft.tag_id = s.tag_id AND ft.scope = 'FAIR'
+         WHERE s.review_id IN
+        <foreach collection="reviewIds" item="reviewId" open="(" separator="," close=")">
+            #{reviewId}
+        </foreach>
+         ORDER BY ft.sort_order
+    </select>
+
     <!-- ===== 행사관리자 통계(Phase 6) ===== -->
 
     <select id="countByFairId" resultType="long">
-        SELECT COUNT(*) FROM fair_reviews WHERE fair_id = #{fairId}
+        SELECT COUNT(*)
+          FROM fair_reviews fr
+          JOIN users u ON u.user_id = fr.user_id
+         WHERE fr.fair_id = #{fairId}
     </select>
 
     <select id="countRevisitByFairId" resultType="long">
@@ -77,5 +108,15 @@
          WHERE fr.fair_id = #{fairId}
          GROUP BY ft.tag_id, ft.label, ft.category, ft.sentiment
     </select>
+
+    <!-- ===== 관리자 삭제 ===== -->
+
+    <delete id="deleteTagSelectionsByReviewId">
+        DELETE FROM fair_review_tag_selections WHERE review_id = #{reviewId}
+    </delete>
+
+    <delete id="deleteById">
+        DELETE FROM fair_reviews WHERE review_id = #{reviewId}
+    </delete>
 
 </mapper>

@@ -4,7 +4,6 @@ import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.payment.dto.ConfirmPaymentRequest;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
-import com.ms.petopia.api.payment.dto.VendorFeePaymentRequest;
 import com.ms.petopia.api.payment.service.PaymentService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -197,8 +196,11 @@ class PaymentControllerTest {
 
     @Test
     void createsVendorFeePayment() throws Exception {
-        // Arrange
-        given(paymentService.payVendorFee(eq(40L),eq(99L),any(VendorFeePaymentRequest.class))).willReturn(
+        // Arrange: 참가비 결제도 예약금·개설비와 동일하게 요청 바디가 없음(금액을 클라이언트가
+        // 안 보냄 — 서비스가 참가업체 도메인 컨텍스트로 진짜 금액을 받아온다는 걸 컨트롤러
+        // 테스트에서는 그냥 신뢰하고, 여기선 "path variable/인증 principal이 잘 넘어가서
+        // 201로 응답하는지"만 본다).
+        given(paymentService.payVendorFee(eq(40L), eq(99L))).willReturn(
                 new PaymentResponse(
                         1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "PENDING", "TOSS",
                         LocalDateTime.of(2026, 8, 3, 10, 0),
@@ -208,18 +210,25 @@ class PaymentControllerTest {
                 )
         );
 
-        // POST는 body(JSON 문자열)를 같이 보내야 함.
-        // 여기 JSON 키(fairId/businessId/amount)는 VendorFeePaymentRequest 필드명과
-        // 정확히 일치해야 Jackson이 자동으로 객체로 바꿔줌(대소문자도 그대로 맞춰야 함).
         mockMvc.perform(post("/api/vendor-applications/40/payment")
-                        .with(authenticatedAs(99L))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"fairId\":10,\"businessId\":20,\"amount\":50000}"))
+                        .with(authenticatedAs(99L)))
                 .andExpect(status().isCreated()) // 컨트롤러가 201로 응답하는지
                 .andExpect(jsonPath("$.paymentType").value("VENDOR_FEE"))
                 .andExpect(jsonPath("$.applicationId").value(40));
 
-        verify(paymentService).payVendorFee(eq(40L), eq(99L), any(VendorFeePaymentRequest.class));
+        verify(paymentService).payVendorFee(40L, 99L);
+    }
+
+    @Test
+    void returns403WhenPayingSomeoneElsesVendorFee() throws Exception {
+        // 사업자 소유주가 아닌 사용자가 남의 참가비를 결제하려는 상황(IDOR 방지 확인)
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(paymentService).payVendorFee(eq(40L), eq(99L));
+
+        mockMvc.perform(post("/api/vendor-applications/40/payment")
+                        .with(authenticatedAs(99L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("A002"));
     }
 
     @Test
@@ -227,12 +236,10 @@ class PaymentControllerTest {
         // Arrange: PaymentServiceTest의 "중복결제 예외" 케이스가 컨트롤러까지
         // 올라왔을 때 409로 잘 변환되는지 확인
         willThrow(new CommonException(ErrorCode.PAYMENT_TARGET_NOT_PAYABLE))
-                .given(paymentService).payVendorFee(eq(40L), eq(99L), any(VendorFeePaymentRequest.class));
+                .given(paymentService).payVendorFee(eq(40L), eq(99L));
 
         mockMvc.perform(post("/api/vendor-applications/40/payment")
-                        .with(authenticatedAs(99L))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"fairId\":10,\"businessId\":20,\"amount\":50000}"))
+                        .with(authenticatedAs(99L)))
                 .andExpect(status().isConflict()) // ErrorCode.PAYMENT_TARGET_NOT_PAYABLE이 HttpStatus.CONFLICT라서 409
                 .andExpect(jsonPath("$.code").value("P002"));
     }
