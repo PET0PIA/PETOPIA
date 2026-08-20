@@ -74,15 +74,17 @@ export function createReservationDepositPayment(reservationId: number, userId: n
 }
 
 /**
- * 참가비 결제 준비(토스 실연동). 신청 상태가 APPROVED여야 하고, 응답은 PENDING + orderId로 온다.
+ * 참가비 결제 준비(토스 실연동). 신청 상태가 결제 대기(PAYMENT_PENDING)여야 하고, 응답은
+ * PENDING + orderId로 온다. 예약금·개설비와 동일하게 금액을 보내지 않는다 — 백엔드가
+ * 참가업체 도메인의 결제 컨텍스트에서 승인 시 확정된 금액을 조회한다(2026-08-20 해소,
+ * 예전엔 클라이언트가 fairId·businessId·amount를 직접 실어보냈음).
  * 실제 결제 완료는 별도로 confirmPayment 호출까지 이어져야 한다.
+ *
+ * userId는 기본값 없이 필수다. 백엔드가 이 값을 사업자 소유주와 대조하므로(ACCESS_DENIED)
+ * 호출부가 로그인 사용자 ID를 반드시 넘겨야 한다.
  */
-export function createVendorFeePayment(
-  applicationId: number,
-  payload: { fairId: number; businessId: number; amount: number },
-  userId: number = TEMP_PAYER_USER_ID,
-) {
-  return apiClient.post<PaymentDetail>(`/api/vendor-applications/${applicationId}/payment`, payload, {
+export function createVendorFeePayment(applicationId: number, userId: number) {
+  return apiClient.post<PaymentDetail>(`/api/vendor-applications/${applicationId}/payment`, undefined, {
     headers: { [TEMP_USER_ID_HEADER]: String(userId) },
   });
 }
