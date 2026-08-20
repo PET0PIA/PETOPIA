@@ -197,21 +197,29 @@ public class PaymentService {
      * 도메인의 내부 계약({@link FairOpeningFeePaymentContractClient})을 호출해 승인 시 확정된
      * 금액을 받아온다. fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
      *
-     * <p>결제자가 이 행사의 담당자인지 검증하지는 않는다 - 지금은 인증된 사용자면 누구나
-     * 개설비를 결제할 수 있다(추후 별도 작업으로 보강 예정, 예약금의 payerUserId 대조와 다름).
+     * <p>개설비는 행사 신청자 본인이 아니라 <b>SUPER_ADMIN만</b> 결제할 수 있다(2026-08-19,
+     * 주원 결정) - 예약금·참가비처럼 신청 당사자가 스스로 내는 구조가 아니라, 플랫폼
+     * 최고관리자가 대행 결제하는 구조라서 {@link FairAdminAccessGuard#requireSuperAdmin()}으로
+     * role만 검증한다(특정 행사 담당자 배정 여부는 안 본다 - fairId 단위 검증이 필요하면
+     * {@link FairAdminAccessGuard#checkAssigned}를 쓰는 {@link #getPayment}과 다른 지점).
      *
-     * <p>결제 완료 후 행사 상태를 "준비중"으로 전이하는 건 이 메서드 책임이 아니다 — 행사 도메인이
-     * 결제 완료를 어떻게 감지할지(폴링/이벤트 발행) 아직 미정이라 API 명세서에 "미확정"으로
-     * 남아있다. 지금은 결제 자체만 처리하고 크로스도메인 통지는 하지 않는다(참가비와 동일).
+     * <p>결제 완료 후 행사 상태를 "준비중"으로 전이하는 건 이 메서드 책임이 아니다 - 행사
+     * 도메인이 폴링 방식으로 직접 감지해서 전이한다({@link
+     * com.ms.petopia.api.fair.service.FairTransitionService#completeDuePayments}, 5분 간격,
+     * 2026-08-07 결정 - confirmPayment()가 예약금과 달리 개설비는 크로스도메인 콜백을 보내지
+     * 않는 걸 확인하고 폴링으로 확정). 지금은 결제 자체만 처리하고 크로스도메인 통지는 하지
+     * 않는다(참가비와 동일).
      *
      * <p>동일 행사에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
      * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
      *
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} SUPER_ADMIN이 아닐 때
      * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사이거나,
      *         존재하지 않거나 개설비를 결제할 수 없는 상태의 행사일 때
      */
     @Transactional
     public PaymentResponse payFairOpeningFee(Long fairId, Long userId) {
+        fairAdminAccessGuard.requireSuperAdmin();
         FairOpeningFeePaymentContext context = fairOpeningFeePaymentContractClient.getPaymentContext(fairId);
 
         String idempotencyKey = "FAIR_OPENING_FEE_" + fairId;

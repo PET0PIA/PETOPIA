@@ -11,6 +11,11 @@ import com.ms.petopia.api.business.dto.response.BusinessReviewDetailResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewResultResponse;
 import com.ms.petopia.api.business.dto.response.BusinessReviewSummaryResponse;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
@@ -19,6 +24,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -34,6 +41,7 @@ public class BusinessService {
     private final StorageService storageService;
     private final UserRoleService userRoleService;
     private final ApplicationService applicationService;
+    private final NotificationService notificationService;
 
     // 사업자 등록(국세청 진위확인 포함)
     public BusinessResponse registerBusiness(Long ownerId, BusinessRegisterRequest request) {
@@ -173,6 +181,11 @@ public class BusinessService {
             userRoleService.grantVendorRole(business.getOwnerId());
         }
 
+        // 알림
+        notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_APPROVED,
+                "사업자 등록이 승인되었습니다",
+                "사업자 등록이 승인되어 참가 신청이 가능합니다.");
+
         return BusinessReviewResultResponse.builder()
                 .businessId(businessId)
                 .approvalStatus(Business.ApprovalStatus.APPROVED.name())
@@ -204,6 +217,11 @@ public class BusinessService {
         if (updatedRows == 0) {
             throw new CommonException(ErrorCode.BUSINESS_NOT_PENDING_REVIEW);
         }
+
+        // 알림
+        notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_REJECTED,
+                "사업자 등록이 반려되었습니다",
+                "반려 사유: " + request.getRejectReason());
 
         return BusinessReviewResultResponse.builder()
                 .businessId(businessId)
@@ -245,12 +263,54 @@ public class BusinessService {
             userRoleService.revokeVendorRole(business.getOwnerId());
         }
 
+        // 알림
+        notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_REVOKED,
+                "사업자 등록이 취소되었습니다",
+                "취소 사유: " + request.getRevokeReason());
+
         return BusinessReviewResultResponse.builder()
                 .businessId(businessId)
                 .approvalStatus(Business.ApprovalStatus.REVOKED.name())
                 .rejectReason(request.getRevokeReason())
                 .reviewedAt(reviewedAt)
                 .build();
+
+    }
+
+    /*
+     * 사업자 심사 결과를 소유자에게 알림으로 남긴다. 알림 저장이 실패해도
+     * 본 로직(승인/반려/취소 처리)은 이미 끝난 뒤이므로 예외를 던져 되돌리지 않는다
+     * (ApplicationService.notifyApplicationEvent와 동일한 이유).
+     */
+    private void notifyBusinessEvent(Long recipientUserId, NotificationType type, String title, String body) {
+
+        try {
+
+            notificationService.save(new SaveNotificationDto.Request(
+                    recipientUserId,
+                    RecipientType.VENDOR,
+                    type,
+                    title,
+                    body,
+                    null,
+                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                    null
+            ));
+
+        } catch (Exception e) {
+            log.error("사업자 심사 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
+        }
+
+    }
+
+    private void notifyBusinessEventAfterCommit(Long recipientUserId, NotificationType type, String title, String body) {
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notifyBusinessEvent(recipientUserId, type, title, body);
+            }
+        });
 
     }
 

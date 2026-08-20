@@ -21,6 +21,7 @@ import {
   type ApplicationSubmitRequest,
   type BoothSlotLockStatus,
 } from "../../api/application";
+import { ApplicationTermsAgreement } from "../../components/application/ApplicationTermsAgreement";
 
 const MAX_SLOTS = 3;
 
@@ -383,15 +384,10 @@ export function ApplicationSubmitPage() {
           </Card>
         </section>
 
-        <label className="flex items-start gap-2 text-sm text-ink">
-          <input
-            type="checkbox"
-            checked={form.agreedTerms}
-            onChange={(event) => update("agreedTerms", event.target.checked)}
-            className="mt-0.5"
-          />
-          <span>이용약관 및 참가 신청 유의사항에 동의합니다. <span className="text-primary-strong">*</span></span>
-        </label>
+        <ApplicationTermsAgreement
+          agreed={form.agreedTerms}
+          onAgreedChange={(checked) => update("agreedTerms", checked)}
+        />
 
         <div className="flex justify-end">
           <Button type="submit" disabled={submitting || attachmentUploading}>

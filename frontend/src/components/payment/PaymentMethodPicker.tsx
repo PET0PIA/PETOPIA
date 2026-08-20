@@ -12,10 +12,9 @@ const METHOD_OPTIONS: { value: PaymentMethodOption; label: string; icon: typeof 
 /**
  * 결제수단 선택 탭(카드·네이버페이·가상계좌). 예약금·참가비·개설비 3개 결제 화면이 공통으로 쓴다.
  *
- * 백엔드는 아직 이 선택을 완전히 따라가지 못한다 - method는 저장되지만(PaymentService.confirmPayment
- * 가 tossResponse.method()를 그대로 씀) 간편결제 제공사(NAVERPAY)는 별도 컬럼이 없어 구분 표시가
- * 안 되고, 가상계좌는 승인 응답이 WAITING_FOR_DEPOSIT으로 와도 지금 코드가 무조건 COMPLETED로
- * 확정해버린다(2차 예정, 실제 입금 전에 완료 처리되는 셈). 결제 자체는 되니 프론트를 먼저 붙인다.
+ * 아래 두 한계는 해소됨(PaymentService 참고): 간편결제 제공사는 payment.easy_pay_provider 컬럼에
+ * 저장되고, 가상계좌는 승인 응답이 WAITING_FOR_DEPOSIT이면 COMPLETED로 바로 확정하지 않고 그
+ * 상태로 저장했다가 입금 웹훅(/webhooks/toss/deposit-callback)으로 COMPLETED 전환한다.
  */
 export function PaymentMethodPicker({
   value,

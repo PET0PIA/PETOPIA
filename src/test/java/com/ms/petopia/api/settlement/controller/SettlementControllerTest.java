@@ -197,6 +197,51 @@ class SettlementControllerTest {
     }
 
     @Test
+    void reopensSettlement() throws Exception {
+        given(settlementService.reopen(eq(1L), eq(99L))).willReturn(sampleResponse("PENDING"));
+
+        mockMvc.perform(put("/api/settlements/1/reopen")
+                        .with(authenticatedAs(99L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    void returns404WhenReopeningNonExistentSettlement() throws Exception {
+        willThrow(new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND))
+                .given(settlementService).reopen(eq(999L), eq(99L));
+
+        mockMvc.perform(put("/api/settlements/999/reopen")
+                        .with(authenticatedAs(99L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ST001"));
+    }
+
+    @Test
+    void returns403WhenReopeningAsNonSuperAdmin() throws Exception {
+        // SUPER_ADMIN이 아닌 요청(SecurityConfig hasRole는 이 standalone 테스트에서 관여하지
+        // 않아서, 서비스 계층 FairAdminAccessGuard.requireSuperAdmin이 던지는 걸 시뮬레이션함).
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(settlementService).reopen(eq(1L), eq(99L));
+
+        mockMvc.perform(put("/api/settlements/1/reopen")
+                        .with(authenticatedAs(99L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("A002"));
+    }
+
+    @Test
+    void returns409WhenReopeningPendingSettlement() throws Exception {
+        willThrow(new CommonException(ErrorCode.SETTLEMENT_NOT_REOPENABLE))
+                .given(settlementService).reopen(eq(1L), eq(99L));
+
+        mockMvc.perform(put("/api/settlements/1/reopen")
+                        .with(authenticatedAs(99L)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ST007"));
+    }
+
+    @Test
     void getsSettlementDetail() throws Exception {
         given(settlementService.getByFairAndBusiness(10L, 20L)).willReturn(sampleResponse("PENDING"));
 
