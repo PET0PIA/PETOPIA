@@ -11,10 +11,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 /*
- * {@code ApplicationPaymentContractController}가 노출하는 참가비 결제 계약의 실제 판단 로직.
+ * ApplicationPaymentContractController가 노출하는 참가비 결제 계약의 실제 판단 로직.
  * 결제 도메인이 더 이상 요청 바디의 금액을 신뢰하지 않고, 이 서비스가 내려주는 확정 금액만
- * 쓰도록 하는 게 목적이다(승인 시 저장한 finalPrice - {@code ApplicationService#approveApplication} 참고).
+ * 쓰도록 하는 게 목적이다(승인 시 저장한 finalPrice - ApplicationService#approveApplication 참고).
  */
 @Service
 @RequiredArgsConstructor
@@ -38,6 +40,7 @@ public class ApplicationPaymentContextService {
 
         // 신청이 존재하는지
         Application application = applicationMapper.selectById(applicationId);
+
         if (application == null) {
             throw new CommonException(ErrorCode.APPLICATION_NOT_FOUND);
         }
@@ -49,6 +52,14 @@ public class ApplicationPaymentContextService {
 
         // finalPrice가 확정돼 있는지
         if (application.getFinalPrice() == null || application.getFinalPrice() <= 0) {
+            throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
+        }
+
+        /*
+         * 만료 배치가 아직 못 돌려서 상태는 PAYMENT_PENDING인데 기한만 지난 경합 구간을
+         * 여기서도 한 번 더 막는다(FairOpeningFeePaymentContextService와 동일한 이유).
+         */
+        if (application.getPaymentDueAt() == null || !LocalDateTime.now().isBefore(application.getPaymentDueAt())) {
             throw new CommonException(ErrorCode.APPLICATION_NOT_PAYMENT_PENDING);
         }
 
