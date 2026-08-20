@@ -12,7 +12,15 @@ const fairCategoryLabels: Record<string, string> = {
   CONTENT_PROGRAM: "부대행사/콘텐츠",
 };
 
-function TagList({ items, emptyText }: { items: TagCountItem[]; emptyText: string }) {
+// 긍정 태그는 --color-leaf(테마에 이미 있는 초록 상태색)를 그대로 쓰고, 부정 태그는
+// TopTagBars의 막대 색과 통일시킨 코랄(#F28B82, DonutChart 첫 슬라이스 색과 동일)을 쓴다 -
+// 이 프로젝트 팔레트엔 별도 red/danger 토큰이 없어 임의 값(text-[...])으로 지정한다.
+const TONE_LABEL_CLASS = {
+  positive: "text-leaf",
+  negative: "text-[#F28B82]",
+} as const;
+
+function TagList({ items, emptyText, tone }: { items: TagCountItem[]; emptyText: string; tone: "positive" | "negative" }) {
   if (items.length === 0) {
     return <p className="py-2 text-sm text-muted">{emptyText}</p>;
   }
@@ -20,10 +28,10 @@ function TagList({ items, emptyText }: { items: TagCountItem[]; emptyText: strin
     <ol className="flex min-w-0 flex-col gap-1.5">
       {items.map((item, index) => (
         <li key={item.tagId} className="flex min-w-0 items-start gap-2 text-sm">
-          <span className="w-4 shrink-0 text-right font-bold text-muted">{index + 1}</span>
+          <span className={`w-4 shrink-0 text-right font-bold ${TONE_LABEL_CLASS[tone]}`}>{index + 1}</span>
           {/* 라벨을 한 줄로 잘라 보여주는 대신 줄바꿈을 허용해서(break-words) 태그 문구가
               길어도 잘리지 않고 다 보이게 한다 - 옆 숫자(건수·%)는 항상 같은 줄 우측에 고정. */}
-          <span className="min-w-0 flex-1 break-words font-bold text-ink">{item.label}</span>
+          <span className={`min-w-0 flex-1 break-words font-bold ${TONE_LABEL_CLASS[tone]}`}>{item.label}</span>
           <span className="shrink-0 whitespace-nowrap tabular-nums text-muted">{item.count}건 · {Math.round(item.ratio * 1000) / 10}%</span>
         </li>
       ))}
@@ -46,12 +54,12 @@ export function TagRankingBoard({ rankings }: { rankings: CategoryTagRanking[] }
           <h3 className="mb-3 text-sm font-extrabold text-ink">{fairCategoryLabels[ranking.category] ?? ranking.category}</h3>
           <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
             <div className="min-w-0">
-              <p className="mb-2 text-xs font-bold text-muted">좋았어요 TOP 5</p>
-              <TagList items={ranking.positiveTop} emptyText="선택된 태그가 없어요." />
+              <p className="mb-2 text-xs font-bold text-leaf">좋았어요 TOP 5</p>
+              <TagList items={ranking.positiveTop} emptyText="선택된 태그가 없어요." tone="positive" />
             </div>
             <div className="min-w-0">
-              <p className="mb-2 text-xs font-bold text-muted">아쉬웠어요 TOP 5</p>
-              <TagList items={ranking.negativeTop} emptyText="선택된 태그가 없어요." />
+              <p className="mb-2 text-xs font-bold text-[#F28B82]">아쉬웠어요 TOP 5</p>
+              <TagList items={ranking.negativeTop} emptyText="선택된 태그가 없어요." tone="negative" />
             </div>
           </div>
         </div>

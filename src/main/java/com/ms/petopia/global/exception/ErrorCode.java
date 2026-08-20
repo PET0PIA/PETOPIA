@@ -196,6 +196,7 @@ public enum ErrorCode {
     REVIEW_FAIR_NOT_PUBLISHED(HttpStatus.BAD_REQUEST, "RV008", "전체공개된 행사가 아닙니다. 아직 공개되지 않았거나 취소된 행사에는 리뷰를 작성할 수 없습니다."),
     REVIEW_VISIT_REQUIRED(HttpStatus.FORBIDDEN, "RV009", "이 행사를 방문(입장)한 기록이 있어야 리뷰를 작성할 수 있습니다."),
     BOOTH_VISIT_REQUIRED(HttpStatus.FORBIDDEN, "RV010", "이 부스를 방문한 기록이 있어야 평가를 작성할 수 있습니다."),
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "RV011", "존재하지 않거나 이 행사의 리뷰가 아닙니다."),
 
     // ===== Recommendation (AI 부스 추천) =====
     RECOMMENDATION_TARGET_REQUIRED(HttpStatus.BAD_REQUEST, "RC001", "반려동물 또는 찾으시는 물건 중 하나는 입력해야 합니다."),

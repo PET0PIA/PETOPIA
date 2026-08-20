@@ -46,3 +46,8 @@ export function getFairReviewList(fairId: number, page = 0, size = 10) {
 export function getFairReviewSummary(fairId: number) {
   return apiClient.get<FairReviewSummary>(`/api/fairs/${fairId}/reviews/summary`);
 }
+
+/** 행사담당자/최고관리자의 리뷰 삭제(하드 삭제, 딸린 부스 평가까지 함께 삭제). */
+export function deleteFairReview(fairId: number, reviewId: number) {
+  return apiClient.delete<void>(`/api/fairs/${fairId}/reviews/${reviewId}`);
+}

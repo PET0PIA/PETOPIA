@@ -1,7 +1,12 @@
 package com.ms.petopia.api.review.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.mapper.FairMapper;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.review.dto.BoothFairBusinessRow;
 import com.ms.petopia.api.review.dto.BoothFeedback;
 import com.ms.petopia.api.review.dto.BoothFeedbackSubmission;
@@ -22,6 +27,8 @@ import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +44,8 @@ import java.util.stream.Collectors;
  * 재방문의향)를 한 트랜잭션으로 저장한다 - 별점+자유서술 리뷰(V17~V35)를 완전히 대체한다
  * (petopia-review-feature-plan 스킬 참고).
  *
- * <p>수정·삭제 API는 이번 범위에 없다 - 리뷰는 행사당 사용자 1건만 "새로 작성"할 수 있다.
+ * <p>수정 API는 없다 - 리뷰는 행사당 사용자 1건만 "새로 작성"할 수 있다. 관리자 삭제(하드
+ * 삭제 + 감사 로그)만 {@link #adminDeleteReview}로 지원한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -45,11 +53,14 @@ public class FairReviewService {
 
     private static final int MAX_BOOTH_FEEDBACKS = 3;
     private static final int MAX_PAGE_SIZE = 50;
+    private static final String SUPER_ADMIN_AUTHORITY = "ROLE_SUPER_ADMIN";
 
     private final FairReviewMapper fairReviewMapper;
     private final BoothFeedbackMapper boothFeedbackMapper;
     private final FeedbackTagMapper feedbackTagMapper;
     private final FairMapper fairMapper;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final AuditLogService auditLogService;
 
     @Transactional
     public FairReviewResponse submit(Long fairId, Long userId, SubmitFairReviewRequest request) {
@@ -160,6 +171,61 @@ public class FairReviewService {
         double revisitRate = reviewCount == 0 ? 0.0
                 : (double) fairReviewMapper.countRevisitByFairId(fairId) / reviewCount;
         return new FairReviewSummaryResponse(fairId, reviewCount, revisitRate);
+    }
+
+    /**
+     * 행사담당자/최고관리자가 부적절한 리뷰를 삭제한다(하드 삭제). {@code UNIQUE(fair_id,user_id)}
+     * 제약이 있어 소프트 삭제로 가면 재작성 시나리오까지 별도로 신경 써야 하는데, 하드 삭제면
+     * 작성자가 원할 경우 다시 작성할 수 있어 정책상 더 단순하다 - 삭제 근거는 감사 로그의
+     * before 스냅샷으로 남긴다(petopia-review-feature-plan 스킬 참고).
+     *
+     * <p>딸린 부스 평가({@code booth_feedbacks}/{@code booth_feedback_selections})까지
+     * 함께 지운다 - FK가 없는 프로젝트 관례상 참조 순서(선택 → 부스평가 → 태그선택 → 리뷰)
+     * 그대로 지워야 한다.
+     */
+    @Transactional
+    public void adminDeleteReview(Long fairId, Long reviewId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
+
+        FairReview review = fairReviewMapper.selectById(reviewId);
+        if (review == null || !fairId.equals(review.getFairId())) {
+            throw new CommonException(ErrorCode.REVIEW_NOT_FOUND);
+        }
+
+        List<Long> boothFeedbackIds = boothFeedbackMapper.selectIdsByReviewId(reviewId);
+        if (!boothFeedbackIds.isEmpty()) {
+            boothFeedbackMapper.deleteSelectionsByBoothFeedbackIds(boothFeedbackIds);
+            boothFeedbackMapper.deleteByIds(boothFeedbackIds);
+        }
+        fairReviewMapper.deleteTagSelectionsByReviewId(reviewId);
+        fairReviewMapper.deleteById(reviewId);
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long adminUserId = (Long) authentication.getPrincipal();
+        String actorRole = isSuperAdmin(authentication) ? "SUPER_ADMIN" : "EVENT_ADMIN";
+
+        auditLogService.record(
+                adminUserId,
+                ActorType.ADMIN,
+                actorRole,
+                ActionType.REVIEW_DELETE,
+                TargetType.REVIEW,
+                reviewId,
+                Map.of(
+                        "fairId", fairId,
+                        "authorUserId", review.getUserId(),
+                        "companionType", review.getCompanionType(),
+                        "visitPurpose", review.getVisitPurpose(),
+                        "wouldRevisit", review.isWouldRevisit(),
+                        "boothFeedbackCount", boothFeedbackIds.size()
+                ),
+                null
+        );
+    }
+
+    private boolean isSuperAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> SUPER_ADMIN_AUTHORITY.equals(authority.getAuthority()));
     }
 
     private void submitBoothFeedback(Long fairId, Long userId, Long reviewId, LocalDateTime now,
