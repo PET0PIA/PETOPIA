@@ -86,7 +86,11 @@ public class FeedbackTagService {
         }
         tag.setUpdatedAt(LocalDateTime.now());
 
-        feedbackTagMapper.update(tag);
+        try {
+            feedbackTagMapper.update(tag);
+        } catch (DuplicateKeyException e) {
+            throw new CommonException(ErrorCode.FEEDBACK_TAG_LABEL_DUPLICATE, e);
+        }
         return FeedbackTagResponse.from(tag);
     }
 

@@ -132,8 +132,9 @@ public class SecurityConfig {
                         // Fair 도메인 - 개설비 결제 페이지 전용 요약 조회. 담당 EVENT_ADMIN인지는
                         // FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/opening-fee").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        // Review 도메인(V39 재설계 - 태그 기반 통합 리뷰) - 제출은 로그인만 하면 누구나
-                        // 가능(예매·방문 여부로 막지 않음, 행사당 1건 제한은 서비스 계층에서 검증).
+                        // Review 도메인(V39 재설계 - 태그 기반 통합 리뷰) - 로그인만 하면 호출은
+                        // 가능하지만, 실제 제출은 해당 행사 방문 이력(entry_records)이 있어야
+                        // 하고 행사당 1건 제한이다 - FairReviewService가 서비스 계층에서 검증한다.
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/reviews").authenticated()
                         // Review 도메인 - "이미 작성했는지" 상태 조회는 로그인한 본인 것만.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/status").authenticated()

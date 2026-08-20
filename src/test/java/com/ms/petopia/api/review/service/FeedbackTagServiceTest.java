@@ -138,6 +138,18 @@ class FeedbackTagServiceTest {
     }
 
     @Test
+    @DisplayName("같은 scope에 이미 있는 라벨로 수정하면 FEEDBACK_TAG_LABEL_DUPLICATE로 변환한다")
+    void update_라벨중복이면_예외로_변환한다() {
+        given(feedbackTagMapper.selectById(TAG_ID)).willReturn(tag(TAG_ID, "기존 라벨", true));
+        willThrow(new DuplicateKeyException("UK_FEEDBACK_TAGS_SCOPE_LABEL")).given(feedbackTagMapper).update(any());
+
+        assertErrorCode(
+                () -> feedbackTagService.update(TAG_ID, new UpdateFeedbackTagRequest("이미 있는 라벨", null, null)),
+                ErrorCode.FEEDBACK_TAG_LABEL_DUPLICATE
+        );
+    }
+
+    @Test
     @DisplayName("존재하지 않는 태그의 사용현황을 조회하면 FEEDBACK_TAG_NOT_FOUND를 던진다")
     void getUsage_존재하지않으면_예외를_던진다() {
         given(feedbackTagMapper.selectById(TAG_ID)).willReturn(null);
