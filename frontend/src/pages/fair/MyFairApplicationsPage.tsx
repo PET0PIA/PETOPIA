@@ -15,7 +15,7 @@ const statusLabels: Record<string, string> = {
   REJECTED: "반려됨",
   EXPIRED: "만료됨",
   PAYMENT_PENDING: "개설비 결제 대기",
-  PREPARING: "준비 중",
+  PREPARING: "행사 준비중",
   IN_PROGRESS: "진행 중",
   ENDED: "종료",
   CANCELED: "취소됨",
@@ -30,6 +30,10 @@ const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
   ENDED: "neutral",
   CANCELED: "neutral",
 };
+
+// "행사 준비중"이 "결제 준비중"으로 오해되기 쉬워서(2026-08-21 사용자 피드백), 개설비 결제가
+// 이미 끝난 상태에는 별도로 "결제완료" 표시를 상태 배지 앞에 같이 보여준다.
+const PAID_STATUSES = new Set(["PREPARING", "IN_PROGRESS"]);
 
 // 취소 승인은 status는 그대로 두고 canceledAt만 채우므로(FairService.getMyApplications 참고),
 // 목록에 보여줄 상태는 status가 아니라 canceledAt 유무로 먼저 판단해야 한다.
@@ -117,9 +121,14 @@ export function MyFairApplicationsPage() {
                 </td>
                 <td className="px-4 py-3 text-muted">{application.createdAt.slice(0, 10)}</td>
                 <td className="px-4 py-3">
-                  <Badge tone={statusTones[resolveDisplayStatus(application)] ?? "neutral"}>
-                    {statusLabels[resolveDisplayStatus(application)] ?? resolveDisplayStatus(application)}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {!application.canceledAt && PAID_STATUSES.has(application.status) && (
+                      <Badge tone="neutral">결제완료</Badge>
+                    )}
+                    <Badge tone={statusTones[resolveDisplayStatus(application)] ?? "neutral"}>
+                      {statusLabels[resolveDisplayStatus(application)] ?? resolveDisplayStatus(application)}
+                    </Badge>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Link

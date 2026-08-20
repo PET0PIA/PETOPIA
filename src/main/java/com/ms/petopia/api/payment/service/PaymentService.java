@@ -384,15 +384,27 @@ public class PaymentService {
      * 조건별 결제 목록 조회(관리자용). fairId·businessId·paymentType·status 전부 선택적이고
      * 넘긴 값들은 AND로 조합된다.
      *
+     * <p>다른 도메인(승훈님 {@code FairCancelRefundOrchestrationService}/{@code
+     * FairCancelPendingPaymentService})이 빈 주입으로 직접 호출하는 기존 시그니처라, 남의
+     * 도메인 호출부를 건드리지 않도록 이 오버로드는 그대로 두고 reservationId 필터는 아래
+     * 새 오버로드로 분리했다(2026-08-21, 관리자 결제 목록 화면의 "ID유형" 통합검색용).
+     *
      * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} page·size가 범위를 벗어났을 때
      */
     public PaymentListResponse getPayments(
             Long fairId, Long businessId, String paymentType, String status, int page, int size
     ) {
+        return getPayments(fairId, businessId, paymentType, status, null, page, size);
+    }
+
+    /** {@link #getPayments(Long, Long, String, String, int, int)}에 reservationId 필터를 더한 버전. */
+    public PaymentListResponse getPayments(
+            Long fairId, Long businessId, String paymentType, String status, Long reservationId, int page, int size
+    ) {
         validatePageAndSize(page, size);
         long offset = (long) page * size;
-        List<PaymentRow> rows = paymentMapper.selectByFilter(fairId, businessId, paymentType, status, null, offset, size);
-        long total = paymentMapper.countByFilter(fairId, businessId, paymentType, status, null);
+        List<PaymentRow> rows = paymentMapper.selectByFilter(fairId, businessId, paymentType, status, null, reservationId, offset, size);
+        long total = paymentMapper.countByFilter(fairId, businessId, paymentType, status, null, reservationId);
         return PaymentListResponse.of(rows, page, size, total);
     }
 
@@ -404,8 +416,8 @@ public class PaymentService {
     public PaymentListResponse getMyPayments(Long userId, int page, int size) {
         validatePageAndSize(page, size);
         long offset = (long) page * size;
-        List<PaymentRow> rows = paymentMapper.selectByFilter(null, null, null, null, userId, offset, size);
-        long total = paymentMapper.countByFilter(null, null, null, null, userId);
+        List<PaymentRow> rows = paymentMapper.selectByFilter(null, null, null, null, userId, null, offset, size);
+        long total = paymentMapper.countByFilter(null, null, null, null, userId, null);
         return PaymentListResponse.of(rows, page, size, total);
     }
 

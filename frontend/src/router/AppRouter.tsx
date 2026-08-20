@@ -29,7 +29,6 @@ import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
 import { PaymentDetailPage } from "../pages/payment/PaymentDetailPage";
-import { PaymentCreatePage } from "../pages/payment/PaymentCreatePage";
 import { PaymentListPage } from "../pages/payment/PaymentListPage";
 import { PaymentFailPage, PaymentSuccessPage } from "../pages/payment/PaymentResultPage";
 import { FairOpeningFeePaymentPage } from "../pages/payment/FairOpeningFeePaymentPage";
@@ -39,6 +38,7 @@ import { AuditLogPage } from "../pages/admin/AuditLogPage";
 import { SettlementPage } from "../pages/admin/SettlementPage";
 import { NotificationsPage } from "../pages/notification/NotificationsPage";
 import { MyReservationsPage } from "../pages/reservation/MyReservationsPage";
+import { MyPaymentsPage } from "../pages/payment/MyPaymentsPage";
 import { ReservationDetailPage } from "../pages/reservation/ReservationDetailPage";
 import { TicketReservationPage } from "../pages/reservation/TicketReservationPage";
 import { BoothVisitScanPage } from "../pages/vendor/BoothVisitScanPage";
@@ -120,7 +120,6 @@ const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).fil
     item.path !== "/admin/fair-applications" &&
     item.path !== "/admin/audit-logs" &&
     item.path !== "/admin/payments" &&
-    item.path !== "/admin/payments/create" &&
     item.path !== "/admin/payments/list" &&
     item.path !== "/admin/refunds" &&
     item.path !== "/admin/settlements" &&
@@ -170,6 +169,7 @@ export function AppRouter() {
             <Route path="/booths/visited/me" element={<MyVisitedBoothsPage />} />
             {/* 부스 콘솔로 이관: 옛 경로는 콘솔로 리다이렉트(북마크·내부 링크 호환). */}
             <Route path="/booths/me" element={<Navigate to="/vendor/booths" replace />} />
+            <Route path="/payments/me" element={<MyPaymentsPage />} />
           </Route>
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
@@ -279,7 +279,6 @@ export function AppRouter() {
             <Route path="fair-applications" element={<FairApplicationReviewPage />} />
             <Route path="audit-logs" element={<AuditLogPage />} />
             <Route path="payments" element={<PaymentDetailPage />} />
-            <Route path="payments/create" element={<PaymentCreatePage />} />
             <Route path="payments/list" element={<PaymentListPage />} />
             <Route path="refunds" element={<RefundPage />} />
             <Route path="settlements" element={<SettlementPage />} />

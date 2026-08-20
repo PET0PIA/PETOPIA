@@ -70,10 +70,21 @@ function Pagination({ result, onPage }: { result: PaymentListResult; onPage: (pa
   );
 }
 
-// 조건별 결제 목록(관리자용). fairId/businessId/paymentType/status 전부 선택적 필터로 AND 조합된다.
+type IdFilterKind = "fairId" | "businessId" | "reservationId";
+
+const idFilterLabels: Record<IdFilterKind, string> = {
+  fairId: "행사ID",
+  businessId: "업체ID",
+  reservationId: "예약ID",
+};
+
+// 조건별 결제 목록(관리자용). fairId/businessId/reservationId/paymentType/status 전부 선택적
+// 필터로 AND 조합된다. 행사ID·업체ID·예약ID는 결제당 의미가 겹치지 않는 배타적 조건이라(한
+// 결제는 셋 중 하나만 채워짐) 별도 칸으로 나누지 않고 "ID유형" 드롭다운 + 값 입력 한 쌍으로
+// 합쳤다(2026-08-21, 결제유형 드롭다운과 같은 패턴).
 function AdminListSection() {
-  const [fairIdInput, setFairIdInput] = useState("");
-  const [businessIdInput, setBusinessIdInput] = useState("");
+  const [idFilterKind, setIdFilterKind] = useState<IdFilterKind>("fairId");
+  const [idInput, setIdInput] = useState("");
   const [paymentType, setPaymentType] = useState<PaymentType | "">("");
   const [status, setStatus] = useState<PaymentStatus | "">("");
   const [result, setResult] = useState<PaymentListResult | null>(null);
@@ -84,9 +95,11 @@ function AdminListSection() {
     setLoading(true);
     setError(null);
     try {
+      const idValue = idInput ? Number(idInput) : undefined;
       const data = await getPayments({
-        fairId: fairIdInput ? Number(fairIdInput) : undefined,
-        businessId: businessIdInput ? Number(businessIdInput) : undefined,
+        fairId: idFilterKind === "fairId" ? idValue : undefined,
+        businessId: idFilterKind === "businessId" ? idValue : undefined,
+        reservationId: idFilterKind === "reservationId" ? idValue : undefined,
         paymentType: paymentType || undefined,
         status: status || undefined,
         page,
@@ -109,12 +122,16 @@ function AdminListSection() {
     <section className="mb-10">
       <form onSubmit={handleSubmit} className="surface mb-6 grid gap-3 p-5 sm:grid-cols-5 sm:items-end">
         <div>
-          <label htmlFor="al-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-          <Input id="al-fair-id" className="input-no-spinner" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="전체" />
+          <label htmlFor="al-id-kind" className="mb-1.5 block text-sm font-bold text-ink">ID유형</label>
+          <Select id="al-id-kind" value={idFilterKind} onChange={(event) => setIdFilterKind(event.target.value as IdFilterKind)}>
+            {(Object.keys(idFilterLabels) as IdFilterKind[]).map((kind) => (
+              <option key={kind} value={kind}>{idFilterLabels[kind]}</option>
+            ))}
+          </Select>
         </div>
         <div>
-          <label htmlFor="al-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
-          <Input id="al-business-id" className="input-no-spinner" type="number" min={1} value={businessIdInput} onChange={(event) => setBusinessIdInput(event.target.value)} placeholder="전체" />
+          <label htmlFor="al-id-value" className="mb-1.5 block text-sm font-bold text-ink">{idFilterLabels[idFilterKind]}</label>
+          <Input id="al-id-value" className="input-no-spinner" type="number" min={1} value={idInput} onChange={(event) => setIdInput(event.target.value)} placeholder="전체" />
         </div>
         <div>
           <label htmlFor="al-type" className="mb-1.5 block text-sm font-bold text-ink">결제 유형</label>

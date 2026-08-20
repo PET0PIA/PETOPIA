@@ -1586,9 +1586,9 @@ class PaymentServiceTest {
         row.setAmount(50000L);
         row.setStatus("COMPLETED");
         row.setFairId(10L);
-        given(paymentMapper.selectByFilter(eq(10L), isNull(), isNull(), isNull(), isNull(), eq(0L), eq(20)))
+        given(paymentMapper.selectByFilter(eq(10L), isNull(), isNull(), isNull(), isNull(), isNull(), eq(0L), eq(20)))
                 .willReturn(List.of(row));
-        given(paymentMapper.countByFilter(eq(10L), isNull(), isNull(), isNull(), isNull())).willReturn(1L);
+        given(paymentMapper.countByFilter(eq(10L), isNull(), isNull(), isNull(), isNull(), isNull())).willReturn(1L);
 
         // Act
         PaymentListResponse result = paymentService.getPayments(10L, null, null, null, 0, 20);
@@ -1606,9 +1606,9 @@ class PaymentServiceTest {
     @Test
     @DisplayName("조건에 맞는 결제가 없으면 빈 목록을 반환한다")
     void getPayments_결과없음_빈목록반환() {
-        given(paymentMapper.selectByFilter(any(), any(), any(), any(), any(), anyLong(), anyInt()))
+        given(paymentMapper.selectByFilter(any(), any(), any(), any(), any(), any(), anyLong(), anyInt()))
                 .willReturn(List.of());
-        given(paymentMapper.countByFilter(any(), any(), any(), any(), any())).willReturn(0L);
+        given(paymentMapper.countByFilter(any(), any(), any(), any(), any(), any())).willReturn(0L);
 
         PaymentListResponse result = paymentService.getPayments(null, null, null, null, 0, 20);
 
@@ -1620,15 +1620,15 @@ class PaymentServiceTest {
     @Test
     @DisplayName("내 결제내역을 조회하면 로그인 사용자 기준으로만 필터링된다")
     void getMyPayments_본인결제내역만조회() {
-        given(paymentMapper.selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), eq(0L), eq(20)))
+        given(paymentMapper.selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), isNull(), eq(0L), eq(20)))
                 .willReturn(List.of());
-        given(paymentMapper.countByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L))).willReturn(0L);
+        given(paymentMapper.countByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), isNull())).willReturn(0L);
 
         PaymentListResponse result = paymentService.getMyPayments(90L, 0, 20);
 
         assertThat(result.content()).isEmpty();
         // fairId·businessId·paymentType·status는 걸지 않고 payerUserId만 거는지(마이페이지 = 본인 것만)
-        verify(paymentMapper).selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), eq(0L), eq(20));
+        verify(paymentMapper).selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), isNull(), eq(0L), eq(20));
     }
 
     // page/size 검증은 컨트롤러의 @Min/@Max가 아니라 여기(서비스 계층)에서 한다 —
@@ -1643,7 +1643,7 @@ class PaymentServiceTest {
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 
-        verify(paymentMapper, never()).selectByFilter(any(), any(), any(), any(), any(), anyLong(), anyInt());
+        verify(paymentMapper, never()).selectByFilter(any(), any(), any(), any(), any(), any(), anyLong(), anyInt());
     }
 
     @Test

@@ -58,7 +58,6 @@ export const superAdminNavigation: NavigationItem[] = [
     icon: CreditCard,
     children: [
       { label: "결제 상세 조회", path: "/admin/payments", icon: CreditCard },
-      { label: "결제 생성·확정", path: "/admin/payments/create", icon: PlusCircle },
       { label: "결제 목록", path: "/admin/payments/list", icon: ListOrdered },
       { label: "환불 조회", path: "/admin/refunds", icon: RotateCcw },
       { label: "정산·수수료율", path: "/admin/settlements", icon: ReceiptText },

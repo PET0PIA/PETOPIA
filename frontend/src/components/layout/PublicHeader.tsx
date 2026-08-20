@@ -92,6 +92,7 @@ function TopNavLink({ to, label }: { to: string; label: string }) {
 const accountMenuItems: { label: string; path: string }[] = [
   { label: "내 예약 목록", path: "/reservations/me" },
   { label: "내 행사 신청 목록", path: "/fair-applications/me" },
+  { label: "내 결제 내역", path: "/payments/me" },
   { label: "내 방문 부스", path: "/booths/visited/me" },
   { label: "즐겨찾기 부스", path: "/booths/favorites/me" },
 ];
