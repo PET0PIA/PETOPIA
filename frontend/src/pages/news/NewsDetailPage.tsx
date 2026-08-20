@@ -24,7 +24,9 @@ export function NewsDetailPage() {
     if (!idValid) return;
     let ignore = false;
     getNotice(currentId)
-      .then((data) => { if (!ignore) setLoaded(data); })
+      // 성공하면 이전 실패 기록을 비운다. 남겨두면 같은 글로 되돌아왔을 때(상세 -> 다른 상세 -> 원래 글)
+      // 잘 받아오고도 아래 loadError가 살아 있어 오류 화면이 먼저 걸린다.
+      .then((data) => { if (!ignore) { setLoaded(data); setFailure(null); } })
       .catch((error) => {
         if (ignore) return;
         // 비공개 글도 서버가 404로 돌려준다(있는지 없는지 알려주지 않는다).

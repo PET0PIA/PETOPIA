@@ -1,5 +1,5 @@
 import { FileText, Loader2, Paperclip, X } from "lucide-react";
-import { useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { uploadDocument, validateDocumentFile } from "../../api/files";
 import { formatFileSize } from "../../utils/fileSize";
 
@@ -34,6 +34,10 @@ export function AttachmentListField({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadingName, setUploadingName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 업로드를 기다리는 동안 목록이 바뀔 수 있다(예: 관리자가 다른 첨부를 제거). handleFileChange가
+  // 붙들고 있는 items는 그때의 옛 목록이라, 완료 시점에는 이 상자에 담긴 최신 목록에 덧붙인다.
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
 
   const full = items.length >= maxCount;
 
@@ -57,7 +61,7 @@ export function AttachmentListField({
     onUploadingChange?.(true);
     try {
       const objectKey = await uploadDocument(file);
-      onChange([...items, { objectKey, originalName: file.name, fileSize: file.size }]);
+      onChange([...itemsRef.current, { objectKey, originalName: file.name, fileSize: file.size }]);
     } catch {
       setError("파일 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {

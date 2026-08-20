@@ -74,7 +74,11 @@ export function AdminNoticesPage() {
   const [editingNotice, setEditingNotice] = useState<AdminNotice | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
-  const [uploading, setUploading] = useState(false);
+  // 본문 이미지와 첨부는 동시에 올라갈 수 있어서 따로 센다. 하나로 합치면 먼저 끝난 쪽이
+  // false로 덮어써서, 아직 올라가는 중인 파일을 빼고 저장할 수 있다.
+  const [contentImageUploading, setContentImageUploading] = useState(false);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const uploading = contentImageUploading || attachmentUploading;
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -119,7 +123,8 @@ export function AdminNoticesPage() {
     setEditingNotice(null);
     setForm(emptyForm);
     setAttachments([]);
-    setUploading(false);
+    setContentImageUploading(false);
+    setAttachmentUploading(false);
     setFormErrors([]);
     setDialogOpen(true);
   }
@@ -140,7 +145,8 @@ export function AdminNoticesPage() {
       originalName: attachment.originalName,
       fileSize: attachment.fileSize,
     })));
-    setUploading(false);
+    setContentImageUploading(false);
+    setAttachmentUploading(false);
     setFormErrors([]);
     setDialogOpen(true);
   }
@@ -335,7 +341,7 @@ export function AdminNoticesPage() {
                 value={form.content}
                 onChange={(html) => update("content", html)}
                 onUploadImage={handleUploadContentImage}
-                onUploadingChange={setUploading}
+                onUploadingChange={setContentImageUploading}
                 placeholder="공지 내용을 입력하세요. 사진은 도구모음의 사진 버튼으로 글 중간에 넣을 수 있어요."
                 disabled={saving}
               />
@@ -357,7 +363,7 @@ export function AdminNoticesPage() {
             label="첨부파일"
             items={attachments}
             onChange={setAttachments}
-            onUploadingChange={setUploading}
+            onUploadingChange={setAttachmentUploading}
             disabled={saving}
           />
 
