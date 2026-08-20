@@ -44,6 +44,9 @@ import { TicketReservationPage } from "../pages/reservation/TicketReservationPag
 import { BoothVisitScanPage } from "../pages/vendor/BoothVisitScanPage";
 import { FairReservationsPage } from "../pages/fair-admin/FairReservationsPage";
 import { NotFoundPage, PlaceholderPage } from "../pages/PlaceholderPage";
+import { AboutPage } from "../pages/about/AboutPage";
+import { ContactPage } from "../pages/contact/ContactPage";
+import { PrivacyPage, TermsPage } from "../pages/legal/LegalPages";
 import { AdminBannersPage } from "../pages/admin/AdminBannersPage";
 import { AdminPopupsPage } from "../pages/admin/AdminPopupsPage";
 import { AdminNoticesPage } from "../pages/admin/AdminNoticesPage";
@@ -89,13 +92,6 @@ import { AdvertisingInquiryPage } from "../pages/advertising/AdvertisingInquiryP
 import { BusinessReviewPage } from "../pages/admin/BusinessReviewPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
-// 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
-const publicPages: Record<string, string> = {
-  "/about": "서비스 소개",
-  "/terms": "이용약관",
-  "/privacy": "개인정보 처리방침",
-  "/contact": "문의",
-};
 const fairAdminImplementedPaths = [
   "/fair-admin/booths",
   "/fair-admin/fair",
@@ -249,9 +245,11 @@ export function AppRouter() {
             <Route path="/participations/me/:applicationId/edit" element={<ApplicationEditPage />} />
           </Route>
           <Route path="/booths/:boothId" element={<BoothDetailPage />} />
-          {Object.entries(publicPages).map(([path, title]) => (
-            <Route key={path} path={path} element={<PlaceholderPage title={title} />} />
-          ))}
+          {/* 푸터에서 들어오는 공개 안내 페이지. 로그인 없이 누구나 봐야 하는 내용이다. */}
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
         {/* 박람회 관리자 콘솔 - EVENT_ADMIN(+ 상위 SUPER_ADMIN) 전용. URL 직접 진입도 role로 가드한다. */}
