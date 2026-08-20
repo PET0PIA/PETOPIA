@@ -21,10 +21,10 @@ const FALLBACK_BANNER: Banner = {
   link2Label: null,
   link2Url: null,
   link2Target: null,
-  // 노출할 배너가 하나도 없을 때만 뜨는 화면이라 다른 배너와 섞일 일이 없어서, 파스텔 대신
-  // 진한 앰버를 쓴다. 일러스트가 흰 털/밝은 털 위주에 외곽선이 검정이라 이 색 위에서 또렷하게
-  // 뜨고, 밝은 배경이라 본문 글자(검정 계열)도 대비가 넉넉하게 남는다.
-  bgColor: "var(--color-point-amber)",
+  // 노출할 배너가 하나도 없을 때만 뜨는 화면이라, 튀는 색 대신 따뜻한 크림색으로 차분하게 둔다.
+  // 일러스트에 흰 털 아이들이 많지만 외곽선이 검정이라 이 밝은 배경 위에서도 형태가 뭉개지지
+  // 않고, 배경이 밝아 본문 글자(검정 계열) 대비도 넉넉하다.
+  bgColor: "var(--color-point-cream)",
   sortOrder: 0,
   active: true,
   startedAt: null,
@@ -97,7 +97,7 @@ export function HeroSection() {
             </div>
           )}
         </div>
-        <div className="relative mx-auto flex h-64 w-full items-center justify-center sm:h-80 md:h-[26rem] md:translate-x-6 md:scale-105 md:justify-end lg:h-[30rem] lg:translate-x-14 lg:scale-110">
+        <div className="relative mx-auto flex h-56 w-full items-center justify-center sm:h-64 md:h-[20rem] md:justify-end lg:h-[24rem]">
           <img key={index} src={slide.imageKey} alt="" className="max-h-full max-w-full animate-[heroPosterIn_600ms_ease-out_both] object-contain motion-reduce:animate-none" />
         </div>
       </div>
