@@ -44,13 +44,18 @@ interface BoothCanvasProps {
   onGeometryChange: (key: string, patch: Partial<Pick<DraftSlot, "posX" | "posY" | "width" | "height">>) => void;
 }
 
-const ASPECT_RATIO = 16 / 10;
+/** 도면 이미지가 없을 때(또는 아직 안 불러왔을 때) 쓰는 기본 비율. */
+const DEFAULT_ASPECT_RATIO = 16 / 10;
 
 export function BoothCanvas({ slots, selectedKey, backgroundImageUrl, showGrid = true, gridSize = 5, zoom = 1, onSelect, onGeometryChange }: BoothCanvasProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   // zoom=1(기본 배율)일 때의 캔버스 너비. 확대 배율을 픽셀 크기로 환산할 때만 쓴다.
   const [naturalWidth, setNaturalWidth] = useState(0);
+  // 도면 이미지의 실제 가로:세로 비율. 이미지를 새로 불러올 때만 갱신한다(setState는 항상
+  // 비동기 onload 콜백 안에서만 호출해, effect 본문에서 곧바로 setState하지 않게 한다).
+  const [loadedImage, setLoadedImage] = useState<{ url: string; ratio: number } | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
   const isZoomed = zoom !== 1;
 
   useEffect(() => {
@@ -64,9 +69,52 @@ export function BoothCanvas({ slots, selectedKey, backgroundImageUrl, showGrid =
     return () => observer.disconnect();
   }, []);
 
-  const naturalHeight = naturalWidth / ASPECT_RATIO;
+  useEffect(() => {
+    if (!backgroundImageUrl) return;
+    let ignore = false;
+    const image = new Image();
+    image.onload = () => {
+      if (ignore || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+      setLoadedImage({ url: backgroundImageUrl, ratio: image.naturalWidth / image.naturalHeight });
+    };
+    image.src = backgroundImageUrl;
+    return () => { ignore = true; };
+  }, [backgroundImageUrl]);
+
+  // 도면 이미지가 있고 그 이미지의 비율을 이미 읽었으면 캔버스를 그 비율에 맞춰서
+  // background-size: cover로 인한 잘림을 없앤다(비율이 항상 일치하니 크롭이 생기지 않는다).
+  // 이미지가 바뀌었는데 아직 새 비율을 못 읽었으면(url 불일치) 기본 비율로 되돌아간다.
+  const aspectRatio = backgroundImageUrl && loadedImage?.url === backgroundImageUrl ? loadedImage.ratio : DEFAULT_ASPECT_RATIO;
+  const naturalHeight = naturalWidth / aspectRatio;
   const canvasWidthPx = naturalWidth * zoom;
   const canvasHeightPx = naturalHeight * zoom;
+
+  /** 확대 상태에서 슬롯이 아닌 빈 캔버스를 드래그하면 스크롤 위치를 옮긴다(패닝). 기존 스크롤바는 그대로 남겨둔다. */
+  function beginPan(event: React.PointerEvent) {
+    if (!isZoomed) return;
+    if (event.target !== event.currentTarget) return;
+    const outer = outerRef.current;
+    if (!outer) return;
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startScrollLeft = outer.scrollLeft;
+    const startScrollTop = outer.scrollTop;
+    setIsPanning(true);
+
+    function handleMove(moveEvent: PointerEvent) {
+      outer!.scrollLeft = startScrollLeft - (moveEvent.clientX - startX);
+      outer!.scrollTop = startScrollTop - (moveEvent.clientY - startY);
+    }
+    function handleUp() {
+      setIsPanning(false);
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    }
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+  }
 
   function beginMove(event: React.PointerEvent, slot: DraftSlot) {
     onSelect(slot.key);
@@ -139,12 +187,13 @@ export function BoothCanvas({ slots, selectedKey, backgroundImageUrl, showGrid =
   return (
     <div
       ref={outerRef}
-      className={`w-full overflow-auto rounded-card border border-line bg-page ${isZoomed ? "" : "aspect-[16/10]"}`}
-      style={isZoomed ? { height: naturalHeight || undefined } : undefined}
+      className="w-full overflow-auto rounded-card border border-line bg-page"
+      style={isZoomed ? { height: naturalHeight || undefined } : { aspectRatio }}
     >
       <div
         ref={containerRef}
-        className="relative select-none overflow-hidden bg-page"
+        onPointerDown={beginPan}
+        className={`relative select-none overflow-hidden bg-page ${isZoomed ? (isPanning ? "cursor-grabbing" : "cursor-grab") : ""}`}
         style={{
           width: isZoomed ? canvasWidthPx || "100%" : "100%",
           height: isZoomed ? canvasHeightPx || "100%" : "100%",

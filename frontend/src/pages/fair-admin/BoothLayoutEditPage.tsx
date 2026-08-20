@@ -293,7 +293,7 @@ export function BoothLayoutEditPage() {
         title={hall ? `${hall.name} 부스 배치 편집` : "부스 배치 편집"}
         description="슬롯을 드래그해 위치를 옮기고, 우측 하단 손잡이로 크기를 조절해요. 자물쇠 아이콘이 붙은 슬롯은 이미 참가 신청이 걸려 있어 위치·크기·번호·가격을 바꿀 수 없어요."
         action={
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2 whitespace-nowrap">
             <Button variant="outline" onClick={handleReset} disabled={loading || saving}>
               <RotateCcw size={16} />되돌리기
             </Button>
@@ -389,7 +389,7 @@ export function BoothLayoutEditPage() {
                 onSelect={setSelectedKey}
                 onGeometryChange={updateDraft}
               />
-              {zoom !== 1 && <p className="mt-2 text-xs text-muted">캔버스를 스크롤해서 확대된 영역을 볼 수 있어요.</p>}
+              {zoom !== 1 && <p className="mt-2 text-xs text-muted">캔버스를 드래그하거나 스크롤해서 확대된 영역을 볼 수 있어요.</p>}
             </div>
           </div>
 
@@ -450,8 +450,11 @@ export function BoothLayoutEditPage() {
                     type="number"
                     min={0}
                     step={1000}
-                    value={selected.price}
-                    onChange={(event) => updateDraft(selected.key, { price: Number(event.target.value) })}
+                    value={selected.price === 0 ? "" : selected.price}
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      updateDraft(selected.key, { price: raw === "" ? 0 : Number(raw) });
+                    }}
                     disabled={!!selected.lockedAt}
                   />
                 </div>
