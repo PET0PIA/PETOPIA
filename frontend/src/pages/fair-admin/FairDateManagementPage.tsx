@@ -5,11 +5,11 @@ import {
   createFairDate,
   deleteFairDate,
   getFairDates,
+  getFairPublishStatus,
   publishFair,
   updateFairDate,
   type CreateFairDateRequest,
   type FairDate,
-  type PublishFairResponse,
   type UpdateFairDateRequest,
 } from "../../api/fair";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -50,10 +50,12 @@ export function FairDateManagementPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // 공개(publish) 버튼 - 이 페이지는 그 행사의 published_at을 미리 조회해오지 않는다(백엔드가
-  // 멱등이라 이미 공개된 행사를 다시 눌러도 최초 공개 결과를 그대로 돌려주고, 공개 불가 상태면
-  // FAIR_NOT_PUBLISHABLE 메시지로 바로 알려주기 때문). 눌러서 받은 응답만 화면에 반영한다.
-  const [publishResult, setPublishResult] = useState<PublishFairResponse | null>(null);
+  // 공개(publish) 버튼 - 진입 시 getFairPublishStatus로 지금 공개 상태를 미리 불러온다.
+  // publishedAt이 채워지면(초기 조회든, 아래에서 직접 눌러 공개했든) 이미 공개된 것으로 보고
+  // 버튼을 "공개됨"으로 바꾼다. 초기 조회가 실패해도(네트워크 등) 페이지를 막지 않고 조용히
+  // 넘어간다 - 이 값은 버튼 상태를 미리 맞추는 용도일 뿐, 실제 공개 가능 여부는 눌렀을 때
+  // 백엔드가 다시 검증한다(멱등이라 이미 공개된 행사를 다시 눌러도 최초 공개 결과를 그대로 돌려줌).
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -62,7 +64,7 @@ export function FairDateManagementPage() {
     let ignore = false;
     setLoading(true);
     setLoadError(null);
-    setPublishResult(null);
+    setPublishedAt(null);
     setPublishError(null);
 
     getFairDates(fairId)
@@ -76,6 +78,10 @@ export function FairDateManagementPage() {
         }
       })
       .finally(() => { if (!ignore) setLoading(false); });
+
+    getFairPublishStatus(fairId)
+      .then((data) => { if (!ignore) setPublishedAt(data.publishedAt); })
+      .catch(() => {});
 
     return () => { ignore = true; };
   }, [fairId]);
@@ -198,7 +204,7 @@ export function FairDateManagementPage() {
     setPublishError(null);
     try {
       const result = await publishFair(fairId);
-      setPublishResult(result);
+      setPublishedAt(result.publishedAt);
     } catch (error) {
       setPublishError(error instanceof ApiError ? error.message : "공개 처리에 실패했어요.");
     } finally {
@@ -229,15 +235,15 @@ export function FairDateManagementPage() {
             <div>
               <p className="text-sm font-bold text-ink">행사 공개</p>
               <p className="text-xs text-muted">
-                {publishResult
-                  ? `공개됨 (${new Date(publishResult.publishedAt).toLocaleString("ko-KR")})`
+                {publishedAt
+                  ? `공개됨 (${new Date(publishedAt).toLocaleString("ko-KR")})`
                   : "공개하면 관람객이 티켓 예매 화면에서 이 행사를 보고 예약할 수 있어요. 개설비 결제가 끝난 뒤에만 공개할 수 있어요."}
               </p>
               {publishError && <p className="mt-1 text-xs font-bold text-primary-strong">{publishError}</p>}
             </div>
           </div>
-          <Button variant="outline" onClick={handlePublish} disabled={publishing || publishResult !== null}>
-            {publishing ? "공개 처리 중..." : publishResult ? "공개됨" : "행사 공개하기"}
+          <Button variant="outline" onClick={handlePublish} disabled={publishing || publishedAt !== null}>
+            {publishing ? "공개 처리 중..." : publishedAt ? "공개됨" : "행사 공개하기"}
           </Button>
         </div>
       )}

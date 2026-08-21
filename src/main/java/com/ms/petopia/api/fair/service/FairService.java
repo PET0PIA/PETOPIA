@@ -577,6 +577,19 @@ public class FairService {
         return new PublishFairResponse(fairId, fair.getStatus().name(), now);
     }
 
+    /**
+     * 운영일·정원 관리 화면이 진입 시 지금 공개 상태를 미리 알기 위해 쓴다. {@link #publish}와
+     * 같은 접근 검증({@link FairAdminAccessGuard#checkAssigned})을 쓰되, 상태를 바꾸지 않고
+     * 그대로 조회만 한다 - 이 화면이 EVENT_ADMIN도 접근 가능해서(publish와 동일 권한),
+     * SUPER_ADMIN 전용인 {@link #getApplication}은 쓸 수 없다.
+     */
+    @Transactional(readOnly = true)
+    public PublishFairResponse getPublishStatus(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
+        Fair fair = findFairOrThrow(fairId);
+        return new PublishFairResponse(fairId, fair.getStatus().name(), fair.getPublishedAt());
+    }
+
     private void validateReviewRequest(Long reviewerId, ReviewFairApplicationRequest request) {
         if (reviewerId == null || reviewerId <= 0 || request == null || request.decision() == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
