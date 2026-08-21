@@ -35,6 +35,16 @@
          ORDER BY fd.operation_date ASC
     </select>
 
+    <!--
+        내 예약 목록. 만료(EXPIRED) 예약은 여기서 제외한다.
+
+        예전에는 프론트가 받아온 페이지에서 걸러냈다. 그러면 만료 건이 페이지 정원을 차지해
+        그 뒤의 유효한 예약이 화면에 나올 방법이 없었고(목록 화면은 첫 페이지만 받는다),
+        totalElements·hasNext도 실제 표시 건수와 어긋났다. 그래서 숨김 규칙을 여기로 모았다.
+
+        취소(CANCELED)는 제외하지 않는다 - 결제·환불 내역을 다시 확인할 일이 있어 목록에 남긴다.
+        아래 countMyReservations의 조건과 반드시 같아야 한다(한쪽만 걸면 개수와 목록이 어긋난다).
+    -->
     <select id="selectMyReservations" resultType="ReservationListRow">
         SELECT r.reservation_id
              , f.name AS fair_name
@@ -56,14 +66,17 @@
      LEFT JOIN entry_records er
             ON er.reservation_id = r.reservation_id
          WHERE r.user_id = #{userId}
+           AND r.status != 'EXPIRED'
          ORDER BY r.created_at DESC, r.reservation_id DESC
          LIMIT #{limit} OFFSET #{offset}
     </select>
 
+    <!-- selectMyReservations와 같은 조건으로 센다(위 주석 참고). -->
     <select id="countMyReservations" resultType="long">
         SELECT COUNT(*)
           FROM reservations
          WHERE user_id = #{userId}
+           AND status != 'EXPIRED'
     </select>
 
     <select id="selectReservationForOwner" resultType="ReservationListRow">
