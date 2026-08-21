@@ -55,7 +55,7 @@ export function VisitStatisticsPage() {
   return (
     <div className="mx-auto max-w-6xl py-2">
       {fromAdminDashboard && (
-        <Link to="/admin" className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-primary-strong">
+        <Link to="/admin/dashboard" className="mb-4 inline-flex items-center gap-1 text-sm font-bold text-muted hover:text-primary-strong">
           <ArrowLeft size={16} />
           전체 운영 대시보드로
         </Link>

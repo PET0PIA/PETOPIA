@@ -26,6 +26,7 @@ import { AdminAccountsPage } from "../pages/admin/AdminAccountsPage";
 import { AdminChatPage } from "../pages/admin/AdminChatPage";
 import { AdminChatSettingsPage } from "../pages/admin/AdminChatSettingsPage";
 import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
+import { AdminFairReservationStatusPage } from "../pages/admin/AdminFairReservationStatusPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
 import { PaymentDetailPage } from "../pages/payment/PaymentDetailPage";
@@ -305,6 +306,7 @@ export function AppRouter() {
             />
             <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="dashboard/fairs/:fairId" element={<VisitStatisticsPage />} />
+            <Route path="dashboard/fairs/:fairId/reservations" element={<AdminFairReservationStatusPage />} />
             <Route path="fair-applications" element={<FairApplicationReviewPage />} />
             <Route path="audit-logs" element={<AuditLogPage />} />
             <Route path="payments" element={<PaymentDetailPage />} />
