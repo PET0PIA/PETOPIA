@@ -247,7 +247,7 @@ export function CancelRequestReviewPage() {
               <p className="text-sm text-primary-strong">{detailError}</p>
             ) : applicationDetail?.applicationId === selectedRequest.applicationId ? (
               <>
-                <div className="rounded-card border border-line bg-page p-4">
+                <div className="space-y-3 rounded-card border border-line bg-page p-4">
                   <h3 className="mb-3 text-sm font-extrabold text-muted">선택한 부스 슬롯</h3>
                   <ul className="space-y-2 text-sm text-ink">
                     {applicationDetail.slots.map((slot) => (
@@ -257,12 +257,30 @@ export function CancelRequestReviewPage() {
                       </li>
                     ))}
                   </ul>
-                  {applicationDetail.finalPrice !== null && (
-                    <div className="mt-3 flex justify-between border-t border-line pt-3 text-sm font-bold text-ink">
-                      <span>참가비</span>
-                      <span>{applicationDetail.finalPrice.toLocaleString()}원</span>
-                    </div>
-                  )}
+                  {(() => {
+                    const originalTotal = applicationDetail.slots.reduce((sum, slot) => sum + slot.priceAtSelection, 0);
+                    const discount = applicationDetail.finalPrice !== null ? originalTotal - applicationDetail.finalPrice : 0;
+                    return (
+                      <>
+                        <div className="mt-3 flex justify-between border-t border-line pt-3 text-sm font-bold text-ink">
+                          <span>합계</span>
+                          <span>{originalTotal.toLocaleString()}원</span>
+                        </div>
+                        {applicationDetail.finalPrice !== null && discount > 0 && (
+                          <div className="flex justify-between text-sm text-primary-strong">
+                            <span>할인 적용</span>
+                            <span>-{discount.toLocaleString()}원</span>
+                          </div>
+                        )}
+                        {applicationDetail.finalPrice !== null && (
+                          <div className="flex justify-between border-t border-line pt-3 text-sm font-extrabold text-ink">
+                            <span>최종 참가비</span>
+                            <span>{applicationDetail.finalPrice.toLocaleString()}원</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="rounded-card border border-line bg-page p-5">
