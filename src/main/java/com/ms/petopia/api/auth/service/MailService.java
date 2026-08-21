@@ -45,33 +45,25 @@ public class MailService {
         sendHtmlEmail(to, "[PETOPIA] 이메일 인증코드", "반가워요!", "이메일 인증을 완료해 주세요", content);
     }
 
-    //관리자 계정 발급 메일 (개설비 청구내역 + 결제 링크 포함)
-    public void sendAdminAccountIssueEmail(String to, String tempPassword,
-                                            Long openingFeeAmount, LocalDateTime paymentDueAt, String paymentLink){
-        String safeEmail = escape(to);
-        String safePassword = escape(tempPassword);
+    /**
+     * 새 계정/임시 비밀번호를 발급하던 이전 메일 대신 사용하는 승인 안내 메일이다.
+     * 수신자(to)는 AdminAccountService가 applicantUserId로 조회한 기존 회원 이메일만 넘긴다.
+     */
+    public void sendExistingAdminAssignmentEmail(String to, Long openingFeeAmount,
+                                                  LocalDateTime paymentDueAt, String paymentLink) {
         String safeAmount = escape(String.format("%,d", openingFeeAmount));
         String safeDueAt = escape(paymentDueAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
         String safePaymentLink = escape(paymentLink);
         String content = """
             <p style="margin:0 0 18px;color:#4b5563;font-size:15px;line-height:1.7;">
-              행사 승인이 완료되어 PETOPIA 행사 관리자 계정이 발급되었습니다.
+              행사 승인이 완료되어 현재 PETOPIA 계정에 행사 관리 권한이 추가되었습니다.
             </p>
-            <table role="presentation" style="width:100%%;margin:20px 0;border-collapse:separate;border-spacing:0;border:1px solid #e5e7eb;border-radius:14px;background:#f9fafb;">
-              <tr><td style="padding:18px 20px 8px;color:#6b7280;font-size:12px;">아이디</td><td style="padding:18px 20px 8px;text-align:right;color:#111827;font-size:14px;font-weight:700;">%s</td></tr>
-              <tr><td style="padding:8px 20px 18px;color:#6b7280;font-size:12px;">임시 비밀번호</td><td style="padding:8px 20px 18px;text-align:right;color:#d94848;font-size:16px;font-weight:800;">%s</td></tr>
-            </table>
-            <p style="margin:0 0 22px;color:#6b7280;font-size:13px;line-height:1.7;">보안을 위해 첫 로그인 후 반드시 비밀번호를 변경해 주세요.</p>
             <div style="margin:0 0 22px;padding:18px 20px;border-radius:14px;background:#fff7e6;">
-              <div style="margin-bottom:10px;color:#8a5a00;font-size:13px;font-weight:800;">개설비 청구 내역</div>
-              <div style="color:#4b5563;font-size:14px;line-height:1.8;">결제 금액 <strong style="float:right;color:#111827;">%s원</strong><br>결제 기한 <strong style="float:right;color:#111827;">%s까지</strong></div>
+              결제 금액 <strong>%s원</strong><br>결제 기한 <strong>%s까지</strong>
             </div>
-            <div style="text-align:center;">
-              <a href="%s" style="display:inline-block;padding:13px 26px;border-radius:10px;background:#d94848;color:#ffffff;font-size:14px;font-weight:800;text-decoration:none;">개설비 결제하기</a>
-            </div>
-            """.formatted(safeEmail, safePassword, safeAmount, safeDueAt, safePaymentLink);
-
-        sendHtmlEmail(to, "[PETOPIA] 행사 관리자 계정이 발급되었습니다", "행사 승인이 완료됐어요", "관리자 계정 발급 안내", content);
+            <div style="text-align:center;"><a href="%s" style="display:inline-block;padding:13px 26px;border-radius:10px;background:#d94848;color:#fff;text-decoration:none;">개설비 결제하기</a></div>
+            """.formatted(safeAmount, safeDueAt, safePaymentLink);
+        sendHtmlEmail(to, "[PETOPIA] 행사 승인이 완료되었습니다", "행사 승인이 완료됐어요", "기존 계정으로 행사를 관리해 주세요", content);
     }
 
     //비밀번호 재설정 메일

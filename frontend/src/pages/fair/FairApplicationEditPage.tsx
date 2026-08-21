@@ -19,6 +19,7 @@ import {
   type FairApplicationDetail,
   type UpdateFairApplicationRequest,
 } from "../../api/fair";
+import { getMe } from "../../api/user";
 
 // 신청서 수정(재제출)은 백엔드가 RECEIVED(심사 대기)/REJECTED(반려) 상태에서만 허용한다
 // (FairService#updateApplication 참고) - 최종 판단은 항상 백엔드가 하지만, 화면에서도 미리
@@ -194,11 +195,11 @@ function FairApplicationEditContent({ id }: { id: number }) {
 
   useEffect(() => {
     let alive = true;
-    getMyApplicationDetail(id)
-      .then((res) => {
+    Promise.all([getMyApplicationDetail(id), getMe()])
+      .then(([res, me]) => {
         if (!alive) return;
         setDetail(res);
-        setForm(formStateFromDetail(res));
+        setForm({ ...formStateFromDetail(res), managerEmail: me.email });
       })
       .catch((err: unknown) => {
         if (!alive) return;
@@ -464,7 +465,8 @@ function FairApplicationEditContent({ id }: { id: number }) {
               </div>
               <div>
                 {label("managerEmail", "담당자 이메일", true)}
-                <Input id="managerEmail" type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} required />
+                <Input id="managerEmail" type="email" value={form.managerEmail} readOnly required className="bg-page text-muted" />
+                <p className="mt-1.5 text-xs text-muted">로그인한 계정 이메일은 변경할 수 없어요.</p>
               </div>
             </Card>
           </section>

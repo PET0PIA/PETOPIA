@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { fairAdminNavigation, superAdminNavigation, vendorNavigation, flattenNavigation } from "../config/navigation";
 import { ConsoleHome } from "../components/layout/ConsoleHome";
 import { FairAdminLayout } from "../layouts/FairAdminLayout";
@@ -58,6 +58,7 @@ import { OAuthCallbackPage } from "../pages/auth/OAuthCallbackPage";
 import { MyPage } from "../pages/mypage/MyPage";
 import { EditProfilePage } from "../pages/mypage/EditProfilePage";
 import { PasswordChangePage } from "../pages/mypage/PasswordChangePage";
+import { AdminAccountSettingsPage } from "../pages/mypage/AdminAccountSettingsPage";
 import { PetFormPage } from "../pages/mypage/PetFormPage";
 import { PetDetailPage } from "../pages/mypage/PetDetailPage";
 import { MyReviewsPage } from "../pages/mypage/MyReviewsPage";
@@ -86,6 +87,7 @@ import { ApplicationEditPage } from "../pages/application/ApplicationEditPage";
 import { ParticipationNewPage } from "../pages/application/ParticipationNewPage";
 import { AdvertisingInquiryPage } from "../pages/advertising/AdvertisingInquiryPage";
 import { BusinessReviewPage } from "../pages/admin/BusinessReviewPage";
+import { useAuth } from "../contexts/AuthContext";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
 // 실제 화면이 구현된 경로는 여기서 제외하고 AppRouter에서 직접 라우팅한다.
@@ -137,6 +139,15 @@ function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const title = nav.find((item) => item.path === location.pathname)?.label ?? "관리자 메뉴";
   return <PlaceholderPage title={title} admin />;
 }
+
+function PersonalAccountRoute() {
+  const { user } = useAuth();
+  if (user?.role === "SUPER_ADMIN") {
+    return <Navigate to="/account/settings" replace />;
+  }
+  return <Outlet />;
+}
+
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -149,9 +160,6 @@ export function AppRouter() {
           <Route element={<ProtectedRoute />}>
             <Route path="/fair-applications/new" element={<FairApplicationNewPage />} />
           </Route>
-          <Route path="/fair-applications/me" element={<MyFairApplicationsPage />} />
-          <Route path="/fair-applications/me/:fairId" element={<MyFairApplicationDetailPage />} />
-          <Route path="/fair-applications/me/:fairId/edit" element={<FairApplicationEditPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
@@ -159,20 +167,28 @@ export function AppRouter() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
           <Route element={<ProtectedRoute />}>
-            <Route path="/mypage" element={<MyPage />} />
-            <Route path="/mypage/edit" element={<EditProfilePage />} />
             <Route path="/mypage/password" element={<PasswordChangePage />} />
-            <Route path="/mypage/pets/new" element={<PetFormPage />} />
-            <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
-            <Route path="/mypage/reviews" element={<MyReviewsPage />} />
+            <Route element={<ProtectedRoute roles={["SUPER_ADMIN"]} />}>
+              <Route path="/account/settings" element={<AdminAccountSettingsPage />} />
+            </Route>
+            <Route element={<PersonalAccountRoute />}>
+              <Route path="/mypage" element={<MyPage />} />
+              <Route path="/mypage/edit" element={<EditProfilePage />} />
+              <Route path="/mypage/pets/new" element={<PetFormPage />} />
+              <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
+              <Route path="/mypage/reviews" element={<MyReviewsPage />} />
+              <Route path="/reservations/me" element={<MyReservationsPage />} />
+              <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
+              <Route path="/fair-applications/me" element={<MyFairApplicationsPage />} />
+              <Route path="/fair-applications/me/:fairId" element={<MyFairApplicationDetailPage />} />
+              <Route path="/fair-applications/me/:fairId/edit" element={<FairApplicationEditPage />} />
+              <Route path="/booths/favorites/me" element={<BoothFavoritesPage />} />
+              <Route path="/booths/visited/me" element={<MyVisitedBoothsPage />} />
+            </Route>
             <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
-            <Route path="/booths/favorites/me" element={<BoothFavoritesPage />} />
-            <Route path="/booths/visited/me" element={<MyVisitedBoothsPage />} />
             {/* 부스 콘솔로 이관: 옛 경로는 콘솔로 리다이렉트(북마크·내부 링크 호환). */}
             <Route path="/booths/me" element={<Navigate to="/vendor/booths" replace />} />
           </Route>
-          <Route path="/reservations/me" element={<MyReservationsPage />} />
-          <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
           {/* 행사 목록은 예정·진행·종료를 상태 배지로 구분하는 통합 목록 하나뿐이다.
               옛 "지난 행사" 경로(북마크·외부 링크)로 들어와도 같은 목록으로 넘긴다. */}
           <Route path="/fairs/upcoming" element={<FairListPage />} />

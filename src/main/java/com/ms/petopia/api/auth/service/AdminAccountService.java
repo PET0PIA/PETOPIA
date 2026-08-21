@@ -32,12 +32,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/*
-    행사 신청이 승인될 때 관리자 계정을 새로 발급해 주는 service
-    행사 신청 시의(행사 테이블의) name, email, phone의 값을 가지고 users 테이블에 새 계정을 만든다.
-    users.email과 행사의 email은 같을 수 없다(이미 가입된 메일도 안 됨)
- */
-
 @Service
 @RequiredArgsConstructor
 public class AdminAccountService {
@@ -54,53 +48,40 @@ public class AdminAccountService {
     @Value("${app.frontend-url}")
     private String frontendUrl;
 
-    //행사 관리자 계정 생성
-    //openingFeeAmount/paymentDueAt은 계정 발급 메일에 개설비 청구내역을 함께 안내하기 위해
-    //받는다 - 호출부(FairService#review)가 이미 승인 시 확정한 값을 그대로 넘긴다.
+    /**
+     * 행사 승인 시 별도의 관리자 계정을 만들지 않고 신청자의 기존 계정을 그대로 사용한다.
+     * USER는 EVENT_ADMIN으로 승격하고, 이미 EVENT_ADMIN이면 role을 유지한 채 담당 행사만
+     * 추가한다. 신청서의 managerEmail은 연락처 입력값일 수 있으므로 권한 부여나 메일 수신자
+     * 판단에 사용하지 않고, applicantUserId로 조회한 회원의 이메일만 신뢰한다.
+     */
     @Transactional
-    public Long issueEventAdminAccount(Long fairId, Long applicantUserId,
-                                       String managerName, String managerEmail, String managerPhone,
-                                       Long openingFeeAmount, LocalDateTime paymentDueAt) {
-
-        if(authMapper.selectUserByEmail(managerEmail) != null) {
-            throw new CommonException(ErrorCode.DUPLICATED_EMAIL);
-        }
-
-        //생일, 동의 약관 등 부가 정보는 신청자 정보에서 빼와서 넣는다.
+    public Long assignApplicantAsEventAdmin(Long fairId, Long applicantUserId,
+                                            Long openingFeeAmount, LocalDateTime paymentDueAt) {
         User applicant = authMapper.selectUserById(applicantUserId);
-
-        //행사에서 phone은 null 가능이라 null 이면 신청자 정보에서 뺴와서 넣는다.
-        String phone = (managerPhone != null && !managerPhone.isBlank()) ? managerPhone : applicant.getPhone();
-
-        String tempPassword = TokenHashUtil.generateRawToken();
-        String passwordHash = passwordEncoder.encode(tempPassword);
-
-        User newAdmin = User.builder()
-                .email(managerEmail)
-                .passwordHash(passwordHash)
-                .nickname(managerName)
-                .birthDate(applicant.getBirthDate())
-                .phone(phone)
-                .gender(applicant.getGender())
-                .address(applicant.getAddress())
-                .agreedTerms(applicant.isAgreedTerms())
-                .agreedPrivacy(applicant.isAgreedPrivacy())
-                .emailVerified(true)
-                .role("EVENT_ADMIN")
-                .status("ACTIVE")
-                .createdAt(LocalDateTime.now())
-                .build();
-        try {
-            authMapper.insertUser(newAdmin);
-        } catch (DuplicateKeyException e) {
-            //동시 요청이 겹쳐 email UNIQUE 제약에 걸린 경우 500 대신 409로 응답
-            throw new CommonException(ErrorCode.DUPLICATED_EMAIL, e);
+        if (applicant == null) {
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
         }
+        if ("USER".equals(applicant.getRole())) {
+            // 기존 개인 데이터는 users 행에 그대로 남고 role만 변경된다.
+            authMapper.updateUserRole(applicantUserId, "EVENT_ADMIN");
+        } else if (!"EVENT_ADMIN".equals(applicant.getRole())) {
+            // VENDOR/SUPER_ADMIN 등 정책상 행사 신청 대상이 아닌 역할은 승인 단계에서도 방어한다.
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+        // 한 EVENT_ADMIN이 여러 행사를 맡을 수 있으므로 계정을 추가 생성하지 않고 배정 행만 늘린다.
+        insertAssignment(fairId, applicantUserId, applicantUserId);
+        String paymentLink = frontendUrl + "/payments/fair-opening-fee/" + fairId;
+        mailService.sendExistingAdminAssignmentEmail(
+                applicant.getEmail(), openingFeeAmount, paymentDueAt, paymentLink
+        );
+        return applicantUserId;
+    }
 
-        //페어-관리자 연결 테이블에 값 넣기
+    /** 역할은 계정 단위, 실제 관리 범위는 fair_admin_assignments의 행사 단위로 제한한다. */
+    private void insertAssignment(Long fairId, Long adminUserId, Long requesterUserId) {
         FairAdminAssignment fairAdminAssignment = FairAdminAssignment.builder()
-                .adminUserId(newAdmin.getUserId())
-                .requesterUserId(applicant.getUserId())
+                .adminUserId(adminUserId)
+                .requesterUserId(requesterUserId)
                 .fairId(fairId)
                 .build();
         try {
@@ -109,15 +90,6 @@ public class AdminAccountService {
             //동시 승인 요청이 겹쳐 fair_id UNIQUE 제약에 걸린 경우 500 대신 409로 응답
             throw new CommonException(ErrorCode.FAIR_ADMIN_ALREADY_ASSIGNED, e);
         }
-
-        //비밀번호 + 개설비 청구내역 + 결제 링크가 담긴 메일 전송. 담당자는 신청자 본인이
-        //아니라 새로 발급된 이 계정이라(fairId가 이미 정해져 있음) 행사 선택 없이 바로
-        //그 행사의 결제 페이지로 보낸다.
-        String paymentLink = frontendUrl + "/payments/fair-opening-fee/" + fairId;
-        mailService.sendAdminAccountIssueEmail(managerEmail, tempPassword, openingFeeAmount, paymentDueAt, paymentLink);
-
-        return newAdmin.getUserId();
-
     }
 
     //SUPER_ADMIN 전용 로그인

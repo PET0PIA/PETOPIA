@@ -35,7 +35,7 @@ export interface FairOpeningFeeSummary {
 
 /**
  * 개설비 결제 페이지 전용 요약 조회(EVENT_ADMIN/SUPER_ADMIN, 그 행사 담당자만). 신청자 본인이
- * 아니라 승인 시 새로 발급된 담당자 계정이 보는 화면이라 getMyApplicationDetail을 쓸 수 없다.
+ * 아니라 승인 후 담당자로 배정된 계정이 보는 화면이라 getMyApplicationDetail을 쓸 수 없다.
  */
 export function getFairOpeningFeeSummary(fairId: number) {
   return apiClient.get<FairOpeningFeeSummary>(`/api/fairs/${fairId}/opening-fee`);
