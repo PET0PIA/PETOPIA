@@ -16,7 +16,6 @@ import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.TokenHashUtil;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,7 +28,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.Map;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -38,15 +36,11 @@ public class AdminAccountService {
 
     private final AuthMapper authMapper;
     private final FairAdminAssignmentMapper fairAdminAssignmentMapper;
-    private final MailService mailService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final AccountSuspensionStore accountSuspensionStore;
     private final AuditLogService auditLogService;
-
-    @Value("${app.frontend-url}")
-    private String frontendUrl;
 
     /**
      * 행사 승인 시 별도의 관리자 계정을 만들지 않고 신청자의 기존 계정을 그대로 사용한다.
@@ -55,8 +49,7 @@ public class AdminAccountService {
      * 판단에 사용하지 않고, applicantUserId로 조회한 회원의 이메일만 신뢰한다.
      */
     @Transactional
-    public Long assignApplicantAsEventAdmin(Long fairId, Long applicantUserId,
-                                            Long openingFeeAmount, LocalDateTime paymentDueAt) {
+    public Long assignApplicantAsEventAdmin(Long fairId, Long applicantUserId) {
         User applicant = authMapper.selectUserById(applicantUserId);
         if (applicant == null) {
             throw new CommonException(ErrorCode.USER_NOT_FOUND);
@@ -70,10 +63,6 @@ public class AdminAccountService {
         }
         // 한 EVENT_ADMIN이 여러 행사를 맡을 수 있으므로 계정을 추가 생성하지 않고 배정 행만 늘린다.
         insertAssignment(fairId, applicantUserId, applicantUserId);
-        String paymentLink = frontendUrl + "/payments/fair-opening-fee/" + fairId;
-        mailService.sendExistingAdminAssignmentEmail(
-                applicant.getEmail(), openingFeeAmount, paymentDueAt, paymentLink
-        );
         return applicantUserId;
     }
 

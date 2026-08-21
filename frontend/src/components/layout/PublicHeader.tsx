@@ -95,14 +95,24 @@ const accountMenuItems: { label: string; path: string }[] = [
 
 // 역할별 콘솔 진입은 옆의 "전환" 버튼이 맡고, 개인 기능은 dev에서 추가된 마이페이지
 // 사이드바가 맡는다. SUPER_ADMIN만 개인 마이페이지 대신 별도 계정 관리 화면으로 보낸다.
-function ProfileMenu({ name, profileEntry, onLogout }: { name: string; profileEntry: { label: string; path: string }; onLogout: () => void }) {
+function ProfileMenu({
+  name,
+  profileEntry,
+  accountItems,
+  onLogout,
+}: {
+  name: string;
+  profileEntry: { label: string; path: string };
+  accountItems: { label: string; path: string }[];
+  onLogout: () => void;
+}) {
   const navigate = useNavigate();
   // 역할별 콘솔·업무 진입은 헤더의 "전환" 버튼(consoleEntryForRole)으로 옮겼다.
   // 프로필 메뉴엔 누구에게나 공통인 개인 계정 항목만 둔다.
   // 사업자 등록 현황 메뉴는 한 번이라도 사업자 신청을 했을 경우 나오는 메뉴이다.
   const items: { label: string; onSelect: () => void }[] = [
     { label: profileEntry.label, onSelect: () => navigate(profileEntry.path) },
-    ...accountMenuItems.map(({ label, path }) => ({ label, onSelect: () => navigate(path) })),
+    ...accountItems.map(({ label, path }) => ({ label, onSelect: () => navigate(path) })),
     { label: "로그아웃", onSelect: onLogout },
   ];
   return <DropdownMenu label={name} items={items} />;
@@ -164,6 +174,8 @@ export function PublicHeader() {
   const profileEntry = isManagementAccount
     ? { label: "계정 관리", path: "/account/settings" }
     : { label: "마이페이지", path: "/mypage" };
+  // SUPER_ADMIN은 개인 마이페이지를 사용하지 않으므로 예약 같은 개인 활동 메뉴도 숨긴다.
+  const visibleAccountMenuItems = isManagementAccount ? [] : accountMenuItems;
   const consoleEntry = consoleEntryForRole(role);
   // requiredRole로 자식 메뉴를 거르고, 남은 자식이 없고 자체 경로도 없는 부모 메뉴는 숨긴다.
   const visibleNavigation = publicNavigation
@@ -216,7 +228,12 @@ export function PublicHeader() {
                 <Bell size={19} />
                 {unreadCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}
               </button>
-              <ProfileMenu name={nickname ?? "내 계정"} profileEntry={profileEntry} onLogout={handleLogout} />
+              <ProfileMenu
+                name={nickname ?? "내 계정"}
+                profileEntry={profileEntry}
+                accountItems={visibleAccountMenuItems}
+                onLogout={handleLogout}
+              />
               {/* 역할별 콘솔 전환 버튼 - 프로필 바로 오른쪽에 둔다. */}
               {consoleEntry && (
                 <button
@@ -290,7 +307,7 @@ export function PublicHeader() {
                     {consoleEntry.label}
                   </button>
                 )}
-                {accountMenuItems.map(({ label, path }) => (
+                {visibleAccountMenuItems.map(({ label, path }) => (
                   <button key={path} type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go(path)}>
                     {label}
                   </button>

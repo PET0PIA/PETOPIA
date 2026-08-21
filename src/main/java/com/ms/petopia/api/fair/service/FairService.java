@@ -19,6 +19,7 @@ import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.service.AdminAccountService;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
@@ -34,6 +35,7 @@ import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -52,6 +54,9 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class FairService {
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     /**
      * 승인 시 개설비 결제 기한의 기본값(일). 검토자가 승인 시 {@code paymentDueDays}를 따로
@@ -81,6 +86,7 @@ public class FairService {
     private final FairTimeProvider timeProvider;
     private final StorageService storageService;
     private final AdminAccountService adminAccountService;
+    private final MailService mailService;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
     private final FairAdminAccessGuard fairAdminAccessGuard;
@@ -456,9 +462,7 @@ public class FairService {
         }
 
         if (approved) {
-            adminAccountService.assignApplicantAsEventAdmin(
-                    fairId, fair.getApplicantUserId(), update.getOpeningFeeAmount(), update.getPaymentDueAt()
-            );
+            adminAccountService.assignApplicantAsEventAdmin(fairId, fair.getApplicantUserId());
         }
 
         auditLogService.record(
@@ -476,14 +480,23 @@ public class FairService {
         );
 
         Long applicantUserId = fair.getApplicantUserId();
+        User applicant = authMapper.selectUserById(applicantUserId);
+        if (applicant == null || isBlank(applicant.getEmail())) {
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
+        }
+        String applicantEmail = applicant.getEmail();
         if (approved) {
+            String paymentPath = "/payments/fair-opening-fee/" + fairId;
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_APPROVED,
                     "행사 신청이 승인되었습니다",
-                    "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.");
+                    "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.",
+                    () -> mailService.sendFairApprovalEmail(applicantEmail,
+                            update.getOpeningFeeAmount(), update.getPaymentDueAt(), frontendUrl + paymentPath));
         } else {
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_REJECTED,
                     "행사 신청이 반려되었습니다",
-                    "반려 사유: " + update.getRejectReason());
+                    "반려 사유: " + update.getRejectReason(),
+                    () -> mailService.sendFairRejectionEmail(applicantEmail, update.getRejectReason()));
         }
 
         return new ReviewFairApplicationResponse(
@@ -497,7 +510,7 @@ public class FairService {
     }
 
     private void notifyFairReviewAfterCommit(Long recipientUserId, NotificationType type,
-                                             String title, String body) {
+                                             String title, String body, Runnable emailAction) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -509,11 +522,17 @@ public class FairService {
                             title,
                             body,
                             null,
-                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            List.of(DeliveryChannel.IN_APP),
                             null
                     ));
                 } catch (Exception e) {
                     log.error("행사 심사 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
+                }
+                // 인앱 알림과 별도로, PETOPIA HTML 템플릿 이메일을 한 번만 발송한다.
+                try {
+                    emailAction.run();
+                } catch (Exception e) {
+                    log.error("행사 심사 이메일 발송 실패. recipientUserId={}, type={}", recipientUserId, type, e);
                 }
             }
         });

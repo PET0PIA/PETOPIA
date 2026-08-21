@@ -12,7 +12,6 @@ import com.ms.petopia.api.auth.mapper.FairAdminAssignmentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -20,10 +19,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,9 +38,6 @@ class AdminAccountServiceTest {
 
     private static final Long FAIR_ID = 10L;
     private static final Long APPLICANT_USER_ID = 5L;
-    private static final Long OPENING_FEE_AMOUNT = 500_000L;
-    private static final LocalDateTime PAYMENT_DUE_AT = LocalDateTime.of(2026, 8, 20, 18, 0);
-    private static final String FRONTEND_URL = "http://localhost:5173";
 
     private static final Long ADMIN_USER_ID = 1L;
     private static final String ADMIN_EMAIL = "admin@petopia.com";
@@ -52,8 +46,6 @@ class AdminAccountServiceTest {
     private AuthMapper authMapper;
     @Mock
     private FairAdminAssignmentMapper fairAdminAssignmentMapper;
-    @Mock
-    private MailService mailService;
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
@@ -67,30 +59,19 @@ class AdminAccountServiceTest {
     @InjectMocks
     private AdminAccountService adminAccountService;
 
-    @BeforeEach
-    void setUp() {
-        //@Value 필드는 Spring이 주입하므로 테스트에서는 ReflectionTestUtils로 세팅
-        ReflectionTestUtils.setField(adminAccountService, "frontendUrl", FRONTEND_URL);
-    }
-
     @Test
     void assignApplicantAsEventAdmin_USER이면_역할변경후_행사에배정한다() {
         User applicant = applicant();
         applicant.setRole("USER");
         given(authMapper.selectUserById(APPLICANT_USER_ID)).willReturn(applicant);
 
-        Long result = adminAccountService.assignApplicantAsEventAdmin(
-                FAIR_ID, APPLICANT_USER_ID, OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
+        Long result = adminAccountService.assignApplicantAsEventAdmin(FAIR_ID, APPLICANT_USER_ID);
 
         assertThat(result).isEqualTo(APPLICANT_USER_ID);
         verify(authMapper).updateUserRole(APPLICANT_USER_ID, "EVENT_ADMIN");
         ArgumentCaptor<FairAdminAssignment> captor = ArgumentCaptor.forClass(FairAdminAssignment.class);
         verify(fairAdminAssignmentMapper).insertFairAdminAssignment(captor.capture());
         assertThat(captor.getValue().getAdminUserId()).isEqualTo(APPLICANT_USER_ID);
-        verify(mailService).sendExistingAdminAssignmentEmail(
-                eq(applicant.getEmail()), eq(OPENING_FEE_AMOUNT), eq(PAYMENT_DUE_AT),
-                eq(FRONTEND_URL + "/payments/fair-opening-fee/" + FAIR_ID)
-        );
         verify(authMapper, never()).insertUser(any());
     }
 
@@ -100,13 +81,10 @@ class AdminAccountServiceTest {
         applicant.setRole("EVENT_ADMIN");
         given(authMapper.selectUserById(APPLICANT_USER_ID)).willReturn(applicant);
 
-        adminAccountService.assignApplicantAsEventAdmin(
-                FAIR_ID, APPLICANT_USER_ID, OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
+        adminAccountService.assignApplicantAsEventAdmin(FAIR_ID, APPLICANT_USER_ID);
 
         verify(authMapper, never()).updateUserRole(anyLong(), anyString());
         verify(fairAdminAssignmentMapper).insertFairAdminAssignment(any());
-        verify(mailService).sendExistingAdminAssignmentEmail(
-                eq(applicant.getEmail()), eq(OPENING_FEE_AMOUNT), eq(PAYMENT_DUE_AT), anyString());
     }
 
     private User applicant() {
