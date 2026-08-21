@@ -7,7 +7,7 @@ import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { Textarea } from "../../components/ui/Textarea";
+import { Input } from "../../components/ui/Input";
 import { ApiError } from "../../api/client";
 import { getMyPets, type Pet } from "../../api/pet";
 import {
@@ -19,6 +19,20 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 
 type Tab = "booths" | "routes";
+
+const NEED_OPTIONS = [
+  { value: "사료&간식", description: "사료, 간식, 음료 등" },
+  { value: "리빙용품", description: "가구, 하우스, 방석, 캣타워, 캣휠 등" },
+  { value: "장난감", description: "공, 터널, 낚싯대, 노즈워크 등" },
+  { value: "의류&악세사리", description: "옷, 목걸이, 모자 등" },
+  { value: "펫테크", description: "자동급수기, 자동급식기, 공기청정기, 청소기 등" },
+  { value: "서비스", description: "장례, 사진촬영, 보험 등" },
+  { value: "외출용품", description: "개모차, 하네스, 슬링백, 카시트 등" },
+  { value: "미용용품", description: "목욕용품, 빗, 드라이기 등" },
+  { value: "위생&배변용품", description: "탈취제, 모래, 화장실, 배변패드 등" },
+  { value: "건강", description: "영양제, 보조기, 진단키트 등" },
+  { value: "여행", description: "반려동물 동반 호텔, 항공, 캠핑 등" },
+] as const;
 
 export function BoothRecommendationPage() {
   const { fairId } = useParams<{ fairId: string }>();
@@ -46,6 +60,7 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
   const [petsLoaded, setPetsLoaded] = useState(false);
   const [selectedPetIds, setSelectedPetIds] = useState<number[]>([]);
   const [need, setNeed] = useState("");
+  const [customNeed, setCustomNeed] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -86,9 +101,9 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const trimmedNeed = need.trim();
+    const trimmedNeed = (need === "기타" ? customNeed : need).trim();
     if (selectedPetIds.length === 0 && trimmedNeed.length === 0) {
-      setFormError("반려동물을 선택하거나, 필요한 것을 입력해 주세요.");
+      setFormError("반려동물을 선택하거나, 필요한 제품·서비스를 선택해 주세요.");
       return;
     }
 
@@ -165,16 +180,82 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
             </div>
           )}
 
-          <div>
-            <label htmlFor="rec-need" className="mb-1.5 block text-sm font-bold text-ink">필요한 것 (선택)</label>
-            <Textarea
-              id="rec-need"
-              placeholder="예: 강아지 관절 영양제, 고양이 장난감처럼 찾는 걸 적어주세요."
-              maxLength={100}
-              value={need}
-              onChange={(event) => setNeed(event.target.value)}
-            />
-          </div>
+          <fieldset>
+            <legend className="mb-2 block text-sm font-bold text-ink">필요한 제품·서비스 (선택)</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label
+                className={`flex cursor-pointer items-center gap-2 rounded-button border p-3 text-sm transition-colors ${
+                  need === "" ? "border-primary-strong bg-primary-soft ring-2 ring-primary ring-offset-1 ring-offset-page" : "border-line bg-card hover:bg-surface-alt"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="recommendation-need"
+                  value=""
+                  checked={need === ""}
+                  onChange={() => {
+                    setNeed("");
+                    setCustomNeed("");
+                  }}
+                  className="accent-primary-strong"
+                />
+                선택 안 함
+              </label>
+              {NEED_OPTIONS.map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex cursor-pointer items-start gap-2 rounded-button border p-3 transition-colors ${
+                    need === option.value
+                      ? "border-primary-strong bg-primary-soft ring-2 ring-primary ring-offset-1 ring-offset-page"
+                      : "border-line bg-card hover:bg-surface-alt"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="recommendation-need"
+                    value={option.value}
+                    checked={need === option.value}
+                    onChange={(event) => setNeed(event.target.value)}
+                    className="mt-0.5 accent-primary-strong"
+                  />
+                  <span>
+                    <span className="block text-sm font-bold text-ink">{option.value}</span>
+                    {option.description && <span className="mt-0.5 block text-xs leading-5 text-muted">({option.description})</span>}
+                  </span>
+                </label>
+              ))}
+              <label
+                className={`flex cursor-pointer items-start gap-2 rounded-button border p-3 transition-colors ${
+                  need === "기타"
+                    ? "border-primary-strong bg-primary-soft ring-2 ring-primary ring-offset-1 ring-offset-page"
+                    : "border-line bg-card hover:bg-surface-alt"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="recommendation-need"
+                  value="기타"
+                  checked={need === "기타"}
+                  onChange={() => setNeed("기타")}
+                  className="mt-0.5 accent-primary-strong"
+                />
+                <span>
+                  <span className="block text-sm font-bold text-ink">기타</span>
+                  <span className="mt-0.5 block text-xs leading-5 text-muted">원하는 제품이나 서비스를 직접 입력</span>
+                </span>
+              </label>
+            </div>
+            {need === "기타" && (
+              <Input
+                className="mt-3"
+                value={customNeed}
+                onChange={(event) => setCustomNeed(event.target.value)}
+                placeholder="예: 반려동물 전용 응급키트"
+                maxLength={100}
+                aria-label="기타 필요한 제품이나 서비스"
+              />
+            )}
+          </fieldset>
 
           {formError && <p className="text-sm font-bold text-primary-strong">{formError}</p>}
 

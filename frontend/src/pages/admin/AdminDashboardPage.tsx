@@ -1,4 +1,4 @@
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Ticket } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
@@ -119,6 +119,7 @@ export function AdminDashboardPage() {
                     <th className="px-4 py-3">운영 기간</th>
                     <th className="px-4 py-3">확정 예약</th>
                     <th className="px-4 py-3">방문자</th>
+                    <th className="px-4 py-3"><span className="sr-only">예약 현황</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -135,6 +136,15 @@ export function AdminDashboardPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-ink">{fair.operationStartDate} ~ {fair.operationEndDate}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-ink">{fair.totalReservations.toLocaleString("ko-KR")}건</td>
                       <td className="whitespace-nowrap px-4 py-3 text-ink">{fair.totalVisitors.toLocaleString("ko-KR")}명</td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <Link
+                          to={`/admin/dashboard/fairs/${fair.fairId}/reservations`}
+                          className="inline-flex items-center gap-1 text-sm font-bold text-primary-strong hover:underline"
+                        >
+                          <Ticket size={14} />
+                          예약 현황 보기
+                        </Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

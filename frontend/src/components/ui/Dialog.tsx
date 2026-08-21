@@ -110,5 +110,6 @@ export function Dialog({ open, onClose, title, size = "md", children }: DialogPr
 
   if (!open) return null;
 
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className={`surface w-full ${sizeClass[size]} p-6`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><div className="mb-4 flex items-center justify-between"><h2 id={titleId} className="text-lg font-extrabold">{title}</h2><button type="button" aria-label="대화상자 닫기" className="rounded-button p-2 hover:bg-page" onClick={onClose}><X size={18} /></button></div>{children}</section></div>;
+  // 배경(바깥 영역) 클릭으로는 닫히지 않는다 - X 버튼이나 취소 버튼(children이 제공)으로만 닫힌다.
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 p-4" role="presentation"><section ref={dialogRef} className={`surface w-full ${sizeClass[size]} p-6`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><div className="mb-4 flex items-center justify-between"><h2 id={titleId} className="text-lg font-extrabold">{title}</h2><button type="button" aria-label="대화상자 닫기" className="rounded-button p-2 hover:bg-page" onClick={onClose}><X size={18} /></button></div>{children}</section></div>;
 }

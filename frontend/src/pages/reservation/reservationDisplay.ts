@@ -30,9 +30,6 @@ export const reservationStatusTones: Record<ReservationStatus, BadgeTone> = {
 /** 카드 전체를 흐릿하게(지난 예약 느낌) 처리할 상태. */
 export const inactiveReservationStatuses: ReservationStatus[] = ["CHECKED_IN", "CANCELED", "EXPIRED"];
 
-/** 내 예약 목록에서 아예 감출 상태(더 이상 유효하지 않은 지난 예약). */
-export const hiddenFromListReservationStatuses: ReservationStatus[] = ["CANCELED", "EXPIRED"];
-
 /** 예약 유형 한글 라벨. */
 export const reservationTypeLabels: Record<ReservationType, string> = {
   ADVANCE: "사전예약",

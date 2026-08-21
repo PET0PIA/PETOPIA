@@ -58,11 +58,13 @@ class SettlementExportServiceTest {
             assertThat(header.getCell(6).getStringCellValue()).isEqualTo("정산액");
 
             Row confirmedRow = sheet.getRow(1);
-            assertThat(confirmedRow.getCell(0).getStringCellValue()).isEqualTo("1");
-            assertThat(confirmedRow.getCell(1).getStringCellValue()).isEqualTo("20");
-            assertThat(confirmedRow.getCell(6).getStringCellValue()).isEqualTo("123500");
+            assertThat(confirmedRow.getCell(0).getNumericCellValue()).isEqualTo(1.0);
+            assertThat(confirmedRow.getCell(1).getNumericCellValue()).isEqualTo(20.0);
+            assertThat(confirmedRow.getCell(4).getNumericCellValue()).isEqualTo(5.0); // 수수료율 0.05 -> 5.0%
+            assertThat(confirmedRow.getCell(6).getNumericCellValue()).isEqualTo(123500.0);
             assertThat(confirmedRow.getCell(7).getStringCellValue()).isEqualTo("CONFIRMED");
-            assertThat(confirmedRow.getCell(9).getStringCellValue()).isEqualTo("99");
+            assertThat(confirmedRow.getCell(8).getLocalDateTimeCellValue()).isEqualTo(LocalDateTime.of(2026, 8, 13, 10, 0));
+            assertThat(confirmedRow.getCell(9).getNumericCellValue()).isEqualTo(99.0);
 
             Row pendingRow = sheet.getRow(2);
             assertThat(pendingRow.getCell(8).getStringCellValue()).isEqualTo("-");

@@ -22,6 +22,7 @@ public class ReservationQueryService {
     private static final String CHECKED_IN = "CHECKED_IN";
     private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final String ADVANCE = "ADVANCE";
+    private static final String PAYMENT_COMPLETED = "COMPLETED";
     private static final int MAX_PAGE_SIZE = 50;
 
     private final ReservationMapper reservationMapper;
@@ -117,8 +118,29 @@ public class ReservationQueryService {
                 row.getReservedAt(),
                 row.getCheckedInAt(),
                 canChangeVisitDate,
-                canCancel
+                canCancel,
+                row.getPaymentId(),
+                paymentMethodLabel(row)
         );
+    }
+
+    /**
+     * 상세 화면에 그대로 뿌릴 결제수단 문구를 만든다. 결제 행이 없는 무료 예약이면 null이고,
+     * 그때 화면은 결제 줄을 아예 그리지 않는다.
+     *
+     * payment.method는 결제 완료 전에는 우리가 넣어둔 임시값 "TOSS"라서 그대로 보여주면
+     * 사용자에게 의미 없는 문자열이 뜬다. 그래서 완료된 결제만 실제 수단을 노출한다.
+     *
+     * 환불된 예약은 결제 행이 COMPLETED로 남으므로(환불은 refund 행으로 기록) 수단이 그대로
+     * 보인다 - "무엇으로 결제했었는지"는 취소 후에도 남아야 하는 정보다.
+     */
+    private String paymentMethodLabel(ReservationListRow row) {
+        if (row.getPaymentId() == null) return null; // 무료 예약: 결제 행이 아예 없다
+        if (!PAYMENT_COMPLETED.equals(row.getPaymentStatus())) return "결제 전";
+        String method = row.getPaymentMethod();
+        if (method == null || method.isBlank()) return "결제 전";
+        String provider = row.getEasyPayProvider();
+        return provider == null || provider.isBlank() ? method : method + " (" + provider + ")";
     }
 
     private boolean isEnded(ReservationListRow row, LocalDateTime now) {

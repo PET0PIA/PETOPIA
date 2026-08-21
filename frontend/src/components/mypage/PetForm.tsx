@@ -4,7 +4,7 @@ import { ImageUploadField } from "../ui/ImageUploadField";
 import { Input } from "../ui/Input";
 import { Select } from "../ui/Select";
 import { clearDateOnDelete, maxBirthDate } from "../../utils/date";
-import { emptyPetForm, toPetRequest, validatePetForm, type PetFormValues } from "./petFormValues";
+import { CAT_BREEDS, DOG_BREEDS, emptyPetForm, toPetRequest, validatePetForm, type PetFormValues } from "./petFormValues";
 import type { PetRequest } from "../../api/pet";
 
 interface PetFormProps {
@@ -29,6 +29,12 @@ export function PetForm({ initialValues, initialImageUrl, submitLabel, submittin
   function update<K extends keyof PetFormValues>(key: K, value: PetFormValues[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
   }
+
+  function updateSpecies(value: PetFormValues["speciesChoice"]) {
+    setForm((previous) => ({ ...previous, speciesChoice: value, speciesOther: "", breedChoice: "", breedOther: "" }));
+  }
+
+  const breeds = form.speciesChoice === "DOG" ? DOG_BREEDS : form.speciesChoice === "CAT" ? CAT_BREEDS : [];
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,13 +65,36 @@ export function PetForm({ initialValues, initialImageUrl, submitLabel, submittin
         <label htmlFor="pet-species" className="mb-1.5 block text-sm font-bold text-ink">
           종<span className="ml-1 text-primary-strong">*</span>
         </label>
-        <Input id="pet-species" value={form.species} onChange={(e) => update("species", e.target.value)} maxLength={20} placeholder="예: 강아지, 고양이, 햄스터" />
+        <Select id="pet-species" value={form.speciesChoice} onChange={(e) => updateSpecies(e.target.value as PetFormValues["speciesChoice"])}>
+          <option value="">종 선택</option>
+          <option value="DOG">강아지</option>
+          <option value="CAT">고양이</option>
+          <option value="OTHER">기타(직접 입력)</option>
+        </Select>
       </div>
 
-      <div>
+      {form.speciesChoice === "OTHER" && (
+        <div>
+          <label htmlFor="pet-species-other" className="mb-1.5 block text-sm font-bold text-ink">기타 종</label>
+          <Input id="pet-species-other" value={form.speciesOther} onChange={(e) => update("speciesOther", e.target.value)} maxLength={20} placeholder="예: 물고기, 햄스터" />
+        </div>
+      )}
+
+      {form.speciesChoice !== "OTHER" && form.speciesChoice !== "" && <div>
         <label htmlFor="pet-breed" className="mb-1.5 block text-sm font-bold text-ink">품종</label>
-        <Input id="pet-breed" value={form.breed} onChange={(e) => update("breed", e.target.value)} maxLength={50} placeholder="예: 말티즈" />
-      </div>
+        <Select id="pet-breed" value={form.breedChoice} onChange={(e) => update("breedChoice", e.target.value)}>
+          <option value="">선택 안 함</option>
+          {breeds.map((breed) => <option key={breed} value={breed}>{breed}</option>)}
+          <option value="OTHER">기타(직접 입력)</option>
+        </Select>
+      </div>}
+
+      {(form.speciesChoice === "OTHER" || form.breedChoice === "OTHER") && (
+        <div>
+          <label htmlFor="pet-breed-other" className="mb-1.5 block text-sm font-bold text-ink">품종</label>
+          <Input id="pet-breed-other" value={form.breedOther} onChange={(e) => update("breedOther", e.target.value)} maxLength={50} placeholder="품종을 직접 입력해 주세요" />
+        </div>
+      )}
 
       <div>
         <label htmlFor="pet-birthDate" className="mb-1.5 block text-sm font-bold text-ink">생년월일</label>
