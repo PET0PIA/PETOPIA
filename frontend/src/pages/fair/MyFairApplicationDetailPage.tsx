@@ -34,7 +34,7 @@ const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
 
 // "행사 준비중"이 "결제 준비중"으로 오해되기 쉬워서(2026-08-21 사용자 피드백), 개설비 결제가
 // 이미 끝난 상태에는 별도로 "결제완료" 표시를 같이 보여준다.
-const PAID_STATUSES = new Set(["PREPARING", "IN_PROGRESS"]);
+const PAID_STATUSES = new Set(["PREPARING", "IN_PROGRESS", "ENDED"]);
 
 // 취소 승인(FairCancelRequestService#review)은 fairs.canceled_at만 채우고 status는 그대로
 // 두므로, 화면에 보여줄 상태는 status 필드가 아니라 canceledAt 유무로 먼저 판단해야 한다

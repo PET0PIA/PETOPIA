@@ -38,7 +38,6 @@ import { AuditLogPage } from "../pages/admin/AuditLogPage";
 import { SettlementPage } from "../pages/admin/SettlementPage";
 import { NotificationsPage } from "../pages/notification/NotificationsPage";
 import { MyReservationsPage } from "../pages/reservation/MyReservationsPage";
-import { MyPaymentsPage } from "../pages/payment/MyPaymentsPage";
 import { ReservationDetailPage } from "../pages/reservation/ReservationDetailPage";
 import { TicketReservationPage } from "../pages/reservation/TicketReservationPage";
 import { BoothVisitScanPage } from "../pages/vendor/BoothVisitScanPage";
@@ -169,7 +168,6 @@ export function AppRouter() {
             <Route path="/booths/visited/me" element={<MyVisitedBoothsPage />} />
             {/* 부스 콘솔로 이관: 옛 경로는 콘솔로 리다이렉트(북마크·내부 링크 호환). */}
             <Route path="/booths/me" element={<Navigate to="/vendor/booths" replace />} />
-            <Route path="/payments/me" element={<MyPaymentsPage />} />
           </Route>
           <Route path="/reservations/me" element={<MyReservationsPage />} />
           <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
