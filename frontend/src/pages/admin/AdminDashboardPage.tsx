@@ -119,7 +119,7 @@ export function AdminDashboardPage() {
                     <th className="px-4 py-3">운영 기간</th>
                     <th className="px-4 py-3">확정 예약</th>
                     <th className="px-4 py-3">방문자</th>
-                    <th className="px-4 py-3" />
+                    <th className="px-4 py-3"><span className="sr-only">예약 현황</span></th>
                   </tr>
                 </thead>
                 <tbody>

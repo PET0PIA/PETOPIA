@@ -15,6 +15,10 @@ function formatTime(time: string) {
   return time.slice(0, 5);
 }
 
+/** ReservationStatusPage(fair-admin 콘솔)와 AdminFairReservationStatusPage(최고관리자)가 같은 문구를 쓴다. */
+export const RESERVATION_STATUS_DESCRIPTION =
+  "운영일마다 예약 상태별 건수와 QR 발급 현황을 확인해요. 예약 상태가 바뀌면 화면이 실시간으로 갱신돼요.";
+
 /** 확정(CONFIRMED)+입장완료(CHECKED_IN) 대비 입장완료 비율. 결제대기·취소·만료는 분모에서 제외한다. */
 function entryRate(row: ReservationDateSummary): string {
   const validCount = row.confirmedCount + row.checkedInCount;
@@ -63,13 +67,17 @@ export function ReservationStatusSection({ fairId }: ReservationStatusSectionPro
 
   // 결제완료·취소·QR 스캔 등 예약 상태가 바뀔 때마다 서버가 최신 요약을 밀어준다.
   useEffect(() => {
+    let ignore = false;
     setLiveConnected(false);
     const unsubscribe = subscribeReservationDashboard(fairId, (data) => {
       setLiveConnected(true);
       setSummary(data);
-      getQrIssuanceSummary(fairId).then(setQrSummary).catch(() => {});
+      // fairId가 바뀌거나 언마운트된 뒤 늦게 도착한 응답이 새 화면 위에 이전 행사의
+      // QR 현황을 덮어쓰지 않도록 가드한다.
+      getQrIssuanceSummary(fairId).then((qr) => { if (!ignore) setQrSummary(qr); }).catch(() => {});
     });
     return () => {
+      ignore = true;
       unsubscribe();
       setLiveConnected(false);
     };
@@ -149,14 +157,20 @@ export function ReservationStatusSection({ fairId }: ReservationStatusSectionPro
               </tr>
             </thead>
             <tbody>
-              {qrSummary.map((row) => (
-                <tr key={row.fairDateId} className="border-b border-line last:border-0">
-                  <td className="px-4 py-3 font-bold">{row.operationDate}</td>
-                  <td className="px-4 py-3 tabular-nums">{row.qrIssuedCount}</td>
-                  <td className="px-4 py-3 tabular-nums text-ink">{row.qrActiveCount}</td>
-                  <td className="px-4 py-3 tabular-nums text-muted">{row.qrRevokedCount}</td>
+              {qrSummary.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-center text-sm text-muted">QR 발급 현황이 없어요.</td>
                 </tr>
-              ))}
+              ) : (
+                qrSummary.map((row) => (
+                  <tr key={row.fairDateId} className="border-b border-line last:border-0">
+                    <td className="px-4 py-3 font-bold">{row.operationDate}</td>
+                    <td className="px-4 py-3 tabular-nums">{row.qrIssuedCount}</td>
+                    <td className="px-4 py-3 tabular-nums text-ink">{row.qrActiveCount}</td>
+                    <td className="px-4 py-3 tabular-nums text-muted">{row.qrRevokedCount}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </Table>
         </>

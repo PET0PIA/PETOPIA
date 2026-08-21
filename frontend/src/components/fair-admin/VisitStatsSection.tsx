@@ -123,7 +123,7 @@ export function VisitStatsSection({ fairId }: VisitStatsSectionProps) {
             </div>
             {fairDates.length > 0 && (
               <div className="w-48">
-                <Select value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
+                <Select aria-label="운영일 선택" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
                   {fairDates.map((date) => <option key={date.fairDateId} value={date.operationDate}>{date.operationDate}</option>)}
                 </Select>
               </div>

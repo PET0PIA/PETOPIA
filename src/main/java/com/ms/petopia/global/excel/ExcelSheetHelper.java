@@ -49,13 +49,16 @@ public final class ExcelSheetHelper {
         cell.setCellStyle(style);
     }
 
+    // 엑셀 열 너비는 255자를 넘길 수 없다(POI 단위로 255 * 256) - 넘기면 setColumnWidth가 예외를 던진다.
+    private static final int MAX_COLUMN_WIDTH = 255 * 256;
+
     /** 열 너비 자동 보정(수동 지정 폭이 내용보다 좁을 때만 넓힘) + 헤더 행 고정 + 자동 필터. */
     public static void finalizeSheet(Sheet sheet, int lastCol, int dataRowCount) {
         for (int c = 0; c <= lastCol; c++) {
             int before = sheet.getColumnWidth(c);
             sheet.autoSizeColumn(c);
             int autoWidth = sheet.getColumnWidth(c) + 768; // 여백 padding
-            sheet.setColumnWidth(c, Math.max(before, autoWidth));
+            sheet.setColumnWidth(c, Math.min(Math.max(before, autoWidth), MAX_COLUMN_WIDTH));
         }
         sheet.createFreezePane(0, 1);
         if (dataRowCount > 0) {

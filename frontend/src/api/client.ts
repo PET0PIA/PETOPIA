@@ -144,6 +144,9 @@ function parseContentDispositionFilename(contentDisposition: string | null): str
  * downloadReviewStatsExcel처럼 도메인별 export API가 공유한다.
  */
 async function fetchBinary(path: string, isRetry = false): Promise<Response> {
+  // request()와 동일하게, 재발급을 기다리는 동안 다른 요청이 먼저 토큰을 갱신했으면
+  // 그 결과를 덮어쓰지 않는다(늦게 도착한 재발급이 방금 로그인한 새 토큰을 지우는 걸 방지).
+  const generationAtRequest = accessTokenGeneration;
   const headers: Record<string, string> = {};
   const accessToken = getAccessToken();
   if (accessToken) {
@@ -155,10 +158,14 @@ async function fetchBinary(path: string, isRetry = false): Promise<Response> {
   if (response.status === 401 && !isRetry) {
     try {
       const newToken = await refreshAccessTokenOnce();
-      setAccessToken(newToken);
+      if (accessTokenGeneration === generationAtRequest) setAccessToken(newToken);
       return fetchBinary(path, true);
     } catch {
-      setAccessToken(null);
+      if (accessTokenGeneration === generationAtRequest) {
+        setAccessToken(null);
+      } else {
+        return fetchBinary(path, true);
+      }
     }
   }
 

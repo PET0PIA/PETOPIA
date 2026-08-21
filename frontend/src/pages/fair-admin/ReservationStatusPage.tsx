@@ -1,4 +1,4 @@
-import { ReservationStatusSection } from "../../components/fair-admin/ReservationStatusSection";
+import { RESERVATION_STATUS_DESCRIPTION, ReservationStatusSection } from "../../components/fair-admin/ReservationStatusSection";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { useFairSelector } from "../../contexts/FairSelectorContext";
@@ -11,7 +11,7 @@ export function ReservationStatusPage() {
       <PageHeader
         eyebrow="박람회 관리자"
         title="예약 현황"
-        description="운영일마다 예약 상태별 건수와 QR 발급 현황을 확인해요. 예약 상태가 바뀌면 화면이 실시간으로 갱신돼요."
+        description={RESERVATION_STATUS_DESCRIPTION}
       />
 
       {fairId === null ? (
