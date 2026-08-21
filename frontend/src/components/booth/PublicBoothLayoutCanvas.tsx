@@ -1,5 +1,5 @@
 import { ImageOff, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getBooth, getConfirmedBooths, type BoothResponse, type ConfirmedBoothResponse } from "../../api/booth";
 
 interface HallGroup {
@@ -14,6 +14,9 @@ interface BoothSummary {
   imageUrl: string | null;
   slotNumbers: string[];
 }
+
+/** 도면 이미지가 없을 때(또는 아직 안 불러왔을 때) 쓰는 기본 비율. BoothCanvas.tsx와 동일. */
+const DEFAULT_ASPECT_RATIO = 16 / 10;
 
 function groupByHall(rows: ConfirmedBoothResponse[]): HallGroup[] {
   const map = new Map<number, HallGroup>();
@@ -60,9 +63,10 @@ interface PublicBoothLayoutCanvasProps {
  * 클릭하면 캐시된 값을 재사용한다. 도면(캔버스)의 빈 공간을 클릭하면 패널이 사라지고,
  * 다른 부스를 클릭하면 패널 내용만 교체된다(한 번에 하나만 표시).
  *
- * 독립 컴포넌트다 - 아직 어느 페이지에도 연결돼 있지 않다. FairParticipatingBooths.tsx/
- * FairBoothsPage.tsx(현재 카드 그리드 UX)에 이 캔버스를 실제로 붙이거나 교체하는 건 그
- * 파일 담당자(kimchaerin9670/binaryrain1219)와 협의해 별도로 진행한다.
+ * 도면 비율은 BoothCanvas.tsx(관리자 편집용)와 동일하게, 실제 도면 이미지를 로드해서
+ * 그 비율에 캔버스를 맞춘다(2026-08-20) - 고정 16:10 + cover였을 때 실제 이미지 비율이
+ * 다르면 잘리거나 슬롯 좌표가 편집 화면과 어긋나 보이던 문제가 있었다. 홀이 여러 개 한
+ * 화면에 나오므로(halls.map), 홀마다 도면이 다를 수 있어 hallId를 키로 비율을 따로 캐시한다.
  */
 export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps) {
   const [halls, setHalls] = useState<HallGroup[]>([]);
@@ -72,6 +76,11 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
   const [selectedBoothId, setSelectedBoothId] = useState<number | null>(null);
   const [detailsCache, setDetailsCache] = useState<Record<number, BoothResponse>>({});
   const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
+
+  // 홀별 도면 이미지의 실제 가로:세로 비율.
+  const [loadedRatios, setLoadedRatios] = useState<Record<number, number>>({});
+  const loadedRatiosRef = useRef<Record<number, number>>({});
+  const pendingHallIdsRef = useRef<Set<number>>(new Set());
 
   // fairId가 바뀌면 렌더링 중에 즉시 이전 행사의 잔여 상태(에러 메시지, 배치도, 선택된
   // 부스, 소개 캐시)를 지운다 - useEffect 안에서 리셋하면 effect가 도는 한 프레임 동안
@@ -86,6 +95,9 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
     setLoading(true);
     setDetailsCache({});
     setLoadingDetailId(null);
+    setLoadedRatios({});
+    loadedRatiosRef.current = {};
+    pendingHallIdsRef.current = new Set();
   }
 
   useEffect(() => {
@@ -104,6 +116,32 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
       alive = false;
     };
   }, [fairId]);
+
+  // 도면 이미지가 로드되면 실제 비율을 읽어서 캐시한다(홀마다 하나씩). loadedRatios(state)를
+  // 의존성에 넣으면 이미지 하나 끝날 때마다 이펙트가 다시 돌아 다른 홀의 로딩 중인 이미지까지
+  // 취소되고 재시작되는 문제가 있어(코드래빗 리뷰), ref로 이미 처리한/처리 중인 홀을 추적해서
+  // halls가 바뀔 때만 새 홀 것만 요청한다.
+  useEffect(() => {
+    for (const hall of halls) {
+      if (!hall.floorPlanImageUrl) continue;
+      if (loadedRatiosRef.current[hall.hallId] !== undefined) continue;
+      if (pendingHallIdsRef.current.has(hall.hallId)) continue;
+
+      pendingHallIdsRef.current.add(hall.hallId);
+      const image = new Image();
+      image.onload = () => {
+        pendingHallIdsRef.current.delete(hall.hallId);
+        if (image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+        const ratio = image.naturalWidth / image.naturalHeight;
+        loadedRatiosRef.current = { ...loadedRatiosRef.current, [hall.hallId]: ratio };
+        setLoadedRatios((prev) => ({ ...prev, [hall.hallId]: ratio }));
+      };
+      image.onerror = () => {
+        pendingHallIdsRef.current.delete(hall.hallId);
+      };
+      image.src = hall.floorPlanImageUrl;
+    }
+  }, [halls]);
 
   const boothSummaries = useMemo(() => buildBoothSummaries(halls), [halls]);
 
@@ -146,10 +184,10 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
           <div
             role="presentation"
             onClick={() => setSelectedBoothId(null)}
-            className="relative aspect-[16/10] w-full overflow-hidden rounded-card border border-line bg-page"
+            className="relative w-full overflow-hidden rounded-card border border-line bg-page"
             style={{
-              backgroundImage: hall.floorPlanImageUrl ? `url(${hall.floorPlanImageUrl})` : undefined,
-              backgroundSize: hall.floorPlanImageUrl ? "cover" : undefined,
+              aspectRatio: loadedRatios[hall.hallId] ?? DEFAULT_ASPECT_RATIO,
+              ...(hall.floorPlanImageUrl ? { backgroundImage: `url(${hall.floorPlanImageUrl})`, backgroundSize: "cover" } : {}),
             }}
           >
             {hall.slots.map((slot) => {

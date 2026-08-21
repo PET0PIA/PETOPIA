@@ -13,6 +13,8 @@ import { Textarea } from "../../components/ui/Textarea";
 import { HelpTip } from "../../components/ui/HelpTip";
 import { ApiError } from "../../api/client";
 import { createFairApplication, type CreateFairApplicationRequest, type CreateFairApplicationResponse } from "../../api/fair";
+import { getMe } from "../../api/user";
+import { useAuth } from "../../contexts/AuthContext";
 import { todayInSeoul } from "../../utils/date";
 
 // EditProfilePage.tsx의 PHONE_PATTERN과 동일 - 이 프로젝트의 휴대폰 번호 형식 검증 관례.
@@ -146,6 +148,7 @@ function toRequest(form: FormState, posterImageObjectKey: string | null): Create
 }
 
 export function FairApplicationNewPage() {
+  const { user } = useAuth();
   const [form, setForm] = useState<FormState>(initialForm);
   const [posterImageObjectKey, setPosterImageObjectKey] = useState<string | null>(null);
   const [posterImageUploading, setPosterImageUploading] = useState(false);
@@ -155,13 +158,43 @@ export function FairApplicationNewPage() {
   const [result, setResult] = useState<CreateFairApplicationResponse | null>(null);
   const errorsRef = useRef<HTMLDivElement>(null);
 
-  // 폼이 길어, 하단 제출 버튼에서 눌렀을 때 위쪽 오류를 놓칠 수 있다.
-  // 검증 오류나 서버 오류가 생기면 오류 박스로 스크롤해 준다.
+  // 행사 승인 권한과 결제 안내가 신청자의 기존 계정에 연결되므로 이메일을 직접 입력받지 않는다.
+  // 화면에는 로그인 계정 이메일을 읽기 전용으로 보여주고, 백엔드도 요청값 대신 계정값을 다시 사용한다.
+  useEffect(() => {
+    let active = true;
+    getMe()
+      .then((me) => {
+        if (active) setForm((previous) => ({ ...previous, managerEmail: me.email }));
+      })
+      .catch(() => {
+        if (active) setSubmitError("로그인 계정 이메일을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+      });
+    return () => { active = false; };
+  }, []);
+
+  // 폼이 길어, 하단 제출 버튼에서 눌렀을 때 위쪽 오류를 놓치지 않도록 오류 영역으로 이동한다.
   useEffect(() => {
     if (errors.length > 0 || submitError) {
       errorsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [errors, submitError]);
+
+  if (user?.role === "VENDOR") {
+    return (
+      <PageContainer className="py-10">
+        <div className="surface mx-auto max-w-lg p-8 text-center">
+          <AlertCircle className="mx-auto text-muted" size={36} />
+          <h1 className="mt-4 text-xl font-extrabold text-ink">행사 개최를 신청할 수 없는 계정이에요</h1>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            참가업체 계정은 행사 개최 신청과 행사 관리자 전환을 함께 진행할 수 없어요.
+          </p>
+          <Link to="/" className="mt-6 inline-flex min-h-11 items-center justify-center rounded-button bg-primary-strong px-4 text-sm font-bold text-white hover:opacity-90">
+            홈으로 이동
+          </Link>
+        </div>
+      </PageContainer>
+    );
+  }
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -372,7 +405,8 @@ export function FairApplicationNewPage() {
               </div>
               <div>
                 {label("managerEmail", "담당자 이메일", true)}
-                <Input id="managerEmail" type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} required />
+                <Input id="managerEmail" type="email" value={form.managerEmail} readOnly required className="bg-page text-muted" />
+                <p className="mt-1.5 text-xs text-muted">로그인한 계정의 이메일로 자동 입력돼요.</p>
               </div>
             </Card>
           </section>

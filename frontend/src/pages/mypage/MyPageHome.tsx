@@ -61,7 +61,7 @@ function CardSection({ title, to, children }: { title: string; to?: string; chil
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-base font-extrabold tracking-tight text-ink">{title}</h2>
         {to && (
-          <Link to={to} className="inline-flex shrink-0 items-center text-sm font-bold text-muted transition hover:text-ink">
+          <Link to={to} className="inline-flex shrink-0 items-center rounded-button px-2 py-1 text-sm font-bold text-muted transition hover:bg-surface-alt hover:text-ink">
             전체 보기
             <ChevronRight size={15} aria-hidden="true" />
           </Link>
@@ -93,7 +93,7 @@ function ReservationCard() {
       ) : items.length === 0 ? (
         <CardNote>
           아직 예약한 행사가 없어요.{" "}
-          <Link to="/fairs/upcoming" className="font-bold text-ink underline">티켓 예매하러 가기</Link>
+          <Link to="/fairs/upcoming" className="rounded-button font-bold text-ink underline transition hover:bg-surface-alt">티켓 예매하러 가기</Link>
         </CardNote>
       ) : (
         <ul className="flex flex-col gap-3">
@@ -102,7 +102,7 @@ function ReservationCard() {
               <Link
                 to={`/reservations/me/${item.reservationId}`}
                 aria-label={`${item.fairName} 예약 상세 보기`}
-                className="flex items-center gap-4 rounded-card border border-line p-3 transition-colors hover:border-muted"
+                className="flex items-center gap-4 rounded-card border border-line p-3 transition-colors hover:border-muted hover:bg-surface-alt"
               >
                 {item.fairPosterImageUrl ? (
                   <img src={item.fairPosterImageUrl} alt="" className="h-20 w-15 shrink-0 rounded-card object-cover" />
@@ -139,7 +139,7 @@ function ApplicationTile({
   return (
     <Link
       to={to}
-      className="flex items-center gap-3 rounded-card border border-line p-4 transition-colors hover:border-muted"
+      className="flex items-center gap-3 rounded-card border border-line p-4 transition-colors hover:border-muted hover:bg-surface-alt"
     >
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-alt text-ink">
         <Icon size={17} aria-hidden="true" />
@@ -211,7 +211,7 @@ function FavoriteCard() {
         <ul className="flex flex-col gap-3">
           {items.map((booth) => (
             <li key={booth.boothId}>
-              <Link to={`/booths/${booth.boothId}`} className="flex items-center gap-3 transition-colors hover:text-primary-strong">
+              <Link to={`/booths/${booth.boothId}`} className="flex items-center gap-3 rounded-card p-2 transition-colors hover:bg-surface-alt hover:text-primary-strong">
                 {booth.imageUrl ? (
                   <img src={booth.imageUrl} alt="" className="size-10 shrink-0 rounded-full object-cover" />
                 ) : (

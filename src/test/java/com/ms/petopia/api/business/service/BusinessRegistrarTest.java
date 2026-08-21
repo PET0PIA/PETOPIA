@@ -1,6 +1,8 @@
 package com.ms.petopia.api.business.service;
 
 import com.ms.petopia.api.business.domain.Business;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
 import com.ms.petopia.global.exception.CommonException;
@@ -42,6 +44,9 @@ class BusinessRegistrarTest {
 
     @Mock
     private BusinessMapper businessMapper;
+
+    @Mock
+    private AuthMapper authMapper;
 
     @InjectMocks
     private BusinessRegistrar businessRegistrar;
@@ -132,6 +137,8 @@ class BusinessRegistrarTest {
         BusinessRegisterRequest request = createRequest();
 
         given(businessMapper.acquireRegistrationLock(ownerId)).willReturn(1);
+        given(authMapper.selectUserByIdForUpdate(ownerId))
+                .willReturn(User.builder().userId(ownerId).role("USER").build());
         doThrow(new DuplicateKeyException("UK_BUSINESS_ACTIVE_BIZ_REG_NO"))
                 .when(businessMapper).insertBusiness(any(Business.class));
 
@@ -162,6 +169,8 @@ class BusinessRegistrarTest {
         Business saved = createBusiness(1L, ownerId, "1234567890", Business.VerifyStatus.VERIFIED);
 
         given(businessMapper.acquireRegistrationLock(ownerId)).willReturn(1);
+        given(authMapper.selectUserByIdForUpdate(ownerId))
+                .willReturn(User.builder().userId(ownerId).role("USER").build());
         given(businessMapper.selectById(any())).willReturn(saved);
 
         ArgumentCaptor<Business> captor = ArgumentCaptor.forClass(Business.class);
@@ -180,6 +189,21 @@ class BusinessRegistrarTest {
         assertThat(result.getBusinessId()).isEqualTo(1L);
         verify(businessMapper).releaseRegistrationLock(ownerId);
 
+    }
+
+    @Test
+    @DisplayName("저장 직전 EVENT_ADMIN이면 사업자를 저장하지 않는다")
+    void rejectsEventAdminImmediatelyBeforeInsert() {
+        Long ownerId = 1L;
+        given(businessMapper.acquireRegistrationLock(ownerId)).willReturn(1);
+        given(authMapper.selectUserByIdForUpdate(ownerId))
+                .willReturn(User.builder().userId(ownerId).role("EVENT_ADMIN").build());
+
+        assertThatThrownBy(() -> businessRegistrar.save(
+                ownerId, createRequest(), Business.VerifyStatus.VERIFIED, "uploads/document/reg.pdf"))
+                .isInstanceOf(CommonException.class);
+
+        verify(businessMapper, never()).insertBusiness(any());
     }
 
 }
