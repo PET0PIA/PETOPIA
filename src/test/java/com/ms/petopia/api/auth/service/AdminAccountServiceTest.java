@@ -63,7 +63,7 @@ class AdminAccountServiceTest {
     void assignApplicantAsEventAdmin_USER이면_역할변경후_행사에배정한다() {
         User applicant = applicant();
         applicant.setRole("USER");
-        given(authMapper.selectUserById(APPLICANT_USER_ID)).willReturn(applicant);
+        given(authMapper.selectUserByIdForUpdate(APPLICANT_USER_ID)).willReturn(applicant);
 
         Long result = adminAccountService.assignApplicantAsEventAdmin(FAIR_ID, APPLICANT_USER_ID);
 
@@ -79,7 +79,7 @@ class AdminAccountServiceTest {
     void assignApplicantAsEventAdmin_이미_EVENT_ADMIN이면_역할변경없이_행사만배정한다() {
         User applicant = applicant();
         applicant.setRole("EVENT_ADMIN");
-        given(authMapper.selectUserById(APPLICANT_USER_ID)).willReturn(applicant);
+        given(authMapper.selectUserByIdForUpdate(APPLICANT_USER_ID)).willReturn(applicant);
 
         adminAccountService.assignApplicantAsEventAdmin(FAIR_ID, APPLICANT_USER_ID);
 

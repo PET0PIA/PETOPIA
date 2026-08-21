@@ -58,6 +58,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class FairServiceTest {
@@ -890,6 +891,8 @@ class FairServiceTest {
         assertThat(updated.getPaymentDueAt()).isEqualTo(NOW.plusDays(7));
 
         verify(adminAccountService).assignApplicantAsEventAdmin(FAIR_ID, USER_ID);
+
+        verifyNoInteractions(mailService, notificationService);
 
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);

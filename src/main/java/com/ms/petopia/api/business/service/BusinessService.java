@@ -180,6 +180,15 @@ public class BusinessService {
             throw new CommonException(ErrorCode.BUSINESS_NOT_FOUND);
         }
 
+        // 행사 승인과 동일한 users 행을 잠가 EVENT_ADMIN을 VENDOR로 덮어쓰지 못하게 한다.
+        User owner = authMapper.selectUserByIdForUpdate(business.getOwnerId());
+        if (owner == null) {
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
+        }
+        if ("EVENT_ADMIN".equals(owner.getRole())) {
+            throw new CommonException(ErrorCode.BUSINESS_EVENT_ADMIN_NOT_ALLOWED);
+        }
+
         LocalDateTime reviewedAt = LocalDateTime.now();
 
         // WHERE approval_status='PENDING_REVIEW' 조건에 안 걸리면(동시에 이미 처리됨) 0행 반영 -> 예외

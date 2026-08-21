@@ -50,7 +50,8 @@ public class AdminAccountService {
      */
     @Transactional
     public Long assignApplicantAsEventAdmin(Long fairId, Long applicantUserId) {
-        User applicant = authMapper.selectUserById(applicantUserId);
+        // 사업자 저장·승인과 같은 users 행 잠금을 사용해 EVENT_ADMIN/VENDOR 역할 변경을 직렬화한다.
+        User applicant = authMapper.selectUserByIdForUpdate(applicantUserId);
         if (applicant == null) {
             throw new CommonException(ErrorCode.USER_NOT_FOUND);
         }
