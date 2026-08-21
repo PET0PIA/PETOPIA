@@ -21,12 +21,15 @@ import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.auth.service.AdminAccountService;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.test.util.ReflectionTestUtils;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
@@ -55,6 +58,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class FairServiceTest {
@@ -85,7 +89,7 @@ class FairServiceTest {
             "reservationStartDate", "reservationEndDate",
             "operationStartDate", "operationEndDate",
             "reservationFee", "reservationCancelDeadlineHours", "reservationChangeDeadlineHours",
-            "managerName", "managerPhone", "managerEmail"
+            "managerName", "managerPhone"
     );
 
     @Mock
@@ -102,6 +106,9 @@ class FairServiceTest {
 
     @Mock
     private AdminAccountService adminAccountService;
+
+    @Mock
+    private MailService mailService;
 
     @Mock
     private NotificationService notificationService;
@@ -122,6 +129,10 @@ class FairServiceTest {
     void setUp() {
         TransactionSynchronizationManager.initSynchronization();
         org.mockito.Mockito.lenient().when(timeProvider.now()).thenReturn(NOW);
+        org.mockito.Mockito.lenient().when(authMapper.selectUserById(USER_ID)).thenReturn(
+                User.builder().userId(USER_ID).email("user@petopia.example").role("USER").build()
+        );
+        ReflectionTestUtils.setField(fairService, "frontendUrl", "https://petopia-kappa.vercel.app");
     }
 
     @AfterEach
@@ -130,6 +141,20 @@ class FairServiceTest {
     }
 
     // ===== createApplication =====
+
+    @Test
+    @DisplayName("참가업체 계정은 행사 개최를 신청할 수 없다")
+    void createApplication_VENDOR이면_신청을_거부한다() {
+        given(authMapper.selectUserById(USER_ID)).willReturn(
+                User.builder().userId(USER_ID).role("VENDOR").build()
+        );
+
+        assertErrorCode(
+                () -> fairService.createApplication(USER_ID, validRequest()),
+                ErrorCode.FAIR_APPLICATION_VENDOR_NOT_ALLOWED
+        );
+        verify(fairMapper, never()).insert(any(Fair.class));
+    }
 
     @Test
     @DisplayName("필수값을 채워 신청하면 저장하고 RECEIVED 상태로 응답한다")
@@ -152,7 +177,7 @@ class FairServiceTest {
         Fair saved = captor.getValue();
         assertThat(saved.getApplicantUserId()).isEqualTo(USER_ID);
         assertThat(saved.getManagerName()).isEqualTo("김담당");
-        assertThat(saved.getManagerEmail()).isEqualTo("manager@petopia.example");
+        assertThat(saved.getManagerEmail()).isEqualTo("user@petopia.example");
         assertThat(saved.getCreatedAt()).isEqualTo(NOW);
         assertThat(saved.getUpdatedAt()).isEqualTo(NOW);
         assertThat(saved.getStatus()).isNull();
@@ -288,12 +313,19 @@ class FairServiceTest {
     }
 
     @Test
-    @DisplayName("담당자 이메일이 이미 가입된 회원 계정이면 DUPLICATED_EMAIL을 던진다")
-    void createApplication_담당자이메일이_이미가입된회원이면_예외를_던진다() {
-        given(authMapper.selectUserByEmail("manager@petopia.example")).willReturn(User.builder().build());
+    @DisplayName("요청의 담당자 이메일 대신 로그인 계정 이메일을 저장한다")
+    void createApplication_로그인계정이메일을_저장한다() {
+        willAnswer(invocation -> {
+            Fair fair = invocation.getArgument(0);
+            fair.setFairId(FAIR_ID);
+            return 1;
+        }).given(fairMapper).insert(any(Fair.class));
 
-        assertErrorCode(() -> fairService.createApplication(USER_ID, validRequest()), ErrorCode.DUPLICATED_EMAIL);
-        verify(fairMapper, never()).insert(any());
+        fairService.createApplication(USER_ID, validRequest());
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).insert(captor.capture());
+        assertThat(captor.getValue().getManagerEmail()).isEqualTo("user@petopia.example");
     }
 
     @Test
@@ -612,7 +644,8 @@ class FairServiceTest {
         Fair updated = captor.getValue();
         assertThat(updated.getFairId()).isEqualTo(FAIR_ID);
         assertThat(updated.getName()).isEqualTo("2026 서울 펫페어(수정)");
-        assertThat(updated.getManagerEmail()).isEqualTo("manager@petopia.example");
+        // managerEmail은 수정 불가 필드라 UPDATE 객체/SET 절에 포함되지 않는다.
+        assertThat(updated.getManagerEmail()).isNull();
     }
 
     @Test
@@ -746,8 +779,8 @@ class FairServiceTest {
     }
 
     @Test
-    @DisplayName("필드를 생략하면(요청에 없으면) 기존 값을 유지한다 - setFields가 비어 매퍼로 전달된다")
-    void updateApplication_필드를_생략하면_setFields가_비어있다() {
+    @DisplayName("수정 시 담당자 이메일은 업데이트 대상에서 제외한다")
+    void updateApplication_담당자이메일은_수정할수없다() {
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
         given(fairMapper.updateApplication(any(), any())).willReturn(1);
 
@@ -786,7 +819,7 @@ class FairServiceTest {
     }
 
     @Test
-    @DisplayName("필수 필드(name/managerName/managerEmail)를 명시적으로 비우려 하면 INVALID_INPUT_VALUE를 던진다")
+    @DisplayName("수정 가능한 필수 필드(name/managerName)를 명시적으로 비우려 하면 INVALID_INPUT_VALUE를 던진다")
     void updateApplication_필수필드를_명시적으로_비우면_예외를_던진다() {
         UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
                 null, null, null, null, null,
@@ -857,10 +890,9 @@ class FairServiceTest {
         assertThat(updated.getOpeningFeeAmount()).isEqualTo(500_000L);
         assertThat(updated.getPaymentDueAt()).isEqualTo(NOW.plusDays(7));
 
-        verify(adminAccountService).issueEventAdminAccount(
-                FAIR_ID, USER_ID, "김담당", "manager@petopia.example", null,
-                500_000L, NOW.plusDays(7)
-        );
+        verify(adminAccountService).assignApplicantAsEventAdmin(FAIR_ID, USER_ID);
+
+        verifyNoInteractions(mailService, notificationService);
 
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);
@@ -869,6 +901,17 @@ class FairServiceTest {
         verify(notificationService).save(notifCaptor.capture());
         assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_APPLICATION_APPROVED);
+        assertThat(notifCaptor.getValue().channels())
+                .containsExactly(DeliveryChannel.IN_APP);
+        assertThat(notifCaptor.getValue().linkUrl()).isNull();
+        assertThat(notifCaptor.getValue().body())
+                .isEqualTo("개설비를 2026-08-08까지 결제해 주세요.");
+        verify(mailService).sendFairApprovalEmail(
+                "user@petopia.example",
+                500_000L,
+                NOW.plusDays(7),
+                "https://petopia-kappa.vercel.app/payments/fair-opening-fee/" + FAIR_ID
+        );
     }
 
     @Test
@@ -884,7 +927,7 @@ class FairServiceTest {
         assertThat(response.status()).isEqualTo(FairStatus.REJECTED.name());
         assertThat(response.paymentDueAt()).isNull();
         assertThat(response.rejectReason()).isEqualTo("서류 미비");
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).assignApplicantAsEventAdmin(any(), any());
 
         TransactionSynchronizationManager.getSynchronizations()
                 .forEach(TransactionSynchronization::afterCommit);
@@ -893,6 +936,8 @@ class FairServiceTest {
         verify(notificationService).save(notifCaptor.capture());
         assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_APPLICATION_REJECTED);
+        assertThat(notifCaptor.getValue().channels()).containsExactly(DeliveryChannel.IN_APP);
+        verify(mailService).sendFairRejectionEmail("user@petopia.example", "서류 미비");
     }
 
     @Test
@@ -901,7 +946,7 @@ class FairServiceTest {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.REJECT, null, "  ", null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_REJECT_REASON_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).assignApplicantAsEventAdmin(any(), any());
     }
 
     @Test
@@ -910,7 +955,7 @@ class FairServiceTest {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, null, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).assignApplicantAsEventAdmin(any(), any());
     }
 
     @Test
@@ -919,7 +964,7 @@ class FairServiceTest {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 0L, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_OPENING_FEE_AMOUNT_REQUIRED);
         verify(fairMapper, never()).updateReviewResult(any());
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).assignApplicantAsEventAdmin(any(), any());
     }
 
     @Test
@@ -941,7 +986,7 @@ class FairServiceTest {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, 0);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
         verify(fairMapper, never()).updateReviewResult(any());
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).assignApplicantAsEventAdmin(any(), any());
     }
 
     @Test
@@ -950,7 +995,7 @@ class FairServiceTest {
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, 366);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_PAYMENT_DUE_DAYS_INVALID);
         verify(fairMapper, never()).updateReviewResult(any());
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).assignApplicantAsEventAdmin(any(), any());
     }
 
     @Test
@@ -961,7 +1006,7 @@ class FairServiceTest {
 
         ReviewFairApplicationRequest request = new ReviewFairApplicationRequest(FairReviewDecision.APPROVE, 500_000L, null, null);
         assertErrorCode(() -> fairService.review(FAIR_ID, REVIEWER_ID, request), ErrorCode.FAIR_NOT_PENDING_REVIEW);
-        verify(adminAccountService, never()).issueEventAdminAccount(any(), any(), any(), any(), any(), any(), any());
+        verify(adminAccountService, never()).assignApplicantAsEventAdmin(any(), any());
     }
 
     @Test

@@ -2,6 +2,8 @@ package com.ms.petopia.api.business.service;
 
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.auth.service.UserRoleService;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.request.BusinessRejectRequest;
@@ -42,9 +44,20 @@ public class BusinessService {
     private final UserRoleService userRoleService;
     private final ApplicationService applicationService;
     private final NotificationService notificationService;
+    private final AuthMapper authMapper;
 
     // 사업자 등록(국세청 진위확인 포함)
     public BusinessResponse registerBusiness(Long ownerId, BusinessRegisterRequest request) {
+
+        // users.role은 단일 값이라 EVENT_ADMIN에게 VENDOR를 부여하면 기존 행사 관리자 권한이
+        // 덮어써진다. 화면 차단과 별개로 API 직접 호출도 국세청 조회 전에 거절한다.
+        User owner = authMapper.selectUserById(ownerId);
+        if (owner == null) {
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
+        }
+        if ("EVENT_ADMIN".equals(owner.getRole())) {
+            throw new CommonException(ErrorCode.BUSINESS_EVENT_ADMIN_NOT_ALLOWED);
+        }
 
         // 국세청 진위 확인 API 호출(동기) - 트랜잭션 없이, DB 커넥션 안 붙잡은 상태로 호출
         boolean valid;
@@ -165,6 +178,15 @@ public class BusinessService {
 
         if (business == null) {
             throw new CommonException(ErrorCode.BUSINESS_NOT_FOUND);
+        }
+
+        // 행사 승인과 동일한 users 행을 잠가 EVENT_ADMIN을 VENDOR로 덮어쓰지 못하게 한다.
+        User owner = authMapper.selectUserByIdForUpdate(business.getOwnerId());
+        if (owner == null) {
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
+        }
+        if ("EVENT_ADMIN".equals(owner.getRole())) {
+            throw new CommonException(ErrorCode.BUSINESS_EVENT_ADMIN_NOT_ALLOWED);
         }
 
         LocalDateTime reviewedAt = LocalDateTime.now();
