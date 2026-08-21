@@ -437,6 +437,13 @@ export function ReservationDetailPage() {
           />
           <DetailRow label="예약 확정시각" value={formatDateTime(reservation.reservedAt)} />
           <DetailRow label="최초 입장시각" value={formatDateTime(reservation.checkedInAt)} />
+          {/* 결제 줄은 결제 행이 있는 유료 예약에서만 그린다(무료 예약은 서버가 null로 내려준다). */}
+          {reservation.paymentId !== null && (
+            <DetailRow label="결제 ID" value={String(reservation.paymentId)} />
+          )}
+          {reservation.paymentMethod !== null && (
+            <DetailRow label="결제수단" value={reservation.paymentMethod} />
+          )}
         </dl>
       </Card>
 
