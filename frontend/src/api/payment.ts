@@ -8,7 +8,7 @@ import { apiClient } from "./client";
 export const TEMP_USER_ID_HEADER = "X-User-Id";
 
 /**
- * 관리자 테스트 도구(PaymentCreatePage) 전용 임시 결제자 ID.
+ * 인증 도메인 연동 전까지 쓰는 임시 결제자 ID 기본값.
  *
  * 실제 사용자 흐름을 타는 함수(createReservationDepositPayment·confirmPayment)에는
  * 이 값을 기본값으로 두지 않는다 — 백엔드가 X-User-Id와 예약 소유자를 대조하기 때문에
@@ -116,6 +116,7 @@ export function confirmPayment(paymentId: number, paymentKey: string, userId: nu
 export interface PaymentListFilters {
   fairId?: number;
   businessId?: number;
+  reservationId?: number;
   paymentType?: PaymentType;
   status?: PaymentStatus;
   page?: number;
@@ -127,6 +128,7 @@ export function getPayments(filters: PaymentListFilters = {}) {
   const params = new URLSearchParams();
   if (filters.fairId !== undefined) params.set("fairId", String(filters.fairId));
   if (filters.businessId !== undefined) params.set("businessId", String(filters.businessId));
+  if (filters.reservationId !== undefined) params.set("reservationId", String(filters.reservationId));
   if (filters.paymentType) params.set("paymentType", filters.paymentType);
   if (filters.status) params.set("status", filters.status);
   params.set("page", String(filters.page ?? 0));

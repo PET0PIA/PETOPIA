@@ -9,7 +9,6 @@ import { getMe } from "../../api/user";
 import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../ui/Button";
 import { DropdownMenu } from "../ui/DropdownMenu";
-import { getMyBusinesses } from "../../api/business";
 
 function useUnreadNotificationCount() {
   const [count, setCount] = useState(0);
@@ -86,42 +85,17 @@ function TopNavLink({ to, label }: { to: string; label: string }) {
 }
 
 // 데스크톱 프로필 드롭다운과 모바일 메뉴가 함께 쓰는 개인 계정 항목. 한쪽에만 추가하면
-// 화면 크기에 따라 못 들어가는 화면이 생기므로(실제로 "내 방문 부스"가 모바일에서
-// 빠져 있었다) 목록을 여기 한 곳에만 둔다. 마이페이지·로그아웃은 두 메뉴에서 생김새가
-// 달라(모바일은 아이콘 버튼) 각자 그린다.
+// 화면 크기에 따라 못 들어가는 화면이 생기므로 목록을 여기 한 곳에만 둔다. 방문 부스·즐겨찾기·
+// 신청 현황 같은 나머지 항목은 마이페이지 사이드바(MyPageLayout)가 갖고 있어, 헤더엔 가장 자주
+// 쓰는 예약만 남긴다. 마이페이지·로그아웃은 두 메뉴에서 생김새가 달라(모바일은 아이콘 버튼)
+// 각자 그린다.
 const accountMenuItems: { label: string; path: string }[] = [
-  { label: "내 예약 목록", path: "/reservations/me" },
-  { label: "내 행사 신청 목록", path: "/fair-applications/me" },
-  { label: "내 방문 부스", path: "/booths/visited/me" },
-  { label: "즐겨찾기 부스", path: "/booths/favorites/me" },
+  { label: "내 예약", path: "/mypage/reservations" },
 ];
 
-// 사업자를 하나라도 등록한 적 있으면(대기/승인/반려/취소 상태 무관) "사업자 등록 현황"을
-// 노출한다. 승인돼서 VENDOR가 되면 콘솔 전환 버튼(consoleEntryForRole)이 따로 뜨지만,
-// 그 전에도 자기 신청이 어떻게 됐는지 확인할 방법은 있어야 해서 role과 별개로 둔다.
-function useHasAnyBusiness() {
-  const [hasBusiness, setHasBusiness] = useState(false);
-  const { status } = useAuth();
-  const { pathname } = useLocation();
-
-  useEffect(() => {
-    if (status !== "authenticated") {
-      setHasBusiness(false);
-      return;
-    }
-    let active = true;
-    getMyBusinesses()
-      .then((businesses) => { if (active) setHasBusiness(businesses.length > 0); })
-      .catch(() => { if (active) setHasBusiness(false); });
-    return () => { active = false; };
-  }, [status, pathname]);
-
-  return hasBusiness;
-}
-
-// 로그인한 사용자의 프로필 메뉴. 역할에 따라 사업자 메뉴/관리자 콘솔 진입이 더해진다.
-// ProfileMenu - accountMenuItems를 prop으로 받도록 변경
-function ProfileMenu({ name, profileEntry, accountMenuItems, onLogout }: { name: string; profileEntry: { label: string; path: string }; accountMenuItems: { label: string; path: string }[]; onLogout: () => void }) {
+// 역할별 콘솔 진입은 옆의 "전환" 버튼이 맡고, 개인 기능은 dev에서 추가된 마이페이지
+// 사이드바가 맡는다. SUPER_ADMIN만 개인 마이페이지 대신 별도 계정 관리 화면으로 보낸다.
+function ProfileMenu({ name, profileEntry, onLogout }: { name: string; profileEntry: { label: string; path: string }; onLogout: () => void }) {
   const navigate = useNavigate();
   // 역할별 콘솔·업무 진입은 헤더의 "전환" 버튼(consoleEntryForRole)으로 옮겼다.
   // 프로필 메뉴엔 누구에게나 공통인 개인 계정 항목만 둔다.
@@ -191,12 +165,6 @@ export function PublicHeader() {
     ? { label: "계정 관리", path: "/account/settings" }
     : { label: "마이페이지", path: "/mypage" };
   const consoleEntry = consoleEntryForRole(role);
-  const hasBusiness = useHasAnyBusiness();
-  const visibleAccountMenuItems = isManagementAccount
-    ? []
-    : (hasBusiness && role !== "VENDOR")
-      ? [...accountMenuItems.slice(0, 2), { label: "사업자 등록 현황", path: "/businesses/me" }, ...accountMenuItems.slice(2)]
-      : accountMenuItems;
   // requiredRole로 자식 메뉴를 거르고, 남은 자식이 없고 자체 경로도 없는 부모 메뉴는 숨긴다.
   const visibleNavigation = publicNavigation
     .map((item) => ({ ...item, children: item.children?.filter((child) => isVisibleForRole(child, role)) }))
@@ -248,7 +216,7 @@ export function PublicHeader() {
                 <Bell size={19} />
                 {unreadCount > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}
               </button>
-              <ProfileMenu name={nickname ?? "내 계정"} profileEntry={profileEntry} accountMenuItems={visibleAccountMenuItems} onLogout={handleLogout} />
+              <ProfileMenu name={nickname ?? "내 계정"} profileEntry={profileEntry} onLogout={handleLogout} />
               {/* 역할별 콘솔 전환 버튼 - 프로필 바로 오른쪽에 둔다. */}
               {consoleEntry && (
                 <button
@@ -322,7 +290,7 @@ export function PublicHeader() {
                     {consoleEntry.label}
                   </button>
                 )}
-                {visibleAccountMenuItems.map(({ label, path }) => (
+                {accountMenuItems.map(({ label, path }) => (
                   <button key={path} type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go(path)}>
                     {label}
                   </button>

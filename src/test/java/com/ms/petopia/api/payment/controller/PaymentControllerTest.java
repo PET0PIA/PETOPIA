@@ -374,7 +374,7 @@ class PaymentControllerTest {
 
     @Test
     void getsPaymentListFilteredByFair() throws Exception {
-        given(paymentService.getPayments(eq(10L), isNull(), isNull(), isNull(), eq(0), eq(20))).willReturn(
+        given(paymentService.getPayments(eq(10L), isNull(), isNull(), isNull(), isNull(), eq(0), eq(20))).willReturn(
                 new PaymentListResponse(List.of(
                         new PaymentResponse(
                                 1L, "PAYMENT_1", "VENDOR_FEE", 50000L, "COMPLETED", "카드",
@@ -392,7 +392,7 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.totalPages").value(1));
 
-        verify(paymentService).getPayments(eq(10L), isNull(), isNull(), isNull(), eq(0), eq(20));
+        verify(paymentService).getPayments(eq(10L), isNull(), isNull(), isNull(), isNull(), eq(0), eq(20));
         // fairId가 있으니 "전체 조회"가 아니라 그 행사 담당자인지만 확인해야 한다 —
         // requireSuperAdmin이 아니라 checkAssigned가 불려야 함.
         verify(fairAdminAccessGuard).checkAssigned(10L);
@@ -425,7 +425,7 @@ class PaymentControllerTest {
         // page/size 검증은 서비스 계층 책임(PaymentServiceTest 참고) — 여기선 그 예외가
         // 컨트롤러까지 올라왔을 때 400으로 잘 변환되는지만 확인
         willThrow(new CommonException(ErrorCode.INVALID_INPUT_VALUE))
-                .given(paymentService).getPayments(any(), any(), any(), any(), eq(-1), anyInt());
+                .given(paymentService).getPayments(any(), any(), any(), any(), any(), eq(-1), anyInt());
 
         mockMvc.perform(get("/api/payments").param("page", "-1"))
                 .andExpect(status().isBadRequest())
@@ -435,7 +435,7 @@ class PaymentControllerTest {
     @Test
     void returns400WhenSizeIsZero() throws Exception {
         willThrow(new CommonException(ErrorCode.INVALID_INPUT_VALUE))
-                .given(paymentService).getPayments(any(), any(), any(), any(), anyInt(), eq(0));
+                .given(paymentService).getPayments(any(), any(), any(), any(), any(), anyInt(), eq(0));
 
         mockMvc.perform(get("/api/payments").param("size", "0"))
                 .andExpect(status().isBadRequest())
@@ -445,7 +445,7 @@ class PaymentControllerTest {
     @Test
     void returns400WhenSizeExceedsMax() throws Exception {
         willThrow(new CommonException(ErrorCode.INVALID_INPUT_VALUE))
-                .given(paymentService).getPayments(any(), any(), any(), any(), anyInt(), eq(101));
+                .given(paymentService).getPayments(any(), any(), any(), any(), any(), anyInt(), eq(101));
 
         mockMvc.perform(get("/api/payments").param("size", "101"))
                 .andExpect(status().isBadRequest())
@@ -454,7 +454,7 @@ class PaymentControllerTest {
 
     @Test
     void getsEmptyPaymentListWhenNoFilterMatches() throws Exception {
-        given(paymentService.getPayments(isNull(), isNull(), isNull(), isNull(), eq(0), eq(20)))
+        given(paymentService.getPayments(isNull(), isNull(), isNull(), isNull(), isNull(), eq(0), eq(20)))
                 .willReturn(new PaymentListResponse(List.of(), 0, 20, 0L, 0));
 
         mockMvc.perform(get("/api/payments"))
