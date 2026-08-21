@@ -26,7 +26,7 @@ const statusLabels: Record<string, string> = {
   REJECTED: "반려됨",
   EXPIRED: "만료됨",
   PAYMENT_PENDING: "개설비 결제 대기",
-  PREPARING: "준비 중",
+  PREPARING: "행사 준비중",
   IN_PROGRESS: "진행 중",
   ENDED: "종료",
 };

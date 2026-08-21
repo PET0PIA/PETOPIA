@@ -94,7 +94,7 @@ public class PaymentController {
                 .body(paymentService.payFairOpeningFee(fairId, userId));
     }
 
-    // 조건별 결제 목록(관리자용). fairId·businessId·paymentType·status 전부 선택적 필터.
+    // 조건별 결제 목록(관리자용). fairId·businessId·paymentType·status·reservationId 전부 선택적 필터.
     // fairId 없이 전체를 보는 건 SUPER_ADMIN만, fairId를 주면 그 행사 담당 EVENT_ADMIN(또는
     // SUPER_ADMIN)만 — getPayments 자체는 FairCancelRefundOrchestrationService 등이 내부
     // 빈 주입으로도 호출해서(SecurityContext 없음) 가드를 서비스 안에 못 넣고, HTTP 요청
@@ -108,6 +108,7 @@ public class PaymentController {
             @RequestParam(required = false) Long businessId,
             @RequestParam(required = false) String paymentType,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long reservationId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
@@ -116,7 +117,7 @@ public class PaymentController {
         } else {
             fairAdminAccessGuard.checkAssigned(fairId);
         }
-        return paymentService.getPayments(fairId, businessId, paymentType, status, page, size);
+        return paymentService.getPayments(fairId, businessId, paymentType, status, reservationId, page, size);
     }
 
     // 로그인 사용자 본인의 결제 내역(마이페이지). page/size 검증은 위와 동일하게 서비스 계층에서.
