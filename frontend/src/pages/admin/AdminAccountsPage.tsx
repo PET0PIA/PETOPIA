@@ -108,7 +108,7 @@ export function AdminAccountsPage() {
       )}
 
       {!loading && !loadError && accounts && accounts.length === 0 && (
-        <EmptyState title="발급된 관리자 계정이 없어요" description="행사 신청이 승인되면 관리자 계정이 자동으로 발급돼요." />
+        <EmptyState title="배정된 행사 관리자가 없어요" description="행사 신청이 승인되면 신청자의 기존 계정이 행사 관리자로 배정돼요." />
       )}
 
       {!loading && !loadError && accounts && accounts.length > 0 && (

@@ -195,7 +195,7 @@ export function FairApplicationReviewPage() {
     setRejectDialogOpen(true);
   }
 
-  // 승인은 되돌릴 수 없는 부수효과(관리자 계정 발급, 안내 메일)를 동반하므로, 금액을 입력받은
+  // 승인은 되돌릴 수 없는 부수효과(행사 관리자 배정, 안내 메일)를 동반하므로, 금액을 입력받은
   // 뒤 곧바로 API를 부르지 않고 "정말 승인할까요?" 확인 모달을 한 번 더 거친다 - 잘못 눌러도
   // 취소할 기회를 준다.
   async function handleApproveSubmit(event: FormEvent<HTMLFormElement>) {
@@ -219,7 +219,7 @@ export function FairApplicationReviewPage() {
     const dueDaysLabel = dueDays != null ? `${dueDays}일` : "기본 기한(7일)";
     const proceed = await confirm({
       title: "행사를 승인할까요?",
-      description: `개설비 ${amount.toLocaleString("ko-KR")}원, 결제 기한 ${dueDaysLabel}으로 승인해요. 승인하면 관리자 계정이 발급되고 신청자에게 결제 안내 메일이 발송돼요.`,
+      description: `개설비 ${amount.toLocaleString("ko-KR")}원, 결제 기한 ${dueDaysLabel}으로 승인해요. 승인하면 신청자의 기존 계정에 행사 관리 권한이 추가되고 결제 안내 메일이 발송돼요.`,
       confirmLabel: "승인",
       danger: false,
     });

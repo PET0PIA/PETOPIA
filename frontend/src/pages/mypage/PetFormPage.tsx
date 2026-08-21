@@ -34,7 +34,7 @@ export function PetFormPage() {
           submitting={submitting}
           submitError={submitError}
           onSubmit={handleSubmit}
-          onCancel={() => navigate("/mypage")}
+          onCancel={() => navigate("/mypage/pets")}
         />
       </Card>
     </PageContainer>

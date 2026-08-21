@@ -26,7 +26,7 @@ export function PasswordChangePage() {
       .then((me) => {
         if (!active) return;
         if (!me.passwordChangeAvailable) {
-          navigate("/mypage", { replace: true });
+          navigate(me.role === "SUPER_ADMIN" ? "/account/settings" : "/mypage", { replace: true });
           return;
         }
         setCheckingAccess(false);

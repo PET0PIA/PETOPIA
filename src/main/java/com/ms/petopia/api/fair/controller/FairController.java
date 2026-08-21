@@ -214,4 +214,12 @@ public class FairController {
         // SecurityConfig에서 SUPER_ADMIN role만 이 엔드포인트에 도달할 수 있게 막는다.
         return fairService.publish(fairId, actorId);
     }
+
+    // 운영일·정원 관리 화면이 진입 시 지금 공개 상태를 미리 조회하는 용도(publish와 동일하게
+    // SecurityConfig에서 EVENT_ADMIN/SUPER_ADMIN role만 도달 가능, "그 행사 담당자인지"는
+    // FairService가 FairAdminAccessGuard로 한 번 더 확인).
+    @GetMapping("/{fairId}/publish-status")
+    public PublishFairResponse getPublishStatus(@PathVariable Long fairId) {
+        return fairService.getPublishStatus(fairId);
+    }
 }

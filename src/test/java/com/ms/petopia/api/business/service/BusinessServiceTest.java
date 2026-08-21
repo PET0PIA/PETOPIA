@@ -2,6 +2,8 @@ package com.ms.petopia.api.business.service;
 
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.auth.service.UserRoleService;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.request.BusinessRejectRequest;
@@ -15,6 +17,7 @@ import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
+import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import org.junit.jupiter.api.AfterEach;
@@ -72,6 +75,9 @@ class BusinessServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private AuthMapper authMapper;
+
     @InjectMocks
     private BusinessService businessService;
 
@@ -84,6 +90,12 @@ class BusinessServiceTest {
     @BeforeEach
     void setUp() {
         TransactionSynchronizationManager.initSynchronization();
+        // 대부분의 기존 테스트는 일반 사용자의 정상 요청을 전제로 한다.
+        org.mockito.Mockito.lenient().when(authMapper.selectUserById(any()))
+                .thenReturn(User.builder().userId(1L).role("USER").build());
+        org.mockito.Mockito.lenient().when(authMapper.selectUserByIdForUpdate(any()))
+                .thenAnswer(invocation -> User.builder()
+                        .userId(invocation.getArgument(0)).role("USER").build());
     }
 
     @AfterEach
@@ -143,6 +155,23 @@ class BusinessServiceTest {
     @Nested
     @DisplayName("사업자 등록")
     class RegisterBusiness {
+
+        @Test
+        @DisplayName("EVENT_ADMIN은 사업자를 등록할 수 없다")
+        void rejectsEventAdminBeforeExternalCalls() {
+            Long ownerId = 1L;
+            given(authMapper.selectUserById(ownerId))
+                    .willReturn(User.builder().userId(ownerId).role("EVENT_ADMIN").build());
+
+            assertThatThrownBy(() -> businessService.registerBusiness(ownerId, createRequest()))
+                    .isInstanceOf(CommonException.class)
+                    .extracting(error -> ((CommonException) error).getErrorCode())
+                    .isEqualTo(ErrorCode.BUSINESS_EVENT_ADMIN_NOT_ALLOWED);
+
+            verify(ntsClient, never()).validate(any(), any(), any());
+            verify(storageService, never()).confirm(any(), any());
+            verify(businessRegistrar, never()).save(any(), any(), any(), any());
+        }
 
         @Test
         @DisplayName("국세청 검증 통과하면 문서를 확정하고 심사 대기 상태로 저장한다")
@@ -452,6 +481,23 @@ class BusinessServiceTest {
             // then: 이미 VENDOR였을 테니 권한 부여 호출 자체가 없어야 함
             verify(userRoleService, never()).grantVendorRole(any());
 
+        }
+
+        @Test
+        @DisplayName("소유자가 EVENT_ADMIN이면 사업자를 승인하지 않는다")
+        void rejectsApprovalForEventAdminOwner() {
+            Business business = createBusiness(1L, 10L, "멍냥사료", "VERIFIED");
+            given(businessMapper.selectByIdForReview(1L)).willReturn(business);
+            given(authMapper.selectUserByIdForUpdate(10L))
+                    .willReturn(User.builder().userId(10L).role("EVENT_ADMIN").build());
+
+            assertThatThrownBy(() -> businessService.approveBusiness(2L, 1L))
+                    .isInstanceOf(CommonException.class)
+                    .extracting(error -> ((CommonException) error).getErrorCode())
+                    .isEqualTo(ErrorCode.BUSINESS_EVENT_ADMIN_NOT_ALLOWED);
+
+            verify(businessMapper, never()).updateApprovalApproved(any(), any(), any());
+            verify(userRoleService, never()).grantVendorRole(any());
         }
 
         @Test

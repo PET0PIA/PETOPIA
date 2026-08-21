@@ -19,6 +19,7 @@ import {
   type FairApplicationDetail,
   type UpdateFairApplicationRequest,
 } from "../../api/fair";
+import { getMe } from "../../api/user";
 
 // 신청서 수정(재제출)은 백엔드가 RECEIVED(심사 대기)/REJECTED(반려) 상태에서만 허용한다
 // (FairService#updateApplication 참고) - 최종 판단은 항상 백엔드가 하지만, 화면에서도 미리
@@ -102,11 +103,17 @@ function PeriodFields({ title, startId, startValue, endId, endValue, onStart, on
   );
 }
 
+// FairApplicationNewPage.tsx/EditProfilePage.tsx의 PHONE_PATTERN과 동일 - 이 프로젝트의 휴대폰 번호 형식 검증 관례.
+const PHONE_PATTERN = /^01[0-9]-?\d{3,4}-?\d{4}$/;
+
 function validate(form: FormState): string[] {
   const errors: string[] = [];
   if (form.name.trim() === "") errors.push("행사명을 입력해 주세요.");
   if (form.managerName.trim() === "") errors.push("담당자 이름을 입력해 주세요.");
   if (form.managerEmail.trim() === "") errors.push("담당자 이메일을 입력해 주세요.");
+  if (form.managerPhone.trim() !== "" && !PHONE_PATTERN.test(form.managerPhone.trim())) {
+    errors.push("담당자 연락처 형식이 올바르지 않아요. (예: 010-1234-5678)");
+  }
   if (form.reservationFee !== "" && Number(form.reservationFee) < 0) errors.push("예약금은 0 이상이어야 해요.");
 
   const periods: Array<[string, string, string]> = [
@@ -194,11 +201,11 @@ function FairApplicationEditContent({ id }: { id: number }) {
 
   useEffect(() => {
     let alive = true;
-    getMyApplicationDetail(id)
-      .then((res) => {
+    Promise.all([getMyApplicationDetail(id), getMe()])
+      .then(([res, me]) => {
         if (!alive) return;
         setDetail(res);
-        setForm(formStateFromDetail(res));
+        setForm({ ...formStateFromDetail(res), managerEmail: me.email });
       })
       .catch((err: unknown) => {
         if (!alive) return;
@@ -464,7 +471,8 @@ function FairApplicationEditContent({ id }: { id: number }) {
               </div>
               <div>
                 {label("managerEmail", "담당자 이메일", true)}
-                <Input id="managerEmail" type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} required />
+                <Input id="managerEmail" type="email" value={form.managerEmail} readOnly required className="bg-page text-muted" />
+                <p className="mt-1.5 text-xs text-muted">로그인한 계정 이메일은 변경할 수 없어요.</p>
               </div>
             </Card>
           </section>

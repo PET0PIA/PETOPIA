@@ -12,7 +12,6 @@ import com.ms.petopia.api.auth.mapper.FairAdminAssignmentMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.security.jwt.JwtTokenProvider;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -20,10 +19,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,13 +38,6 @@ class AdminAccountServiceTest {
 
     private static final Long FAIR_ID = 10L;
     private static final Long APPLICANT_USER_ID = 5L;
-    private static final Long NEW_ADMIN_ID = 100L;
-    private static final String MANAGER_NAME = "김담당";
-    private static final String MANAGER_EMAIL = "manager@fair.com";
-    private static final String MANAGER_PHONE = "010-9999-8888";
-    private static final Long OPENING_FEE_AMOUNT = 500_000L;
-    private static final LocalDateTime PAYMENT_DUE_AT = LocalDateTime.of(2026, 8, 20, 18, 0);
-    private static final String FRONTEND_URL = "http://localhost:5173";
 
     private static final Long ADMIN_USER_ID = 1L;
     private static final String ADMIN_EMAIL = "admin@petopia.com";
@@ -56,8 +46,6 @@ class AdminAccountServiceTest {
     private AuthMapper authMapper;
     @Mock
     private FairAdminAssignmentMapper fairAdminAssignmentMapper;
-    @Mock
-    private MailService mailService;
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
@@ -71,121 +59,32 @@ class AdminAccountServiceTest {
     @InjectMocks
     private AdminAccountService adminAccountService;
 
-    @BeforeEach
-    void setUp() {
-        //@Value 필드는 Spring이 주입하므로 테스트에서는 ReflectionTestUtils로 세팅
-        ReflectionTestUtils.setField(adminAccountService, "frontendUrl", FRONTEND_URL);
-    }
-
     @Test
-    void issueEventAdminAccount_managerEmail이_이미존재하면_DUPLICATED_EMAIL을_던지고_아무것도_하지않는다() {
-        given(authMapper.selectUserByEmail(MANAGER_EMAIL)).willReturn(applicant());
+    void assignApplicantAsEventAdmin_USER이면_역할변경후_행사에배정한다() {
+        User applicant = applicant();
+        applicant.setRole("USER");
+        given(authMapper.selectUserByIdForUpdate(APPLICANT_USER_ID)).willReturn(applicant);
 
-        assertThatThrownBy(() -> adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
-                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT))
-                .isInstanceOf(CommonException.class)
-                .extracting(ex -> ((CommonException) ex).getErrorCode())
-                .isEqualTo(ErrorCode.DUPLICATED_EMAIL);
+        Long result = adminAccountService.assignApplicantAsEventAdmin(FAIR_ID, APPLICANT_USER_ID);
 
-        verify(authMapper, never()).insertUser(any());
-        verify(fairAdminAssignmentMapper, never()).insertFairAdminAssignment(any());
-        verify(mailService, never()).sendAdminAccountIssueEmail(any(), any(), any(), any(), any());
-    }
-
-    @Test
-    void issueEventAdminAccount_managerPhone이있으면_그값을_그대로_사용한다() {
-        givenHappyPath();
-
-        adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
-                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
-
-        User saved = capturedUser();
-        assertThat(saved.getPhone()).isEqualTo(MANAGER_PHONE);
-    }
-
-    @Test
-    void issueEventAdminAccount_managerPhone이없으면_신청자_전화번호로_대체한다() {
-        givenHappyPath();
-
-        adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, null,
-                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
-
-        User saved = capturedUser();
-        assertThat(saved.getPhone()).isEqualTo(applicant().getPhone());
-    }
-
-    @Test
-    void issueEventAdminAccount_정상발급시_EVENT_ADMIN_role과_신청자_프로필로_계정을_만든다() {
-        givenHappyPath();
-
-        adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
-                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
-
-        User saved = capturedUser();
-        assertThat(saved.getEmail()).isEqualTo(MANAGER_EMAIL);
-        assertThat(saved.getNickname()).isEqualTo(MANAGER_NAME);
-        assertThat(saved.getRole()).isEqualTo("EVENT_ADMIN");
-        assertThat(saved.getStatus()).isEqualTo("ACTIVE");
-        assertThat(saved.isEmailVerified()).isTrue();
-        assertThat(saved.getBirthDate()).isEqualTo(applicant().getBirthDate());
-        assertThat(saved.getGender()).isEqualTo(applicant().getGender());
-        assertThat(saved.getAddress()).isEqualTo(applicant().getAddress());
-        assertThat(saved.isAgreedTerms()).isTrue();
-        assertThat(saved.isAgreedPrivacy()).isTrue();
-    }
-
-    @Test
-    void issueEventAdminAccount_정상발급시_fair_admin_assignments를_새계정id로_기록한다() {
-        givenHappyPath();
-
-        adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
-                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
-
+        assertThat(result).isEqualTo(APPLICANT_USER_ID);
+        verify(authMapper).updateUserRole(APPLICANT_USER_ID, "EVENT_ADMIN");
         ArgumentCaptor<FairAdminAssignment> captor = ArgumentCaptor.forClass(FairAdminAssignment.class);
         verify(fairAdminAssignmentMapper).insertFairAdminAssignment(captor.capture());
-        FairAdminAssignment saved = captor.getValue();
-        assertThat(saved.getAdminUserId()).isEqualTo(NEW_ADMIN_ID);
-        assertThat(saved.getRequesterUserId()).isEqualTo(APPLICANT_USER_ID);
-        assertThat(saved.getFairId()).isEqualTo(FAIR_ID);
+        assertThat(captor.getValue().getAdminUserId()).isEqualTo(APPLICANT_USER_ID);
+        verify(authMapper, never()).insertUser(any());
     }
 
     @Test
-    void issueEventAdminAccount_정상발급시_managerEmail로_메일을보내고_새user_id를_반환한다() {
-        givenHappyPath();
+    void assignApplicantAsEventAdmin_이미_EVENT_ADMIN이면_역할변경없이_행사만배정한다() {
+        User applicant = applicant();
+        applicant.setRole("EVENT_ADMIN");
+        given(authMapper.selectUserByIdForUpdate(APPLICANT_USER_ID)).willReturn(applicant);
 
-        Long result = adminAccountService.issueEventAdminAccount(
-                FAIR_ID, APPLICANT_USER_ID, MANAGER_NAME, MANAGER_EMAIL, MANAGER_PHONE,
-                OPENING_FEE_AMOUNT, PAYMENT_DUE_AT);
+        adminAccountService.assignApplicantAsEventAdmin(FAIR_ID, APPLICANT_USER_ID);
 
-        assertThat(result).isEqualTo(NEW_ADMIN_ID);
-        verify(mailService).sendAdminAccountIssueEmail(
-                eq(MANAGER_EMAIL), anyString(), eq(OPENING_FEE_AMOUNT), eq(PAYMENT_DUE_AT),
-                eq(FRONTEND_URL + "/payments/fair-opening-fee/" + FAIR_ID)
-        );
-    }
-
-    //신청자 중복(managerEmail 미존재) + insertUser 시 PK 생성까지 흉내내는 공통 스텁
-    private void givenHappyPath() {
-        given(authMapper.selectUserByEmail(MANAGER_EMAIL)).willReturn(null);
-        given(authMapper.selectUserById(APPLICANT_USER_ID)).willReturn(applicant());
-        given(passwordEncoder.encode(any())).willReturn("hashed-temp-password");
-        //MyBatis useGeneratedKeys가 insertUser 이후 user.userId를 채워주는 걸 흉내
-        given(authMapper.insertUser(any(User.class))).willAnswer(invocation -> {
-            User user = invocation.getArgument(0);
-            user.setUserId(NEW_ADMIN_ID);
-            return 1;
-        });
-    }
-
-    private User capturedUser() {
-        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-        verify(authMapper).insertUser(captor.capture());
-        return captor.getValue();
+        verify(authMapper, never()).updateUserRole(anyLong(), anyString());
+        verify(fairAdminAssignmentMapper).insertFairAdminAssignment(any());
     }
 
     private User applicant() {
