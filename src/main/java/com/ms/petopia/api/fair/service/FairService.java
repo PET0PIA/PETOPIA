@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -74,6 +75,9 @@ public class FairService {
      */
     private static final Set<FairStatus> PUBLISHABLE_STATUSES =
             EnumSet.of(FairStatus.PREPARING, FairStatus.IN_PROGRESS);
+
+    /** UserUpdateRequest/EmailSignupRequest 등과 동일한 이 프로젝트의 휴대폰 번호 형식 검증 관례. */
+    private static final Pattern MANAGER_PHONE_PATTERN = Pattern.compile("^01[0-9]-?\\d{3,4}-?\\d{4}$");
 
     private final FairMapper fairMapper;
     private final AuthMapper authMapper;
@@ -668,6 +672,7 @@ public class FairService {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         validateManagerEmailNotTaken(request.managerEmail());
+        validateManagerPhoneFormat(request.managerPhone());
 
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
@@ -709,6 +714,16 @@ public class FairService {
         }
     }
 
+    /** managerPhone은 선택 입력이라 값이 없으면(null/빈 문자열) 검사하지 않는다. 있으면 형식만 확인한다. */
+    private void validateManagerPhoneFormat(String managerPhone) {
+        if (isBlank(managerPhone)) {
+            return;
+        }
+        if (!MANAGER_PHONE_PATTERN.matcher(managerPhone.trim()).matches()) {
+            throw new CommonException(ErrorCode.FAIR_INVALID_MANAGER_PHONE);
+        }
+    }
+
     /**
      * updateApplication 전용 검증. createApplication과 달리 PATCH라 필드가 null일 수 있으므로
      * "필수" 대신 "보냈다면 빈 문자열이면 안 된다"만 확인한다. name/managerName/managerEmail은
@@ -737,6 +752,7 @@ public class FairService {
         if (setFields.contains("managerEmail")) {
             validateManagerEmailNotTaken(request.managerEmail());
         }
+        validateManagerPhoneFormat(request.managerPhone());
 
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
