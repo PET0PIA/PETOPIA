@@ -20,6 +20,7 @@ export function HallManagementPage() {
   const [halls, setHalls] = useState<Hall[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingHall, setEditingHall] = useState<Hall | null>(null);
@@ -36,6 +37,7 @@ export function HallManagementPage() {
 
     setLoading(true);
     setLoadError(null);
+    setActionError(null);
     setHalls([]);
     getHalls(fairId)
       .then((data) => { if (!ignore) setHalls(data); })
@@ -100,11 +102,12 @@ export function HallManagementPage() {
     if (fairId === null) return;
     if (!(await confirm({ description: `'${hall.name}' 홀을 삭제할까요?` }))) return;
 
+    setActionError(null);
     try {
       await deleteHall(fairId, hall.hallId);
       setHalls((previous) => previous.filter((item) => item.hallId !== hall.hallId));
     } catch (error) {
-      setLoadError(error instanceof ApiError ? error.message : "홀을 삭제하지 못했어요.");
+      setActionError(error instanceof ApiError ? error.message : "홀을 삭제하지 못했어요.");
     }
   }
 
@@ -121,6 +124,13 @@ export function HallManagementPage() {
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <p>{loadError}</p>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <p>{actionError}</p>
         </div>
       )}
 

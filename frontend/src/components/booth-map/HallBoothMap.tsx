@@ -71,7 +71,7 @@ export function HallBoothMap({ hallName, backgroundImageUrl, slots, onSlotClick 
               disabled={clickable ? false : undefined}
               onClick={clickable ? () => onSlotClick?.(slot.boothSlotsId) : undefined}
               aria-label={`부스 슬롯 ${slot.slotNumber}${slot.caption ? `, ${slot.caption}` : ""}`}
-              className={`absolute flex flex-col items-center justify-center overflow-hidden rounded-md border-2 px-1 text-center text-[11px] font-bold transition-colors ${toneClass[slot.tone]} ${
+              className={`absolute flex flex-col items-center justify-center overflow-hidden rounded-md border-2 px-1 text-center font-bold transition-colors [container-type:size] ${toneClass[slot.tone]} ${
                 slot.locked ? "cursor-not-allowed" : clickable ? "cursor-pointer hover:opacity-80" : ""
               } ${slot.selected ? "ring-2 ring-primary ring-offset-1 ring-offset-page" : ""}`}
               style={{
@@ -82,8 +82,12 @@ export function HallBoothMap({ hallName, backgroundImageUrl, slots, onSlotClick 
               }}
             >
               {slot.locked && <Lock size={11} className="mb-0.5" />}
-              <span className="truncate">{slot.slotNumber}</span>
-              {slot.caption && <span className="truncate text-[10px] font-normal opacity-80">{slot.caption}</span>}
+              <span className="truncate leading-tight [font-size:clamp(7px,26cqmin,11px)]">{slot.slotNumber}</span>
+              {slot.caption && (
+                <span className="w-full whitespace-pre-line break-words text-center font-normal leading-tight opacity-80 [font-size:clamp(6px,18cqmin,10px)]">
+                  {slot.caption}
+                </span>
+              )}
             </Tag>
           );
         })}
