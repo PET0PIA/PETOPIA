@@ -2,11 +2,16 @@ package com.ms.petopia.api.review.controller;
 
 import com.ms.petopia.api.review.dto.FairReviewStatsResponse;
 import com.ms.petopia.api.review.service.FairReviewStatsService;
+import com.ms.petopia.api.review.service.ReviewStatsExportService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
 
 /**
  * 행사관리자 통계 - 리뷰(태그) 데이터 기반 부분만 담당한다. 예약·입장 데이터 기반 부분은
@@ -19,9 +24,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class FairReviewStatsController {
 
     private final FairReviewStatsService fairReviewStatsService;
+    private final ReviewStatsExportService reviewStatsExportService;
 
     @GetMapping
     public FairReviewStatsResponse stats(@PathVariable Long fairId) {
         return fairReviewStatsService.getStats(fairId);
+    }
+
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> exportStats(@PathVariable Long fairId) throws IOException {
+        byte[] body = reviewStatsExportService.exportAsExcel(fairId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"review-stats-" + fairId + ".xlsx\"")
+                .header(HttpHeaders.CONTENT_TYPE,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                .body(body);
     }
 }

@@ -11,7 +11,7 @@ import { VisitStatsSection } from "../../components/fair-admin/VisitStatsSection
 import { useFairSelector } from "../../contexts/FairSelectorContext";
 import { ApiError } from "../../api/client";
 import { downloadVisitStatsExcel } from "../../api/statistics";
-import { getFairReviewStats, type CompanionType, type CountItem, type FairReviewStats, type TagCountItem, type VisitPurpose } from "../../api/fairReviewStats";
+import { downloadReviewStatsExcel, getFairReviewStats, type CompanionType, type CountItem, type FairReviewStats, type TagCountItem, type VisitPurpose } from "../../api/fairReviewStats";
 
 const companionTypeLabels: Record<string, string> = {
   ALONE: "혼자",
@@ -54,8 +54,10 @@ export function FairStatsPage() {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportingVisit, setExportingVisit] = useState(false);
+  const [exportVisitError, setExportVisitError] = useState<string | null>(null);
+  const [exportingReview, setExportingReview] = useState(false);
+  const [exportReviewError, setExportReviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (fairId === null) return;
@@ -76,16 +78,29 @@ export function FairStatsPage() {
     return () => { ignore = true; };
   }, [fairId]);
 
-  async function handleExport() {
+  async function handleExportVisit() {
     if (fairId === null) return;
-    setExporting(true);
-    setExportError(null);
+    setExportingVisit(true);
+    setExportVisitError(null);
     try {
       await downloadVisitStatsExcel(fairId);
     } catch (error) {
-      setExportError(error instanceof ApiError ? error.message : "엑셀 파일을 내려받지 못했어요.");
+      setExportVisitError(error instanceof ApiError ? error.message : "엑셀 파일을 내려받지 못했어요.");
     } finally {
-      setExporting(false);
+      setExportingVisit(false);
+    }
+  }
+
+  async function handleExportReview() {
+    if (fairId === null) return;
+    setExportingReview(true);
+    setExportReviewError(null);
+    try {
+      await downloadReviewStatsExcel(fairId);
+    } catch (error) {
+      setExportReviewError(error instanceof ApiError ? error.message : "엑셀 파일을 내려받지 못했어요.");
+    } finally {
+      setExportingReview(false);
     }
   }
 
@@ -100,18 +115,24 @@ export function FairStatsPage() {
         description="방문 통계와 태그 기반 리뷰 통계를 한 화면에서 확인해요."
         action={
           fairId !== null && (
-            <Button type="button" variant="outline" onClick={handleExport} disabled={exporting}>
+            <Button type="button" variant="outline" onClick={handleExportVisit} disabled={exportingVisit}>
               <Download size={16} />
-              {exporting ? "내보내는 중..." : "방문 통계 엑셀로 내보내기"}
+              {exportingVisit ? "내보내는 중..." : "방문 통계 엑셀로 내보내기"}
             </Button>
           )
         }
       />
 
-      {exportError && (
+      {exportVisitError && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <p>{exportError}</p>
+          <p>{exportVisitError}</p>
+        </div>
+      )}
+      {exportReviewError && (
+        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          <p>{exportReviewError}</p>
         </div>
       )}
       {loadError && (
@@ -130,9 +151,17 @@ export function FairStatsPage() {
           <VisitStatsSection fairId={fairId} />
 
           <div className="flex flex-col gap-6">
-            <div>
-              <h2 className="text-xl font-extrabold text-ink">리뷰 통계</h2>
-              <p className="mt-1 text-sm text-muted">방문객이 태그로 남긴 만족도·특성 통계예요.</p>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-extrabold text-ink">리뷰 통계</h2>
+                <p className="mt-1 text-sm text-muted">방문객이 태그로 남긴 만족도·특성 통계예요.</p>
+              </div>
+              {reviewStats && reviewStats.reviewCount > 0 && (
+                <Button type="button" variant="outline" onClick={handleExportReview} disabled={exportingReview}>
+                  <Download size={16} />
+                  {exportingReview ? "내보내는 중..." : "리뷰 통계 엑셀로 내보내기"}
+                </Button>
+              )}
             </div>
 
             {loading && (
