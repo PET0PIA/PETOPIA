@@ -136,6 +136,7 @@ public enum ErrorCode {
     FAIR_RESERVATION_START_IN_PAST(HttpStatus.BAD_REQUEST, "F031", "예약 시작일은 오늘 이후여야 합니다."),
     FAIR_OPERATION_START_IN_PAST(HttpStatus.BAD_REQUEST, "F032", "행사 운영 시작일은 오늘 이후여야 합니다."),
     FAIR_APPLICATION_VENDOR_NOT_ALLOWED(HttpStatus.FORBIDDEN, "F033", "참가업체 계정은 행사 개최를 신청할 수 없습니다."),
+    FAIR_INVALID_MANAGER_PHONE(HttpStatus.BAD_REQUEST, "F034", "담당자 연락처 형식이 올바르지 않습니다. (예: 01012345678 또는 010-1234-5678)"),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),

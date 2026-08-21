@@ -200,6 +200,15 @@ function MyFairApplicationDetailContent({ id }: { id: number }) {
       <div className="space-y-6">
         <Card className="space-y-4 p-6">
           <h3 className="text-sm font-extrabold text-muted">기본 정보</h3>
+          {detail.posterImageUrl && (
+            <a href={detail.posterImageUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+              <img
+                src={detail.posterImageUrl}
+                alt="행사 포스터"
+                className="aspect-[4/5] w-40 rounded-card border border-line object-cover transition hover:opacity-80"
+              />
+            </a>
+          )}
           <dl className="grid gap-4 sm:grid-cols-2">
             <Field label="카테고리" value={detail.category ?? "-"} />
             <Field label="행사 소개" value={detail.description ?? "-"} />

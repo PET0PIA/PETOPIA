@@ -302,6 +302,21 @@ export function publishFair(fairId: number) {
   return apiClient.patch<PublishFairResponse>(`/api/fairs/${fairId}/publish`);
 }
 
+export interface FairPublishStatusResponse {
+  fairId: number;
+  status: string;
+  /** 아직 공개하지 않았으면 null. */
+  publishedAt: string | null;
+}
+
+/**
+ * 운영일·정원 관리 화면이 진입 시 지금 공개 상태를 미리 조회한다(publish와 동일 권한 -
+ * 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN). publishFair와 달리 상태를 바꾸지 않는다.
+ */
+export function getFairPublishStatus(fairId: number) {
+  return apiClient.get<FairPublishStatusResponse>(`/api/fairs/${fairId}/publish-status`);
+}
+
 export interface Hall {
   hallId: number;
   fairId: number;
