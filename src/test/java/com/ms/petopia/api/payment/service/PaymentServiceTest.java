@@ -464,22 +464,23 @@ class PaymentServiceTest {
         // idempotencyKey가 fairId 기준으로 만들어졌는지(같은 행사 중복결제 방지의 핵심 값)
         verify(paymentMapper).insert(argThat(row -> "FAIR_OPENING_FEE_10".equals(row.getIdempotencyKey())));
 
-        // SUPER_ADMIN role 검증을 거쳤는지(개설비는 신청자 본인이 아니라 SUPER_ADMIN만 결제 가능)
-        verify(fairAdminAccessGuard).requireSuperAdmin();
+        // 담당자 검증을 거쳤는지(개설비는 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 결제 가능,
+        // 2026-08-21 정정 — 예약금·참가비처럼 당사자가 직접 내는 흐름으로 통일)
+        verify(fairAdminAccessGuard).checkAssigned(10L);
     }
 
     @Test
-    @DisplayName("SUPER_ADMIN이 아니면 행사개설비 결제를 요청해도 예외를 던진다")
-    void payFairOpeningFee_SUPER_ADMIN아님_예외를던진다() {
+    @DisplayName("그 행사 담당 EVENT_ADMIN도 SUPER_ADMIN도 아니면 행사개설비 결제를 요청해도 예외를 던진다")
+    void payFairOpeningFee_담당자아님_예외를던진다() {
         willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
-                .given(fairAdminAccessGuard).requireSuperAdmin();
+                .given(fairAdminAccessGuard).checkAssigned(10L);
 
         assertThatThrownBy(() -> paymentService.payFairOpeningFee(10L, 3L))
                 .isInstanceOf(CommonException.class)
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
 
-        // role 검증에서 이미 막혔으니 행사 도메인 계약 조회조차 안 가야 한다
+        // 담당자 검증에서 이미 막혔으니 행사 도메인 계약 조회조차 안 가야 한다
         verify(fairOpeningFeePaymentContractClient, never()).getPaymentContext(any());
     }
 
@@ -1585,9 +1586,9 @@ class PaymentServiceTest {
         row.setAmount(50000L);
         row.setStatus("COMPLETED");
         row.setFairId(10L);
-        given(paymentMapper.selectByFilter(eq(10L), isNull(), isNull(), isNull(), isNull(), eq(0L), eq(20)))
+        given(paymentMapper.selectByFilter(eq(10L), isNull(), isNull(), isNull(), isNull(), isNull(), eq(0L), eq(20)))
                 .willReturn(List.of(row));
-        given(paymentMapper.countByFilter(eq(10L), isNull(), isNull(), isNull(), isNull())).willReturn(1L);
+        given(paymentMapper.countByFilter(eq(10L), isNull(), isNull(), isNull(), isNull(), isNull())).willReturn(1L);
 
         // Act
         PaymentListResponse result = paymentService.getPayments(10L, null, null, null, 0, 20);
@@ -1605,9 +1606,9 @@ class PaymentServiceTest {
     @Test
     @DisplayName("조건에 맞는 결제가 없으면 빈 목록을 반환한다")
     void getPayments_결과없음_빈목록반환() {
-        given(paymentMapper.selectByFilter(any(), any(), any(), any(), any(), anyLong(), anyInt()))
+        given(paymentMapper.selectByFilter(any(), any(), any(), any(), any(), any(), anyLong(), anyInt()))
                 .willReturn(List.of());
-        given(paymentMapper.countByFilter(any(), any(), any(), any(), any())).willReturn(0L);
+        given(paymentMapper.countByFilter(any(), any(), any(), any(), any(), any())).willReturn(0L);
 
         PaymentListResponse result = paymentService.getPayments(null, null, null, null, 0, 20);
 
@@ -1619,15 +1620,15 @@ class PaymentServiceTest {
     @Test
     @DisplayName("내 결제내역을 조회하면 로그인 사용자 기준으로만 필터링된다")
     void getMyPayments_본인결제내역만조회() {
-        given(paymentMapper.selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), eq(0L), eq(20)))
+        given(paymentMapper.selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), isNull(), eq(0L), eq(20)))
                 .willReturn(List.of());
-        given(paymentMapper.countByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L))).willReturn(0L);
+        given(paymentMapper.countByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), isNull())).willReturn(0L);
 
         PaymentListResponse result = paymentService.getMyPayments(90L, 0, 20);
 
         assertThat(result.content()).isEmpty();
         // fairId·businessId·paymentType·status는 걸지 않고 payerUserId만 거는지(마이페이지 = 본인 것만)
-        verify(paymentMapper).selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), eq(0L), eq(20));
+        verify(paymentMapper).selectByFilter(isNull(), isNull(), isNull(), isNull(), eq(90L), isNull(), eq(0L), eq(20));
     }
 
     // page/size 검증은 컨트롤러의 @Min/@Max가 아니라 여기(서비스 계층)에서 한다 —
@@ -1642,7 +1643,7 @@ class PaymentServiceTest {
                 .extracting(e -> ((CommonException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 
-        verify(paymentMapper, never()).selectByFilter(any(), any(), any(), any(), any(), anyLong(), anyInt());
+        verify(paymentMapper, never()).selectByFilter(any(), any(), any(), any(), any(), any(), anyLong(), anyInt());
     }
 
     @Test

@@ -39,6 +39,7 @@ export interface ApplicationSubmitRequest {
   managerPhone: string; // ≤20자
   managerEmail: string; // ≤100자
   agreedTerms: boolean; // 제출 시 true여야 서버가 통과시킴
+  agreedPrivacy: boolean; // 제출 시 true여야 서버가 통과시킴
   attachmentObjectKey?: string; // presigned-upload로 받은 임시 객체 키, 선택 입력
 }
 
