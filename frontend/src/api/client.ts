@@ -130,6 +130,75 @@ export interface ApiEnvelope<T> {
   data: T;
 }
 
+/** Content-Disposition 헤더의 filename="..."을 뽑아낸다. 없으면 null. */
+function parseContentDispositionFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+  const match = /filename="?([^";]+)"?/.exec(contentDisposition);
+  return match ? match[1] : null;
+}
+
+/**
+ * 바이너리(엑셀 등) 다운로드 응답을 fetch해 Blob으로 받고 브라우저 다운로드를 트리거한다.
+ * apiClient.request()는 JSON 응답만 다뤄서 못 쓰므로, Authorization 헤더 부착과
+ * 401 재발급 재시도만 같은 방식으로 직접 구현한다. downloadVisitStatsExcel/
+ * downloadReviewStatsExcel처럼 도메인별 export API가 공유한다.
+ */
+async function fetchBinary(path: string, isRetry = false): Promise<Response> {
+  // request()와 동일하게, 재발급을 기다리는 동안 다른 요청이 먼저 토큰을 갱신했으면
+  // 그 결과를 덮어쓰지 않는다(늦게 도착한 재발급이 방금 로그인한 새 토큰을 지우는 걸 방지).
+  const generationAtRequest = accessTokenGeneration;
+  const headers: Record<string, string> = {};
+  const accessToken = getAccessToken();
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const response = await fetch(path, { headers, credentials: "include" });
+
+  if (response.status === 401 && !isRetry) {
+    try {
+      const newToken = await refreshAccessTokenOnce();
+      if (accessTokenGeneration === generationAtRequest) setAccessToken(newToken);
+      return fetchBinary(path, true);
+    } catch {
+      if (accessTokenGeneration === generationAtRequest) {
+        setAccessToken(null);
+      } else {
+        return fetchBinary(path, true);
+      }
+    }
+  }
+
+  return response;
+}
+
+export async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  const response = await fetchBinary(path);
+
+  if (!response.ok) {
+    let message = "파일을 내려받지 못했어요.";
+    try {
+      const body = await response.json();
+      message = body?.message ?? message;
+    } catch {
+      // 에러 응답이 JSON이 아니면 기본 메시지를 사용한다.
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const blob = await response.blob();
+  const filename = parseContentDispositionFilename(response.headers.get("Content-Disposition")) ?? fallbackFilename;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const apiClient = {
   get: <T>(path: string, init?: RequestInit) => request<T>(path, { ...init, method: "GET" }),
   post: <T>(path: string, payload?: unknown, init?: RequestInit) =>
