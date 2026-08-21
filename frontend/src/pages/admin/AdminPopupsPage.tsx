@@ -376,13 +376,16 @@ export function AdminPopupsPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               {label("너비(px)")}
-              <Input type="number" min={1} value={form.width} onChange={(event) => update("width", event.target.value)} placeholder="예: 360" />
+              <Input type="number" min={1} value={form.width} onChange={(event) => update("width", event.target.value)} placeholder="예: 320" />
             </div>
             <div>
               {label("높이(px)")}
               <Input type="number" min={1} value={form.height} onChange={(event) => update("height", event.target.value)} placeholder="예: 480" />
             </div>
           </div>
+          <p className="text-xs text-muted">
+            팝업은 화면 좌측 하단에 카드로 표시돼요. 너비는 320px, 높이는 화면 높이의 70%를 넘으면 그 값으로 잘려서 보여요.
+          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
