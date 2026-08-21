@@ -26,7 +26,7 @@ const visitPurposeLabels: Record<VisitPurpose, string> = {
 };
 
 /**
- * 박람회 관리자 콘솔 - 리뷰 관리(삭제 전용). 리뷰 통계(ReviewManagementPage, "/fair-admin/reviews")와
+ * 박람회 관리자 콘솔 - 리뷰 관리(삭제 전용). 방문·리뷰 통계(FairStatsPage, "/fair-admin/statistics")와
  * 역할을 분리했다 - 통계 화면은 집계만 보여주고, 여기서는 부적절한 리뷰 1건을 골라 삭제한다.
  * 목록 조회는 공개 목록 API(GET /reviews)를 그대로 재사용한다 - 닉네임·태그·작성일까지
  * 이미 다 내려주고 있어 관리자 전용 조회 API를 새로 만들지 않았다(petopia-review-feature-plan

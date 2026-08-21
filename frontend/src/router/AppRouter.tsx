@@ -66,7 +66,7 @@ import { PasswordChangePage } from "../pages/mypage/PasswordChangePage";
 import { PetFormPage } from "../pages/mypage/PetFormPage";
 import { PetDetailPage } from "../pages/mypage/PetDetailPage";
 import { MyReviewsPage } from "../pages/mypage/MyReviewsPage";
-import { ReviewManagementPage } from "../pages/fair-admin/ReviewManagementPage";
+import { FairStatsPage } from "../pages/fair-admin/FairStatsPage";
 import { ReviewDeletionPage } from "../pages/fair-admin/ReviewDeletionPage";
 import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
 import { RecruitNoticeDetailPage } from "../pages/recruit-notice/RecruitNoticeDetailPage";
@@ -100,7 +100,6 @@ const fairAdminImplementedPaths = [
   "/fair-admin/qr",
   "/fair-admin/reservations",
   "/fair-admin/payments",
-  "/fair-admin/reviews",
   "/fair-admin/reviews/manage",
   "/fair-admin/statistics",
   "/fair-admin/cancellation",
@@ -275,9 +274,10 @@ export function AppRouter() {
             <Route path="reservations" element={<ReservationStatusPage />} />
             <Route path="reservations/list" element={<FairReservationsPage />} />
             <Route path="payments" element={<FairPaymentSettlementPage />} />
-            <Route path="reviews" element={<ReviewManagementPage />} />
+            {/* 리뷰 통계는 방문 통계와 합쳐졌다 - 옛 북마크/링크가 죽지 않도록 리다이렉트만 남긴다. */}
+            <Route path="reviews" element={<Navigate to="/fair-admin/statistics" replace />} />
             <Route path="reviews/manage" element={<ReviewDeletionPage />} />
-            <Route path="statistics" element={<VisitStatisticsPage />} />
+            <Route path="statistics" element={<FairStatsPage />} />
             <Route path="statistics/booths/:fairId" element={<BoothVisitStatsPage />} />
             <Route path="cancellation" element={<FairCancelRequestPage />} />
             <Route path="recruit-notice" element={<RecruitNoticeFormPage />} />
