@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronLeft, Pencil } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, CreditCard, Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -16,7 +16,7 @@ const statusLabels: Record<string, string> = {
   REJECTED: "반려됨",
   EXPIRED: "만료됨",
   PAYMENT_PENDING: "개설비 결제 대기",
-  PREPARING: "준비 중",
+  PREPARING: "행사 준비중",
   IN_PROGRESS: "진행 중",
   ENDED: "종료",
   CANCELED: "취소됨",
@@ -32,9 +32,13 @@ const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
   CANCELED: "neutral",
 };
 
+// "행사 준비중"이 "결제 준비중"으로 오해되기 쉬워서(2026-08-21 사용자 피드백), 개설비 결제가
+// 이미 끝난 상태에는 별도로 "결제완료" 표시를 같이 보여준다.
+const PAID_STATUSES = new Set(["PREPARING", "IN_PROGRESS", "ENDED"]);
+
 // 취소 승인(FairCancelRequestService#review)은 fairs.canceled_at만 채우고 status는 그대로
 // 두므로, 화면에 보여줄 상태는 status 필드가 아니라 canceledAt 유무로 먼저 판단해야 한다
-// (그렇지 않으면 취소된 행사가 계속 "진행 중"/"준비 중"으로 보인다).
+// (그렇지 않으면 취소된 행사가 계속 "진행 중"/"행사 준비중"으로 보인다).
 function resolveDisplayStatus(detail: FairApplicationDetail): string {
   return detail.canceledAt ? "CANCELED" : detail.status;
 }
@@ -156,6 +160,11 @@ function MyFairApplicationDetailContent({ id }: { id: number }) {
             <Badge tone={statusTones[displayStatus] ?? "neutral"}>
               {statusLabels[displayStatus] ?? displayStatus}
             </Badge>
+            {!detail.canceledAt && PAID_STATUSES.has(detail.status) && (
+              <Badge tone="neutral">
+                <CheckCircle2 size={12} className="mr-1" />결제완료
+              </Badge>
+            )}
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{detail.name}</h1>
         </div>
@@ -254,6 +263,15 @@ function MyFairApplicationDetailContent({ id }: { id: number }) {
             <Field label="이메일" value={detail.managerEmail} />
           </dl>
         </Card>
+
+        {!detail.canceledAt && detail.status === "PAYMENT_PENDING" && (
+          <Link
+            to={`/payments/fair-opening-fee/${detail.fairId}`}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-button bg-primary-strong px-4 text-sm font-bold text-white transition hover:opacity-90"
+          >
+            <CreditCard size={16} />결제하러가기
+          </Link>
+        )}
       </div>
     </div>
   );

@@ -29,7 +29,6 @@ import { AdminDashboardPage } from "../pages/admin/AdminDashboardPage";
 import { FairApplicationReviewPage } from "../pages/admin/FairApplicationReviewPage";
 import { FairCancelRequestReviewPage } from "../pages/admin/FairCancelRequestReviewPage";
 import { PaymentDetailPage } from "../pages/payment/PaymentDetailPage";
-import { PaymentCreatePage } from "../pages/payment/PaymentCreatePage";
 import { PaymentListPage } from "../pages/payment/PaymentListPage";
 import { PaymentFailPage, PaymentSuccessPage } from "../pages/payment/PaymentResultPage";
 import { FairOpeningFeePaymentPage } from "../pages/payment/FairOpeningFeePaymentPage";
@@ -119,7 +118,6 @@ const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).fil
     item.path !== "/admin/fair-applications" &&
     item.path !== "/admin/audit-logs" &&
     item.path !== "/admin/payments" &&
-    item.path !== "/admin/payments/create" &&
     item.path !== "/admin/payments/list" &&
     item.path !== "/admin/refunds" &&
     item.path !== "/admin/settlements" &&
@@ -310,7 +308,6 @@ export function AppRouter() {
             <Route path="fair-applications" element={<FairApplicationReviewPage />} />
             <Route path="audit-logs" element={<AuditLogPage />} />
             <Route path="payments" element={<PaymentDetailPage />} />
-            <Route path="payments/create" element={<PaymentCreatePage />} />
             <Route path="payments/list" element={<PaymentListPage />} />
             <Route path="refunds" element={<RefundPage />} />
             <Route path="settlements" element={<SettlementPage />} />

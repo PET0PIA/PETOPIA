@@ -16,7 +16,7 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 
 const statusLabels: Record<FairOperationStatus, string> = {
-  PREPARING: "준비 중",
+  PREPARING: "행사 준비중",
   IN_PROGRESS: "진행 중",
   ENDED: "종료",
 };
@@ -61,7 +61,7 @@ export function AdminDashboardPage() {
     ? [
         { label: "전체 행사", value: `${summary.totalFairs}건` },
         { label: "진행 중", value: `${summary.inProgressFairs}건` },
-        { label: "준비 중", value: `${summary.preparingFairs}건` },
+        { label: "행사 준비중", value: `${summary.preparingFairs}건` },
         { label: "종료", value: `${summary.endedFairs}건` },
         { label: "전체 확정 예약", value: `${summary.totalReservations.toLocaleString("ko-KR")}건` },
         { label: "전체 방문자", value: `${summary.totalVisitors.toLocaleString("ko-KR")}명` },
