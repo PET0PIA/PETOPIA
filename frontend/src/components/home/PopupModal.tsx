@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
 import { getActivePopups, type Popup } from "../../api/popup";
 import { SmartLink } from "../common/SmartLink";
@@ -27,6 +27,9 @@ export function PopupModal() {
   // 슬라이드업/다운 트랜지션 트리거용. 큐의 popup과 별개로 다뤄야 닫힐 때
   // 슬라이드다운 애니메이션이 끝날 때까지 카드가 화면에 남아있을 수 있다.
   const [visible, setVisible] = useState(false);
+  // 종료 애니메이션이 끝나기 전에 dismiss/hideToday가 또 호출되는 걸 막는 가드.
+  // 없으면 애니메이션 중 연타 시 큐가 두 번 slice(1)돼서 다음 팝업이 통째로 건너뛰어진다.
+  const closingRef = useRef(false);
   const titleId = useId();
 
   useEffect(() => {
@@ -49,8 +52,13 @@ export function PopupModal() {
   }, [popup?.popupId]);
 
   function closeWithAnimation(after: () => void) {
+    if (closingRef.current) return;
+    closingRef.current = true;
     setVisible(false);
-    window.setTimeout(after, EXIT_ANIMATION_MS);
+    window.setTimeout(() => {
+      after();
+      closingRef.current = false;
+    }, EXIT_ANIMATION_MS);
   }
 
   function dismiss() {
@@ -75,7 +83,7 @@ export function PopupModal() {
     <section
       role="region"
       aria-labelledby={titleId}
-      className={`fixed bottom-6 left-6 z-40 flex w-full max-w-[320px] flex-col overflow-hidden rounded-card shadow-lg surface transition-all duration-300 ease-out ${
+      className={`fixed bottom-6 left-6 z-40 flex w-full max-w-[min(320px,calc(100vw_-_3rem))] flex-col overflow-hidden rounded-card shadow-lg surface transition-all duration-300 ease-out ${
         visible ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
       }`}
       style={sizeStyle}

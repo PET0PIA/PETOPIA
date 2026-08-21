@@ -384,7 +384,7 @@ export function AdminPopupsPage() {
             </div>
           </div>
           <p className="text-xs text-muted">
-            팝업은 화면 좌측 하단에 카드로 표시돼요. 너비는 320px, 높이는 화면 높이의 70%를 넘으면 그 값으로 잘려서 보여요.
+            팝업은 화면 좌측 하단에 카드로 표시돼요. 너비는 최대 320px까지만 반영되고, 높이가 화면 높이의 70%를 넘으면 나머지는 스크롤로 볼 수 있어요.
           </p>
 
           <div className="grid grid-cols-2 gap-3">
