@@ -81,6 +81,10 @@
              , r.reserved_at
              , r.payment_expires_at
              , er.first_checked_in_at AS checked_in_at
+             , p.payment_id
+             , p.status AS payment_status
+             , p.method AS payment_method
+             , p.easy_pay_provider AS easy_pay_provider
           FROM reservations r
           JOIN fairs f
             ON f.fair_id = r.fair_id
@@ -89,6 +93,12 @@
            AND fd.operation_date = r.visit_date
      LEFT JOIN entry_records er
             ON er.reservation_id = r.reservation_id
+     <!-- 상세 화면의 "결제 ID / 결제수단"용. 예약금 결제는 idempotency_key가
+          "RESERVATION_DEPOSIT_{예약ID}"로 UNIQUE라 예약 1건당 최대 1행이므로 행이 늘지 않는다.
+          무료 예약은 결제 행이 없어 네 값 모두 NULL로 온다. -->
+     LEFT JOIN payment p
+            ON p.reservation_id = r.reservation_id
+           AND p.payment_type = 'RESERVATION_DEPOSIT'
          WHERE r.reservation_id = #{reservationId}
            AND r.user_id = #{userId}
     </select>

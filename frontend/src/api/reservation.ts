@@ -83,6 +83,10 @@ export interface ReservationDetail extends ReservationListItem {
   canChangeVisitDate: boolean;
   /** 케밥 "예약 취소" 노출 여부 */
   canCancel: boolean;
+  /** 예약금 결제의 ID. 무료 예약(결제 행 없음)이면 null */
+  paymentId: number | null;
+  /** 표시용 결제수단("카드", "간편결제 (네이버페이)"). 결제 완료 전이면 "결제 전", 무료 예약이면 null */
+  paymentMethod: string | null;
 }
 
 /** 입장 QR 토큰. (GET /reservations/{id}/entry-qr) */
