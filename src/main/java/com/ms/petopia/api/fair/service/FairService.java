@@ -17,7 +17,9 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.service.AdminAccountService;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
@@ -33,6 +35,7 @@ import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -46,12 +49,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FairService {
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     /**
      * 승인 시 개설비 결제 기한의 기본값(일). 검토자가 승인 시 {@code paymentDueDays}를 따로
@@ -76,14 +81,12 @@ public class FairService {
     private static final Set<FairStatus> PUBLISHABLE_STATUSES =
             EnumSet.of(FairStatus.PREPARING, FairStatus.IN_PROGRESS);
 
-    /** UserUpdateRequest/EmailSignupRequest 등과 동일한 이 프로젝트의 휴대폰 번호 형식 검증 관례. */
-    private static final Pattern MANAGER_PHONE_PATTERN = Pattern.compile("^01[0-9]-?\\d{3,4}-?\\d{4}$");
-
     private final FairMapper fairMapper;
     private final AuthMapper authMapper;
     private final FairTimeProvider timeProvider;
     private final StorageService storageService;
     private final AdminAccountService adminAccountService;
+    private final MailService mailService;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
     private final FairAdminAccessGuard fairAdminAccessGuard;
@@ -96,6 +99,7 @@ public class FairService {
     @Transactional
     public CreateFairApplicationResponse createApplication(Long userId, CreateFairApplicationRequest request) {
         validateRequest(userId, request);
+        User applicant = validateApplicantRole(userId);
 
         LocalDateTime now = timeProvider.now();
 
@@ -121,7 +125,9 @@ public class FairService {
         fair.setReservationChangeDeadlineHours(request.reservationChangeDeadlineHours());
         fair.setManagerName(request.managerName());
         fair.setManagerPhone(request.managerPhone());
-        fair.setManagerEmail(request.managerEmail());
+        // 요청 본문의 이메일은 변조할 수 있으므로 저장하지 않는다. 승인 권한과 결제 메일은
+        // 항상 applicantUserId의 기존 계정에 연결되어야 해 로그인 계정 이메일로 고정한다.
+        fair.setManagerEmail(applicant.getEmail());
         fair.setCreatedAt(now);
         fair.setUpdatedAt(now);
 
@@ -210,7 +216,7 @@ public class FairService {
 
     /**
      * 개설비 결제 페이지 전용 요약 조회. 이 화면을 보는 사람은 신청자 본인(applicant_user_id)이
-     * 아니라 승인 시 새로 발급된 담당자(EVENT_ADMIN) 계정이라 {@link #getMyApplicationDetail}
+     * 아니라 승인 시 담당자로 배정된 신청자(EVENT_ADMIN) 계정이라 {@link #getMyApplicationDetail}
      * (신청자 본인 검증)을 쓸 수 없다 - {@link FairAdminAccessGuard}로 그 행사에 배정된
      * 담당자인지 확인한다(SUPER_ADMIN은 배정 여부와 무관하게 통과).
      *
@@ -218,7 +224,7 @@ public class FairService {
      * 반대면 배정 안 된 사용자에게 "존재하는 행사는 ACCESS_DENIED, 없는 행사는 FAIR_NOT_FOUND"로
      * 서로 다른 에러가 나가 행사 ID 존재 여부가 새어나간다. fair_admin_assignments에는
      * fairs로의 FK는 없지만, 이 행에는 승인된(=존재가 확정된) 행사에 대해서만 행이 생기므로
-     * (issueEventAdminAccount 참고) 순서를 바꿔도 정상 배정건 조회 결과는 달라지지 않는다.
+     * (assignApplicantAsEventAdmin 참고) 순서를 바꿔도 정상 배정건 조회 결과는 달라지지 않는다.
      */
     @Transactional(readOnly = true)
     public FairOpeningFeeSummaryResponse getOpeningFeeSummary(Long fairId) {
@@ -326,13 +332,17 @@ public class FairService {
         if (requesterId == null || requesterId <= 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        Set<String> setFields = resolveUpdateSetFields(presentFields);
+        Set<String> setFields = new HashSet<>(resolveUpdateSetFields(presentFields));
         validateUpdateRequest(request, setFields);
 
         Fair fair = findFairOrThrow(fairId);
         if (!requesterId.equals(fair.getApplicantUserId())) {
             throw new CommonException(ErrorCode.FAIR_APPLICATION_ACCESS_DENIED);
         }
+        validateApplicantRole(requesterId);
+        // 담당자 이메일은 신청 당시 로그인 계정 이메일로 확정되며 이후에는 변경할 수 없다.
+        // 화면의 readOnly만 믿지 않고, API 요청에 managerEmail이 포함돼도 UPDATE 대상에서 제거한다.
+        setFields.remove("managerEmail");
 
         Fair update = new Fair();
         update.setFairId(fairId);
@@ -375,7 +385,8 @@ public class FairService {
         update.setReservationChangeDeadlineHours(request.reservationChangeDeadlineHours());
         update.setManagerName(request.managerName());
         update.setManagerPhone(request.managerPhone());
-        update.setManagerEmail(request.managerEmail());
+        // setFields에서 제외했으므로 매퍼는 기존 managerEmail 값을 그대로 유지한다.
+        update.setManagerEmail(null);
 
         int updated = fairMapper.updateApplication(update, setFields);
         if (updated == 0) {
@@ -403,8 +414,8 @@ public class FairService {
 
     /**
      * 신청서를 승인하거나 반려한다. RECEIVED 상태의 신청서만 검토할 수 있다.
-     * 승인 시 상태를 PAYMENT_PENDING으로 바꾸고 개설비 결제 기한을 잡은 뒤, 행사 관리자
-     * 계정을 발급한다({@link AdminAccountService#issueEventAdminAccount}). 개설비 결제
+     * 승인 시 상태를 PAYMENT_PENDING으로 바꾸고 개설비 결제 기한을 잡은 뒤, 신청자의 기존
+     * 계정을 행사 관리자로 배정한다({@link AdminAccountService#assignApplicantAsEventAdmin}). 개설비 결제
      * 완료 감지는 별도(FairTransitionService.completeDuePayments, 폴링)로 처리한다.
      *
      * <p>RECEIVED 여부는 미리 SELECT로 확인하지 않고 UPDATE의 WHERE 절이 직접 검증한다
@@ -451,10 +462,7 @@ public class FairService {
         }
 
         if (approved) {
-            adminAccountService.issueEventAdminAccount(
-                    fairId, fair.getApplicantUserId(), fair.getManagerName(), fair.getManagerEmail(), fair.getManagerPhone(),
-                    update.getOpeningFeeAmount(), update.getPaymentDueAt()
-            );
+            adminAccountService.assignApplicantAsEventAdmin(fairId, fair.getApplicantUserId());
         }
 
         auditLogService.record(
@@ -472,14 +480,23 @@ public class FairService {
         );
 
         Long applicantUserId = fair.getApplicantUserId();
+        User applicant = authMapper.selectUserById(applicantUserId);
+        if (applicant == null || isBlank(applicant.getEmail())) {
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
+        }
+        String applicantEmail = applicant.getEmail();
         if (approved) {
+            String paymentPath = "/payments/fair-opening-fee/" + fairId;
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_APPROVED,
                     "행사 신청이 승인되었습니다",
-                    "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.");
+                    "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.",
+                    () -> mailService.sendFairApprovalEmail(applicantEmail,
+                            update.getOpeningFeeAmount(), update.getPaymentDueAt(), frontendUrl + paymentPath));
         } else {
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_REJECTED,
                     "행사 신청이 반려되었습니다",
-                    "반려 사유: " + update.getRejectReason());
+                    "반려 사유: " + update.getRejectReason(),
+                    () -> mailService.sendFairRejectionEmail(applicantEmail, update.getRejectReason()));
         }
 
         return new ReviewFairApplicationResponse(
@@ -493,7 +510,7 @@ public class FairService {
     }
 
     private void notifyFairReviewAfterCommit(Long recipientUserId, NotificationType type,
-                                             String title, String body) {
+                                             String title, String body, Runnable emailAction) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -505,11 +522,17 @@ public class FairService {
                             title,
                             body,
                             null,
-                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            List.of(DeliveryChannel.IN_APP),
                             null
                     ));
                 } catch (Exception e) {
                     log.error("행사 심사 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
+                }
+                // 인앱 알림과 별도로, PETOPIA HTML 템플릿 이메일을 한 번만 발송한다.
+                try {
+                    emailAction.run();
+                } catch (Exception e) {
+                    log.error("행사 심사 이메일 발송 실패. recipientUserId={}, type={}", recipientUserId, type, e);
                 }
             }
         });
@@ -665,15 +688,12 @@ public class FairService {
         if (userId == null || userId <= 0 || request == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        if (isBlank(request.name()) || isBlank(request.managerName()) || isBlank(request.managerEmail())) {
+        if (isBlank(request.name()) || isBlank(request.managerName())) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        validateManagerEmailNotTaken(request.managerEmail());
-        validateManagerPhoneFormat(request.managerPhone());
-
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
                 request.vendorRecruitStartDate(), request.vendorRecruitEndDate(),
@@ -693,18 +713,22 @@ public class FairService {
     }
 
     /**
-     * 담당자 이메일이 이미 가입된 회원 계정과 겹치는지 미리 확인한다. 승인 시점에
-     * {@link AdminAccountService#issueEventAdminAccount}가 같은 검증을 한 번 더 하지만, 그때는
-     * 이미 심사가 끝난 뒤라 관리자가 승인을 눌러야만 신청 자체가 애초에 불가능했다는 사실이
-     * 드러난다 - 신청 접수 단계에서 미리 막아 관리자가 뒤늦게 반려하지 않아도 되게 한다.
+     * 단일 role 구조에서 VENDOR 권한이 EVENT_ADMIN으로 덮이는 일을 막기 위한 공통 검사다.
+     * USER는 승인 시 EVENT_ADMIN으로 전환되고, EVENT_ADMIN은 여러 행사를 추가 신청할 수 있다.
+     * VENDOR는 EVENT_ADMIN이 될 수 없다.
      */
-    private void validateManagerEmailNotTaken(String managerEmail) {
-        if (isBlank(managerEmail)) {
-            return;
+    private User validateApplicantRole(Long userId) {
+        User applicant = authMapper.selectUserById(userId);
+        if (applicant == null) {
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
         }
-        if (authMapper.selectUserByEmail(managerEmail) != null) {
-            throw new CommonException(ErrorCode.DUPLICATED_EMAIL);
+        if ("VENDOR".equals(applicant.getRole())) {
+            throw new CommonException(ErrorCode.FAIR_APPLICATION_VENDOR_NOT_ALLOWED);
         }
+        if (!"USER".equals(applicant.getRole()) && !"EVENT_ADMIN".equals(applicant.getRole())) {
+            throw new CommonException(ErrorCode.ACCESS_DENIED);
+        }
+        return applicant;
     }
 
     /** startDate가 있는데 오늘보다 이전이면 막는다. 참가업체 모집·예약·운영 세 기간에 공통으로 쓴다. */
@@ -714,19 +738,9 @@ public class FairService {
         }
     }
 
-    /** managerPhone은 선택 입력이라 값이 없으면(null/빈 문자열) 검사하지 않는다. 있으면 형식만 확인한다. */
-    private void validateManagerPhoneFormat(String managerPhone) {
-        if (isBlank(managerPhone)) {
-            return;
-        }
-        if (!MANAGER_PHONE_PATTERN.matcher(managerPhone.trim()).matches()) {
-            throw new CommonException(ErrorCode.FAIR_INVALID_MANAGER_PHONE);
-        }
-    }
-
     /**
      * updateApplication 전용 검증. createApplication과 달리 PATCH라 필드가 null일 수 있으므로
-     * "필수" 대신 "보냈다면 빈 문자열이면 안 된다"만 확인한다. name/managerName/managerEmail은
+     * "필수" 대신 "보냈다면 빈 문자열이면 안 된다"만 확인한다. name/managerName은
      * 그 자체로는 nullable해 보이지만(record에서 null 허용) 실제로는 필수 컬럼이라, setFields에
      * 있는데(=요청에 명시적으로 포함됐는데) 값이 null이면(=명시적으로 지우려는 시도) 거부한다 -
      * 그냥 생략(setFields에 없음)했다면 기존 값이 유지되니 문제없다.
@@ -735,25 +749,16 @@ public class FairService {
         if (request == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        if (isBlankIfPresent(request.name()) || isBlankIfPresent(request.managerName())
-                || isBlankIfPresent(request.managerEmail())) {
+        if (isBlankIfPresent(request.name()) || isBlankIfPresent(request.managerName())) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if ((setFields.contains("name") && request.name() == null)
-                || (setFields.contains("managerName") && request.managerName() == null)
-                || (setFields.contains("managerEmail") && request.managerEmail() == null)) {
+                || (setFields.contains("managerName") && request.managerName() == null)) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        // managerEmail이 이번 요청에 실제로 포함돼(=바뀌려는 시도) 있을 때만 중복 확인한다.
-        // 생략된 경우(기존 값 유지)까지 매번 재확인할 필요는 없다.
-        if (setFields.contains("managerEmail")) {
-            validateManagerEmailNotTaken(request.managerEmail());
-        }
-        validateManagerPhoneFormat(request.managerPhone());
-
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
                 request.vendorRecruitStartDate(), request.vendorRecruitEndDate(),

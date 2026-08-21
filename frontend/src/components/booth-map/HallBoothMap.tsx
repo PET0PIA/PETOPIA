@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 
 export type HallBoothMapTone = "leaf" | "sun" | "neutral";
@@ -7,6 +8,9 @@ const toneClass: Record<HallBoothMapTone, string> = {
   sun: "border-sun/60 bg-sun-soft text-ink",
   neutral: "border-muted/60 bg-muted/15 text-muted",
 };
+
+/** 도면 이미지가 없을 때(또는 아직 안 불러왔을 때) 쓰는 기본 비율. BoothCanvas.tsx와 동일. */
+const DEFAULT_ASPECT_RATIO = 16 / 10;
 
 export interface HallBoothMapSlot {
   boothSlotsId: number;
@@ -35,20 +39,38 @@ interface HallBoothMapProps {
 
 /**
  * 홀 하나의 배치도를 그리는 공용 읽기 전용 컴포넌트. 모집공고 상세/확정부스안내판/신청서
- * 제출 페이지가 다 같이 쓴다. fair-admin의 BoothCanvas(관리자 편집용, 드래그/리사이즈)와
- * 같은 0~1 비율 좌표·기본 스타일을 쓰되, 이동/크기조절은 없다.
- *
- * 한 행사에 홀이 여러 개일 수 있어(posX/posY가 홀마다 다른 도면 기준 좌표), 반드시 호출부가
- * 슬롯을 hallId로 그룹핑해서 홀 하나씩 이 컴포넌트에 넘겨야 한다 - 서로 다른 홀의 슬롯을
- * 섞어서 넘기면 좌표가 뒤섞여 잘못 그려진다.
+ * 제출 페이지가 다 같이 쓴다. fair-admin의 BoothCanvas(관리자 편집용)와 같은 0~1 비율
+ * 좌표를 쓰므로, 캔버스 비율도 BoothCanvas와 똑같이 실제 도면 이미지 비율에 맞춰야
+ * 슬롯 위치가 편집 화면이랑 어긋나지 않는다(2026-08-20, 도면 담당자가 BoothCanvas에
+ * 적용한 것과 동일한 방식).
  */
 export function HallBoothMap({ hallName, backgroundImageUrl, slots, onSlotClick }: HallBoothMapProps) {
+  // 도면 이미지의 실제 가로:세로 비율. 이미지를 새로 불러올 때만 갱신한다.
+  const [loadedImage, setLoadedImage] = useState<{ url: string; ratio: number } | null>(null);
+
+  useEffect(() => {
+    if (!backgroundImageUrl) return;
+    let ignore = false;
+    const image = new Image();
+    image.onload = () => {
+      if (ignore || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+      setLoadedImage({ url: backgroundImageUrl, ratio: image.naturalWidth / image.naturalHeight });
+    };
+    image.src = backgroundImageUrl;
+    return () => { ignore = true; };
+  }, [backgroundImageUrl]);
+
+  const aspectRatio = backgroundImageUrl && loadedImage?.url === backgroundImageUrl ? loadedImage.ratio : DEFAULT_ASPECT_RATIO;
+
   return (
     <div>
       <h3 className="mb-2 text-sm font-bold text-ink">{hallName}</h3>
       <div
-        className="relative aspect-[16/10] w-full overflow-hidden rounded-card border border-line bg-page"
-        style={backgroundImageUrl ? { backgroundImage: `url(${backgroundImageUrl})`, backgroundSize: "cover" } : undefined}
+        className="relative w-full overflow-hidden rounded-card border border-line bg-page"
+        style={{
+          aspectRatio,
+          ...(backgroundImageUrl ? { backgroundImage: `url(${backgroundImageUrl})`, backgroundSize: "cover" } : {}),
+        }}
       >
         {!backgroundImageUrl && (
           <div
@@ -71,7 +93,7 @@ export function HallBoothMap({ hallName, backgroundImageUrl, slots, onSlotClick 
               disabled={clickable ? false : undefined}
               onClick={clickable ? () => onSlotClick?.(slot.boothSlotsId) : undefined}
               aria-label={`부스 슬롯 ${slot.slotNumber}${slot.caption ? `, ${slot.caption}` : ""}`}
-              className={`absolute flex flex-col items-center justify-center overflow-hidden rounded-md border-2 px-1 text-center text-[11px] font-bold transition-colors ${toneClass[slot.tone]} ${
+              className={`absolute flex flex-col items-center justify-center overflow-hidden rounded-md border-2 px-1 text-center font-bold transition-colors [container-type:size] ${toneClass[slot.tone]} ${
                 slot.locked ? "cursor-not-allowed" : clickable ? "cursor-pointer hover:opacity-80" : ""
               } ${slot.selected ? "ring-2 ring-primary ring-offset-1 ring-offset-page" : ""}`}
               style={{
@@ -82,8 +104,12 @@ export function HallBoothMap({ hallName, backgroundImageUrl, slots, onSlotClick 
               }}
             >
               {slot.locked && <Lock size={11} className="mb-0.5" />}
-              <span className="truncate">{slot.slotNumber}</span>
-              {slot.caption && <span className="truncate text-[10px] font-normal opacity-80">{slot.caption}</span>}
+              <span className="truncate leading-tight [font-size:clamp(7px,26cqmin,11px)]">{slot.slotNumber}</span>
+              {slot.caption && (
+                <span className="w-full whitespace-pre-line break-words text-center font-normal leading-tight opacity-80 [font-size:clamp(6px,18cqmin,10px)]">
+                  {slot.caption}
+                </span>
+              )}
             </Tag>
           );
         })}

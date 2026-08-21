@@ -91,6 +91,7 @@ public enum ErrorCode {
     BUSINESS_NOT_APPROVED(HttpStatus.CONFLICT, "V029", "승인된 사업자만 취소 처리할 수 있습니다."),
     BUSINESS_REVOKE_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "V030", "취소 처리 시 사유를 입력해야 합니다."),
     BUSINESS_APPROVAL_REQUIRED(HttpStatus.CONFLICT, "V031", "승인된 사업자만 참가 신청을 할 수 있습니다."),
+    BUSINESS_EVENT_ADMIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "V032", "행사 관리자 계정은 사업자를 등록할 수 없습니다."),
 
 
     // ===== Payment =====
@@ -135,6 +136,7 @@ public enum ErrorCode {
     FAIR_RESERVATION_START_IN_PAST(HttpStatus.BAD_REQUEST, "F031", "예약 시작일은 오늘 이후여야 합니다."),
     FAIR_OPERATION_START_IN_PAST(HttpStatus.BAD_REQUEST, "F032", "행사 운영 시작일은 오늘 이후여야 합니다."),
     FAIR_INVALID_MANAGER_PHONE(HttpStatus.BAD_REQUEST, "F033", "담당자 연락처 형식이 올바르지 않습니다. (예: 01012345678 또는 010-1234-5678)"),
+    FAIR_APPLICATION_VENDOR_NOT_ALLOWED(HttpStatus.FORBIDDEN, "F033", "참가업체 계정은 행사 개최를 신청할 수 없습니다."),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),

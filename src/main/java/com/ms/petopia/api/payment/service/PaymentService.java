@@ -215,11 +215,11 @@ public class PaymentService {
      * 도메인의 내부 계약({@link FairOpeningFeePaymentContractClient})을 호출해 승인 시 확정된
      * 금액을 받아온다. fairId만 채워지고 businessId·reservationId·applicationId는 전부 null.
      *
-     * <p>개설비는 행사 신청자 본인이 아니라 <b>SUPER_ADMIN만</b> 결제할 수 있다(2026-08-19,
-     * 주원 결정) - 예약금·참가비처럼 신청 당사자가 스스로 내는 구조가 아니라, 플랫폼
-     * 최고관리자가 대행 결제하는 구조라서 {@link FairAdminAccessGuard#requireSuperAdmin()}으로
-     * role만 검증한다(특정 행사 담당자 배정 여부는 안 본다 - fairId 단위 검증이 필요하면
-     * {@link FairAdminAccessGuard#checkAssigned}를 쓰는 {@link #getPayment}과 다른 지점).
+     * <p>개설비는 승인받은 당사자(그 행사 담당 EVENT_ADMIN) 또는 SUPER_ADMIN이 결제할 수 있다
+     * ({@link FairAdminAccessGuard#checkAssigned}, 2026-08-21 정정 — 원래 "SUPER_ADMIN만 대행
+     * 결제"로 좁혀뒀었는데, 다시 보니 승인(SUPER_ADMIN의 심사 액션)과 결제(승인받은 당사자가
+     * 내는 돈)를 혼동한 설계였다. 예약금·참가비처럼 그 일의 당사자가 직접 내는 흐름으로
+     * 맞추고, SUPER_ADMIN도 관리 목적상 계속 결제할 수 있게 뒀다).
      *
      * <p>결제 완료 후 행사 상태를 "준비중"으로 전이하는 건 이 메서드 책임이 아니다 - 행사
      * 도메인이 폴링 방식으로 직접 감지해서 전이한다({@link
@@ -231,13 +231,14 @@ public class PaymentService {
      * <p>동일 행사에 대한 중복 결제는 idempotencyKey(UK_PAYMENT_IDEMPOTENCY_KEY)로
      * DB가 막는다 — 여기서 잡아 {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE}로 변환한다.
      *
-     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} SUPER_ADMIN이 아닐 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 EVENT_ADMIN도
+     *         SUPER_ADMIN도 아닐 때
      * @throws CommonException {@link ErrorCode#PAYMENT_TARGET_NOT_PAYABLE} 이미 결제된 행사이거나,
      *         존재하지 않거나 개설비를 결제할 수 없는 상태의 행사일 때
      */
     @Transactional
     public PaymentResponse payFairOpeningFee(Long fairId, Long userId) {
-        fairAdminAccessGuard.requireSuperAdmin();
+        fairAdminAccessGuard.checkAssigned(fairId);
         FairOpeningFeePaymentContext context = fairOpeningFeePaymentContractClient.getPaymentContext(fairId);
 
         String idempotencyKey = "FAIR_OPENING_FEE_" + fairId;
@@ -383,15 +384,27 @@ public class PaymentService {
      * 조건별 결제 목록 조회(관리자용). fairId·businessId·paymentType·status 전부 선택적이고
      * 넘긴 값들은 AND로 조합된다.
      *
+     * <p>다른 도메인(승훈님 {@code FairCancelRefundOrchestrationService}/{@code
+     * FairCancelPendingPaymentService})이 빈 주입으로 직접 호출하는 기존 시그니처라, 남의
+     * 도메인 호출부를 건드리지 않도록 이 오버로드는 그대로 두고 reservationId 필터는 아래
+     * 새 오버로드로 분리했다(2026-08-21, 관리자 결제 목록 화면의 "ID유형" 통합검색용).
+     *
      * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} page·size가 범위를 벗어났을 때
      */
     public PaymentListResponse getPayments(
             Long fairId, Long businessId, String paymentType, String status, int page, int size
     ) {
+        return getPayments(fairId, businessId, paymentType, status, null, page, size);
+    }
+
+    /** {@link #getPayments(Long, Long, String, String, int, int)}에 reservationId 필터를 더한 버전. */
+    public PaymentListResponse getPayments(
+            Long fairId, Long businessId, String paymentType, String status, Long reservationId, int page, int size
+    ) {
         validatePageAndSize(page, size);
         long offset = (long) page * size;
-        List<PaymentRow> rows = paymentMapper.selectByFilter(fairId, businessId, paymentType, status, null, offset, size);
-        long total = paymentMapper.countByFilter(fairId, businessId, paymentType, status, null);
+        List<PaymentRow> rows = paymentMapper.selectByFilter(fairId, businessId, paymentType, status, null, reservationId, offset, size);
+        long total = paymentMapper.countByFilter(fairId, businessId, paymentType, status, null, reservationId);
         return PaymentListResponse.of(rows, page, size, total);
     }
 
@@ -403,8 +416,8 @@ public class PaymentService {
     public PaymentListResponse getMyPayments(Long userId, int page, int size) {
         validatePageAndSize(page, size);
         long offset = (long) page * size;
-        List<PaymentRow> rows = paymentMapper.selectByFilter(null, null, null, null, userId, offset, size);
-        long total = paymentMapper.countByFilter(null, null, null, null, userId);
+        List<PaymentRow> rows = paymentMapper.selectByFilter(null, null, null, null, userId, null, offset, size);
+        long total = paymentMapper.countByFilter(null, null, null, null, userId, null);
         return PaymentListResponse.of(rows, page, size, total);
     }
 

@@ -72,7 +72,7 @@ class ApplicationControllerTest {
     private static final String SUBMIT_BODY =
             "{\"businessId\":1,\"boothSlotIds\":[1,2],\"purpose\":\"체험 부스 운영\","
                     + "\"itemsDesc\":\"사료·간식\",\"managerName\":\"김담당\",\"managerPhone\":\"010-1234-5678\","
-                    + "\"managerEmail\":\"manager@petopia.com\",\"agreedTerms\":true}";
+                    + "\"managerEmail\":\"manager@petopia.com\",\"agreedTerms\":true,\"agreedPrivacy\":true}";
 
     private static final String UPDATE_BODY =
             "{\"purpose\":\"체험 부스 운영(수정)\",\"itemsDesc\":\"사료·간식\","
@@ -116,7 +116,7 @@ class ApplicationControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"businessId\":1,\"boothSlotIds\":[1],\"purpose\":\"\","
                                 + "\"itemsDesc\":\"사료\",\"managerName\":\"김담당\",\"managerPhone\":\"010-1234-5678\","
-                                + "\"managerEmail\":\"manager@petopia.com\"}"))
+                                + "\"managerEmail\":\"manager@petopia.com\",\"agreedTerms\":true,\"agreedPrivacy\":true}"))
                 .andExpect(status().isBadRequest());
 
     }

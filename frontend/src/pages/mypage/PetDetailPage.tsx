@@ -247,7 +247,7 @@ export function PetDetailPage() {
               {savingImage ? "저장 중…" : "이미지로 저장"}
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => navigate("/mypage")}>
+              <Button variant="outline" onClick={() => navigate("/mypage/pets")}>
                 목록으로
               </Button>
               <Button variant="outline" onClick={() => setEditing(true)}>

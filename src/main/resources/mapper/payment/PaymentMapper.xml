@@ -224,6 +224,7 @@
             <if test="paymentType != null">AND payment_type = #{paymentType}</if>
             <if test="status != null">AND status = #{status}</if>
             <if test="payerUserId != null">AND payer_user_id = #{payerUserId}</if>
+            <if test="reservationId != null">AND reservation_id = #{reservationId}</if>
         </where>
     </sql>
 

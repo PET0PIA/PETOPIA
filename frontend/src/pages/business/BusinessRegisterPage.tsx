@@ -21,6 +21,7 @@ interface FormState {
   phone: string;
   website: string;
   agreedTerms: boolean;
+  agreedPrivacy: boolean;
 }
 
 const initialForm: FormState = {
@@ -32,6 +33,7 @@ const initialForm: FormState = {
   phone: "",
   website: "",
   agreedTerms: false,
+  agreedPrivacy: false,
 };
 
 function label(text: string, required = false) {
@@ -48,6 +50,7 @@ function validate(form: FormState, documentObjectKey: string | null): string[] {
   if (form.phone.trim() === "") errors.push("연락처를 입력해 주세요.");
   if (!documentObjectKey) errors.push("사업자등록증을 첨부해 주세요.");
   if (!form.agreedTerms) errors.push("사업자 등록 이용약관에 동의해 주세요.");
+  if (!form.agreedPrivacy) errors.push("개인정보 수집·이용에 동의해 주세요.");
   return errors;
 }
 
@@ -61,7 +64,8 @@ function toRequest(form: FormState, documentObjectKey: string): BusinessRegister
     phone: form.phone.trim(),
     website: form.website.trim() || undefined,
     businessRegDocKey: documentObjectKey,
-    agreedTerms: form.agreedTerms, // 추가
+    agreedTerms: form.agreedTerms,
+    agreedPrivacy: form.agreedPrivacy, // 추가
   };
 }
 
@@ -77,6 +81,23 @@ export function BusinessRegisterPage() {
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  if (user?.role === "EVENT_ADMIN") {
+    return (
+      <PageContainer className="py-10">
+        <div className="surface mx-auto max-w-lg p-8 text-center">
+          <AlertCircle className="mx-auto text-muted" size={36} />
+          <h1 className="mt-4 text-xl font-extrabold text-ink">사업자를 등록할 수 없는 계정이에요</h1>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            행사 관리자와 참가업체 권한은 동시에 사용할 수 없어 사업자 등록을 신청할 수 없어요.
+          </p>
+          <Button type="button" className="mt-6" onClick={() => navigate("/")}>
+            홈으로 이동
+          </Button>
+        </div>
+      </PageContainer>
+    );
+  }
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -179,8 +200,10 @@ export function BusinessRegisterPage() {
         </section>
 
         <BusinessTermsAgreement
-          agreed={form.agreedTerms}
-          onAgreedChange={(checked) => update("agreedTerms", checked)}
+          agreedTerms={form.agreedTerms}
+          agreedPrivacy={form.agreedPrivacy}
+          onTermsChange={(checked) => update("agreedTerms", checked)}
+          onPrivacyChange={(checked) => update("agreedPrivacy", checked)}
         />
 
         <div className="flex justify-end">

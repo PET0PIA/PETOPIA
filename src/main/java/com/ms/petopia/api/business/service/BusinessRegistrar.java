@@ -1,5 +1,7 @@
 package com.ms.petopia.api.business.service;
 
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -24,6 +26,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class BusinessRegistrar {
 
     private final BusinessMapper businessMapper;
+    private final AuthMapper authMapper;
 
     @Transactional
     public Business save(Long ownerId, BusinessRegisterRequest request,
@@ -50,6 +53,16 @@ public class BusinessRegistrar {
             }
 
         });
+
+        // 행사 승인과 같은 users 행을 잠근 뒤 최신 role을 다시 확인한다. 외부 API 확인 중
+        // EVENT_ADMIN으로 바뀐 계정이 사업자 소유자로 저장되는 경쟁 조건을 막는다.
+        User owner = authMapper.selectUserByIdForUpdate(ownerId);
+        if (owner == null) {
+            throw new CommonException(ErrorCode.USER_NOT_FOUND);
+        }
+        if ("EVENT_ADMIN".equals(owner.getRole())) {
+            throw new CommonException(ErrorCode.BUSINESS_EVENT_ADMIN_NOT_ALLOWED);
+        }
 
         /*
          * 관리자 승인 전이라 VENDOR 권한은 아직 부여하지 않는다(승인 시점에 BusinessService에서 부여).
