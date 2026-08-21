@@ -39,14 +39,22 @@ export function AccountSettingsPage() {
     setWithdrawError(null);
     try {
       await withdraw();
-      // 백엔드가 토큰을 무효화했어도 프론트 세션 상태(user/status)를 지워야 로그인한 것처럼
-      // 보이는 화면이 안 남는다. logout()은 실패해도 클라이언트 상태를 정리한다(AuthContext 참고).
-      await logout();
-      navigate("/");
     } catch (err) {
       setWithdrawError(err instanceof ApiError ? err.message : "탈퇴에 실패했어요. 잠시 후 다시 시도해 주세요.");
       setWithdrawing(false);
+      return;
     }
+
+    // 여기부터는 탈퇴가 이미 성립했다. 백엔드가 토큰을 무효화했어도 프론트 세션 상태(user/status)를
+    // 지워야 로그인한 것처럼 보이는 화면이 안 남는다. logout()은 서버 요청이 실패해도 finally에서
+    // 클라이언트 상태를 정리하므로(AuthContext 참고), 오류를 삼키고 항상 홈으로 보낸다
+    // - 탈퇴 성공을 실패로 알리면 안 되기 때문이다(PublicHeader.handleLogout과 같은 방식).
+    try {
+      await logout();
+    } catch {
+      // 로그아웃 요청 실패는 무시 - 로컬 상태는 이미 정리됨
+    }
+    navigate("/");
   }
 
   return (
