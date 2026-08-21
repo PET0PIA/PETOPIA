@@ -68,7 +68,7 @@ export function MyPetsPage() {
       ) : (
         <Table>
           <thead>
-            <tr className="border-b border-line bg-surface-alt text-xs font-bold text-ink">
+            <tr className="border-b border-line bg-[#f5f0e8] text-xs font-bold text-ink">
               <th className="px-6 py-4">이름</th>
               <th className="px-6 py-4">종</th>
               <th className="px-6 py-4">생년월일</th>
@@ -93,7 +93,7 @@ export function MyPetsPage() {
                   <Link
                     to={`/mypage/pets/${pet.petId}`}
                     aria-label={`${pet.name} 동물등록증 보기`}
-                    className="inline-flex items-center gap-1.5 rounded-button border border-line px-3 py-1.5 text-xs font-bold text-ink hover:bg-surface-alt"
+                    className="inline-flex items-center gap-1.5 rounded-button border border-line px-3 py-1.5 text-xs font-bold text-ink transition hover:bg-[#f7f3ed]"
                   >
                     <IdCard size={14} aria-hidden="true" />
                     동물등록증
