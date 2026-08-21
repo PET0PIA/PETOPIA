@@ -194,6 +194,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/*/reopen").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // 행사별 매출 요약(티켓+참가비 합산, WBS 5.6) - 전체 행사를 한 번에 보여주는
+                        // 현황판이라 개별 행사 담당자가 아니라 SUPER_ADMIN 전용으로 좁힌다.
+                        .requestMatchers(HttpMethod.GET, "/api/settlements/revenue-summary", "/api/settlements/revenue-summary/export").hasRole("SUPER_ADMIN")
+                        // 정산 통합검색(fairId·businessId 선택적 조합, 2026-08-21) - 정산·수수료율
+                        // 화면(SettlementPage)이 SUPER_ADMIN 전용 라우트라 이것도 그에 맞춘다.
+                        .requestMatchers(HttpMethod.GET, "/api/settlements").hasRole("SUPER_ADMIN")
                         // CommissionRate 도메인 - 현재 요율 조회는 결제 화면 등에서 누구나 볼 수 있게
                         // permitAll, 설정 변경만 SUPER_ADMIN.
                         .requestMatchers(HttpMethod.GET, "/api/settlements/commission-rate").permitAll()

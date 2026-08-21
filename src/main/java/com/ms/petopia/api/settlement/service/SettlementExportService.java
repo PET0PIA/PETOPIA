@@ -1,5 +1,6 @@
 package com.ms.petopia.api.settlement.service;
 
+import com.ms.petopia.api.settlement.dto.FairRevenueSummaryResponse;
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Cell;
@@ -60,6 +61,46 @@ public class SettlementExportService {
             }
 
             for (int col = 0; col < HEADERS.length; col++) {
+                sheet.autoSizeColumn(col);
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            wb.write(out);
+            return out.toByteArray();
+        }
+    }
+
+    private static final String[] REVENUE_SUMMARY_HEADERS = {
+            "행사ID", "행사명", "티켓예매 총금액", "참가비용 총금액", "전체금액", "수수료율", "행사업체금액", "플랫폼금액"
+    };
+
+    /** 행사별 매출 요약(SUPER_ADMIN 정산·수수료 화면) 엑셀 export. 위 정산내역 export와 같은 패턴. */
+    public byte[] exportRevenueSummaryAsExcel() throws IOException {
+        List<FairRevenueSummaryResponse> summaries = settlementService.getFairRevenueSummaries();
+
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            Sheet sheet = wb.createSheet("행사별 매출 요약");
+            CellStyle headerStyle = buildHeaderStyle(wb);
+
+            Row header = sheet.createRow(0);
+            for (int col = 0; col < REVENUE_SUMMARY_HEADERS.length; col++) {
+                setCell(header, col, REVENUE_SUMMARY_HEADERS[col], headerStyle);
+            }
+
+            for (int i = 0; i < summaries.size(); i++) {
+                FairRevenueSummaryResponse s = summaries.get(i);
+                Row row = sheet.createRow(i + 1);
+                setCell(row, 0, String.valueOf(s.fairId()), null);
+                setCell(row, 1, s.fairName(), null);
+                setCell(row, 2, String.valueOf(s.ticketAmount()), null);
+                setCell(row, 3, String.valueOf(s.vendorFeeAmount()), null);
+                setCell(row, 4, String.valueOf(s.grossAmount()), null);
+                setCell(row, 5, s.commissionRate() != null ? s.commissionRate().toString() : "-", null);
+                setCell(row, 6, String.valueOf(s.businessAmount()), null);
+                setCell(row, 7, String.valueOf(s.platformAmount()), null);
+            }
+
+            for (int col = 0; col < REVENUE_SUMMARY_HEADERS.length; col++) {
                 sheet.autoSizeColumn(col);
             }
 

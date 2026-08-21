@@ -1,5 +1,6 @@
 package com.ms.petopia.api.settlement.controller;
 
+import com.ms.petopia.api.settlement.dto.FairRevenueSummaryResponse;
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import com.ms.petopia.api.settlement.service.SettlementExportService;
 import com.ms.petopia.api.settlement.service.SettlementService;
@@ -80,6 +81,16 @@ public class SettlementController {
         return settlementService.getByFair(fairId);
     }
 
+    // 정산 통합검색(SUPER_ADMIN 전용, 2026-08-21). fairId·businessId 둘 다 선택적이고 최소
+    // 하나는 채워야 한다 - SettlementService.getByFilter가 검증·권한확인 전부 담당한다.
+    @GetMapping("/settlements")
+    public List<SettlementResponse> searchSettlements(
+            @RequestParam(required = false) Long fairId,
+            @RequestParam(required = false) Long businessId
+    ) {
+        return settlementService.getByFilter(fairId, businessId);
+    }
+
     // 행사 전체 정산내역 엑셀(.xlsx) 다운로드. statistics 도메인의 visit-stats/export와 동일 패턴.
     @GetMapping("/fairs/{fairId}/settlements/export")
     public ResponseEntity<byte[]> exportSettlements(@PathVariable Long fairId) throws IOException {
@@ -87,6 +98,25 @@ public class SettlementController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"settlements-" + fairId + ".xlsx\"")
+                .header(HttpHeaders.CONTENT_TYPE,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                .body(body);
+    }
+
+    // 행사별 매출 요약 목록(SUPER_ADMIN 전용, WBS 5.6) - 위 정산(참가비 전용, 저장됨)과 별개로
+    // 티켓예매+참가비를 합친 행사 전체 매출을 요율로 나눠서 보여주는 조회 전용 화면.
+    @GetMapping("/settlements/revenue-summary")
+    public List<FairRevenueSummaryResponse> getFairRevenueSummaries() {
+        return settlementService.getFairRevenueSummaries();
+    }
+
+    // 행사별 매출 요약 엑셀(.xlsx) 다운로드(SUPER_ADMIN 전용).
+    @GetMapping("/settlements/revenue-summary/export")
+    public ResponseEntity<byte[]> exportFairRevenueSummaries() throws IOException {
+        byte[] body = settlementExportService.exportRevenueSummaryAsExcel();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"settlement-revenue-summary.xlsx\"")
                 .header(HttpHeaders.CONTENT_TYPE,
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 .body(body);

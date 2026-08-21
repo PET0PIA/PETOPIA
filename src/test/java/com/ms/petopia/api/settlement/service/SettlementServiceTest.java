@@ -7,6 +7,7 @@ import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.dto.FairRevenueSummaryRow;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
@@ -14,6 +15,7 @@ import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.mapper.RefundMapper;
 import com.ms.petopia.api.settlement.client.FairContractClient;
 import com.ms.petopia.api.settlement.dto.FairCancellationStatus;
+import com.ms.petopia.api.settlement.dto.FairRevenueSummaryResponse;
 import com.ms.petopia.api.settlement.dto.SettlementItemRow;
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import com.ms.petopia.api.settlement.dto.SettlementRow;
@@ -493,6 +495,55 @@ class SettlementServiceTest {
         verify(settlementMapper, never()).selectByFairId(any());
     }
 
+    @Test
+    @DisplayName("정산 통합검색 - fairId만 있으면 그 행사 담당자 확인 후 조회한다")
+    void getByFilter_fairId만_행사담당자확인() {
+        given(settlementMapper.selectByFilter(10L, null)).willReturn(List.of(pendingSettlementRow()));
+
+        List<SettlementResponse> results = settlementService.getByFilter(10L, null);
+
+        assertThat(results).hasSize(1);
+        verify(fairAdminAccessGuard).checkAssigned(10L);
+        verify(fairAdminAccessGuard, never()).requireSuperAdmin();
+    }
+
+    @Test
+    @DisplayName("정산 통합검색 - businessId만 있으면 여러 행사를 넘나드니 SUPER_ADMIN만 허용한다")
+    void getByFilter_businessId만_슈퍼어드민만() {
+        given(settlementMapper.selectByFilter(null, 20L)).willReturn(List.of(pendingSettlementRow()));
+
+        List<SettlementResponse> results = settlementService.getByFilter(null, 20L);
+
+        assertThat(results).hasSize(1);
+        verify(fairAdminAccessGuard).requireSuperAdmin();
+        verify(fairAdminAccessGuard, never()).checkAssigned(any());
+    }
+
+    @Test
+    @DisplayName("정산 통합검색 - businessId만 조회인데 SUPER_ADMIN이 아니면 예외를 던진다")
+    void getByFilter_businessId만_슈퍼어드민아님_예외를던진다() {
+        willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
+                .given(fairAdminAccessGuard).requireSuperAdmin();
+
+        assertThatThrownBy(() -> settlementService.getByFilter(null, 20L))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(settlementMapper, never()).selectByFilter(any(), any());
+    }
+
+    @Test
+    @DisplayName("정산 통합검색 - fairId·businessId 둘 다 없으면 예외를 던진다")
+    void getByFilter_둘다없음_예외를던진다() {
+        assertThatThrownBy(() -> settlementService.getByFilter(null, null))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+        verify(settlementMapper, never()).selectByFilter(any(), any());
+    }
+
     private SettlementRow confirmedSettlementRow() {
         SettlementRow row = pendingSettlementRow();
         row.setStatus("CONFIRMED");
@@ -591,5 +642,71 @@ class SettlementServiceTest {
                 .isEqualTo(ErrorCode.SETTLEMENT_RECALCULATION_REQUIRED);
 
         verify(settlementMapper, never()).confirm(any(), any(), any(), any());
+    }
+
+    // ── getFairRevenueSummaries (행사별 매출 요약, WBS 5.6) ──
+
+    private FairRevenueSummaryRow revenueSummaryRow(Long fairId, String fairName, long ticketAmount, long vendorFeeAmount) {
+        FairRevenueSummaryRow row = new FairRevenueSummaryRow();
+        row.setFairId(fairId);
+        row.setFairName(fairName);
+        row.setTicketAmount(ticketAmount);
+        row.setVendorFeeAmount(vendorFeeAmount);
+        return row;
+    }
+
+    @Test
+    @DisplayName("행사별 매출 요약은 티켓예매+참가비를 합산해 수수료율만큼 플랫폼/행사업체 몫으로 나눈다")
+    void getFairRevenueSummaries_티켓과참가비합산_수수료율분배() {
+        // Arrange: 티켓 70000원 + 참가비 30000원 = 전체 100000원, 수수료율 10%
+        given(paymentMapper.selectFairRevenueSummary())
+                .willReturn(List.of(revenueSummaryRow(10L, "댕댕펫", 70000L, 30000L)));
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.1000"));
+
+        List<FairRevenueSummaryResponse> result = settlementService.getFairRevenueSummaries();
+
+        assertThat(result).hasSize(1);
+        FairRevenueSummaryResponse summary = result.get(0);
+        assertThat(summary.fairId()).isEqualTo(10L);
+        assertThat(summary.fairName()).isEqualTo("댕댕펫");
+        assertThat(summary.ticketAmount()).isEqualTo(70000L);
+        assertThat(summary.vendorFeeAmount()).isEqualTo(30000L);
+        assertThat(summary.grossAmount()).isEqualTo(100000L);
+        assertThat(summary.platformAmount()).isEqualTo(10000L);
+        assertThat(summary.businessAmount()).isEqualTo(90000L);
+    }
+
+    @Test
+    @DisplayName("행사별 매출 요약은 매출이 0원인 행사도 목록에 포함시킨다")
+    void getFairRevenueSummaries_매출없는행사도포함() {
+        given(paymentMapper.selectFairRevenueSummary())
+                .willReturn(List.of(revenueSummaryRow(11L, "빈 행사", 0L, 0L)));
+        given(commissionRateService.resolveEffectiveRate(11L)).willReturn(new BigDecimal("0.1000"));
+
+        List<FairRevenueSummaryResponse> result = settlementService.getFairRevenueSummaries();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).grossAmount()).isZero();
+        assertThat(result.get(0).platformAmount()).isZero();
+        assertThat(result.get(0).businessAmount()).isZero();
+    }
+
+    @Test
+    @DisplayName("행사별 매출 요약은 각 행사에 지금 적용되는 요율을 행사별로 따로 조회해서 쓴다")
+    void getFairRevenueSummaries_행사마다요율따로조회() {
+        given(paymentMapper.selectFairRevenueSummary())
+                .willReturn(List.of(
+                        revenueSummaryRow(10L, "댕댕펫", 100000L, 0L),
+                        revenueSummaryRow(11L, "냥이", 100000L, 0L)
+                ));
+        given(commissionRateService.resolveEffectiveRate(10L)).willReturn(new BigDecimal("0.1000"));
+        given(commissionRateService.resolveEffectiveRate(11L)).willReturn(new BigDecimal("0.2000"));
+
+        List<FairRevenueSummaryResponse> result = settlementService.getFairRevenueSummaries();
+
+        assertThat(result).extracting(FairRevenueSummaryResponse::platformAmount)
+                .containsExactly(10000L, 20000L);
+        verify(commissionRateService).resolveEffectiveRate(10L);
+        verify(commissionRateService).resolveEffectiveRate(11L);
     }
 }

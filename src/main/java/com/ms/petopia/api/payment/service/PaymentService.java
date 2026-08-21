@@ -92,7 +92,7 @@ public class PaymentService {
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 소유자도, 그 행사 담당 관리자도 아닐 때
      */
     public PaymentResponse getPayment(Long paymentId, Long userId) {
-        PaymentRow row = paymentMapper.selectById(paymentId);
+        PaymentRow row = paymentMapper.selectByIdWithRefund(paymentId);
         if (row == null) {
             throw new CommonException(ErrorCode.PAYMENT_NOT_FOUND);
         }

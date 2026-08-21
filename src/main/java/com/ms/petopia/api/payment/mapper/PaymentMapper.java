@@ -1,5 +1,6 @@
 package com.ms.petopia.api.payment.mapper;
 
+import com.ms.petopia.api.payment.dto.FairRevenueSummaryRow;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -21,6 +22,14 @@ public interface PaymentMapper {
      * 서비스 계층의 책임으로 남겨둔다).
      */
     PaymentRow selectById(@Param("paymentId") Long paymentId);
+
+    /**
+     * selectById와 동일하지만 REFUND 테이블을 LEFT JOIN해서 환불 정보(있으면)까지 한 번에 담아온다.
+     * HTTP 상세조회 진입점({@code GET /api/payments/{paymentId}}) 전용 - 결제 상세 화면에
+     * "환불 정보" 섹션을 보여주기 위함. 다른 내부 호출부는 불필요한 JOIN을 피하려고 그대로
+     * selectById를 쓴다.
+     */
+    PaymentRow selectByIdWithRefund(@Param("paymentId") Long paymentId);
 
     /**
      * selectById와 동일하지만 {@code FOR UPDATE}로 행을 잠근다. 환불(RefundService)과 정산 계산
@@ -168,4 +177,11 @@ public interface PaymentMapper {
             @Param("status") String status,
             @Param("payerUserId") Long payerUserId,
             @Param("reservationId") Long reservationId);
+
+    /**
+     * 행사별 매출 요약(SUPER_ADMIN 정산·수수료 화면용) — 행사마다 완료된 예약금(티켓)과
+     * 참가비 합계를 각각 환불 차감해서 한 행씩 반환한다. 매출이 없는 행사도(둘 다 0으로)
+     * 전부 포함한다 - fairs 테이블 기준으로 LEFT JOIN하기 때문.
+     */
+    List<FairRevenueSummaryRow> selectFairRevenueSummary();
 }

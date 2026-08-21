@@ -1,5 +1,6 @@
 package com.ms.petopia.api.settlement.service;
 
+import com.ms.petopia.api.settlement.dto.FairRevenueSummaryResponse;
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -81,6 +82,41 @@ class SettlementExportServiceTest {
         try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
             Sheet sheet = wb.getSheet("정산내역");
             assertThat(sheet.getLastRowNum()).isEqualTo(0);
+        }
+    }
+
+    @Test
+    @DisplayName("행사별 매출 요약을 시트 한 장짜리 엑셀로 만든다 - 헤더 + 데이터 행 일치")
+    void exportsRevenueSummaryAsExcel() throws Exception {
+        given(settlementService.getFairRevenueSummaries()).willReturn(List.of(
+                new FairRevenueSummaryResponse(10L, "댕댕펫", 70000L, 30000L, 100000L,
+                        new BigDecimal("0.1000"), 10000L, 90000L)
+        ));
+
+        byte[] bytes = settlementExportService.exportRevenueSummaryAsExcel();
+
+        try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            Sheet sheet = wb.getSheet("행사별 매출 요약");
+            assertThat(sheet).isNotNull();
+
+            Row header = sheet.getRow(0);
+            assertThat(header.getCell(0).getStringCellValue()).isEqualTo("행사ID");
+            assertThat(header.getCell(1).getStringCellValue()).isEqualTo("행사명");
+            assertThat(header.getCell(2).getStringCellValue()).isEqualTo("티켓예매 총금액");
+            assertThat(header.getCell(3).getStringCellValue()).isEqualTo("참가비용 총금액");
+            assertThat(header.getCell(4).getStringCellValue()).isEqualTo("전체금액");
+            assertThat(header.getCell(6).getStringCellValue()).isEqualTo("행사업체금액");
+            assertThat(header.getCell(7).getStringCellValue()).isEqualTo("플랫폼금액");
+
+            Row row = sheet.getRow(1);
+            assertThat(row.getCell(1).getStringCellValue()).isEqualTo("댕댕펫");
+            assertThat(row.getCell(2).getStringCellValue()).isEqualTo("70000");
+            assertThat(row.getCell(3).getStringCellValue()).isEqualTo("30000");
+            assertThat(row.getCell(4).getStringCellValue()).isEqualTo("100000");
+            assertThat(row.getCell(6).getStringCellValue()).isEqualTo("90000");
+            assertThat(row.getCell(7).getStringCellValue()).isEqualTo("10000");
+
+            assertThat(sheet.getLastRowNum()).isEqualTo(1);
         }
     }
 }

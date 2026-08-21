@@ -42,6 +42,16 @@
          ORDER BY business_id
     </select>
 
+    <select id="selectByFilter" resultType="SettlementRow">
+        SELECT <include refid="settlementColumns"/>
+          FROM settlement
+        <where>
+            <if test="fairId != null">AND fair_id = #{fairId}</if>
+            <if test="businessId != null">AND business_id = #{businessId}</if>
+        </where>
+         ORDER BY fair_id, business_id
+    </select>
+
     <select id="selectSettlementIdByPaymentId" resultType="long">
         SELECT settlement_id
           FROM settlement_item
