@@ -5,8 +5,21 @@ interface DialogProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  /**
+   * 모달 최대 너비. 확인/짧은 폼은 기본값("md")이면 충분하고, 편집기가 들어가는
+   * 긴 폼(공지 등록 등)은 "lg"/"xl"로 넓힌다.
+   */
+  size?: DialogSize;
   children: ReactNode;
 }
+
+type DialogSize = "md" | "lg" | "xl";
+
+const sizeClass: Record<DialogSize, string> = {
+  md: "max-w-md",
+  lg: "max-w-2xl",
+  xl: "max-w-4xl",
+};
 
 const focusableSelector = [
   "a[href]",
@@ -24,7 +37,7 @@ const focusableSelector = [
 // (예: 정원 축소 확인 모달에서 Escape로 취소했는데 뒤의 수정 폼까지 닫히며 입력 내용이 날아감).
 const openDialogStack: symbol[] = [];
 
-export function Dialog({ open, onClose, title, children }: DialogProps) {
+export function Dialog({ open, onClose, title, size = "md", children }: DialogProps) {
   const dialogRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
@@ -97,5 +110,5 @@ export function Dialog({ open, onClose, title, children }: DialogProps) {
 
   if (!open) return null;
 
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className="surface w-full max-w-md p-6" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><div className="mb-4 flex items-center justify-between"><h2 id={titleId} className="text-lg font-extrabold">{title}</h2><button type="button" aria-label="대화상자 닫기" className="rounded-button p-2 hover:bg-page" onClick={onClose}><X size={18} /></button></div>{children}</section></div>;
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className={`surface w-full ${sizeClass[size]} p-6`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}><div className="mb-4 flex items-center justify-between"><h2 id={titleId} className="text-lg font-extrabold">{title}</h2><button type="button" aria-label="대화상자 닫기" className="rounded-button p-2 hover:bg-page" onClick={onClose}><X size={18} /></button></div>{children}</section></div>;
 }

@@ -311,15 +311,15 @@ export function AdminNoticesPage() {
         </>
       )}
 
-      <Dialog open={dialogOpen} onClose={closeDialog} title={editingNotice ? "공지 수정" : "공지 등록"}>
-        <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+      <Dialog open={dialogOpen} onClose={closeDialog} title={editingNotice ? "공지 수정" : "공지 등록"} size="xl">
+        <form onSubmit={handleSubmit} className="max-h-[76vh] space-y-4 overflow-y-auto pr-1">
           {formErrors.length > 0 && (
             <ul className="space-y-1 text-sm font-bold text-primary-strong">
               {formErrors.map((message) => <li key={message}>{message}</li>)}
             </ul>
           )}
 
-          <div className="grid grid-cols-[140px_1fr] gap-3">
+          <div className="grid grid-cols-[180px_1fr] gap-3">
             <div>
               {label("분류", true)}
               <Select value={form.category} onChange={(event) => update("category", event.target.value as NoticeCategory)}>
