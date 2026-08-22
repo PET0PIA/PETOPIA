@@ -1,5 +1,5 @@
 import { PawPrint } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import { createPet, getMyPets, type Pet, type PetRequest } from "../../api/pet";
 import { Button } from "../ui/Button";
@@ -47,11 +47,33 @@ export function PetCompanionPicker({
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState<string | null>(null);
 
+  // value/onChange의 최신값만 ref로 따라간다. 아래 정리 로직을 effect 의존성으로 엮으면
+  // 반려동물을 고를 때마다(value 변경 -> effect 재실행) 목록을 다시 조회하게 된다.
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  // 렌더 중 ref 대입은 금지(react-hooks/refs)라 레이아웃 이펙트로 옮긴다 - 커밋 직후,
+  // 조회 콜백이 읽기 전에 갱신된다.
+  useLayoutEffect(() => {
+    valueRef.current = value;
+    onChangeRef.current = onChange;
+  });
+
   const loadPets = useCallback(() => {
     return getMyPets()
       .then((result) => {
         setPets(result);
         setLoadError(null);
+        // 예약 수정에서 넘어온 목록에는 그 뒤 삭제된 반려동물의 petId가 남아 있을 수 있다 -
+        // 예약 기록은 스냅샷이라 원본이 지워져도 그대로다(정책 P5). 화면에는 지금 보유한 것만
+        // 칩으로 그려져 사용자가 그걸 뺄 방법이 없는데, 그대로 보내면 서버 소유 검증에서 R025로
+        // 거절돼 방문일 변경 자체가 막힌다. 목록을 제대로 받아온 이 자리에서만 정리한다 -
+        // 조회가 실패했을 때 비우면 멀쩡한 동반 정보가 사용자 요청 없이 날아간다.
+        const ownedPetIds = new Set(result.map((pet) => pet.petId));
+        const current = valueRef.current;
+        const kept = current.filter((petId) => ownedPetIds.has(petId));
+        if (kept.length !== current.length) {
+          onChangeRef.current(kept);
+        }
         return result;
       })
       .catch((error: unknown) => {
@@ -86,7 +108,9 @@ export function PetCompanionPicker({
       const created = await createPet(payload);
       await loadPets();
       // 방금 등록한 반려동물은 곧바로 선택된 상태로 둔다 - 등록하려던 이유가 그것이다.
-      onChange([...value, created.petId]);
+      // 바로 위 loadPets가 낡은 petId를 정리했을 수 있어, 렌더 시점 value가 아니라 최신값에
+      // 더한다 - 아니면 방금 정리한 항목이 되살아난다.
+      onChangeRef.current([...valueRef.current, created.petId]);
       setRegisterOpen(false);
     } catch (error) {
       setRegisterError(error instanceof ApiError ? error.message : "반려동물 등록에 실패했어요.");

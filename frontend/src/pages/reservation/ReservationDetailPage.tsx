@@ -260,6 +260,9 @@ export function ReservationDetailPage() {
     setAvailError(null);
     // 지금 담긴 반려동물을 그대로 채워 둔다 - 다이얼로그를 열었다는 것만으로 동반이
     // 지워지면 안 되고, 사용자가 여기서 고친 결과가 곧 저장될 목록이 된다.
+    // 이 목록은 예약 스냅샷이라 그 뒤 삭제된 반려동물이 섞여 있을 수 있다. 그건 아래 피커가
+    // 보유 목록을 불러온 뒤 걸러낸다(PetCompanionPicker의 loadPets 참고) - 여기서 미리
+    // 걸러낼 수는 없다. 지금 무엇을 보유했는지는 그 조회가 끝나야 알 수 있다.
     setChangePetIds(target.pets.map((pet) => pet.petId));
     setChangePetAllowed(false);
     setDateDialogOpen(true);
@@ -281,9 +284,12 @@ export function ReservationDetailPage() {
     setChangeSubmitting(true);
     setChangeError(null);
     try {
-      // 동반 정보는 항상 함께 보낸다 - 이 다이얼로그가 "지금 화면에 보이는 목록이 곧 저장될
-      // 목록"이기 때문이다. 동반이 금지된 행사면 목록 UI 자체가 없어 빈 배열이 나간다.
-      const res = await changeVisitDate(id, selectedNewDate, changePetIds);
+      // 동반 정보는 "동반 가능"을 확인했을 때만 보낸다. 확인했다면 이 다이얼로그가 "지금 화면에
+      // 보이는 목록이 곧 저장될 목록"이다. 금지 행사이거나 예약 가능 조회가 실패해 허용 여부를
+      // 모를 때는 필드를 빼서 보내고, 서버는 "없으면 기존 동반 정보 유지"로 읽는다 - 그 상황에는
+      // 목록 UI가 그려지지 않아 사용자가 비울 수도 없으니, 담겼던 반려동물을 그대로 보내면 R024로
+      // 거절돼 방문일 변경까지 막히고, 빈 배열을 보내면 요청하지 않은 동반 해제가 조용히 일어난다.
+      const res = await changeVisitDate(id, selectedNewDate, changePetAllowed ? changePetIds : undefined);
       // 서버가 스냅샷을 다시 뜬 결과를 화면에 그대로 반영하려면 상세를 다시 읽어야 한다
       // (변경 응답에는 반려동물이 없다. 날짜·QR 유효시간만 돌려준다).
       const refreshed = await getReservationDetail(id).catch(() => null);
