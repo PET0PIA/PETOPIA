@@ -260,6 +260,17 @@
            FOR UPDATE
     </select>
 
+    <!-- 행사별 최종정산 집계용(2026-08-22) - 위와 같지만 business_id 없이 행사 하나의 모든
+         참가업체 결제를 합쳐서 조회한다. -->
+    <select id="selectCompletedVendorFeePaymentsByFair" resultType="PaymentRow">
+        SELECT <include refid="paymentColumns"/>
+          FROM payment
+         WHERE fair_id = #{fairId}
+           AND payment_type = 'VENDOR_FEE'
+           AND status = 'COMPLETED'
+           FOR UPDATE
+    </select>
+
     <!--
         selectByFilter/countByFilter가 공유하는 동적 WHERE 조각. 넘어온 파라미터만 조건에 건다.
         selectByFilter가 refund를 LEFT JOIN하면서(환불완료 표시용) status/payment_id 등이
@@ -322,6 +333,34 @@
                  GROUP BY p.fair_id
                ) vendor_fee ON vendor_fee.fair_id = f.fair_id
          ORDER BY f.fair_id DESC
+    </select>
+
+    <!--
+        위 selectFairRevenueSummary와 같은 집계를 행사 하나로 좁힌 버전(EVENT_ADMIN 담당 행사
+        정산 화면용, 2026-08-22). 그 fairId가 fairs에 없으면 결과 없음(null) - 서비스 계층에서
+        404(FAIR_NOT_FOUND) 처리한다.
+    -->
+    <select id="selectFairRevenueSummaryByFairId" resultType="FairRevenueSummaryRow">
+        SELECT f.fair_id                        AS fair_id
+             , f.name                            AS fair_name
+             , COALESCE(ticket.amount, 0)        AS ticket_amount
+             , COALESCE(vendor_fee.amount, 0)    AS vendor_fee_amount
+          FROM fairs f
+          LEFT JOIN (
+                SELECT p.fair_id, SUM(p.amount - COALESCE(r.refund_amount, 0)) AS amount
+                  FROM payment p
+                  LEFT JOIN refund r ON r.payment_id = p.payment_id AND r.status = 'COMPLETED'
+                 WHERE p.payment_type = 'RESERVATION_DEPOSIT' AND p.status = 'COMPLETED'
+                 GROUP BY p.fair_id
+               ) ticket ON ticket.fair_id = f.fair_id
+          LEFT JOIN (
+                SELECT p.fair_id, SUM(p.amount - COALESCE(r.refund_amount, 0)) AS amount
+                  FROM payment p
+                  LEFT JOIN refund r ON r.payment_id = p.payment_id AND r.status = 'COMPLETED'
+                 WHERE p.payment_type = 'VENDOR_FEE' AND p.status = 'COMPLETED'
+                 GROUP BY p.fair_id
+               ) vendor_fee ON vendor_fee.fair_id = f.fair_id
+         WHERE f.fair_id = #{fairId}
     </select>
 
 </mapper>

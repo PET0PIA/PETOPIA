@@ -155,6 +155,12 @@ public interface PaymentMapper {
             @Param("fairId") Long fairId, @Param("businessId") Long businessId);
 
     /**
+     * 행사별 최종정산 집계용(2026-08-22) — 위와 같은 조건이지만 businessId 없이 그 행사에
+     * 참가한 모든 업체의 완료된 참가비(VENDOR_FEE) 결제를 합쳐서 조회한다.
+     */
+    List<PaymentRow> selectCompletedVendorFeePaymentsByFair(@Param("fairId") Long fairId);
+
+    /**
      * 조건별 결제 목록 조회. {@code GET /api/payments}(관리자용, fairId·businessId·paymentType·
      * status·reservationId 조합)와 {@code GET /api/me/payments}(마이페이지, payerUserId만)가
      * 같이 쓴다. 파라미터가 null이면 그 조건은 걸지 않는다(전부 AND로 조합).
@@ -184,4 +190,10 @@ public interface PaymentMapper {
      * 전부 포함한다 - fairs 테이블 기준으로 LEFT JOIN하기 때문.
      */
     List<FairRevenueSummaryRow> selectFairRevenueSummary();
+
+    /**
+     * 위 selectFairRevenueSummary와 같은 집계를 행사 하나로 좁힌 버전(EVENT_ADMIN 담당 행사
+     * 정산 화면용, 2026-08-22). 그 fairId가 fairs에 없으면 null.
+     */
+    FairRevenueSummaryRow selectFairRevenueSummaryByFairId(@Param("fairId") Long fairId);
 }

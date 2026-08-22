@@ -15,6 +15,14 @@ import {
   type SettlementStatus,
 } from "../../api/settlement";
 import {
+  calculateFairSettlement,
+  confirmFairSettlement,
+  getFairSettlement,
+  recalculateFairSettlement,
+  reopenFairSettlement,
+  type FairSettlementResponse,
+} from "../../api/fairSettlement";
+import {
   getCommissionRate,
   setCommissionRate,
   type CommissionRateResponse,
@@ -168,7 +176,12 @@ export function SettlementPage() {
     }
   }
 
-  // ── 정산 조회/계산 ──
+  // ── 정산 조회/계산(업체별 정산, 구) ──
+  // 2026-08-22: 화면에서 이 블록 전부 제거하고 아래 "행사비 조회·정산·확정(신규)" 블록으로
+  // 대체함 — "업체가 100개면 확정을 100번 해야 하냐"는 지적으로 정산 단위를 업체별에서
+  // 행사별로 바꾸기로 함. 이 블록(상태·핸들러)과 뒤에 이어지는 handleCalcSubmit~toggleDetail은
+  // 백엔드(settlement 도메인)까지 완전히 지우지는 않기로 한 팀 결정 때문에 코드에 그대로
+  // 남겨둠 - 아무 데서도 렌더링되지 않는다.
   // fairId·businessId 둘 다 선택적 — 하나만 채우면 그 조건 전체가, 둘 다 채우면 그 조합
   // 하나만 나온다(getSettlementsByFilter, 2026-08-21 통합검색으로 개편).
   const [fairIdInput, setFairIdInput] = useState("");
@@ -264,7 +277,7 @@ export function SettlementPage() {
       return;
     }
     if (fair.value === undefined && business.value === undefined) {
-      setListError("행사 ID 또는 업체 ID 중 하나는 입력해 주세요.");
+      setListError("행사 ID를 입력해 주세요.");
       return;
     }
     loadSettlements(fair.value, business.value);
@@ -376,6 +389,139 @@ export function SettlementPage() {
 
   function toggleDetail(settlementId: number) {
     setExpandedSettlementId((current) => (current === settlementId ? null : settlementId));
+  }
+
+  // ── 행사비 조회·정산·확정(신규, 2026-08-22) ──
+  // 업체 구분 없이 행사 하나당 최종정산 1건 - 그 행사에 참가한 모든 업체의 참가비를 합쳐
+  // 계산·재계산·확정·되돌리기까지 한 카드에서 처리한다(플랫폼 ↔ 행사 정산).
+  const [finalFairIdInput, setFinalFairIdInput] = useState("");
+  const [finalSearchedFairId, setFinalSearchedFairId] = useState<number | null>(null);
+  // undefined = 아직 조회 안 함, null = 조회했지만 계산된 정산 없음, 객체 = 정산 있음.
+  const [fairSettlement, setFairSettlement] = useState<FairSettlementResponse | null | undefined>(undefined);
+  const [finalLoading, setFinalLoading] = useState(false);
+  const [finalError, setFinalError] = useState<string | null>(null);
+  const [finalCalcSubmitting, setFinalCalcSubmitting] = useState(false);
+  const [finalActioning, setFinalActioning] = useState(false);
+  // "상세" 클릭 시 확정 시각·확정한 관리자를 그 행 바로 아래에 펼쳐 보여준다(구 업체별
+  // 정산 목록의 상세 토글과 동일한 상호작용, 2026-08-22 재구현).
+  const [finalDetailExpanded, setFinalDetailExpanded] = useState(false);
+
+  const finalFairVersionRef = useRef(0);
+
+  async function loadFairSettlement(fairId: number) {
+    const version = ++finalFairVersionRef.current;
+    setFinalLoading(true);
+    setFinalError(null);
+    setFinalDetailExpanded(false);
+    try {
+      const data = await getFairSettlement(fairId);
+      if (finalFairVersionRef.current !== version) return;
+      setFairSettlement(data ?? null);
+      setFinalSearchedFairId(fairId);
+    } catch (error) {
+      if (finalFairVersionRef.current !== version) return;
+      setFairSettlement(undefined);
+      setFinalSearchedFairId(null);
+      setFinalError(errorMessage(error, "정산을 불러오지 못했어요."));
+    } finally {
+      if (finalFairVersionRef.current === version) setFinalLoading(false);
+    }
+  }
+
+  function handleFinalLoadSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Number(finalFairIdInput);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setFinalError("행사 ID는 1 이상의 숫자로 입력해 주세요.");
+      return;
+    }
+    loadFairSettlement(parsed);
+  }
+
+  async function handleFinalCalculate() {
+    if (finalSearchedFairId === null) return;
+    const version = finalFairVersionRef.current;
+    setFinalCalcSubmitting(true);
+    setFinalError(null);
+    try {
+      const created = await calculateFairSettlement(finalSearchedFairId);
+      if (finalFairVersionRef.current !== version) return;
+      setFairSettlement(created);
+    } catch (error) {
+      if (finalFairVersionRef.current !== version) return;
+      setFinalError(errorMessage(error, "정산 계산에 실패했어요."));
+    } finally {
+      if (finalFairVersionRef.current === version) setFinalCalcSubmitting(false);
+    }
+  }
+
+  async function handleFinalConfirm() {
+    if (!fairSettlement) return;
+    const version = finalFairVersionRef.current;
+    const ok = await confirm({
+      title: "정산 확정",
+      description: `행사 #${fairSettlement.fairId} 정산(${formatWon(fairSettlement.netAmount)})을 확정할까요?\n확정 이후에는 금액을 되돌릴 수 없어요.`,
+      confirmLabel: "확정",
+    });
+    if (!ok || finalFairVersionRef.current !== version) return;
+
+    setFinalError(null);
+    setFinalActioning(true);
+    try {
+      const result = await confirmFairSettlement(fairSettlement.fairSettlementId);
+      if (finalFairVersionRef.current !== version) return;
+      setFairSettlement(result);
+    } catch (error) {
+      if (finalFairVersionRef.current !== version) return;
+      if (error instanceof ApiError && error.code === "ST005") {
+        setFinalError('계산 이후 환불이 반영되지 않았어요. 먼저 "재계산"을 눌러 주세요.');
+      } else {
+        setFinalError(errorMessage(error, "정산 확정에 실패했어요."));
+      }
+    } finally {
+      setFinalActioning(false);
+    }
+  }
+
+  async function handleFinalRecalculate() {
+    if (!fairSettlement) return;
+    const version = finalFairVersionRef.current;
+    setFinalError(null);
+    setFinalActioning(true);
+    try {
+      const result = await recalculateFairSettlement(fairSettlement.fairSettlementId);
+      if (finalFairVersionRef.current !== version) return;
+      setFairSettlement(result);
+    } catch (error) {
+      if (finalFairVersionRef.current !== version) return;
+      setFinalError(errorMessage(error, "정산 재계산에 실패했어요."));
+    } finally {
+      setFinalActioning(false);
+    }
+  }
+
+  async function handleFinalReopen() {
+    if (!fairSettlement) return;
+    const version = finalFairVersionRef.current;
+    const ok = await confirm({
+      title: "정산 확정 되돌리기",
+      description: `행사 #${fairSettlement.fairId} 정산(${formatWon(fairSettlement.netAmount)})을 확정 전 상태로 되돌릴까요?\n되돌린 뒤엔 재계산으로 최신 금액을 반영하고 다시 확정해야 해요.`,
+      confirmLabel: "되돌리기",
+    });
+    if (!ok || finalFairVersionRef.current !== version) return;
+
+    setFinalError(null);
+    setFinalActioning(true);
+    try {
+      const result = await reopenFairSettlement(fairSettlement.fairSettlementId);
+      if (finalFairVersionRef.current !== version) return;
+      setFairSettlement(result);
+    } catch (error) {
+      if (finalFairVersionRef.current !== version) return;
+      setFinalError(errorMessage(error, "정산 되돌리기에 실패했어요."));
+    } finally {
+      setFinalActioning(false);
+    }
   }
 
   return (
@@ -494,89 +640,51 @@ export function SettlementPage() {
       </section>
 
       <section>
-        <SectionHeader title="정산 조회·계산" description="행사 ID·업체 ID 중 하나만 입력해도 조회돼요 - 행사 ID만 넣으면 그 행사 업체 전체, 업체 ID만 넣으면 그 업체가 참가한 모든 행사, 둘 다 넣으면 그 조합 하나만 나와요." />
+        <SectionHeader title="행사비 조회·정산·확정" description="행사 ID를 입력하면 그 행사의 최종정산(참가업체 전체 참가비 합산, 플랫폼↔행사)을 확인·계산·확정할 수 있어요." />
 
-        <form onSubmit={handleLoadSubmit} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
+        <form onSubmit={handleFinalLoadSubmit} className="surface mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <label htmlFor="fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
-            <Input id="fair-id" className="input-no-spinner" type="number" min={1} value={fairIdInput} onChange={(event) => setFairIdInput(event.target.value)} placeholder="예: 1 (비워도 돼요)" />
+            <label htmlFor="final-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
+            <Input id="final-fair-id" className="input-no-spinner" type="number" min={1} value={finalFairIdInput} onChange={(event) => setFinalFairIdInput(event.target.value)} placeholder="예: 1" />
           </div>
-          <div className="flex-1">
-            <label htmlFor="search-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
-            <Input id="search-business-id" className="input-no-spinner" type="number" min={1} value={businessIdInput} onChange={(event) => setBusinessIdInput(event.target.value)} placeholder="예: 20 (비워도 돼요)" />
-          </div>
-          <Button type="submit" variant="outline" disabled={listLoading}>
+          <Button type="submit" variant="outline" disabled={finalLoading}>
             <Search size={16} />
             조회
           </Button>
         </form>
 
-        {listError && (
+        {finalError && (
           <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
             <AlertCircle size={18} className="mt-0.5 shrink-0" />
-            <p>{listError}</p>
+            <p>{finalError}</p>
           </div>
         )}
 
-        {settlements === null && !listLoading && !listError && (
-          <EmptyState title="행사 ID 또는 업체 ID를 먼저 조회해 주세요" description="정산을 확인·계산할 행사 ID나 업체 ID를 입력하고 조회하면 목록이 표시돼요." />
+        {finalSearchedFairId === null && !finalLoading && !finalError && (
+          <EmptyState title="행사 ID를 먼저 조회해 주세요" description="정산을 확인·계산할 행사 ID를 입력하고 조회하면 결과가 표시돼요." />
         )}
 
-        {listLoading && <div className="surface grid min-h-32 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
+        {finalLoading && <div className="surface grid min-h-32 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
 
-        {settlements !== null && !listLoading && (
+        {finalSearchedFairId !== null && !finalLoading && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-bold text-muted">
-                {searchedFairId !== null && searchedBusinessId !== null
-                  ? `행사 #${searchedFairId} · 업체 #${searchedBusinessId} 정산`
-                  : searchedFairId !== null
-                    ? `행사 #${searchedFairId} 정산 목록`
-                    : `업체 #${searchedBusinessId} 정산 목록`}
-              </p>
-              {searchedFairId !== null && (
-                <Button type="button" variant="outline" onClick={handleExport} disabled={exporting}>
-                  <Download size={16} />
-                  {exporting ? "내보내는 중..." : "엑셀로 내보내기"}
-                </Button>
-              )}
-            </div>
-            {exportError && <p className="text-sm text-primary-strong">{exportError}</p>}
-
-            {searchedFairId !== null && (
+            {fairSettlement === null && (
               <Card className="p-5">
-                <h3 className="mb-3 text-sm font-extrabold text-muted">행사 #{searchedFairId} 새 정산 계산</h3>
-                <form onSubmit={handleCalcSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <div className="flex-1">
-                    <label htmlFor="calc-business-id" className="mb-1.5 block text-sm font-bold text-ink">업체 ID</label>
-                    <Input id="calc-business-id" className="input-no-spinner" type="number" min={1} value={calcBusinessIdInput} onChange={(event) => setCalcBusinessIdInput(event.target.value)} placeholder="예: 20" />
-                  </div>
-                  <Button type="submit" variant="outline" disabled={calcSubmitting}>
-                    <Calculator size={16} />
-                    {calcSubmitting ? "계산 중..." : "정산 계산"}
-                  </Button>
-                </form>
-                {calcError && <p className="mt-3 text-sm text-primary-strong">{calcError}</p>}
+                <h3 className="mb-3 text-sm font-extrabold text-muted">행사 #{finalSearchedFairId} 정산 계산</h3>
+                <p className="mb-3 text-sm text-muted">아직 계산된 정산이 없어요. 그 행사에 참가한 모든 업체의 완료된 참가비를 합산해서 계산해요.</p>
+                <Button type="button" variant="outline" onClick={handleFinalCalculate} disabled={finalCalcSubmitting}>
+                  <Calculator size={16} />
+                  {finalCalcSubmitting ? "계산 중..." : "정산 계산"}
+                </Button>
               </Card>
             )}
 
-            {actionError && (
-              <div className="surface flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-                <AlertCircle size={18} className="mt-0.5 shrink-0" />
-                <p>{actionError}</p>
-              </div>
-            )}
-
-            {settlements.length === 0 ? (
-              <EmptyState title="조회된 정산이 없어요" description={searchedFairId !== null ? "위 폼에서 업체 ID를 입력해 정산을 계산해 보세요." : "다른 행사 ID·업체 ID로 다시 조회해 보세요."} />
-            ) : (
+            {fairSettlement && (
               <Table>
                 <thead>
                   <tr className="border-b border-line bg-page text-xs font-bold text-muted">
                     <th className="px-4 py-3">행사</th>
-                    <th className="px-4 py-3">업체</th>
                     <th className="px-4 py-3">총 참가비</th>
-                    <th className="px-4 py-3">환불액</th>
                     <th className="px-4 py-3">수수료</th>
                     <th className="px-4 py-3">지급액</th>
                     <th className="px-4 py-3">상태</th>
@@ -585,77 +693,75 @@ export function SettlementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {settlements.map((row) => {
-                    const isActioning = actioningSettlementIds.has(row.settlementId);
-                    const isExpanded = expandedSettlementId === row.settlementId;
-                    return (
-                      <Fragment key={row.settlementId}>
-                        <tr className="border-b border-line last:border-b-0">
-                          <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.fairId}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.businessId}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-ink">{formatWon(row.grossAmount)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-ink">{formatWon(row.refundAmount)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-ink">
-                            {formatWon(row.commissionAmount)} <span className="text-muted">({formatRatePercent(row.commissionRate)})</span>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatWon(row.netAmount)}</td>
-                          <td className="whitespace-nowrap px-4 py-3">
-                            <Badge tone={statusTones[row.status]}>{statusLabels[row.status]}</Badge>
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3">
-                            {row.status === "PENDING" ? (
-                              <div className="flex gap-2">
-                                <Button variant="outline" onClick={() => handleRecalculate(row)} disabled={isActioning}>
-                                  <RefreshCw size={14} />
-                                  재계산
-                                </Button>
-                                <Button onClick={() => handleConfirm(row)} disabled={isActioning}>
-                                  <Check size={14} />
-                                  {isActioning ? "처리 중..." : "확정"}
-                                </Button>
-                              </div>
-                            ) : row.status === "CONFIRMED" ? (
-                              <div className="flex flex-col items-start gap-1.5">
-                                <span className="text-sm text-muted">
-                                  {row.confirmedAt ? `${formatDateTime(row.confirmedAt)} 확정` : "-"}
-                                </span>
-                                <Button variant="outline" onClick={() => handleReopen(row)} disabled={isActioning}>
-                                  <RotateCcw size={14} />
-                                  {isActioning ? "처리 중..." : "되돌리기"}
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-muted">
-                                {row.confirmedAt ? `${formatDateTime(row.confirmedAt)} 확정` : "-"}
-                              </span>
-                            )}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3">
-                            <button type="button" onClick={() => toggleDetail(row.settlementId)} className="flex items-center gap-1 text-sm font-bold text-primary-strong hover:underline">
-                              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                              {isExpanded ? "접기" : "상세"}
-                            </button>
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr className="border-b border-line bg-page last:border-b-0">
-                            <td colSpan={9} className="px-4 py-3">
-                              <dl className="grid gap-4 sm:grid-cols-2">
-                                <div>
-                                  <dt className="text-xs font-bold text-muted">확정 시각</dt>
-                                  <dd className="mt-1 text-sm text-ink">{row.confirmedAt ? formatDateTime(row.confirmedAt) : "-"}</dd>
-                                </div>
-                                <div>
-                                  <dt className="text-xs font-bold text-muted">확정한 관리자</dt>
-                                  <dd className="mt-1 text-sm text-ink">{row.confirmedByUserId !== null ? `#${row.confirmedByUserId}` : "-"}</dd>
-                                </div>
-                              </dl>
-                            </td>
-                          </tr>
+                  <Fragment>
+                    <tr className="border-b border-line last:border-b-0">
+                      <td className="whitespace-nowrap px-4 py-3 text-ink">#{fairSettlement.fairId}</td>
+                      {/* "총 참가비"는 환불 차감 전 원본 합계(grossAmount)가 아니라 환불액을 뺀
+                          값으로 보여준다 - 환불액은 상세 펼치면 따로 확인 가능. */}
+                      <td className="whitespace-nowrap px-4 py-3 text-ink">{formatWon(fairSettlement.grossAmount - fairSettlement.refundAmount)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-ink">
+                        {formatWon(fairSettlement.commissionAmount)} <span className="text-muted">({formatRatePercent(fairSettlement.commissionRate)})</span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatWon(fairSettlement.netAmount)}</td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <Badge tone={statusTones[fairSettlement.status]}>{statusLabels[fairSettlement.status]}</Badge>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {fairSettlement.status === "PENDING" ? (
+                          <div className="flex gap-2">
+                            <Button variant="outline" onClick={handleFinalRecalculate} disabled={finalActioning}>
+                              <RefreshCw size={14} />
+                              재계산
+                            </Button>
+                            <Button onClick={handleFinalConfirm} disabled={finalActioning}>
+                              <Check size={14} />
+                              {finalActioning ? "처리 중..." : "확정"}
+                            </Button>
+                          </div>
+                        ) : fairSettlement.status === "CONFIRMED" ? (
+                          <div className="flex flex-col items-start gap-1.5">
+                            <span className="text-sm text-muted">
+                              {fairSettlement.confirmedAt ? `${formatDateTime(fairSettlement.confirmedAt)} 확정` : "-"}
+                            </span>
+                            <Button variant="outline" onClick={handleFinalReopen} disabled={finalActioning}>
+                              <RotateCcw size={14} />
+                              {finalActioning ? "처리 중..." : "되돌리기"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted">
+                            {fairSettlement.confirmedAt ? `${formatDateTime(fairSettlement.confirmedAt)} 확정` : "-"}
+                          </span>
                         )}
-                      </Fragment>
-                    );
-                  })}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <button type="button" onClick={() => setFinalDetailExpanded((current) => !current)} className="flex items-center gap-1 text-sm font-bold text-primary-strong hover:underline">
+                          {finalDetailExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          {finalDetailExpanded ? "접기" : "상세"}
+                        </button>
+                      </td>
+                    </tr>
+                    {finalDetailExpanded && (
+                      <tr className="border-b border-line bg-page last:border-b-0">
+                        <td colSpan={7} className="px-4 py-3">
+                          <dl className="grid gap-4 sm:grid-cols-3">
+                            <div>
+                              <dt className="text-xs font-bold text-muted">환불액</dt>
+                              <dd className="mt-1 text-sm text-ink">{formatWon(fairSettlement.refundAmount)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs font-bold text-muted">확정 시각</dt>
+                              <dd className="mt-1 text-sm text-ink">{fairSettlement.confirmedAt ? formatDateTime(fairSettlement.confirmedAt) : "-"}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs font-bold text-muted">확정한 관리자</dt>
+                              <dd className="mt-1 text-sm text-ink">{fairSettlement.confirmedByUserId !== null ? `#${fairSettlement.confirmedByUserId}` : "-"}</dd>
+                            </div>
+                          </dl>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 </tbody>
               </Table>
             )}

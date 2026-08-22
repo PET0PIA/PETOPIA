@@ -453,6 +453,23 @@ public class SettlementService {
                 .toList();
     }
 
+    /**
+     * 행사 하나의 매출 요약(EVENT_ADMIN 담당 행사 정산 화면용, 2026-08-22). 위 전체 목록판과
+     * 달리 그 행사 담당자인지 확인한다(FairAdminAccessGuard) - 남의 행사 매출까지 보이면 안
+     * 되므로, SecurityConfig의 URL 단위 SUPER_ADMIN 전용 제한과는 별도 경로로 둔다.
+     *
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
+     * @throws CommonException {@link ErrorCode#FAIR_NOT_FOUND} 존재하지 않는 행사일 때
+     */
+    public FairRevenueSummaryResponse getFairRevenueSummary(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
+        FairRevenueSummaryRow row = paymentMapper.selectFairRevenueSummaryByFairId(fairId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
+        }
+        return toRevenueSummaryResponse(row);
+    }
+
     private FairRevenueSummaryResponse toRevenueSummaryResponse(FairRevenueSummaryRow row) {
         long grossAmount = row.getTicketAmount() + row.getVendorFeeAmount();
         BigDecimal commissionRate = commissionRateService.resolveEffectiveRate(row.getFairId());

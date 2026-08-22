@@ -94,6 +94,11 @@ export function getFairRevenueSummaries() {
   return apiClient.get<FairRevenueSummaryResponse[]>("/api/settlements/revenue-summary");
 }
 
+/** 행사 하나의 매출 요약 조회(EVENT_ADMIN/SUPER_ADMIN, 2026-08-22). 담당 행사 정산 화면 전용. */
+export function getFairRevenueSummary(fairId: number) {
+  return apiClient.get<FairRevenueSummaryResponse>(`/api/fairs/${fairId}/revenue-summary`);
+}
+
 /** Content-Disposition 헤더의 filename="..."을 뽑아낸다. 없으면 null. (statistics.ts와 동일 패턴) */
 function parseFilename(contentDisposition: string | null): string | null {
   if (!contentDisposition) return null;

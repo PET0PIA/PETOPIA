@@ -110,6 +110,14 @@ public class SettlementController {
         return settlementService.getFairRevenueSummaries();
     }
 
+    // 행사 하나의 매출 요약(EVENT_ADMIN/SUPER_ADMIN, 2026-08-22) - 위와 같은 집계를 담당 행사
+    // 하나로 좁힌 버전. 그 행사 담당자인지는 SettlementService.getFairRevenueSummary가
+    // FairAdminAccessGuard로 확인한다.
+    @GetMapping("/fairs/{fairId}/revenue-summary")
+    public FairRevenueSummaryResponse getFairRevenueSummary(@PathVariable Long fairId) {
+        return settlementService.getFairRevenueSummary(fairId);
+    }
+
     // 행사별 매출 요약 엑셀(.xlsx) 다운로드(SUPER_ADMIN 전용).
     @GetMapping("/settlements/revenue-summary/export")
     public ResponseEntity<byte[]> exportFairRevenueSummaries() throws IOException {
