@@ -19,6 +19,7 @@
     "@vitejs/plugin-react": "6.0.5",
     "dompurify": "^3.4.13",
     "html-to-image": "^1.11.13",
+    "jsqr": "^1.4.0",
     "lucide-react": "1.28.0",
     "qrcode": "^1.5.4",
     "react": "19.2.8",
