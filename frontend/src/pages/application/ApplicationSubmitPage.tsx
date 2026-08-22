@@ -129,32 +129,34 @@ export function ApplicationSubmitPage() {
   // 에러가 새로 생기면(신청하기 눌렀는데 검증 실패) 에러 박스로 스크롤해서
   // 사용자가 폼 하단(제출 버튼 근처)에 있어도 에러를 놓치지 않게 한다.
   useEffect(() => {
-    if (errors.length > 0) {
-      errorsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [errors]);
-
-  useEffect(() => {
     if (!fairId) return;
     let ignore = false;
 
     setLoading(true);
     setLoadError(null);
-    Promise.all([
-      getBoothSlots(Number(fairId)),
-      getMyBusinesses(),
-      getRecruitNotice(Number(fairId)).catch((error: unknown) => {
+
+    getRecruitNotice(Number(fairId))
+      .catch((error: unknown) => {
         if (error instanceof ApiError && error.status === 404) return null; // 공고 없음 = 마감 아님
         throw error;
-      }),
-    ])
-      .then(([slots, myBusinesses, notice]) => {
+      })
+      .then((notice) => {
         if (ignore) return;
-        setBoothSlots(slots);
-        setHasAnyBusiness(myBusinesses.length > 0);
-        setHasPendingReview(myBusinesses.some((business) => business.approvalStatus === "PENDING_REVIEW"));
-        setBusinesses(myBusinesses.filter((business) => business.approvalStatus === "APPROVED"));
-        setRecruitClosed(notice?.closed ?? false);
+        if (notice?.closed) {
+          setRecruitClosed(true);
+          setLoading(false);
+          return;
+        }
+        setRecruitClosed(false);
+
+        return Promise.all([getBoothSlots(Number(fairId)), getMyBusinesses()]).then(([slots, myBusinesses]) => {
+          if (ignore) return;
+          setBoothSlots(slots);
+          setHasAnyBusiness(myBusinesses.length > 0);
+          setHasPendingReview(myBusinesses.some((business) => business.approvalStatus === "PENDING_REVIEW"));
+          // 승인된 사업자만 신청 가능 - 심사대기/반려/취소된 사업자는 목록/셀렉트에서 제외
+          setBusinesses(myBusinesses.filter((business) => business.approvalStatus === "APPROVED"));
+        });
       })
       .catch((error) => {
         if (ignore) return;
