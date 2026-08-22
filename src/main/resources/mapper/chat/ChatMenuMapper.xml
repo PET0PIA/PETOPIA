@@ -5,7 +5,7 @@
 
     <select id="selectActiveMenus" resultType="ChatMenu">
         SELECT menu_id, parent_menu_id, code, label, display_order,
-               answer_type, fixed_answer, ai_context, is_active, created_at, updated_at
+               answer_type, fixed_answer, is_active, created_at, updated_at
           FROM chat_menu
          WHERE is_active = 1
          ORDER BY display_order, menu_id
@@ -13,7 +13,7 @@
 
     <select id="selectActiveByCode" resultType="ChatMenu">
         SELECT menu_id, parent_menu_id, code, label, display_order,
-               answer_type, fixed_answer, ai_context, is_active, created_at, updated_at
+               answer_type, fixed_answer, is_active, created_at, updated_at
           FROM chat_menu
          WHERE code = #{code}
            AND is_active = 1
@@ -21,7 +21,7 @@
 
     <select id="selectAllMenus" resultType="ChatMenu">
         SELECT menu_id, parent_menu_id, code, label, display_order,
-               answer_type, fixed_answer, ai_context, is_active, created_at, updated_at
+               answer_type, fixed_answer, is_active, created_at, updated_at
           FROM chat_menu
          ORDER BY display_order, menu_id
     </select>
@@ -32,9 +32,9 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="menuId">
         INSERT INTO chat_menu (
-            code, label, display_order, answer_type, fixed_answer, ai_context, is_active
+            code, label, display_order, answer_type, fixed_answer, is_active
         ) VALUES (
-            #{code}, #{label}, #{displayOrder}, #{answerType}, #{fixedAnswer}, #{aiContext}, #{isActive}
+            #{code}, #{label}, #{displayOrder}, #{answerType}, #{fixedAnswer}, #{isActive}
         )
     </insert>
 
@@ -44,7 +44,6 @@
            SET label = #{label}
              , answer_type = #{answerType}
              , fixed_answer = #{fixedAnswer}
-             , ai_context = #{aiContext}
              , display_order = #{displayOrder}
              , is_active = #{isActive}
          WHERE menu_id = #{menuId}
@@ -60,7 +59,7 @@
 
     <select id="selectById" resultType="ChatMenu">
         SELECT menu_id, parent_menu_id, code, label, display_order,
-               answer_type, fixed_answer, ai_context, is_active, created_at, updated_at
+               answer_type, fixed_answer, is_active, created_at, updated_at
           FROM chat_menu
          WHERE menu_id = #{menuId}
     </select>
