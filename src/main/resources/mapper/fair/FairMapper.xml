@@ -220,6 +220,38 @@
     </update>
 
     <!--
+        "행사 정보 관리" 화면 전용. updateApplication과 달리 status 조건이나 status/reject_reason
+        리셋이 없다 - 심사 전 재제출이 아니라, 승인·공개된 뒤에도 정보성 필드(이름/소개/카테고리/
+        포스터/유의사항/장소/일정/담당자명·연락처)의 오타나 미정 값을 아무 상태에서나 고칠 수 있게
+        하는 용도라서다. 예약금·기한·모집/예약 기간·managerEmail은 이 쿼리가 아예 모른다(setFields에
+        와도 무시) - FairService#updateFairInfo가 그 필드들을 request에 담지 않아 setFields에도
+        안 들어온다.
+    -->
+    <update id="updateFairInfo">
+        UPDATE fairs
+        <set>
+            <if test="setFields.contains('name')">name = #{fair.name},</if>
+            <if test="setFields.contains('description')">description = #{fair.description},</if>
+            <if test="setFields.contains('category')">category = #{fair.category},</if>
+            <if test="setFields.contains('posterImageUrl')">poster_image_url = #{fair.posterImageUrl},</if>
+            <if test="setFields.contains('noticeText')">notice_text = #{fair.noticeText},</if>
+            <if test="setFields.contains('placeName')">place_name = #{fair.placeName},</if>
+            <if test="setFields.contains('address')">
+                address = #{fair.address},
+                latitude = #{fair.latitude},
+                longitude = #{fair.longitude},
+            </if>
+            <if test="setFields.contains('indoorOutdoor')">indoor_outdoor = #{fair.indoorOutdoor},</if>
+            <if test="setFields.contains('operationStartDate')">operation_start_date = #{fair.operationStartDate},</if>
+            <if test="setFields.contains('operationEndDate')">operation_end_date = #{fair.operationEndDate},</if>
+            <if test="setFields.contains('managerName')">manager_name = #{fair.managerName},</if>
+            <if test="setFields.contains('managerPhone')">manager_phone = #{fair.managerPhone},</if>
+            updated_at = NOW(),
+        </set>
+        WHERE fair_id = #{fair.fairId}
+    </update>
+
+    <!--
         canceled_at IS NOT NULL만 걸면 취소된 행사 수가 limit를 넘는 순간
         canceled_at DESC 정렬로 매번 같은 최신 N개만 뽑혀서, 그보다 오래된 행사의 정리 안 된
         결제가 영영 처리되지 못하고 배치 슬롯을 못 받을 수 있다. 그래서 이 결제가 아직 남아있는

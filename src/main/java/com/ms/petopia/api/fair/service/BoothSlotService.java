@@ -292,7 +292,9 @@ public class BoothSlotService {
                 || item.price() == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
-        if (item.price() < 0) {
+        // 가격은 필수 입력이라 0도 막는다. 프론트가 빈 칸을 내부적으로 0으로 들고 있어서
+        // (BoothLayoutEditPage.tsx) < 0만 막으면 빈 채로 저장해도 API 직접 호출 시 통과한다.
+        if (item.price() <= 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if (isOutOfUnitRange(item.posX()) || isOutOfUnitRange(item.posY())

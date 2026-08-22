@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { fairAdminNavigation, superAdminNavigation, vendorNavigation, flattenNavigation } from "../config/navigation";
 import { ConsoleHome } from "../components/layout/ConsoleHome";
 import { FairAdminLayout } from "../layouts/FairAdminLayout";
@@ -93,7 +93,6 @@ import { ApplicationEditPage } from "../pages/application/ApplicationEditPage";
 import { ParticipationNewPage } from "../pages/application/ParticipationNewPage";
 import { AdvertisingInquiryPage } from "../pages/advertising/AdvertisingInquiryPage";
 import { BusinessReviewPage } from "../pages/admin/BusinessReviewPage";
-import { useAuth } from "../contexts/AuthContext";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
 const fairAdminImplementedPaths = [
@@ -137,14 +136,6 @@ function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   return <PlaceholderPage title={title} admin />;
 }
 
-function PersonalAccountRoute() {
-  const { user } = useAuth();
-  if (user?.role === "SUPER_ADMIN") {
-    return <Navigate to="/account/settings" replace />;
-  }
-  return <Outlet />;
-}
-
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -175,28 +166,28 @@ export function AppRouter() {
             <Route element={<ProtectedRoute roles={["SUPER_ADMIN"]} />}>
               <Route path="/account/settings" element={<AdminAccountSettingsPage />} />
             </Route>
-            <Route element={<PersonalAccountRoute />}>
-              {/* dev의 새 사이드바형 마이페이지를 EVENT_ADMIN도 일반 사용자처럼 사용한다. */}
-              <Route path="/mypage" element={<MyPageLayout />}>
-                <Route index element={<MyPageHome />} />
-                <Route path="reservations" element={<MyReservationsPage />} />
-                <Route path="booths/visited" element={<MyVisitedBoothsPage />} />
-                <Route path="favorites" element={<BoothFavoritesPage />} />
-                <Route path="reviews" element={<MyReviewsPage />} />
-                <Route path="fair-applications" element={<MyFairApplicationsPage />} />
-                <Route path="businesses" element={<MyBusinessesPage />} />
-                <Route path="pets" element={<MyPetsPage />} />
-                <Route path="edit" element={<EditProfilePage />} />
-                <Route path="account" element={<AccountSettingsPage />} />
-              </Route>
-              {/* 상세·입력 폼은 넓게 봐야 하는 화면이라 사이드바 밖에 둔다. */}
-              <Route path="/mypage/pets/new" element={<PetFormPage />} />
-              <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
-              <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
-              {/* 옛 경로는 마이페이지 안의 새 위치로 리다이렉트(북마크·내부 링크 호환). */}
-              <Route path="/booths/favorites/me" element={<Navigate to="/mypage/favorites" replace />} />
-              <Route path="/booths/visited/me" element={<Navigate to="/mypage/booths/visited" replace />} />
+            {/* dev의 새 사이드바형 마이페이지. 역할과 상관없이 로그인한 계정이면 모두 쓴다 -
+                관리자도 개인 자격으로는 예약을 하는 관람객이라, 예약 내역·리뷰 같은 개인 활동
+                화면이 필요하다. 관리자 전용 계정 화면(/account/settings)은 그대로 남아 있다. */}
+            <Route path="/mypage" element={<MyPageLayout />}>
+              <Route index element={<MyPageHome />} />
+              <Route path="reservations" element={<MyReservationsPage />} />
+              <Route path="booths/visited" element={<MyVisitedBoothsPage />} />
+              <Route path="favorites" element={<BoothFavoritesPage />} />
+              <Route path="reviews" element={<MyReviewsPage />} />
+              <Route path="fair-applications" element={<MyFairApplicationsPage />} />
+              <Route path="businesses" element={<MyBusinessesPage />} />
+              <Route path="pets" element={<MyPetsPage />} />
+              <Route path="edit" element={<EditProfilePage />} />
+              <Route path="account" element={<AccountSettingsPage />} />
             </Route>
+            {/* 상세·입력 폼은 넓게 봐야 하는 화면이라 사이드바 밖에 둔다. */}
+            <Route path="/mypage/pets/new" element={<PetFormPage />} />
+            <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
+            <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
+            {/* 옛 경로는 마이페이지 안의 새 위치로 리다이렉트(북마크·내부 링크 호환). */}
+            <Route path="/booths/favorites/me" element={<Navigate to="/mypage/favorites" replace />} />
+            <Route path="/booths/visited/me" element={<Navigate to="/mypage/booths/visited" replace />} />
             {/* 부스 콘솔로 이관: 옛 경로는 콘솔로 리다이렉트(북마크·내부 링크 호환). */}
             <Route path="/booths/me" element={<Navigate to="/vendor/booths" replace />} />
           </Route>

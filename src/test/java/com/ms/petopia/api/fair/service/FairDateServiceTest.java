@@ -272,6 +272,7 @@ class FairDateServiceTest {
         given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithPeriod(null, null));
         given(fairDateMapper.selectByIdWithStats(FAIR_DATE_ID)).willReturn(statsRow(5, true));
+        given(fairDateMapper.update(any())).willReturn(1);
 
         FairDateResponse response = fairDateService.update(FAIR_ID, FAIR_DATE_ID, updateRequest());
 
@@ -283,6 +284,20 @@ class FairDateServiceTest {
         assertThat(response.capacity()).isEqualTo(100);
         assertThat(response.reservedCount()).isEqualTo(5);
         assertThat(response.onsiteSalesConfigured()).isTrue();
+    }
+
+    @Test
+    @DisplayName("SELECT 이후 새 예약이 들어와 UPDATE의 WHERE절이 막히면(영향받은 행 0건) FAIR_DATE_CAPACITY_BELOW_RESERVED를 던진다")
+    void update_UPDATE가0건이면_예외를_던진다() {
+        given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithPeriod(null, null));
+        given(fairDateMapper.selectByIdWithStats(FAIR_DATE_ID)).willReturn(statsRow(5, false));
+        given(fairDateMapper.update(any())).willReturn(0);
+
+        assertErrorCode(
+                () -> fairDateService.update(FAIR_ID, FAIR_DATE_ID, updateRequest()),
+                ErrorCode.FAIR_DATE_CAPACITY_BELOW_RESERVED
+        );
     }
 
     @Test
@@ -331,10 +346,22 @@ class FairDateServiceTest {
     void delete_정상삭제() {
         given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
         given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithPeriod(null, null));
+        given(fairDateMapper.deleteById(FAIR_DATE_ID)).willReturn(1);
 
         fairDateService.delete(FAIR_ID, FAIR_DATE_ID);
 
         verify(fairDateMapper).deleteById(FAIR_DATE_ID);
+    }
+
+    @Test
+    @DisplayName("SELECT 이후 새 예약이 들어와 DELETE의 WHERE절이 막히면(영향받은 행 0건) FAIR_DATE_HAS_RESERVATIONS를 던진다")
+    void delete_DELETE가0건이면_예외를_던진다() {
+        given(fairDateMapper.selectById(FAIR_DATE_ID)).willReturn(fairDate(FAIR_ID));
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithPeriod(null, null));
+        given(fairDateMapper.selectByIdWithStats(FAIR_DATE_ID)).willReturn(statsRow(0, false));
+        given(fairDateMapper.deleteById(FAIR_DATE_ID)).willReturn(0);
+
+        assertErrorCode(() -> fairDateService.delete(FAIR_ID, FAIR_DATE_ID), ErrorCode.FAIR_DATE_HAS_RESERVATIONS);
     }
 
     @Test
