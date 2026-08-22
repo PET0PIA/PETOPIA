@@ -42,7 +42,7 @@ public class ReservationAvailabilityService {
                 .map(this::toResponse)
                 .toList();
 
-        return new ReservationAvailabilityResponse(fairId, fair.getReservationFee(), dates);
+        return new ReservationAvailabilityResponse(fairId, fair.getReservationFee(), fair.isPetAllowed(), dates);
     }
 
     private void validateReservableFair(ReservationAvailabilityFair fair, LocalDate today) {

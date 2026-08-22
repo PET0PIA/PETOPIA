@@ -87,6 +87,37 @@ export interface ReservationDetail extends ReservationListItem {
   paymentId: number | null;
   /** 표시용 결제수단("카드", "간편결제 (네이버페이)"). 결제 완료 전이면 "결제 전", 무료 예약이면 null */
   paymentMethod: string | null;
+  /** 동반 반려동물의 예약 시점 스냅샷. 동반이 없으면 빈 배열. */
+  pets: ReservationPet[];
+}
+
+/**
+ * 예약에 담긴 동반 반려동물 1마리(예약 시점 스냅샷).
+ * 원본(마이페이지 반려동물)이 수정·삭제돼도 이 값은 변하지 않는다.
+ * 백엔드 ReservationPetResponse에 맞춘다.
+ */
+export interface ReservationPet {
+  reservationPetId: number;
+  /** 원본 pets.pet_id. 원본이 지워졌을 수도 있으니 표시는 아래 스냅샷 값으로 한다. */
+  petId: number;
+  name: string;
+  species: string;
+  breed: string | null;
+  /** YYYY-MM-DD */
+  birthDate: string | null;
+  /** null=미입력 / false=없음 / true=있음 */
+  hasAllergy: boolean | null;
+  allergies: ReservationPetAllergy[];
+}
+
+/** 예약 시점 알레르기 1건. requiresText=true인 항목만 otherText가 채워져 있다. */
+export interface ReservationPetAllergy {
+  allergyTypeId: number;
+  code: string;
+  category: string;
+  label: string;
+  requiresText: boolean;
+  otherText: string | null;
 }
 
 /** 입장 QR 토큰. (GET /reservations/{id}/entry-qr) */
@@ -149,6 +180,8 @@ export interface ReservationAvailabilityDate {
 export interface ReservationAvailability {
   fairId: number;
   reservationFee: number;
+  /** 반려동물 동반 가능 여부. false면 예약 화면이 반려동물 선택 UI를 아예 띄우지 않는다. */
+  petAllowed: boolean;
   dates: ReservationAvailabilityDate[];
 }
 
@@ -162,6 +195,12 @@ export interface CreateAdvanceReservationRequest {
   visitDate: string;
   reservationTermsAgreed?: boolean;
   reservationTermsVersion?: string;
+  /**
+   * 함께 갈 반려동물의 petId 목록. 안 보내거나 빈 배열이면 동반 없이 예약한다.
+   * 동반 금지 행사에 값을 담아 보내면 R024, 남의 반려동물이면 R025.
+   * 반려동물은 인원이 아니라 예약 매수·정원에 영향을 주지 않는다.
+   */
+  petIds?: number[];
 }
 
 /** 예약 생성 결과. 백엔드 CreateReservationResponse에 맞춘다. */
@@ -212,6 +251,8 @@ export const ONSITE_TERMS_VERSION = "onsite-no-refund-v1";
 export interface CreateOnsiteReservationRequest {
   reservationTermsAgreed?: boolean;
   reservationTermsVersion?: string;
+  /** 사전예약과 같은 규칙. 현장예매도 동반 반려동물을 기록한다(방문 통계 재료). */
+  petIds?: number[];
 }
 
 /** 현장예매 생성 결과. 백엔드 CreateOnsiteReservationResponse에 맞춘다. */
@@ -281,11 +322,17 @@ export interface CancelReservationResult {
 /**
  * 방문일을 변경한다. ADVANCE·CONFIRMED만 가능.
  * 마감(입장 12시간 전) 초과면 R018, 대상일 불가/마감이면 R002/R004.
+ *
+ * petIds를 함께 보내면 동반 반려동물 목록을 그 값으로 교체한다(빈 배열 = 동반 해제).
+ * 생략하면 기존 동반 정보를 그대로 둔다. 같은 날짜로 요청하면 정원·QR은 건드리지 않고
+ * 동반 정보만 바뀐다.
  */
-export function changeVisitDate(reservationId: number, visitDate: string) {
+export function changeVisitDate(reservationId: number, visitDate: string, petIds?: number[]) {
   return apiClient.patch<ChangeVisitDateResult>(
     `/api/v1/reservations/${reservationId}/visit-date`,
-    { visitDate },
+    // petIds를 안 넘기면 필드 자체를 빼서 보낸다 - 서버는 "없으면 기존 동반 정보 유지"로 읽는다.
+    // 빈 배열은 "동반 해제"라는 다른 뜻이므로 undefined와 구분해서 다뤄야 한다.
+    petIds === undefined ? { visitDate } : { visitDate, petIds },
     { headers: authHeaders() },
   );
 }

@@ -34,6 +34,13 @@ public class Fair {
     private String category;
     private String posterImageUrl;
     private String noticeText;
+    /**
+     * 반려동물 동반 가능 여부(NOT NULL, 기본값 TRUE).
+     *
+     * <p>category(DOG/CAT/ETC)는 행사의 *주제*일 뿐이라 "강아지 박람회지만 동반은 금지"를
+     * 구분하지 못한다 - 그 판단을 코드가 할 수 있게 별도 컬럼으로 둔다(정책 P1).
+     */
+    private Boolean petAllowed;
 
     // ===== 장소 =====
     /** 마스터 테이블 없이 행사에 직접 종속 */

@@ -213,6 +213,7 @@ function MyFairApplicationDetailContent({ id }: { id: number }) {
             <Field label="카테고리" value={detail.category ?? "-"} />
             <Field label="행사 소개" value={detail.description ?? "-"} />
             <Field label="유의사항" value={detail.noticeText ?? "-"} />
+            <Field label="반려동물 동반" value={detail.petAllowed ? "동반 가능" : "동반 금지"} />
           </dl>
         </Card>
 

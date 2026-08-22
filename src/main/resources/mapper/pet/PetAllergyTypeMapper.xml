@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.pet.mapper.PetAllergyTypeMapper">
+
+    <!-- is_active는 도메인 객체에서 active로 받는다(Boolean getter 관례) - 이름이 달라
+         map-underscore-to-camel-case로 자동 매핑되지 않으므로 별칭을 준다. -->
+    <sql id="typeColumns">
+        allergy_type_id
+      , code
+      , category
+      , label
+      , requires_text
+      , sort_order
+      , is_active AS active
+      , created_at
+      , updated_at
+    </sql>
+
+    <select id="selectActive" resultType="PetAllergyType">
+        SELECT <include refid="typeColumns"/>
+          FROM pet_allergy_types
+         WHERE is_active = 1
+         ORDER BY FIELD(category, 'FOOD', 'ENVIRONMENT', 'OTHER'), sort_order, allergy_type_id
+    </select>
+
+    <select id="selectByIds" resultType="PetAllergyType">
+        SELECT <include refid="typeColumns"/>
+          FROM pet_allergy_types
+         WHERE allergy_type_id IN
+        <foreach collection="allergyTypeIds" item="allergyTypeId" open="(" separator="," close=")">
+            #{allergyTypeId}
+        </foreach>
+    </select>
+
+</mapper>

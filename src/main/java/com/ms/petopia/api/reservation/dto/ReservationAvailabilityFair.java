@@ -15,4 +15,6 @@ public class ReservationAvailabilityFair {
     private LocalDate reservationEndDate;
     private LocalDateTime publishedAt;
     private LocalDateTime canceledAt;
+    /** 행사의 반려동물 동반 허용 여부(fairs.pet_allowed). */
+    private boolean petAllowed;
 }
