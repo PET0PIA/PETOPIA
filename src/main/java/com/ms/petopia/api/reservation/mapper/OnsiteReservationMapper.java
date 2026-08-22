@@ -32,6 +32,7 @@ public interface OnsiteReservationMapper {
     int insertPolicy(
             @Param("fairDateId") Long fairDateId,
             @Param("price") long price,
+            @Param("capacity") Integer capacity,
             @Param("status") String status,
             @Param("updatedBy") Long updatedBy,
             @Param("now") LocalDateTime now
@@ -40,6 +41,7 @@ public interface OnsiteReservationMapper {
     int updatePolicy(
             @Param("fairDateId") Long fairDateId,
             @Param("price") long price,
+            @Param("capacity") Integer capacity,
             @Param("status") String status,
             @Param("updatedBy") Long updatedBy,
             @Param("expectedVersion") int expectedVersion,

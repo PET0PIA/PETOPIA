@@ -13,6 +13,7 @@ import { getFairPublicSummary, type FairPublicSummary } from "../../api/fair";
 import { createReservationDepositPayment } from "../../api/payment";
 import {
   ADVANCE_TERMS_VERSION,
+  cancelReservation,
   createAdvanceReservation,
   createOnsiteReservation,
   getReservationAvailability,
@@ -32,7 +33,13 @@ import {
 } from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 import { PetCompanionPicker } from "../../components/reservation/PetCompanionPicker";
-import { formatEntryTime, formatVisitDateDow, reservationTypeLabels } from "./reservationDisplay";
+import {
+  formatEntryTime,
+  formatRemaining,
+  formatVisitDateDow,
+  reservationStatusLabels,
+  reservationTypeLabels,
+} from "./reservationDisplay";
 
 type ReservationType= "ADVANCE" | "ONSITE";
 /** waiting: 대기열에 막혀 순번을 기다리는 중. 통과하면 곧바로 예약을 재시도한다. */
@@ -54,21 +61,6 @@ interface PaymentInfo {
   paymentExpiresAt: string | null;
 }
 
-/**
- * 결제 제한시각까지 남은 시간을 "m:ss"로 만든다. 제한시각이 없거나 이미 지났으면 null.
- *
- * 백엔드는 LocalDateTime을 오프셋 없이("2026-08-09T12:34:56") 내려주는데, 서버·DB·컨테이너가
- * 전부 Asia/Seoul로 고정돼 있어(Dockerfile / docker-compose의 TZ) 브라우저 로컬 시각으로
- * 파싱해도 어긋나지 않는다.
- */
-function formatRemaining(expiresAt: string | null, now: number): string | null {
-  if (!expiresAt) return null;
-  const diff = new Date(expiresAt).getTime() - now;
-  if (Number.isNaN(diff) || diff <= 0) return null;
-  const totalSeconds = Math.floor(diff / 1000);
-  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
-}
-
 // 운영 시작~종료일을 "2026-09-18 ~ 09-20" 형태로 다듬는다.
 // 단, 해가 바뀌는 기간(2026-12-30 ~ 2027-01-02)은 종료 연도를 남긴다.
 function formatPeriod(start: string | null, end: string | null) {
@@ -85,6 +77,20 @@ function formatPeriod(start: string | null, end: string | null) {
  */
 function isReservableDate(date: ReservationAvailabilityDate): boolean {
   return date.available && date.remainingCapacity > 0;
+}
+
+/**
+ * 날짜 카드에 붙일 상태. 한 사람이 같은 행사·같은 날짜에 활성 예약을 두 개 가질 수 없으므로
+ * (서버 R005), 이미 잡아둔 날짜는 잔여석이 남아 있어도 고를 수 없다.
+ *
+ * 매진("마감")과 내가 이미 예약함("이미 예약함")을 구분해서 보여주는 게 핵심이다 - 예전에는
+ * 둘 다 그냥 "잔여 N석"으로 보였고, 결제 버튼을 누른 뒤에야 "이미 활성 예약이 존재합니다"라는
+ * 서버 메시지로 막혔다.
+ */
+function dateBlockedReason(date: ReservationAvailabilityDate): "SOLD_OUT" | "MINE" | null {
+  if (date.myReservationId !== null) return "MINE";
+  if (!date.available || date.remainingCapacity === 0) return "SOLD_OUT";
+  return null;
 }
 
 /**
@@ -134,6 +140,8 @@ export function TicketReservationPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // 에러 문구만으로는 다음 행동을 알 수 없는 실패(대표적으로 R005 중복 예약)에 붙이는 안내 링크.
+  const [submitErrorLink, setSubmitErrorLink] = useState<{ to: string; label: string } | null>(null);
   const [doneInfo, setDoneInfo] = useState<DoneInfo | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
   // 예약금 결제 팝업 열림 여부. 예약 생성 후 결제가 필요하면 이 팝업을 띄운다.
@@ -141,6 +149,11 @@ export function TicketReservationPage() {
 
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  // 결제 팝업을 닫으려 할 때 뜨는 확인창. "계속 결제 / 나중에 결제 / 예약 취소" 세 갈래라
+  // 예/아니오뿐인 useConfirm 대신 전용 다이얼로그를 쓴다.
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
   // 예약금은 가상계좌를 쓸 수 없어서 타입부터 좁혀 둔다(ReservationPaymentMethod 주석 참고).
   const [paymentMethod, setPaymentMethod] = useState<ReservationPaymentMethod>("CARD");
   const [now, setNow] = useState(() => Date.now());
@@ -233,7 +246,18 @@ export function TicketReservationPage() {
   const isPaid = price > 0;
   const advanceVisitDate = selectedDate?.visitDate ?? null;
 
-  const canProceedAdvance = selectedDate !== null && (!isPaid || agreed) && !submitting;
+  // 내가 이미 잡아둔 날짜들. 카드를 비활성화하는 이유를 화면 아래에서 한 번 더 설명한다.
+  const myReservedDates = (availability?.dates ?? []).filter((date) => date.myReservationId !== null);
+  // 그중 아직 결제가 안 끝난 건. 있으면 "이어서 결제"로 바로 보내준다(가장 흔한 상황이다).
+  const myPendingDate = myReservedDates.find((date) => date.myReservationStatus === "PENDING_PAYMENT") ?? null;
+
+  // 이미 예약한 날짜(비활성 카드)는 애초에 선택되지 않지만, 조회 직후 상태가 바뀌는 경우까지
+  // 감안해 진행 버튼에서도 한 번 더 막는다.
+  const canProceedAdvance =
+    selectedDate !== null
+    && selectedDate.myReservationId === null
+    && (!isPaid || agreed)
+    && !submitting;
   const canProceedOnsite = onsiteAgreed && !submitting;
 
   // 이 화면에 어떤 예약 유형을 노출할지 결정한다.
@@ -265,6 +289,35 @@ export function TicketReservationPage() {
     setOnsiteAgreed(false);
     setPetIds([]);
     setSubmitError(null);
+    setSubmitErrorLink(null);
+  }
+
+  /** 예매 정보를 다시 읽어 날짜 카드를 최신 상태로 맞춘다(중복 예약으로 막힌 직후 등). */
+  async function refreshAvailability() {
+    try {
+      setAvailability(await getReservationAvailability(id));
+    } catch {
+      // 새로고침 실패는 조용히 넘긴다 - 이미 화면에 표시 중인 실패 안내가 본론이다.
+    }
+  }
+
+  /**
+   * 예약/예매 실패를 화면 문구로 바꾼다.
+   *
+   * R005(중복 예약)는 서버 메시지("이미 활성 예약이 존재합니다.")만 띄우면 사용자가 무엇을
+   * 해야 할지 알 수 없다 - 대부분 결제를 안 끝낸 자기 예약이 남아 있는 경우라, 그 예약으로
+   * 갈 수 있는 링크까지 함께 준다. 날짜 카드도 다시 읽어 "이미 예약함"으로 바꿔둔다.
+   */
+  function applySubmitError(err: unknown, fallback: string) {
+    const duplicated = err instanceof ApiError && err.code === "R005";
+    if (duplicated) {
+      setSubmitError("이 날짜는 이미 예약해 두셨어요. 결제를 마치지 않았다면 내 예약에서 이어서 결제할 수 있어요.");
+      setSubmitErrorLink({ to: "/reservations/me", label: "내 예약으로 가기" });
+      void refreshAvailability();
+      return;
+    }
+    setSubmitError(err instanceof ApiError ? err.message : fallback);
+    setSubmitErrorLink(null);
   }
 
   async function handleAdvance() {
@@ -292,6 +345,7 @@ export function TicketReservationPage() {
     if (!advanceVisitDate) return;
 
     setSubmitError(null);
+    setSubmitErrorLink(null);
     setSubmitting(true);
     try {
       // 유료도 예약을 먼저 만든다 - 결제 생성 API가 reservationId로 원장 금액을 조회하므로
@@ -335,7 +389,7 @@ export function TicketReservationPage() {
       // R001 행사없음 / R002 날짜불가 / R003 접수아님 / R004 마감 / R005 중복 / R006 약관
       // 여기까지 온 건 재시도해도 결과가 같은 실패들이다. 쓰지 않을 슬롯은 돌려준다.
       releaseWaitingSlot(id);
-      setSubmitError(err instanceof ApiError ? err.message : "예약에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      applySubmitError(err, "예약에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -375,7 +429,7 @@ export function TicketReservationPage() {
       }
     } catch (err) {
       // R007 접수아님/시간지남 / R008 일시중지 / R005 활성 예약 중복
-      setSubmitError(err instanceof ApiError ? err.message : "현장예매에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      applySubmitError(err, "현장예매에 실패했어요. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -420,20 +474,57 @@ export function TicketReservationPage() {
    * 닫지 않고 "아직 완료되지 않았다"고 확인한다. 나가기를 택하면 예약은 PENDING_PAYMENT로 남아
    * 내 예약 목록에서 제한시간(약 10분) 안에 결제할 수 있고, 안 하면 자동으로 만료된다.
    */
-  async function attemptClosePayment() {
-    // 결제창을 여는 중(결제 생성 API 응답 대기 + 토스 SDK 호출)에는 닫기를 받지 않는다.
-    // 여기서 나가버리면 화면은 내 예약 목록으로 떠난 뒤에 진행 중이던 요청이 뒤늦게 끝나면서
-    // 사용자가 그만두기로 한 결제창을 띄운다. 결제 버튼도 이 구간에는 이미 비활성이다.
+  /**
+   * 결제 팝업을 닫으려 할 때. 곧바로 닫지 않고 "나가면 어떻게 되는지"를 먼저 묻는다.
+   *
+   * 결제창을 여는 중(결제 생성 API 응답 대기 + 토스 SDK 호출)에는 닫기를 받지 않는다.
+   * 여기서 나가버리면 화면은 내 예약 목록으로 떠난 뒤에 진행 중이던 요청이 뒤늦게 끝나면서
+   * 사용자가 그만두기로 한 결제창을 띄운다. 결제 버튼도 이 구간에는 이미 비활성이다.
+   */
+  function attemptClosePayment() {
     if (paying) return;
-    const leave = await confirm({
-      title: "예약이 아직 완료되지 않았어요",
-      description: "결제를 마치지 않고 나가면 예약이 완료되지 않아요. 이 예약은 '내 예약 목록'에 "
-        + "약 10분간 결제 대기로 남아 있다가, 결제하지 않으면 자동으로 만료돼요. 그래도 나갈까요?",
-      confirmLabel: "나가기",
-    });
-    if (!leave) return; // 계속 결제
+    setLeaveError(null);
+    setLeaveOpen(true);
+  }
+
+  /** 결제는 나중에. 예약은 결제 대기로 남겨두고 내 예약 목록으로 보낸다. */
+  function leaveKeepingReservation() {
+    setLeaveOpen(false);
     setPaymentOpen(false);
     navigate("/reservations/me");
+  }
+
+  /**
+   * 예약을 지금 취소하고 예매 화면으로 돌아간다.
+   *
+   * 그냥 나가면 결제 대기 예약이 최대 10분간 남아 같은 날짜를 다시 고를 수 없다(R005).
+   * "마음이 바뀐" 사용자가 자동 만료를 기다리지 않아도 되게 즉시 정리할 길을 열어둔다.
+   */
+  async function leaveCancelingReservation() {
+    if (!paymentInfo) return;
+    setLeaving(true);
+    setLeaveError(null);
+    try {
+      await cancelReservation(paymentInfo.reservationId);
+      releaseWaitingSlot(id);
+      setLeaveOpen(false);
+      setPaymentOpen(false);
+      setPaymentInfo(null);
+      setSelectedVisitDate(null);
+      setAgreed(false);
+      setSubmitError(null);
+      setSubmitErrorLink(null);
+      await refreshAvailability(); // 방금 놓아준 자리가 다시 잡히도록
+    } catch (err) {
+      // R021(결제 진행 중) 등. 취소가 안 됐는데 팝업을 닫으면 사용자는 취소된 줄 안다.
+      setLeaveError(
+        err instanceof ApiError
+          ? `${err.message} 그냥 나가면 이 예약은 결제 대기로 남았다가 자동으로 만료돼요.`
+          : "예약을 취소하지 못했어요. 그냥 나가면 이 예약은 결제 대기로 남았다가 자동으로 만료돼요.",
+      );
+    } finally {
+      setLeaving(false);
+    }
   }
 
   // 대기 화면. 통과하면 기다리게 만든 그 예약 요청을 그대로 이어서 보낸다.
@@ -581,26 +672,34 @@ export function TicketReservationPage() {
           {(availability?.dates.length ?? 0) === 0 ? (
             <Card className="mb-6 p-4 text-sm text-muted">지금 예매할 수 있는 방문일이 없어요.</Card>
           ) : (
-            <div className="mb-6 grid gap-3 sm:grid-cols-3">
+            <div className={`grid gap-3 sm:grid-cols-3 ${myReservedDates.length > 0 ? "mb-3" : "mb-6"}`}>
               {(availability?.dates ?? []).map((date) => {
-                const soldOut = !isReservableDate(date);
+                const blocked = dateBlockedReason(date);
                 const selected = date.visitDate === selectedVisitDate;
                 return (
                   <button
                     key={date.visitDate}
                     type="button"
-                    disabled={soldOut}
+                    disabled={blocked !== null}
                     onClick={() => setSelectedVisitDate(date.visitDate)}
                     className={`rounded-card border p-4 text-left transition ${
                       selected ? "border-primary-strong bg-primary-soft" : "border-line bg-card hover:bg-page"
-                    } ${soldOut ? "cursor-not-allowed opacity-50 hover:bg-card" : ""}`}
+                    } ${blocked !== null ? "cursor-not-allowed opacity-50 hover:bg-card" : ""}`}
                   >
                     <p className="font-bold text-ink">{formatVisitDateDow(date.visitDate)}</p>
                     <p className="mt-1 text-xs text-muted">
                       {formatEntryTime(date.entryStartTime)} ~ {formatEntryTime(date.entryEndTime)}
                     </p>
                     <p className="mt-2 text-xs font-bold">
-                      {soldOut ? (
+                      {blocked === "MINE" ? (
+                        // 상태까지 적어준다 - "결제 대기"면 아래 안내에서 이어서 결제할 수 있다.
+                        <span className="text-primary-strong">
+                          이미 예약함
+                          {date.myReservationStatus
+                            ? ` · ${reservationStatusLabels[date.myReservationStatus]}`
+                            : ""}
+                        </span>
+                      ) : blocked === "SOLD_OUT" ? (
                         <span className="text-muted">마감</span>
                       ) : (
                         <span className="text-ink">잔여 {date.remainingCapacity}석</span>
@@ -609,6 +708,28 @@ export function TicketReservationPage() {
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {/* 이미 예약한 날짜가 있으면 "왜 못 고르는지"와 "그럼 뭘 하면 되는지"를 같이 알려준다.
+              결제 대기 건이 있으면 그 예약으로 바로 갈 수 있게 링크까지 건다 - QA에서 이 안내가
+              없어서, 이미 잡아둔 날짜를 다시 고르고 결제까지 눌렀다가 R005로 막히는 흐름이 나왔다. */}
+          {myReservedDates.length > 0 && (
+            <div className="mb-6 rounded-card bg-surface-alt px-4 py-3 text-sm leading-6 text-ink">
+              <p className="font-bold">
+                이미 예약하신 날짜: {myReservedDates.map((date) => formatVisitDateDow(date.visitDate)).join(", ")}
+              </p>
+              <p className="mt-1 text-muted">
+                {myPendingDate
+                  ? "결제를 마치지 않은 예약이 있어요. 내 예약에서 이어서 결제하거나, 그 예약을 취소하면 이 날짜를 다시 고를 수 있어요."
+                  : "같은 날짜는 한 번만 예약할 수 있어요. 방문일을 바꾸려면 내 예약에서 '방문일 변경'을 이용해 주세요."}
+              </p>
+              <Link
+                to={myPendingDate ? `/reservations/me/${myPendingDate.myReservationId}` : "/reservations/me"}
+                className="mt-2 inline-flex min-h-11 items-center font-bold text-primary-strong hover:underline"
+              >
+                {myPendingDate ? "결제 이어서 하기 ›" : "내 예약 보기 ›"}
+              </Link>
             </div>
           )}
 
@@ -649,7 +770,19 @@ export function TicketReservationPage() {
             </p>
           )}
 
-          {submitError && <p className="mb-4 text-sm font-bold text-primary-strong">{submitError}</p>}
+          {submitError && (
+            <div role="alert" className="mb-4">
+              <p className="text-sm font-bold text-primary-strong">{submitError}</p>
+              {submitErrorLink && (
+                <Link
+                  to={submitErrorLink.to}
+                  className="mt-1 inline-flex min-h-11 items-center text-sm font-bold text-ink hover:underline"
+                >
+                  {submitErrorLink.label} ›
+                </Link>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end">
             <Button disabled={!canProceedAdvance} onClick={handleAdvance}>
@@ -686,7 +819,19 @@ export function TicketReservationPage() {
             <span>현장예매 취소·환불 불가 규정을 확인했고 이에 동의해요.</span>
           </label>
 
-          {submitError && <p className="mb-4 text-sm font-bold text-primary-strong">{submitError}</p>}
+          {submitError && (
+            <div role="alert" className="mb-4">
+              <p className="text-sm font-bold text-primary-strong">{submitError}</p>
+              {submitErrorLink && (
+                <Link
+                  to={submitErrorLink.to}
+                  className="mt-1 inline-flex min-h-11 items-center text-sm font-bold text-ink hover:underline"
+                >
+                  {submitErrorLink.label} ›
+                </Link>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end">
             <Button disabled={!canProceedOnsite} onClick={handleOnsite}>
@@ -758,6 +903,51 @@ export function TicketReservationPage() {
             {paying && (
               <p className="text-right text-xs text-muted">결제창을 여는 중에는 창을 닫을 수 없어요. 잠시만 기다려 주세요.</p>
             )}
+          </div>
+        </Dialog>
+      )}
+
+      {/* 결제 팝업을 닫으려 할 때. 남겨두고 나중에 결제할지, 아예 취소할지를 여기서 정한다. */}
+      {paymentInfo && (
+        <Dialog
+          open={leaveOpen}
+          onClose={() => (leaving ? undefined : setLeaveOpen(false))}
+          size="lg"
+          title="예약이 아직 완료되지 않았습니다"
+        >
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-ink">나가시겠습니까?</p>
+            <p className="text-sm leading-6 text-muted">
+              &lsquo;나중에 결제하기&rsquo;를 누르면 10분 내에 결제하지 않을 경우 예약이 만료됩니다.
+              만료 전까지는 {formatVisitDateDow(paymentInfo.visitDate)} 방문으로 다시 예약할 수 없습니다.
+            </p>
+
+            {leaveError && <p role="alert" className="text-sm font-bold text-primary-strong">{leaveError}</p>}
+
+            {/* 세 갈래를 한 줄에 둔다. 라벨이 줄바꿈되면 버튼 높이가 제각각이 되어 무엇이
+                기본 동작인지 읽히지 않는다. 아주 좁은 화면에서는 줄을 접는 대신 가로로
+                스크롤시킨다 - 한 줄 배치가 깨지지 않는 쪽이 읽기 쉽다. */}
+            <div className="flex flex-nowrap items-center justify-end gap-2 overflow-x-auto pt-1">
+              <Button
+                variant="outline"
+                className="whitespace-nowrap px-2 text-xs sm:px-3 sm:text-sm"
+                disabled={leaving}
+                onClick={() => void leaveCancelingReservation()}
+              >
+                {leaving ? "취소하는 중…" : "취소하고 나가기"}
+              </Button>
+              <Button
+                variant="outline"
+                className="whitespace-nowrap px-2 text-xs sm:px-3 sm:text-sm"
+                disabled={leaving}
+                onClick={leaveKeepingReservation}
+              >
+                나중에 결제하기
+              </Button>
+              <Button className="whitespace-nowrap px-2 text-xs sm:px-3 sm:text-sm" disabled={leaving} onClick={() => setLeaveOpen(false)}>
+                계속 결제하기
+              </Button>
+            </div>
           </div>
         </Dialog>
       )}

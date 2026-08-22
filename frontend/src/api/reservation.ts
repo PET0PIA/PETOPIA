@@ -50,11 +50,21 @@ export interface ReservationListItem {
   qrAvailable: boolean;
   /** 결제 대기 예약에서 "결제 계속하기"를 보여줄지 */
   paymentAvailable: boolean;
+  /**
+   * 결제 대기 예약의 결제 제한시각(ISO). 남은 시간 카운트다운에 쓴다.
+   * 결제 대기가 아니거나 무료 예약이면 null.
+   */
+  paymentExpiresAt: string | null;
   amount: number;
   /** 예약 확정시각(ISO). 미확정이면 null */
   reservedAt: string | null;
   /** 최초 입장시각(ISO). 입장 전이면 null */
   checkedInAt: string | null;
+  /**
+   * 주최측 행사 취소로 자동 취소된 예약인지.
+   * 내가 직접 취소한 건과 구분해서 안내 문구를 다르게 보여준다.
+   */
+  canceledByFairCancellation: boolean;
 }
 
 /** 내 예약 목록 응답(페이징). 백엔드 ReservationListResponse에 맞춘다. */
@@ -69,9 +79,9 @@ export interface ReservationListResponse {
 
 /**
  * 예약 단건 상세. (GET /reservations/{id})
- * 목록 필드 + reservationNo·reservationType + 케밥 제어 플래그 2개.
- * canChangeVisitDate·canCancel은 상태·유형 기준의 대략 판단이며,
- * 12시간 마감은 반영돼 있지 않다 → 버튼을 눌러도 R018/R019가 올 수 있으니 응답 처리를 해야 한다.
+ * 목록 필드 + reservationNo·reservationType + 케밥 제어 플래그 2개 + 취소·변경 마감 시각.
+ * canChangeVisitDate·canCancel에는 마감까지 반영돼 있지만, 화면을 열어둔 채 마감을 넘기면
+ * 여전히 R018/R019가 올 수 있으니 응답 처리는 그대로 해야 한다.
  */
 export interface ReservationDetail extends ReservationListItem {
   /** 예약번호(사람이 읽는 식별자) */
@@ -83,6 +93,13 @@ export interface ReservationDetail extends ReservationListItem {
   canChangeVisitDate: boolean;
   /** 케밥 "예약 취소" 노출 여부 */
   canCancel: boolean;
+  /**
+   * 방문일 변경 마감 시각(ISO). 행사가 정한 기한(없으면 입장 12시간 전)이다.
+   * 계산할 수 없거나 행사 설정이 잘못된 경우 null.
+   */
+  changeDeadlineAt: string | null;
+  /** 예약 취소 마감 시각(ISO). 결제 대기 예약의 취소에는 적용되지 않는다. */
+  cancelDeadlineAt: string | null;
   /** 예약금 결제의 ID. 무료 예약(결제 행 없음)이면 null */
   paymentId: number | null;
   /** 표시용 결제수단("카드", "간편결제 (네이버페이)"). 결제 완료 전이면 "결제 전", 무료 예약이면 null */
@@ -169,8 +186,18 @@ export interface ReservationAvailabilityDate {
   entryStartTime: string;
   entryEndTime: string;
   remainingCapacity: number;
-  /** 예매 가능 여부(마감이면 false) */
+  /**
+   * 잔여석 기준 예매 가능 여부(마감이면 false).
+   * "내가 이미 예약한 날"인지는 여기 섞여 있지 않다 - 아래 myReservationId로 따로 판단한다.
+   */
   available: boolean;
+  /**
+   * 로그인 사용자가 이 날짜에 이미 잡아둔 예약의 ID. 없거나 비로그인이면 null.
+   * 값이 있으면 같은 날짜로 또 예약할 수 없다(서버가 R005로 막는다).
+   */
+  myReservationId: number | null;
+  /** 그 예약의 상태. 결제 대기면 상세에서 결제를 이어갈 수 있다. */
+  myReservationStatus: ReservationStatus | null;
 }
 
 /**
@@ -218,10 +245,17 @@ export interface CreateReservationResult {
   entryQrToken: string | null;
 }
 
-/** 예약 가능 날짜·잔여석을 조회한다. 인증 불필요(공개). 접수 중이 아니면 R003. */
+/**
+ * 예약 가능 날짜·잔여석을 조회한다. 접수 중이 아니면 R003.
+ *
+ * 인증은 선택이다(공개 API). 다만 토큰을 실어 보내면 서버가 "내가 이미 예약한 날짜"까지
+ * 표시해 주므로, 로그인 상태에서는 항상 붙여 보낸다 - 그래야 이미 예약한 날짜를 눌러
+ * 결제까지 진행한 뒤에 R005로 막히는 일이 없다.
+ */
 export function getReservationAvailability(fairId: number) {
   return apiClient.get<ReservationAvailability>(
     `/api/v1/fairs/${fairId}/reservation-availability`,
+    { headers: authHeaders() },
   );
 }
 
@@ -321,7 +355,7 @@ export interface CancelReservationResult {
 
 /**
  * 방문일을 변경한다. ADVANCE·CONFIRMED만 가능.
- * 마감(입장 12시간 전) 초과면 R018, 대상일 불가/마감이면 R002/R004.
+ * 마감(행사가 정한 기한, 기본 입장 12시간 전) 초과면 R018, 대상일 불가/마감이면 R002/R004.
  *
  * petIds를 함께 보내면 동반 반려동물 목록을 그 값으로 교체한다(빈 배열 = 동반 해제).
  * 생략하면 기존 동반 정보를 그대로 둔다. 같은 날짜로 요청하면 정원·QR은 건드리지 않고
@@ -367,6 +401,10 @@ export interface OnsiteSalesPolicy {
   /** YYYY-MM-DD */
   operationDate: string;
   price: number;
+  /** 현장예매 전용 정원. null이면 제한 없음(사전예약 정원과는 별개다). */
+  capacity: number | null;
+  /** 그 정원을 점유 중인 현장예매 수. 읽기 전용 — 예매·취소가 움직인다. */
+  reservedCount: number;
   status: OnsiteSalesStatus;
   /** 낙관적 락 버전. 미설정이면 0. */
   version: number;
@@ -376,12 +414,14 @@ export interface OnsiteSalesPolicy {
 /** 현장예매 정책 저장 요청. 백엔드 UpdateOnsiteSalesPolicyRequest에 맞춘다. */
 export interface SaveOnsiteSalesPolicyRequest {
   price: number;
+  /** 현장예매 전용 정원. null로 보내면 "제한 없음"으로 저장된다. */
+  capacity: number | null;
   status: OnsiteSalesStatus;
   /** 조회 때 받은 version. 신규(미설정)면 0 또는 null. 불일치 시 R009. */
   expectedVersion: number | null;
 }
 
-/** 운영일의 현장예매 정책을 조회한다. 미설정이면 price=0·CLOSED·version=0. */
+/** 운영일의 현장예매 정책을 조회한다. 미설정이면 price=0·정원 없음·CLOSED·version=0. */
 export function getOnsiteSalesPolicy(fairId: number, fairDateId: number) {
   return apiClient.get<OnsiteSalesPolicy>(
     `/api/v1/admin/fairs/${fairId}/dates/${fairDateId}/onsite-sales-policy`,

@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.reservation.mapper.ReservationFairCancelMapper">
+
+    <!--
+        취소된 행사에 남아 있는 예약을 한 번에 훑는다.
+
+        fairs·payment·refund는 다른 도메인 소유 테이블이라 읽기만 하고, 잠금은 FOR UPDATE OF r로
+        reservations에만 건다(FairTransitionMapper가 payment를 다루는 규칙과 같다). 결제 행을 같이
+        잠그면 정산·환불이 그 행을 잠그는 것과 불필요하게 경쟁한다.
+
+        예약금 결제(payment)는 idempotency_key가 "RESERVATION_DEPOSIT_{예약ID}"로 UNIQUE라
+        예약 1건당 최대 1행이고, 환불(refund)도 UK_REFUND_PAYMENT로 결제 1건당 최대 1행이다.
+        그래서 LEFT JOIN 두 번으로 행이 늘어나지 않는다.
+
+        구동 테이블은 옵티마이저가 고른다. reservations에는 (fair_id, status, visit_date)와
+        (status, payment_expires_at) 두 인덱스가 있어 어느 쪽에서 들어와도 인덱스를 탄다
+        (fairs.canceled_at에는 인덱스가 없지만 행사 수가 적어 문제되지 않는다).
+    -->
+    <select id="selectLiveReservationsOfCanceledFairsForUpdate" resultType="CanceledFairReservationRow">
+        SELECT r.reservation_id
+             , r.user_id
+             , r.fair_id
+             , r.visit_date
+             , r.reservation_type
+             , r.status         AS reservation_status
+             , p.status         AS payment_status
+             , rf.status        AS refund_status
+             , rf.refund_id
+             , rf.refund_amount
+          FROM fairs f
+          JOIN reservations r
+            ON r.fair_id = f.fair_id
+     LEFT JOIN payment p
+            ON p.reservation_id = r.reservation_id
+           AND p.payment_type = 'RESERVATION_DEPOSIT'
+     LEFT JOIN refund rf
+            ON rf.payment_id = p.payment_id
+         WHERE f.canceled_at IS NOT NULL
+           <!-- CHECKED_IN은 제외한다 - 이미 입장한 예약을 취소로 되돌리면 입장 이력과 어긋난다.
+                EXPIRED·CANCELED는 이미 끝난 예약이라 손댈 게 없다. -->
+           AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED')
+         ORDER BY r.reservation_id
+         LIMIT #{limit}
+         FOR UPDATE OF r SKIP LOCKED
+    </select>
+
+    <!--
+        조회와 갱신 사이에 상황이 바뀔 수 있다(사용자가 그 사이 직접 취소, 결제 완료 통지로
+        PENDING_PAYMENT -> CONFIRMED 상승 등). 그래서 조회 때 본 조건을 갱신 시점에 다시 건다:
+        상태 CAS + 행사 취소 여부 + (필요하면) 환불 완료 여부.
+
+        canceled_by는 NULL로 남긴다 - 사람이 아니라 시스템이 정리한 취소라는 표시이고,
+        화면·조회가 "행사 취소로 자동 취소된 건"을 이 값으로 구분한다(reservations를 CANCELED로
+        바꾸는 다른 경로는 사용자 자진취소뿐이고 거기선 항상 user_id가 들어간다).
+    -->
+    <update id="cancelByFairCancellation">
+        UPDATE reservations r
+          JOIN fairs f
+            ON f.fair_id = r.fair_id
+           SET r.status = 'CANCELED'
+             , r.canceled_at = #{now}
+             , r.cancel_reason = #{reason}
+             , r.canceled_by = NULL
+             , r.updated_at = #{now}
+         WHERE r.reservation_id = #{reservationId}
+           AND r.status = #{expectedStatus}
+           AND f.canceled_at IS NOT NULL
+        <if test="requireRefundCompleted">
+           AND EXISTS (
+               SELECT 1
+                 FROM payment p
+                 JOIN refund rf
+                   ON rf.payment_id = p.payment_id
+                WHERE p.reservation_id = r.reservation_id
+                  AND p.payment_type = 'RESERVATION_DEPOSIT'
+                  AND rf.status = 'COMPLETED'
+           )
+        </if>
+    </update>
+
+    <!-- 사용자 자진취소 이력(RESERVATION_CANCELED, actor_type=USER)과 구분하려고
+         action_type을 FAIR_CANCELED로 따로 쓴다. 환불까지 나간 건이면 refundId·refundAmount가 함께 남는다. -->
+    <insert id="insertFairCanceledHistory">
+        INSERT INTO reservation_histories (
+               reservation_id
+             , action_type
+             , before_data
+             , after_data
+             , changed_by
+             , actor_type
+             , is_admin_action
+             , change_reason
+             , created_at
+        ) VALUES (
+               #{reservationId}
+             , 'FAIR_CANCELED'
+             , JSON_OBJECT('status', #{previousStatus})
+             , JSON_OBJECT(
+                    'status', 'CANCELED',
+                    'refundId', #{refundId},
+                    'refundAmount', #{refundAmount}
+               )
+             , NULL
+             , 'SYSTEM'
+             , FALSE
+             , #{reason}
+             , #{now}
+        )
+    </insert>
+
+</mapper>

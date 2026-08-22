@@ -391,11 +391,11 @@ export function FairApplicationNewPage() {
               </div>
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
-                  {label("reservationCancelDeadlineHours", "취소 가능 기한(시간)", false, "방문 몇 시간 전까지 취소를 허용할지. 예: 24 = 하루 전까지.")}
+                  {label("reservationCancelDeadlineHours", "취소 가능 기한(시간)", false, "방문 몇 시간 전까지 취소를 허용할지. 예: 24 = 하루 전까지. 비워두면 기본 12시간.")}
                   <Input id="reservationCancelDeadlineHours" type="number" min={0} value={form.reservationCancelDeadlineHours} onChange={(event) => update("reservationCancelDeadlineHours", event.target.value)} placeholder="예: 24" />
                 </div>
                 <div>
-                  {label("reservationChangeDeadlineHours", "변경 가능 기한(시간)", false, "방문 몇 시간 전까지 방문일 변경을 허용할지.")}
+                  {label("reservationChangeDeadlineHours", "변경 가능 기한(시간)", false, "방문 몇 시간 전까지 방문일 변경을 허용할지. 비워두면 기본 12시간.")}
                   <Input id="reservationChangeDeadlineHours" type="number" min={0} value={form.reservationChangeDeadlineHours} onChange={(event) => update("reservationChangeDeadlineHours", event.target.value)} placeholder="예: 24" />
                 </div>
               </div>

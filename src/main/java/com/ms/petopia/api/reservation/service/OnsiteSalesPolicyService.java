@@ -38,10 +38,13 @@ public class OnsiteSalesPolicyService {
         }
         OnsiteSalesPolicyRow policy = onsiteReservationMapper.selectPolicy(fairDateId);
         if (policy == null) {
+            // 아직 설정한 적 없는 운영일. 판매하지 않는 상태(가격 0·마감·정원 제한 없음)를 준다.
             return new OnsiteSalesPolicyResponse(
                     fairId,
                     fairDateId,
                     fairDate.getOperationDate(),
+                    0,
+                    null,
                     0,
                     OnsiteSalesStatus.CLOSED.name(),
                     0,
@@ -53,6 +56,8 @@ public class OnsiteSalesPolicyService {
                 fairDateId,
                 fairDate.getOperationDate(),
                 policy.getPrice(),
+                policy.getCapacity(),
+                policy.getReservedCount(),
                 policy.getStatus(),
                 policy.getVersion(),
                 policy.getUpdatedAt()
@@ -60,7 +65,7 @@ public class OnsiteSalesPolicyService {
     }
 
     /**
-     * 운영일별 현장예매 가격과 접수 상태를 생성하거나 변경한다.
+     * 운영일별 현장예매 가격·정원·접수 상태를 생성하거나 변경한다.
      * EVENT_ADMIN은 배정된 행사만, SUPER_ADMIN은 모든 행사를 변경할 수 있다.
      */
     @Transactional
@@ -90,6 +95,7 @@ public class OnsiteSalesPolicyService {
             onsiteReservationMapper.insertPolicy(
                     fairDateId,
                     request.price(),
+                    request.capacity(),
                     status.name(),
                     actorUserId,
                     now
@@ -101,6 +107,7 @@ public class OnsiteSalesPolicyService {
             int updated = onsiteReservationMapper.updatePolicy(
                     fairDateId,
                     request.price(),
+                    request.capacity(),
                     status.name(),
                     actorUserId,
                     request.expectedVersion(),
@@ -117,6 +124,8 @@ public class OnsiteSalesPolicyService {
                 fairDateId,
                 fairDate.getOperationDate(),
                 saved.getPrice(),
+                saved.getCapacity(),
+                saved.getReservedCount(),
                 saved.getStatus(),
                 saved.getVersion(),
                 saved.getUpdatedAt()
@@ -134,6 +143,12 @@ public class OnsiteSalesPolicyService {
                 || actorUserId == null || actorUserId <= 0
                 || request == null
                 || request.price() == null || request.price() < 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        // 정원은 생략(null)하면 "제한 없음"이다. 값을 줬다면 음수만 막는다.
+        // 이미 팔린 수보다 작게 줄이는 것은 막지 않는다 - 판매를 중간에 조일 수 있어야 하고,
+        // 이미 발행된 예약을 무효로 만들지도 않는다(새 예매만 매진 처리된다).
+        if (request.capacity() != null && request.capacity() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
     }

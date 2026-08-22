@@ -22,20 +22,6 @@ interface FairPublicCardProps {
   layout?: "card" | "list";
 }
 
-/*
- * 동반 "가능"이 기본값(정책 P1)이라 거의 모든 카드에 배지가 붙게 되고, 그러면 정보가 아니라
- * 소음이 된다 - 알려줘야 할 쪽은 예외인 "불가"다. 그래서 petAllowed=false일 때만 배지를 띄운다.
- * 상세 페이지는 사용자가 판단하는 자리라 양쪽 모두 문장으로 보여준다(FairDetailPage).
- */
-function PetNotAllowedBadge({ petAllowed }: { petAllowed: boolean }) {
-  if (petAllowed) return null;
-  return (
-    <Badge tone="neutral" className="shrink-0">
-      반려동물 동반 불가
-    </Badge>
-  );
-}
-
 /** 공개 행사 카드(세로 포스터 + 이름·기간·장소 + 하단 CTA). 목록·참가신청·업체목록에서 공유한다. */
 export function FairPublicCard({ fair, ended = false, to, action, layout = "card" }: FairPublicCardProps) {
   const poster = fair.posterImageUrl ? (
@@ -96,7 +82,6 @@ export function FairPublicCard({ fair, ended = false, to, action, layout = "card
                 {fairCategoryLabels[fair.category] ?? fair.category}
               </Badge>
             )}
-            <PetNotAllowedBadge petAllowed={fair.petAllowed} />
           </div>
           <p className="truncate text-sm text-muted">{formatFairPeriodDow(fair.operationStartDate, fair.operationEndDate)}</p>
           <p className="truncate text-sm text-muted">{fair.placeName ?? "장소 미정"}</p>
@@ -145,11 +130,6 @@ export function FairPublicCard({ fair, ended = false, to, action, layout = "card
         </h3>
         <p className="text-sm text-muted">{formatFairPeriodDow(fair.operationStartDate, fair.operationEndDate)}</p>
         <p className="text-sm text-muted">{fair.placeName ?? "장소 미정"}</p>
-        {!fair.petAllowed && (
-          <div className="mt-0.5">
-            <PetNotAllowedBadge petAllowed={fair.petAllowed} />
-          </div>
-        )}
       </div>
 
       {/* CTA: to가 있으면 링크 pill(검정), 없으면(오픈 예정·종료) 비활성 pill(회색). 모든 카드가 같은 자리에 둬 높이를 맞춘다. */}

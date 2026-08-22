@@ -19,6 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ReservationQueryService {
 
+    private static final String CANCELED = "CANCELED";
     private static final String CONFIRMED = "CONFIRMED";
     private static final String CHECKED_IN = "CHECKED_IN";
     private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
@@ -85,9 +86,11 @@ public class ReservationQueryService {
                 ended,
                 !ended && (CONFIRMED.equals(status) || CHECKED_IN.equals(status)),
                 isPaymentAvailable(row, now),
+                paymentDeadline(row),
                 row.getAmount(),
                 row.getReservedAt(),
-                row.getCheckedInAt()
+                row.getCheckedInAt(),
+                isCanceledByFairCancellation(row)
         );
     }
 
@@ -100,13 +103,22 @@ public class ReservationQueryService {
         String type = row.getReservationType();
         boolean ended = isEnded(row, now);
         boolean qrAvailable = !ended && (CONFIRMED.equals(status) || CHECKED_IN.equals(status));
-        // 케밥 노출용 대략 판단. 정확한 마감(12시간 전·취소 마감)은 각 변경/취소 API가 최종 검증한다.
+        // 마감 시각을 화면에 알려주고, 케밥 노출 판단에도 반영한다. 예전에는 상태·유형만 보고
+        // 버튼을 열어줘서, 마감이 지난 예약도 눌러본 뒤에야 R018·R019로 거절됐다.
         // 입장 종료된 예약은 화면에서 비활성 처리하므로 두 액션 모두 !ended를 전제로 한다.
-        boolean canChangeVisitDate = !ended && ADVANCE.equals(type) && CONFIRMED.equals(status);
+        LocalDateTime changeDeadlineAt = deadlineAt(
+                row, row.getChangeDeadlineHours(), ReservationDeadlinePolicy.DEFAULT_CHANGE_DEADLINE_HOURS
+        );
+        LocalDateTime cancelDeadlineAt = deadlineAt(
+                row, row.getCancelDeadlineHours(), ReservationDeadlinePolicy.DEFAULT_CANCEL_DEADLINE_HOURS
+        );
+        boolean canChangeVisitDate = !ended && ADVANCE.equals(type) && CONFIRMED.equals(status)
+                && !isPast(changeDeadlineAt, now);
         // 유료 확정 예약도 취소 가능하다 — 취소 API가 예약금을 전액 환불하고 CANCELED로 전환한다
         // (ReservationCancellationService 참고). 그래서 금액으로 가리지 않는다.
+        // 결제 대기 예약에는 마감을 적용하지 않는다 - 취소 API도 그 상태는 마감 검사 없이 받아준다.
         boolean canCancel = !ended && (PENDING_PAYMENT.equals(status)
-                || (ADVANCE.equals(type) && CONFIRMED.equals(status)));
+                || (ADVANCE.equals(type) && CONFIRMED.equals(status) && !isPast(cancelDeadlineAt, now)));
         return new ReservationDetailResponse(
                 row.getReservationId(),
                 row.getReservationNo(),
@@ -121,15 +133,54 @@ public class ReservationQueryService {
                 ended,
                 qrAvailable,
                 isPaymentAvailable(row, now),
+                paymentDeadline(row),
                 row.getAmount(),
                 row.getReservedAt(),
                 row.getCheckedInAt(),
                 canChangeVisitDate,
                 canCancel,
+                changeDeadlineAt,
+                cancelDeadlineAt,
                 row.getPaymentId(),
                 paymentMethodLabel(row),
-                pets
+                pets,
+                isCanceledByFairCancellation(row)
         );
+    }
+
+    /**
+     * 취소·변경 마감 시각을 계산한다. 행사가 정한 기한(입장 몇 시간 전)이 없으면 기본값을 쓴다.
+     *
+     * <p>음수 기한은 잘못 저장된 설정이다(행사 신청·수정에서 막지만 과거 데이터가 있을 수 있다).
+     * 그때는 null을 내려 "마감 없음"으로 두고, 실제 취소·변경 API가 400으로 거절하게 한다 -
+     * 여기서 억지로 시각을 만들면 화면에 없는 기한이 그려진다.
+     */
+    private LocalDateTime deadlineAt(ReservationListRow row, Integer configuredHours, int defaultHours) {
+        if (row.getVisitDate() == null || row.getEntryStartTime() == null) {
+            return null;
+        }
+        int hours = configuredHours == null ? defaultHours : configuredHours;
+        if (hours < 0) {
+            return null;
+        }
+        return LocalDateTime.of(row.getVisitDate(), row.getEntryStartTime()).minusHours(hours);
+    }
+
+    /** 마감 시각이 없으면(계산 불가) 지나지 않은 것으로 본다 - 판단은 각 API가 최종적으로 한다. */
+    private boolean isPast(LocalDateTime deadlineAt, LocalDateTime now) {
+        return deadlineAt != null && now.isAfter(deadlineAt);
+    }
+
+    /**
+     * 주최측 행사 취소로 자동 취소된 예약인지 판단한다.
+     *
+     * <p>취소한 주체를 canceled_by로 가린다. 예약을 CANCELED로 바꾸는 경로는 둘뿐이라서다 -
+     * 사용자 자진취소({@link ReservationCancellationService})는 항상 본인 user_id를 남기고,
+     * 행사 취소 정리({@link ReservationFairCancelSyncService})는 사람이 아니므로 NULL을 남긴다.
+     * 취소 사유 문구를 비교하지 않는 이유는, 문구가 바뀌면 조용히 오작동하기 때문이다.
+     */
+    private boolean isCanceledByFairCancellation(ReservationListRow row) {
+        return CANCELED.equals(row.getReservationStatus()) && row.getCanceledBy() == null;
     }
 
     /**
@@ -155,6 +206,16 @@ public class ReservationQueryService {
         return row.getVisitDate() != null
                 && row.getEntryEndTime() != null
                 && now.isAfter(LocalDateTime.of(row.getVisitDate(), row.getEntryEndTime()));
+    }
+
+    /**
+     * 화면에 노출할 결제 제한시각. 결제 대기 상태일 때만 준다.
+     *
+     * <p>결제가 끝나거나 취소된 예약의 payment_expires_at은 원장에 그대로 남아 있어서,
+     * 거르지 않고 내보내면 "이미 확정된 예약에 지난 마감시각이 붙어 있는" 응답이 된다.
+     */
+    private LocalDateTime paymentDeadline(ReservationListRow row) {
+        return PENDING_PAYMENT.equals(row.getReservationStatus()) ? row.getPaymentExpiresAt() : null;
     }
 
     private boolean isPaymentAvailable(ReservationListRow row, LocalDateTime now) {

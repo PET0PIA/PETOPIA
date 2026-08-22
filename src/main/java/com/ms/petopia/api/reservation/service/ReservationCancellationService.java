@@ -72,8 +72,8 @@ public class ReservationCancellationService {
     private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final String CONFIRMED = "CONFIRMED";
     private static final String ADVANCE = "ADVANCE";
+    private static final String ONSITE_DIRECT = "ONSITE_DIRECT";
     private static final String CANCELED = "CANCELED";
-    private static final int DEFAULT_CANCEL_DEADLINE_HOURS = 12;
 
     /**
      * {@link PaymentService#cancelPayment}가 "이 도메인이 건드려도 되는 결제유형인지" 검증할 때 쓰는
@@ -152,9 +152,12 @@ public class ReservationCancellationService {
         // 취소된 좌석을 정원에 돌려준다. 이 반납을 빼면 좌석이 영구 증발한다.
         // cancelReservation이 1을 반환한 뒤에만 호출해야 중복 반납이 생기지 않는다 -
         // 위의 상태 CAS가 이미 "이번 호출이 취소를 성사시킨 유일한 호출"임을 보장한다.
-        // 현장예매(ONSITE_DIRECT)는 애초에 정원을 점유하지 않으므로 반납 대상이 아니다.
+        // 사전예약과 현장예매는 정원을 따로 센다(V49). 어느 쪽 자리를 반납할지는 예약 유형이 정한다 -
+        // 결제 전(PENDING_PAYMENT) 현장예매는 사용자가 직접 취소할 수 있어서 여기로도 들어온다.
         if (ADVANCE.equals(reservation.getReservationType())) {
             capacityMapper.release(reservation.getFairId(), reservation.getVisitDate());
+        } else if (ONSITE_DIRECT.equals(reservation.getReservationType())) {
+            capacityMapper.releaseOnsite(reservation.getFairId(), reservation.getVisitDate());
         }
 
         eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
@@ -288,7 +291,7 @@ public class ReservationCancellationService {
         }
 
         int deadlineHours = reservation.getCancelDeadlineHours() == null
-                ? DEFAULT_CANCEL_DEADLINE_HOURS
+                ? ReservationDeadlinePolicy.DEFAULT_CANCEL_DEADLINE_HOURS
                 : reservation.getCancelDeadlineHours();
         if (deadlineHours < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);

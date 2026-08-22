@@ -7,7 +7,9 @@ import { Badge } from "../../components/ui/Badge";
 import { ApiError } from "../../api/client";
 import { getMyReservations, type ReservationListItem } from "../../api/reservation";
 import {
+  fairCancellationLabel,
   formatEntryTime,
+  formatRemaining,
   formatVisitDateDow,
   inactiveReservationStatuses,
   reservationStatusLabels,
@@ -18,6 +20,11 @@ export function MyReservationsPage() {
   const [reservations, setReservations] = useState<ReservationListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 결제 대기 예약의 남은 시간을 1초마다 다시 그리기 위한 시계.
+  const [now, setNow] = useState(() => Date.now());
+
+  // 결제 대기 건이 하나도 없으면 시계를 돌리지 않는다 - 목록 전체를 1초마다 리렌더할 이유가 없다.
+  const hasPendingPayment = reservations.some((item) => item.paymentAvailable && item.paymentExpiresAt);
 
   useEffect(() => {
     let alive = true;
@@ -36,6 +43,12 @@ export function MyReservationsPage() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!hasPendingPayment) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingPayment]);
 
   return (
     <div className="mx-auto max-w-3xl py-2">
@@ -60,6 +73,8 @@ export function MyReservationsPage() {
         <ul className="flex flex-col gap-3">
           {reservations.map((item) => {
             const inactive = inactiveReservationStatuses.includes(item.reservationStatus);
+            // 결제 마감까지 남은 시간. 지났으면 null이고, 곧 만료 배치가 상태를 정리한다.
+            const remaining = item.paymentAvailable ? formatRemaining(item.paymentExpiresAt, now) : null;
             return (
               <li key={item.reservationId}>
                 <Link
@@ -82,9 +97,15 @@ export function MyReservationsPage() {
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="truncate font-bold text-ink">{item.fairName}</h3>
-                      <Badge tone={reservationStatusTones[item.reservationStatus]} className="shrink-0">
-                        {reservationStatusLabels[item.reservationStatus]}
-                      </Badge>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {/* 주최측 취소는 내가 취소한 것과 다르므로 배지로 먼저 구분해 준다. */}
+                        {item.canceledByFairCancellation && (
+                          <Badge tone="sun">{fairCancellationLabel}</Badge>
+                        )}
+                        <Badge tone={reservationStatusTones[item.reservationStatus]}>
+                          {reservationStatusLabels[item.reservationStatus]}
+                        </Badge>
+                      </div>
                     </div>
                     <p className="text-sm text-muted">
                       {formatVisitDateDow(item.visitDate)} · {formatEntryTime(item.entryStartTime)}~{formatEntryTime(item.entryEndTime)}
@@ -92,9 +113,16 @@ export function MyReservationsPage() {
                     {item.amount > 0 && (
                       <p className="text-sm text-muted">{item.amount.toLocaleString()}원</p>
                     )}
-                    {/* 결제 대기 예약: 카드를 누르면 상세에서 결제를 이어갈 수 있음을 알린다. */}
+                    {/* 결제 대기 예약: 카드를 누르면 상세에서 결제를 이어갈 수 있음을 알린다.
+                        남은 시간을 같이 보여준다 - "결제 대기" 배지만으로는 언제까지 결제해야
+                        하는지 알 수 없어, 그냥 두면 자동 만료되는 걸 모른 채 지나친다. */}
                     {item.paymentAvailable && (
-                      <span className="mt-0.5 text-sm font-bold text-primary-strong">결제 계속하기 ›</span>
+                      <span className="mt-0.5 text-sm font-bold text-primary-strong">
+                        결제 계속하기 ›
+                        {remaining && (
+                          <span className="ml-2 font-normal text-muted">결제 마감까지 {remaining} 남음</span>
+                        )}
+                      </span>
                     )}
                   </div>
 

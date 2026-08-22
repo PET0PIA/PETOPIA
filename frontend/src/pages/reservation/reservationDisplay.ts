@@ -27,6 +27,15 @@ export const reservationStatusTones: Record<ReservationStatus, BadgeTone> = {
   EXPIRED: "neutral",
 };
 
+/**
+ * 주최측 행사 취소로 자동 취소된 예약에 붙이는 문구.
+ * 목록은 짧은 라벨을, 상세는 무슨 일이 있었는지 한 줄로 설명한다.
+ * 내가 직접 취소한 건과 구분해서 "왜 취소됐지?" 하는 문의를 줄이는 게 목적이다.
+ */
+export const fairCancellationLabel = "행사 취소";
+export const fairCancellationNotice =
+  "주최측 사정으로 행사가 취소되어 예약이 자동으로 취소됐어요. 결제하신 예약금은 환불 처리됐어요.";
+
 /** 카드 전체를 흐릿하게(지난 예약 느낌) 처리할 상태. */
 export const inactiveReservationStatuses: ReservationStatus[] = ["CHECKED_IN", "CANCELED", "EXPIRED"];
 
@@ -55,4 +64,22 @@ export function formatVisitDateDow(iso: string): string {
   const date = new Date(year, month - 1, day);
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return iso;
   return `${year}.${month}.${day}(${WEEKDAY_LABELS[date.getDay()]})`;
+}
+
+/**
+ * 결제 제한시각까지 남은 시간을 "m:ss"로 만든다. 이미 지났거나 값이 없으면 null.
+ *
+ * 예매·목록·상세가 같은 문구를 쓰도록 여기 모았다 - 예전에는 예매 화면에만 있어서,
+ * 목록·상세에서는 "결제 대기"라는 배지만 보이고 언제까지 결제해야 하는지 알 수 없었다.
+ *
+ * 백엔드는 LocalDateTime을 오프셋 없이("2026-08-09T12:34:56") 내려주는데, 서버·DB·컨테이너가
+ * 전부 Asia/Seoul로 고정돼 있어(Dockerfile / docker-compose의 TZ) 브라우저 로컬 시각으로
+ * 파싱해도 어긋나지 않는다.
+ */
+export function formatRemaining(expiresAt: string | null, now: number): string | null {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - now;
+  if (Number.isNaN(diff) || diff <= 0) return null;
+  const totalSeconds = Math.floor(diff / 1000);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
 }
