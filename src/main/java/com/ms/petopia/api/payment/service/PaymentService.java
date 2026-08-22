@@ -7,6 +7,7 @@ import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
@@ -68,6 +69,7 @@ public class PaymentService {
     private final FairAdminAccessGuard fairAdminAccessGuard;
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final AuthMapper authMapper;
+    private final MailService mailService;
 
     // RefundService.refund()의 actingUserId는 원래 "누가 환불을 처리했는지" 기록하는 값인데,
     // 여기서는 사람이 아니라 시스템(이 메서드)이 자동으로 트리거하는 환불이라 실제 유저 ID가 없다.
@@ -737,15 +739,29 @@ public class PaymentService {
                         "결제가 완료되었습니다",
                         row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
                         null,
-                        List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                        List.of(DeliveryChannel.IN_APP),
                         null
                 ));
             } catch (Exception e) {
                 log.error("결제 완료 알림 저장 실패. paymentId={}, userId={}",
                         row.getPaymentId(), row.getPayerUserId(), e);
             }
+            sendPaymentCompletedEmail(row);
         }
         notifyPaymentCompletedToAdmins(row);
+    }
+
+    private void sendPaymentCompletedEmail(PaymentRow row) {
+        try {
+            User user = authMapper.selectUserById(row.getPayerUserId());
+            if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+                return;
+            }
+            mailService.sendPaymentCompletedEmail(user.getEmail(), row.getAmount(), row.getMethod(), row.getPaidAt());
+        } catch (Exception e) {
+            log.error("결제 완료 이메일 발송 실패. paymentId={}, userId={}",
+                    row.getPaymentId(), row.getPayerUserId(), e);
+        }
     }
 
     /** 결제 발생을 행사 담당 EVENT_ADMIN에게 알린다. 실패해도 결제 처리에는 영향 없음. */

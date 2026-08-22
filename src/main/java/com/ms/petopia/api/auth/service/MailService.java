@@ -166,6 +166,215 @@ public class MailService {
                 "RESERVATION CONFIRMED", "예약 확정 안내", content, qrToken);
     }
 
+    /** 결제 완료 안내(참가비/개설비 등 — 예약금은 sendReservationConfirmedEmail이 대신 보낸다). */
+    public void sendPaymentCompletedEmail(String to, long amount, String paymentMethodLabel, LocalDateTime paidAt) {
+        String amountLabel = String.format("%,d원", amount);
+        String paidAtLabel = paidAt == null ? "-" : paidAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              결제가 정상적으로 완료되었습니다.<br>
+              아래 결제 내역을 확인해 주세요.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">결제 금액 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">결제 수단 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="color:#6b7280;font-size:13px;">결제 일시 <strong style="float:right;color:#111827;">%s</strong></div>
+            </div>
+            """.formatted(escape(amountLabel), escape(paymentMethodLabel == null ? "-" : paymentMethodLabel), escape(paidAtLabel));
+
+        sendHtmlEmail(to, "[PETOPIA] 결제가 완료되었습니다", "PAYMENT COMPLETED", "결제 완료 안내", content);
+    }
+
+    /** 환불 완료 안내. */
+    public void sendRefundCompletedEmail(String to, long refundAmount) {
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              요청하신 환불이 정상적으로 처리되었습니다.<br>
+              카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="color:#6b7280;font-size:13px;">환불 금액 <strong style="float:right;color:#111827;">%s</strong></div>
+            </div>
+            """.formatted(escape(String.format("%,d원", refundAmount)));
+
+        sendHtmlEmail(to, "[PETOPIA] 환불이 완료되었습니다", "REFUND COMPLETED", "환불 완료 안내", content);
+    }
+
+    /** 정산 확정 안내. settlementLabel은 "정산" 또는 "최종정산"처럼 SettlementService/FairSettlementService가 구분해서 넘긴다. */
+    public void sendSettlementCompletedEmail(String to, String settlementLabel, Long settlementId,
+                                             long grossAmount, long refundAmount, long commissionAmount, long netAmount) {
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              담당하시는 행사의 %s이(가) 확정 처리되었습니다.<br>
+              아래 정산 내역을 확인해 주세요.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">정산 ID <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">총 결제액 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">환불액 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">수수료 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="color:#6b7280;font-size:13px;">정산액 <strong style="float:right;color:#111827;">%s</strong></div>
+            </div>
+            """.formatted(escape(settlementLabel), escape(String.valueOf(settlementId)),
+                escape(String.format("%,d원", grossAmount)), escape(String.format("%,d원", refundAmount)),
+                escape(String.format("%,d원", commissionAmount)), escape(String.format("%,d원", netAmount)));
+
+        sendHtmlEmail(to, "[PETOPIA] " + settlementLabel + "이 확정되었습니다",
+                "SETTLEMENT COMPLETED", settlementLabel + " 확정 안내", content);
+    }
+
+    /** 행사 취소로 인한 환불 안내. */
+    public void sendFairCanceledEmail(String to, long refundAmount) {
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              참가하셨던 행사가 부득이한 사정으로 취소되어 결제하신 금액이 환불 처리되었습니다.<br>
+              카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="color:#6b7280;font-size:13px;">환불 금액 <strong style="float:right;color:#111827;">%s</strong></div>
+            </div>
+            """.formatted(escape(String.format("%,d원", refundAmount)));
+
+        sendHtmlEmail(to, "[PETOPIA] 행사가 취소되었습니다", "FAIR CANCELED", "행사 취소 안내", content);
+    }
+
+    /** 예약 방문일 변경 안내. */
+    public void sendReservationChangedEmail(String to, LocalDate oldVisitDate, LocalDate newVisitDate,
+                                            LocalTime entryStartTime, LocalTime entryEndTime) {
+        DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy.M.d(E)", java.util.Locale.KOREAN);
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              예약하신 방문일이 아래와 같이 변경되었습니다.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">기존 방문일 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">변경된 방문일 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="color:#6b7280;font-size:13px;">입장 시간 <strong style="float:right;color:#111827;">%s</strong></div>
+            </div>
+            """.formatted(escape(oldVisitDate.format(dateFormat)), escape(newVisitDate.format(dateFormat)),
+                escape(entryStartTime + " ~ " + entryEndTime));
+
+        sendHtmlEmail(to, "[PETOPIA] 예약 날짜가 변경되었습니다", "RESERVATION CHANGED", "예약 날짜 변경 안내", content);
+    }
+
+    /** 예약 취소 안내(유료 예약은 별도로 sendRefundCompletedEmail도 나간다 — 취소됐다는 사실과 환불됐다는 사실은 서로 다른 안내라 둘 다 유지). */
+    public void sendReservationCanceledEmail(String to, LocalDate visitDate, long amount) {
+        String visitLabel = visitDate == null ? "-"
+                : visitDate.format(DateTimeFormatter.ofPattern("yyyy.M.d(E)", java.util.Locale.KOREAN));
+        String amountLabel = amount <= 0 ? "무료" : String.format("%,d원", amount);
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              예약이 정상적으로 취소 처리되었습니다.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">방문 예정일 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="color:#6b7280;font-size:13px;">예약 금액 <strong style="float:right;color:#111827;">%s</strong></div>
+            </div>
+            """.formatted(escape(visitLabel), escape(amountLabel));
+
+        sendHtmlEmail(to, "[PETOPIA] 예약이 취소되었습니다", "RESERVATION CANCELED", "예약 취소 안내", content);
+    }
+
+    /** 참가 신청 승인 — 참가비 결제 안내와 함께 내 참가신청 목록(/vendor/participations)으로 가는 버튼을 넣는다. */
+    public void sendVendorApplicationApprovedEmail(String to, Long finalPrice, LocalDate paymentDueAt,
+                                                    String participationsLink) {
+        String amount = finalPrice == null ? "-" : String.format("%,d원", finalPrice);
+        String dueDate = paymentDueAt == null ? "-" : paymentDueAt.toString();
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              참가 신청이 승인되었습니다.<br>
+              아래 내용을 확인한 뒤 기한 내에 참가비를 결제해 주세요.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">참가비 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="color:#6b7280;font-size:13px;">결제 기한 <strong style="float:right;color:#111827;">%s까지</strong></div>
+            </div>
+            <div style="margin:26px 0;text-align:center;">
+              <a href="%s" style="display:inline-block;padding:13px 26px;border-radius:10px;background:#d94848;color:#ffffff;font-size:14px;font-weight:800;text-decoration:none;">참가신청 내역 확인하기</a>
+            </div>
+            """.formatted(escape(amount), escape(dueDate), escape(participationsLink));
+
+        sendHtmlEmail(to, "[PETOPIA] 참가 신청이 승인되었습니다", "APPLICATION APPROVED", "참가 신청 승인 안내", content);
+    }
+
+    /** 참가 신청 반려. */
+    public void sendVendorApplicationRejectedEmail(String to, String rejectReason) {
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              제출하신 참가 신청이 검토 결과 반려되었습니다.<br>
+              아래 사유를 확인해 주세요.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:7px;color:#9ca3af;font-size:12px;font-weight:700;">반려 사유</div>
+              <div style="color:#374151;font-size:14px;line-height:1.7;white-space:pre-wrap;">%s</div>
+            </div>
+            """.formatted(escape(rejectReason));
+
+        sendHtmlEmail(to, "[PETOPIA] 참가 신청이 반려되었습니다", "APPLICATION REJECTED", "참가 신청 반려 안내", content);
+    }
+
+    /** 참가 취소 요청 승인. */
+    public void sendVendorApplicationCancelApprovedEmail(String to) {
+        String content = """
+            <p style="margin:0;color:#4b5563;font-size:15px;line-height:1.7;">
+              요청하신 참가 취소가 승인되어 신청이 취소 처리되었습니다.
+            </p>
+            """;
+        sendHtmlEmail(to, "[PETOPIA] 참가 취소 요청이 승인되었습니다", "CANCEL APPROVED", "참가 취소 승인 안내", content);
+    }
+
+    /** 참가 취소 요청 반려. */
+    public void sendVendorApplicationCancelRejectedEmail(String to) {
+        String content = """
+            <p style="margin:0;color:#4b5563;font-size:15px;line-height:1.7;">
+              요청하신 참가 취소가 반려되어 신청이 그대로 유지됩니다.
+            </p>
+            """;
+        sendHtmlEmail(to, "[PETOPIA] 참가 취소 요청이 반려되었습니다", "CANCEL REJECTED", "참가 취소 반려 안내", content);
+    }
+
+    /** 사업자 등록 승인. */
+    public void sendBusinessApprovedEmail(String to) {
+        String content = """
+            <p style="margin:0;color:#4b5563;font-size:15px;line-height:1.7;">
+              사업자 등록이 승인되어 이제 행사 참가 신청이 가능합니다.
+            </p>
+            """;
+        sendHtmlEmail(to, "[PETOPIA] 사업자 등록이 승인되었습니다", "BUSINESS APPROVED", "사업자 등록 승인 안내", content);
+    }
+
+    /** 사업자 등록 반려. */
+    public void sendBusinessRejectedEmail(String to, String rejectReason) {
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              제출하신 사업자 등록이 검토 결과 반려되었습니다.<br>
+              아래 사유를 확인해 주세요.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:7px;color:#9ca3af;font-size:12px;font-weight:700;">반려 사유</div>
+              <div style="color:#374151;font-size:14px;line-height:1.7;white-space:pre-wrap;">%s</div>
+            </div>
+            """.formatted(escape(rejectReason));
+
+        sendHtmlEmail(to, "[PETOPIA] 사업자 등록이 반려되었습니다", "BUSINESS REJECTED", "사업자 등록 반려 안내", content);
+    }
+
+    /** 사업자 등록 취소(박탈). */
+    public void sendBusinessRevokedEmail(String to, String revokeReason) {
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              사업자 등록이 취소되었습니다.<br>
+              아래 사유를 확인해 주세요.
+            </p>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:7px;color:#9ca3af;font-size:12px;font-weight:700;">취소 사유</div>
+              <div style="color:#374151;font-size:14px;line-height:1.7;white-space:pre-wrap;">%s</div>
+            </div>
+            """.formatted(escape(revokeReason));
+
+        sendHtmlEmail(to, "[PETOPIA] 사업자 등록이 취소되었습니다", "BUSINESS REVOKED", "사업자 등록 취소 안내", content);
+    }
+
     private void sendHtmlEmailWithInlineQr(String to, String subject, String eyebrow, String title,
                                            String content, String qrToken) {
         MimeMessage mimeMessage = javaMailSender.createMimeMessage();

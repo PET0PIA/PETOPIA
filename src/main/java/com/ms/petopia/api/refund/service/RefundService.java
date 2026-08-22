@@ -2,6 +2,7 @@ package com.ms.petopia.api.refund.service;
 
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
@@ -69,6 +70,7 @@ public class RefundService {
     private final FairAdminAccessGuard fairAdminAccessGuard;
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final AuthMapper authMapper;
+    private final MailService mailService;
 
     /**
      * 환불 요청자가 결제 소유자 또는 그 행사 담당 EVENT_ADMIN/SUPER_ADMIN인지 확인한다
@@ -236,11 +238,20 @@ public class RefundService {
                     "환불 금액 " + refund.getRefundAmount() + "원이 처리되었습니다. "
                             + "카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.",
                     null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                    List.of(DeliveryChannel.IN_APP),
                     null
             ));
         } catch (Exception e) {
             log.error("환불 완료 알림 저장 실패. refundId={}, paymentId={}",
+                    refund.getRefundId(), refund.getPaymentId(), e);
+        }
+        try {
+            User user = authMapper.selectUserById(payment.getPayerUserId());
+            if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+                mailService.sendRefundCompletedEmail(user.getEmail(), refund.getRefundAmount());
+            }
+        } catch (Exception e) {
+            log.error("환불 완료 이메일 발송 실패. refundId={}, paymentId={}",
                     refund.getRefundId(), refund.getPaymentId(), e);
         }
         notifyRefundCompletedToAdmins(payment, refund);
