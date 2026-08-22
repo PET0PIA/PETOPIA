@@ -94,7 +94,9 @@ const accountMenuItems: { label: string; path: string }[] = [
 ];
 
 // 역할별 콘솔 진입은 옆의 "전환" 버튼이 맡고, 개인 기능은 dev에서 추가된 마이페이지
-// 사이드바가 맡는다. SUPER_ADMIN만 개인 마이페이지 대신 별도 계정 관리 화면으로 보낸다.
+// 사이드바가 맡는다. 예약 같은 개인 활동 메뉴는 역할과 무관하게 모두에게 보인다 - 관리자도
+// 개인 자격으로는 예약하는 관람객이기 때문이다. SUPER_ADMIN만 프로필 첫 항목이 개인
+// 마이페이지 대신 관리자 계정 화면이고, 마이페이지는 "내 예약"으로 들어간다.
 function ProfileMenu({
   name,
   profileEntry,
@@ -174,8 +176,6 @@ export function PublicHeader() {
   const profileEntry = isManagementAccount
     ? { label: "계정 관리", path: "/account/settings" }
     : { label: "마이페이지", path: "/mypage" };
-  // SUPER_ADMIN은 개인 마이페이지를 사용하지 않으므로 예약 같은 개인 활동 메뉴도 숨긴다.
-  const visibleAccountMenuItems = isManagementAccount ? [] : accountMenuItems;
   const consoleEntry = consoleEntryForRole(role);
   // requiredRole로 자식 메뉴를 거르고, 남은 자식이 없고 자체 경로도 없는 부모 메뉴는 숨긴다.
   const visibleNavigation = publicNavigation
@@ -231,7 +231,7 @@ export function PublicHeader() {
               <ProfileMenu
                 name={nickname ?? "내 계정"}
                 profileEntry={profileEntry}
-                accountItems={visibleAccountMenuItems}
+                accountItems={accountMenuItems}
                 onLogout={handleLogout}
               />
               {/* 역할별 콘솔 전환 버튼 - 프로필 바로 오른쪽에 둔다. */}
@@ -307,7 +307,7 @@ export function PublicHeader() {
                     {consoleEntry.label}
                   </button>
                 )}
-                {visibleAccountMenuItems.map(({ label, path }) => (
+                {accountMenuItems.map(({ label, path }) => (
                   <button key={path} type="button" className="mb-2 block w-full text-left text-sm font-bold" onClick={() => go(path)}>
                     {label}
                   </button>
