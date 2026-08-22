@@ -27,6 +27,7 @@ class ReservationAvailabilityServiceTest {
 
     private static final Long FAIR_ID = 10L;
     private static final LocalDate TODAY = LocalDate.of(2026, 8, 1);
+    private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 1, 10, 0);
 
     @Mock
     private ReservationMapper reservationMapper;
@@ -37,9 +38,9 @@ class ReservationAvailabilityServiceTest {
 
     @Test
     void returnsFutureDatesWithRemainingAdvanceReservationCapacity() {
-        given(timeProvider.today()).willReturn(TODAY);
+        given(timeProvider.now()).willReturn(NOW);
         given(reservationMapper.selectAvailabilityFair(FAIR_ID)).willReturn(reservableFair());
-        given(reservationMapper.selectAvailabilityDates(FAIR_ID, TODAY)).willReturn(List.of(
+        given(reservationMapper.selectAvailabilityDates(FAIR_ID, TODAY, NOW)).willReturn(List.of(
                 dateRow(TODAY.plusDays(1), 100, 65),
                 dateRow(TODAY.plusDays(2), 100, 100)
         ));
@@ -52,14 +53,14 @@ class ReservationAvailabilityServiceTest {
                 .containsExactly(35L, 0L);
         assertThat(response.dates()).extracting(date -> date.available())
                 .containsExactly(true, false);
-        verify(reservationMapper).selectAvailabilityDates(FAIR_ID, TODAY);
+        verify(reservationMapper).selectAvailabilityDates(FAIR_ID, TODAY, NOW);
     }
 
     @Test
     void rejectsFairOutsideReservationPeriod() {
         ReservationAvailabilityFair fair = reservableFair();
         fair.setReservationStartDate(TODAY.plusDays(1));
-        given(timeProvider.today()).willReturn(TODAY);
+        given(timeProvider.now()).willReturn(NOW);
         given(reservationMapper.selectAvailabilityFair(FAIR_ID)).willReturn(fair);
 
         assertThatThrownBy(() -> service.getAvailability(FAIR_ID))

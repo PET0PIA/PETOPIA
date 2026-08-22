@@ -10,6 +10,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Mapper
@@ -19,7 +20,8 @@ public interface ReservationMapper {
 
     List<ReservationAvailabilityDateRow> selectAvailabilityDates(
             @Param("fairId") Long fairId,
-            @Param("today") LocalDate today
+            @Param("today") LocalDate today,
+            @Param("now") LocalDateTime now
     );
 
     List<ReservationListRow> selectMyReservations(
