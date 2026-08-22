@@ -1,5 +1,6 @@
 package com.ms.petopia.api.pet.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Past;
 import jakarta.validation.constraints.Pattern;
@@ -9,6 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Getter
 @Setter
@@ -33,6 +35,16 @@ public class PetCreateRequest {
     private String gender;
 
     private Boolean isNeutered;
+
+    /**
+     * 알레르기 여부 3값. 안 보내면(null) "아직 안 물어봄"으로 남는다.
+     * false면 목록을 비워야 하고, true여야 allergies를 함께 보낼 수 있다.
+     */
+    private Boolean hasAllergy;
+
+    /** hasAllergy=true일 때 고른 알레르기 항목들. 같은 항목을 두 번 보내면 서버가 하나로 합친다. */
+    @Valid
+    private List<PetAllergySelectionRequest> allergies;
 
     /** presigned-upload로 받은 임시 객체 키. 선택 입력이며, 서버가 tmp -> uploads로 확정해 imageUrl로 저장한다. */
     private String imageObjectKey;

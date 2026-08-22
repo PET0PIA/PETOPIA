@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, ImageOff, MapPin } from "lucide-react";
+import { CalendarDays, ChevronRight, ImageOff, MapPin, PawPrint } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { KakaoMap } from "../../components/map/KakaoMap";
@@ -168,6 +168,12 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
               <div className="flex gap-2">
                 <CalendarDays size={18} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
                 <dd>{formatFairPeriodDow(fair.operationStartDate, fair.operationEndDate)}</dd>
+              </div>
+              {/* 동반 가능 여부는 "데려갈 수 있나"를 판단하는 정보라, 기본값이든 아니든 양쪽 모두
+                  문장으로 보여준다(목록 카드는 반대로 예외인 '불가'만 배지로 띄운다). */}
+              <div className="flex gap-2">
+                <PawPrint size={18} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />
+                <dd>{fair.petAllowed ? "반려동물 동반 가능" : "반려동물 동반 불가"}</dd>
               </div>
               <div className="flex gap-2">
                 <MapPin size={18} className="mt-0.5 shrink-0 text-muted" aria-hidden="true" />

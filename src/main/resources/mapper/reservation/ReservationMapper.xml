@@ -11,6 +11,7 @@
              , reservation_end_date
              , published_at
              , canceled_at
+             , pet_allowed
           FROM fairs
          WHERE fair_id = #{fairId}
     </select>
@@ -137,6 +138,7 @@
              , f.reservation_fee
              , f.published_at
              , f.canceled_at
+             , f.pet_allowed
              , fd.fair_date_id
              , fd.operation_date
              , fd.capacity

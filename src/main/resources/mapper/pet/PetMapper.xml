@@ -3,8 +3,8 @@
 <mapper namespace="com.ms.petopia.api.pet.mapper.PetMapper">
 
     <insert id="insertPet" parameterType="Pet" useGeneratedKeys="true" keyProperty="petId">
-        INSERT INTO pets (user_id, name, species, breed, birth_date, gender, is_neutered, image_url, created_at)
-        VALUES (#{userId}, #{name}, #{species}, #{breed}, #{birthDate}, #{gender}, #{isNeutered}, #{imageUrl}, CURRENT_TIMESTAMP)
+        INSERT INTO pets (user_id, name, species, breed, birth_date, gender, is_neutered, has_allergy, image_url, created_at)
+        VALUES (#{userId}, #{name}, #{species}, #{breed}, #{birthDate}, #{gender}, #{isNeutered}, #{hasAllergy}, #{imageUrl}, CURRENT_TIMESTAMP)
     </insert>
 
     <select id="selectPetsByUserId" resultType="Pet">
@@ -16,6 +16,7 @@
              , birth_date
              , gender
              , is_neutered
+             , has_allergy
              , image_url
              , created_at
           FROM pets
@@ -32,6 +33,7 @@
              , birth_date
              , gender
              , is_neutered
+             , has_allergy
              , image_url
              , created_at
           FROM pets
@@ -47,6 +49,7 @@
             <if test="birthDate != null">birth_date = #{birthDate},</if>
             <if test="gender != null">gender = #{gender},</if>
             <if test="isNeutered != null">is_neutered = #{isNeutered},</if>
+            <if test="hasAllergy != null">has_allergy = #{hasAllergy},</if>
             <if test="imageUrl != null">image_url = #{imageUrl},</if>
         </set>
         WHERE pet_id = #{petId}
@@ -54,6 +57,39 @@
 
     <delete id="deletePetById">
         DELETE FROM pets WHERE pet_id = #{petId}
+    </delete>
+
+    <!-- ===== 알레르기 선택(pet_allergies) ===== -->
+
+    <!-- 마스터를 조인해 라벨까지 한 번에 가져온다. is_active=0인 항목도 제외하지 않는다 -
+         이미 등록된 정보를 마스터 정리 때문에 사용자 화면에서 사라지게 하지 않는다. -->
+    <select id="selectAllergiesByPetIds" resultType="PetAllergyRow">
+        SELECT pa.pet_id
+             , pa.allergy_type_id
+             , pat.code
+             , pat.category
+             , pat.label
+             , pat.requires_text
+             , pa.other_text
+          FROM pet_allergies pa
+          JOIN pet_allergy_types pat ON pat.allergy_type_id = pa.allergy_type_id
+         WHERE pa.pet_id IN
+        <foreach collection="petIds" item="petId" open="(" separator="," close=")">
+            #{petId}
+        </foreach>
+         ORDER BY FIELD(pat.category, 'FOOD', 'ENVIRONMENT', 'OTHER'), pat.sort_order, pat.allergy_type_id
+    </select>
+
+    <insert id="insertAllergies">
+        INSERT INTO pet_allergies (pet_id, allergy_type_id, other_text)
+        VALUES
+        <foreach collection="selections" item="selection" separator=",">
+            (#{petId}, #{selection.allergyTypeId}, #{selection.otherText})
+        </foreach>
+    </insert>
+
+    <delete id="deleteAllergiesByPetId">
+        DELETE FROM pet_allergies WHERE pet_id = #{petId}
     </delete>
 
 </mapper>

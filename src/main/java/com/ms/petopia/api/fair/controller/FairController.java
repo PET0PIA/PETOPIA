@@ -158,6 +158,7 @@ public class FairController {
                     asString(rawBody.get("category")),
                     asString(rawBody.get("posterImageObjectKey")),
                     asString(rawBody.get("noticeText")),
+                    asBoolean(rawBody.get("petAllowed")),
                     asString(rawBody.get("placeName")),
                     asString(rawBody.get("address")),
                     asString(rawBody.get("indoorOutdoor")),
@@ -182,6 +183,10 @@ public class FairController {
 
     private static String asString(Object value) {
         return value == null ? null : (String) value;
+    }
+
+    private static Boolean asBoolean(Object value) {
+        return value == null ? null : (Boolean) value;
     }
 
     private static LocalDate asDate(Object value) {

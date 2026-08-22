@@ -455,6 +455,7 @@ export function FairApplicationReviewPage() {
               </div>
               <Field label="행사 소개" value={detail.description ?? "-"} />
               <Field label="유의사항" value={detail.noticeText ?? "-"} />
+              <Field label="반려동물 동반" value={detail.petAllowed ? "동반 가능" : "동반 금지"} />
             </dl>
           </Card>
 

@@ -36,6 +36,7 @@ public class OnsiteReservationService {
     private final ReservationNumberGenerator reservationNumberGenerator;
     private final ReservationTimeProvider timeProvider;
     private final EntryQrService entryQrService;
+    private final ReservationPetService reservationPetService;
 
     // 실시간 예약 현황용 이벤트 발행
     private final ApplicationEventPublisher eventPublisher;
@@ -111,6 +112,14 @@ public class OnsiteReservationService {
         }
 
         reservationMapper.insertCreatedHistory(row.getReservationId(), userId, status);
+        // 현장예매도 사전예약과 같은 규칙으로 동반 반려동물을 받는다 - 방문 통계에서 현장 관람객이
+        // 빠지면 알레르기·품종 분포가 사전예약 쪽으로 치우친다.
+        reservationPetService.attachPets(
+                row.getReservationId(),
+                userId,
+                context.isPetAllowed(),
+                request == null ? null : request.petIds()
+        );
         String entryQrToken = paymentRequired ? null : entryQrService.issueForReservation(row.getReservationId());
 
         // 실시간 예약현황 확인용
