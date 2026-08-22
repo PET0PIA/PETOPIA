@@ -239,13 +239,55 @@ class PaymentServiceTest {
         row.setStatus("COMPLETED");
         row.setFairId(10L);
         row.setPayerUserId(30L);
-        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.selectByIdWithRefund(1L)).willReturn(row);
 
         PaymentResponse result = paymentService.getPayment(1L, 30L);
 
         assertThat(result.paymentId()).isEqualTo(1L);
         // 소유자면 굳이 행사담당자인지까지 확인할 필요 없다.
         verify(fairAdminAccessGuard, never()).checkAssigned(any());
+    }
+
+    @Test
+    @DisplayName("환불된 결제를 (paymentId, userId)로 조회하면 응답에 환불 정보가 같이 담긴다")
+    void getPayment_userId오버로드_환불된결제는환불정보를포함한다() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPaymentType("RESERVATION_DEPOSIT");
+        row.setStatus("COMPLETED");
+        row.setFairId(10L);
+        row.setPayerUserId(30L);
+        row.setRefundId(5L);
+        row.setRefundStatus("COMPLETED");
+        row.setRefundAmount(1000L);
+        row.setRefundReason("USER_CANCEL");
+        row.setRefundRequestedByDomain("RESERVATION");
+        given(paymentMapper.selectByIdWithRefund(1L)).willReturn(row);
+
+        PaymentResponse result = paymentService.getPayment(1L, 30L);
+
+        assertThat(result.refundId()).isEqualTo(5L);
+        assertThat(result.refundStatus()).isEqualTo("COMPLETED");
+        assertThat(result.refundAmount()).isEqualTo(1000L);
+        assertThat(result.refundReason()).isEqualTo("USER_CANCEL");
+        assertThat(result.refundRequestedByDomain()).isEqualTo("RESERVATION");
+    }
+
+    @Test
+    @DisplayName("환불 없는 결제를 (paymentId, userId)로 조회하면 환불 필드가 전부 null이다")
+    void getPayment_userId오버로드_환불없는결제는환불필드가null이다() {
+        PaymentRow row = new PaymentRow();
+        row.setPaymentId(1L);
+        row.setPaymentType("RESERVATION_DEPOSIT");
+        row.setStatus("COMPLETED");
+        row.setFairId(10L);
+        row.setPayerUserId(30L);
+        given(paymentMapper.selectByIdWithRefund(1L)).willReturn(row);
+
+        PaymentResponse result = paymentService.getPayment(1L, 30L);
+
+        assertThat(result.refundId()).isNull();
+        assertThat(result.refundStatus()).isNull();
     }
 
     @Test
@@ -257,7 +299,7 @@ class PaymentServiceTest {
         row.setStatus("COMPLETED");
         row.setFairId(10L);
         row.setPayerUserId(30L);
-        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.selectByIdWithRefund(1L)).willReturn(row);
         // fairAdminAccessGuard.checkAssigned(10L)이 Mock 기본 no-op이니 "담당자로 확인됨"을 흉내냄
 
         PaymentResponse result = paymentService.getPayment(1L, 99L);
@@ -275,7 +317,7 @@ class PaymentServiceTest {
         row.setStatus("COMPLETED");
         row.setFairId(10L);
         row.setPayerUserId(30L);
-        given(paymentMapper.selectById(1L)).willReturn(row);
+        given(paymentMapper.selectByIdWithRefund(1L)).willReturn(row);
         willThrow(new CommonException(ErrorCode.ACCESS_DENIED))
                 .given(fairAdminAccessGuard).checkAssigned(10L);
 
@@ -288,7 +330,7 @@ class PaymentServiceTest {
     @Test
     @DisplayName("존재하지 않는 결제ID를 (paymentId, userId)로 조회하면 예외를 던진다")
     void getPayment_userId오버로드_존재하지않는결제_예외를던진다() {
-        given(paymentMapper.selectById(999L)).willReturn(null);
+        given(paymentMapper.selectByIdWithRefund(999L)).willReturn(null);
 
         assertThatThrownBy(() -> paymentService.getPayment(999L, 30L))
                 .isInstanceOf(CommonException.class)

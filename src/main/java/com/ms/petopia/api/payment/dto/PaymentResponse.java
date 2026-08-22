@@ -27,6 +27,13 @@ import java.time.LocalDateTime;
  * @param virtualAccountNumber   가상계좌 계좌번호. 가상계좌 결제가 아니면 null
  * @param virtualAccountDueDate  가상계좌 입금기한. 가상계좌 결제가 아니면 null
  *                               (웹훅 검증용 secret은 절대 응답에 포함하지 않는다)
+ * @param refundId               이 결제에 걸린 환불 PK. 환불이 없으면 null(이하 refund* 전부 동일)
+ * @param refundStatus           환불 상태 (REQUESTED / COMPLETED / REJECTED)
+ * @param refundAmount           환불 금액
+ * @param refundReason           환불 사유
+ * @param refundRequestedByDomain 환불을 촉발한 도메인
+ * @param refundRequestedAt      환불 요청 시각
+ * @param refundProcessedAt      환불 처리 완료 시각. 아직 처리 전(REQUESTED)이면 null
  */
 public record PaymentResponse(
         Long paymentId,
@@ -45,7 +52,14 @@ public record PaymentResponse(
         String easyPayProvider,
         String virtualAccountBankCode,
         String virtualAccountNumber,
-        LocalDateTime virtualAccountDueDate
+        LocalDateTime virtualAccountDueDate,
+        Long refundId,
+        String refundStatus,
+        Long refundAmount,
+        String refundReason,
+        String refundRequestedByDomain,
+        LocalDateTime refundRequestedAt,
+        LocalDateTime refundProcessedAt
 ) {
 
     /**
@@ -70,7 +84,14 @@ public record PaymentResponse(
                 row.getEasyPayProvider(),
                 row.getVirtualAccountBankCode(),
                 row.getVirtualAccountNumber(),
-                row.getVirtualAccountDueDate()
+                row.getVirtualAccountDueDate(),
+                row.getRefundId(),
+                row.getRefundStatus(),
+                row.getRefundAmount(),
+                row.getRefundReason(),
+                row.getRefundRequestedByDomain(),
+                row.getRefundRequestedAt(),
+                row.getRefundProcessedAt()
         );
     }
 }

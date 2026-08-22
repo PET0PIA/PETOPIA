@@ -9,7 +9,16 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
-import { formatAmount, formatDateTime, paymentTypeLabels, statusLabels, statusTone } from "./paymentDisplay";
+import {
+  formatAmount,
+  formatDateTime,
+  paymentStatusLabel,
+  paymentStatusTone,
+  paymentTypeLabels,
+  refundReasonLabels,
+  refundRequestedByDomainLabels,
+  refundStatusLabels,
+} from "./paymentDisplay";
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -99,7 +108,7 @@ export function PaymentDetailPage() {
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <h2 className="text-lg font-extrabold">{paymentTypeLabels[detail.paymentType] ?? detail.paymentType}</h2>
-                <Badge tone={statusTone[detail.status] ?? "neutral"}>{statusLabels[detail.status] ?? detail.status}</Badge>
+                <Badge tone={paymentStatusTone(detail.status, detail.refundStatus)}>{paymentStatusLabel(detail.status, detail.refundStatus)}</Badge>
               </div>
               <p className="text-sm text-muted">결제 #{detail.paymentId} · 행사 #{detail.fairId}</p>
             </div>
@@ -113,6 +122,21 @@ export function PaymentDetailPage() {
               <Field label="결제 요청 시각" value={formatDateTime(detail.createdAt)} />
               <Field label="결제 완료 시각" value={formatDateTime(detail.paidAt)} />
             </dl>
+
+            {detail.refundId !== null && (
+              <>
+                <h3 className="pt-2 text-sm font-extrabold text-muted">환불 정보</h3>
+                <dl className="grid gap-4 sm:grid-cols-3">
+                  <Field label="환불 ID" value={`#${detail.refundId}`} />
+                  <Field label="환불 상태" value={refundStatusLabels[detail.refundStatus ?? ""] ?? detail.refundStatus ?? "-"} />
+                  <Field label="환불 금액" value={detail.refundAmount !== null ? formatAmount(detail.refundAmount) : "-"} />
+                  <Field label="환불 사유" value={refundReasonLabels[detail.refundReason ?? ""] ?? detail.refundReason ?? "-"} />
+                  <Field label="요청 도메인" value={refundRequestedByDomainLabels[detail.refundRequestedByDomain ?? ""] ?? detail.refundRequestedByDomain ?? "-"} />
+                  <Field label="환불 요청 시각" value={formatDateTime(detail.refundRequestedAt)} />
+                  <Field label="환불 처리 완료 시각" value={formatDateTime(detail.refundProcessedAt)} />
+                </dl>
+              </>
+            )}
           </Card>
 
           <Card className="space-y-4 p-6">

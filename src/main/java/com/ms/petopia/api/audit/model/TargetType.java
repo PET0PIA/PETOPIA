@@ -5,6 +5,7 @@ public enum TargetType {
     FAIR,
     RESERVATION,
     SETTLEMENT,
+    FAIR_SETTLEMENT,
     COMMISSION_RATE,
     REVIEW
 }
