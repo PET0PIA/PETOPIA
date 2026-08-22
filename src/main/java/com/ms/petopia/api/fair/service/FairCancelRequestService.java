@@ -17,12 +17,20 @@ import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
@@ -40,7 +48,10 @@ import java.util.Set;
  * 이 값을 조회해서 환불을 처리할 예정이다 - 따라서 이 필드를 실제로 채우는 것이 이 작업의
  * 핵심이다. 승인/반려를 다른 도메인에 이벤트로 알리는 것은 이번 범위에 없다(도메인 간 이벤트
  * 발행 구조가 아직 없어서, 각 도메인이 fairs.canceled_at을 직접 조회해서 확인하는 것을 전제로 한다).
+ * 다만 취소 신청을 넣은 EVENT_ADMIN 본인에게는 승인/반려 결과를 인앱 알림+이메일로 알린다
+ * ({@link #review} 참고, 2026-08-22 사용자 피드백 - 이전에는 심사 결과가 아무 곳에도 전달되지 않았다).
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FairCancelRequestService {
@@ -58,6 +69,7 @@ public class FairCancelRequestService {
     private final FairTimeProvider timeProvider;
     private final AuditLogService auditLogService;
     private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final NotificationService notificationService;
 
     /**
      * 취소를 신청한다. PENDING 상태로 등록되고, SUPER_ADMIN의 검토를 기다린다.
@@ -147,6 +159,11 @@ public class FairCancelRequestService {
      * "확인 후 갱신" 순서로 하면 두 검토 요청이 동시에 PENDING을 읽어 둘 다 통과해버릴 수
      * 있는데, 조건부 UPDATE는 그 경합을 DB가 원자적으로 해소하게 해서
      * 둘 중 먼저 커밋된 하나만 실제로 반영되고 나머지는 영향 행 0건으로 실패한다.
+     *
+     * <p>취소 신청을 넣은 EVENT_ADMIN({@code requestedBy})에게 승인/반려 결과를 인앱 알림+이메일로
+     * 알린다({@code FairService#review}가 신청서 심사 결과를 알리는 것과 동일한 이유). 이
+     * 트랜잭션이 실제로 커밋된 뒤에만 보내야 해서(심사 자체가 실패했는데 알림만 나가면 안 됨)
+     * afterCommit 콜백으로 미룬다.
      */
     @Transactional
     public ReviewFairCancelRequestResponse review(
@@ -156,8 +173,9 @@ public class FairCancelRequestService {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         // fairId 소속 여부(404) 확인용. 존재 자체는 레이스가 없는 값이라 미리 조회해도 안전하다 -
-        // 상태(PENDING) 판단만 아래 조건부 UPDATE로 넘긴다.
-        findCancelRequestInFair(fairId, cancelRequestId);
+        // 상태(PENDING) 판단만 아래 조건부 UPDATE로 넘긴다. requestedBy는 알림 수신자로 쓴다.
+        FairCancelRequest existing = findCancelRequestInFair(fairId, cancelRequestId);
+        Fair fair = findFairOrThrow(fairId);
         boolean approved = request.decision() == FairReviewDecision.APPROVE;
         if (!approved && (request.rejectReason() == null || request.rejectReason().isBlank())) {
             throw new CommonException(ErrorCode.FAIR_CANCEL_REJECT_REASON_REQUIRED);
@@ -207,6 +225,8 @@ public class FairCancelRequestService {
             );
         }
 
+        notifyCancelReviewAfterCommit(existing.getRequestedBy(), approved, fair.getName(), update.getRejectReason());
+
         return new ReviewFairCancelRequestResponse(
                 cancelRequestId,
                 fairId,
@@ -215,6 +235,36 @@ public class FairCancelRequestService {
                 update.getRejectReason(),
                 canceledAt
         );
+    }
+
+    /**
+     * 취소 신청을 넣은 EVENT_ADMIN에게 심사 결과를 인앱 알림+이메일로 알린다.
+     * {@code NotificationService.save}가 EMAIL 채널이 있으면 이메일 발송까지 함께 처리하므로
+     * {@code FairService#review}와 달리 별도 MailService 템플릿을 만들 필요가 없다
+     * ({@link FairCancelRefundOrchestrationService#notifyFairCanceled}와 동일한 패턴).
+     */
+    private void notifyCancelReviewAfterCommit(Long requestedBy, boolean approved, String fairName, String rejectReason) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.save(new SaveNotificationDto.Request(
+                            requestedBy,
+                            RecipientType.EVENT_ADMIN,
+                            approved ? NotificationType.FAIR_CANCEL_REQUEST_APPROVED : NotificationType.FAIR_CANCEL_REQUEST_REJECTED,
+                            approved ? "취소 신청이 승인되었습니다" : "취소 신청이 반려되었습니다",
+                            approved
+                                    ? "'" + fairName + "' 행사의 취소 신청이 승인되어 취소가 확정되었습니다."
+                                    : "'" + fairName + "' 행사의 취소 신청이 반려되었습니다. 반려 사유: " + rejectReason,
+                            null,
+                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            null
+                    ));
+                } catch (Exception e) {
+                    log.error("취소 신청 심사 알림 저장 실패. requestedBy={}, approved={}", requestedBy, approved, e);
+                }
+            }
+        });
     }
 
     private Fair findFairOrThrow(Long fairId) {
