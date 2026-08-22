@@ -239,7 +239,7 @@ public class RefundService {
                     "환불이 완료되었습니다",
                     "환불 금액 " + refund.getRefundAmount() + "원이 처리되었습니다. "
                             + "카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.",
-                    null,
+                    refundDetailLinkUrl(payment),
                     List.of(DeliveryChannel.IN_APP),
                     null
             ));
@@ -286,6 +286,17 @@ public class RefundService {
         }
     }
 
+    /** 결제 유형별로 환불받은 결제자가 확인해야 할 상세 화면을 가리킨다. */
+    private String refundDetailLinkUrl(PaymentRow payment) {
+        if ("RESERVATION_DEPOSIT".equals(payment.getPaymentType()) && payment.getReservationId() != null) {
+            return "/reservations/me/" + payment.getReservationId();
+        }
+        if ("VENDOR_FEE".equals(payment.getPaymentType()) && payment.getApplicationId() != null) {
+            return "/participations/me/" + payment.getApplicationId();
+        }
+        return null;
+    }
+
     /** 환불 발생을 행사 담당 EVENT_ADMIN에게 알린다. 실패해도 환불 처리에는 영향 없음. */
     private void notifyRefundCompletedToAdmins(PaymentRow payment, RefundRow refund) {
         String payerNickname = resolvePayerNickname(payment.getPayerUserId());
@@ -301,7 +312,7 @@ public class RefundService {
                         NotificationType.REFUND_COMPLETED,
                         "환불이 접수되었습니다",
                         body,
-                        null,
+                        "/fair-admin/payments?fairId=" + payment.getFairId(),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));

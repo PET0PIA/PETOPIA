@@ -738,7 +738,7 @@ public class PaymentService {
                         NotificationType.PAYMENT_COMPLETED,
                         "결제가 완료되었습니다",
                         row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
-                        null,
+                        paymentDetailLinkUrl(row),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -749,6 +749,17 @@ public class PaymentService {
             sendPaymentCompletedEmail(row);
         }
         notifyPaymentCompletedToAdmins(row);
+    }
+
+    /** 결제 유형별로 결제자가 확인해야 할 상세 화면을 가리킨다. 알 수 없는 유형이면 링크 없이 둔다. */
+    private String paymentDetailLinkUrl(PaymentRow row) {
+        if ("VENDOR_FEE".equals(row.getPaymentType()) && row.getApplicationId() != null) {
+            return "/participations/me/" + row.getApplicationId();
+        }
+        if ("FAIR_OPENING_FEE".equals(row.getPaymentType()) && row.getFairId() != null) {
+            return "/fair-applications/me/" + row.getFairId();
+        }
+        return null;
     }
 
     private void sendPaymentCompletedEmail(PaymentRow row) {
@@ -779,7 +790,7 @@ public class PaymentService {
                         NotificationType.PAYMENT_COMPLETED,
                         "결제가 접수되었습니다",
                         body,
-                        null,
+                        "/fair-admin/payments?fairId=" + row.getFairId(),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));

@@ -984,7 +984,7 @@ class FairServiceTest {
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_APPLICATION_APPROVED);
         assertThat(notifCaptor.getValue().channels())
                 .containsExactly(DeliveryChannel.IN_APP);
-        assertThat(notifCaptor.getValue().linkUrl()).isNull();
+        assertThat(notifCaptor.getValue().linkUrl()).isEqualTo("/payments/fair-opening-fee/" + FAIR_ID);
         assertThat(notifCaptor.getValue().body())
                 .isEqualTo("개설비를 2026-08-08까지 결제해 주세요.");
         verify(mailService).sendFairApprovalEmail(

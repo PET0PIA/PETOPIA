@@ -165,7 +165,8 @@ public class FairService {
                     notificationService.notifySuperAdmins(
                             NotificationType.FAIR_APPLICATION_SUBMITTED,
                             "새 행사 신청이 접수되었습니다",
-                            "'" + fairName + "' 행사 신청이 접수되어 심사를 기다리고 있습니다."
+                            "'" + fairName + "' 행사 신청이 접수되어 심사를 기다리고 있습니다.",
+                            "/admin/fair-applications"
                     );
                 } catch (Exception e) {
                     log.error("행사 신청 접수 알림 저장 실패. fairId={}", fairId, e);
@@ -659,12 +660,14 @@ public class FairService {
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_APPROVED,
                     "행사 신청이 승인되었습니다",
                     "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.",
+                    paymentPath,
                     () -> mailService.sendFairApprovalEmail(applicantEmail,
                             update.getOpeningFeeAmount(), update.getPaymentDueAt(), frontendUrl + paymentPath));
         } else {
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_REJECTED,
                     "행사 신청이 반려되었습니다",
                     "반려 사유: " + update.getRejectReason(),
+                    "/fair-applications/me/" + fairId,
                     () -> mailService.sendFairRejectionEmail(applicantEmail, update.getRejectReason()));
         }
 
@@ -679,7 +682,7 @@ public class FairService {
     }
 
     private void notifyFairReviewAfterCommit(Long recipientUserId, NotificationType type,
-                                             String title, String body, Runnable emailAction) {
+                                             String title, String body, String linkUrl, Runnable emailAction) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -690,7 +693,7 @@ public class FairService {
                             type,
                             title,
                             body,
-                            null,
+                            linkUrl,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));

@@ -360,7 +360,7 @@ class NotificationServiceTest {
             return null;
         }).when(notificationMapper).insert(any());
 
-        notificationService.notifySuperAdmins(NotificationType.SETTLEMENT_COMPLETED, "제목", "내용");
+        notificationService.notifySuperAdmins(NotificationType.SETTLEMENT_COMPLETED, "제목", "내용", "/admin/settlements");
 
         verify(notificationMapper, times(3)).insert(any(Notification.class));
     }
@@ -372,7 +372,7 @@ class NotificationServiceTest {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
 
-        notificationService.notifySuperAdmins(NotificationType.SETTLEMENT_COMPLETED, "제목", "내용");
+        notificationService.notifySuperAdmins(NotificationType.SETTLEMENT_COMPLETED, "제목", "내용", "/admin/settlements");
 
         ArgumentCaptor<TransactionDefinition> captor = ArgumentCaptor.forClass(TransactionDefinition.class);
         verify(transactionManager).getTransaction(captor.capture());

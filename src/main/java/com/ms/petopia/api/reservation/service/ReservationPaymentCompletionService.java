@@ -151,7 +151,7 @@ public class ReservationPaymentCompletionService {
                             fairName == null || fairName.isBlank()
                                     ? "예약이 확정되었습니다" : "'" + fairName + "' 예약이 확정되었습니다",
                             "결제가 완료되어 예약이 확정되었습니다.",
-                            null,
+                            "/reservations/me/" + reservationId,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));

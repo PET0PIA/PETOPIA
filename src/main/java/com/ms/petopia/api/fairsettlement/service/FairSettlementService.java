@@ -349,7 +349,7 @@ public class FairSettlementService {
                         NotificationType.SETTLEMENT_COMPLETED,
                         "행사 정산이 확정되었습니다",
                         "행사 최종정산(ID: " + fairSettlementId + ")이 확정 처리되었습니다.",
-                        null,
+                        "/fair-admin/payments?fairId=" + fairId,
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -363,7 +363,8 @@ public class FairSettlementService {
             notificationService.notifySuperAdmins(
                     NotificationType.SETTLEMENT_COMPLETED,
                     "행사 정산이 확정되었습니다",
-                    "행사 최종정산(ID: " + fairSettlementId + ", fairId=" + fairId + ")이 확정 처리되었습니다."
+                    "행사 최종정산(ID: " + fairSettlementId + ", fairId=" + fairId + ")이 확정 처리되었습니다.",
+                    "/admin/settlements"
             );
         } catch (Exception e) {
             log.error("행사 정산 확정 SUPER_ADMIN 알림 저장 실패. fairId={}, fairSettlementId={}", fairId, fairSettlementId, e);

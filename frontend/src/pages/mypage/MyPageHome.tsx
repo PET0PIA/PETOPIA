@@ -1,13 +1,13 @@
 import { Building2, ChevronRight, FileText, Store, Ticket } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Badge } from "../../components/ui/Badge";
 import { Card } from "../../components/ui/Card";
 import { ApiError } from "../../api/client";
 import { getMyBusinesses, type Business } from "../../api/business";
 import { getMyFavoriteBooths } from "../../api/booth";
 import { getMyApplications } from "../../api/fair";
-import { getMyNotifications } from "../../api/notification";
+import { getMyNotifications, markNotificationAsRead, type NotificationListItem } from "../../api/notification";
 import { getMyReservations } from "../../api/reservation";
 import {
   formatEntryTime,
@@ -232,6 +232,16 @@ function FavoriteCard() {
 function NotificationCard() {
   const { data, loading, error } = useCardData(loadNotifications);
   const items = (data?.items ?? []).slice(0, LIST_PREVIEW);
+  const navigate = useNavigate();
+
+  function handleItemClick(item: NotificationListItem) {
+    if (!item.isRead) {
+      markNotificationAsRead(item.notificationId).catch(() => {
+        // 읽음 처리 실패는 화면 이동을 막지 않는다.
+      });
+    }
+    if (item.linkUrl) navigate(item.linkUrl);
+  }
 
   return (
     <CardSection title="최근 알림" to="/notifications">
@@ -245,14 +255,21 @@ function NotificationCard() {
         ) : (
           <ul className="flex flex-col gap-3">
             {items.map((item) => (
-              <li key={item.notificationId} className="flex items-start justify-between gap-3">
-                <span className="min-w-0 flex-1">
-                  <span className={`block truncate text-sm ${item.isRead ? "text-muted" : "font-bold text-ink"}`}>
-                    {item.title}
+              <li key={item.notificationId}>
+                <button
+                  type="button"
+                  onClick={() => handleItemClick(item)}
+                  disabled={!item.linkUrl}
+                  className="flex w-full items-start justify-between gap-3 rounded-button text-left disabled:cursor-default"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className={`block truncate text-sm ${item.isRead ? "text-muted" : "font-bold text-ink"}`}>
+                      {item.title}
+                    </span>
+                    <span className="mt-0.5 block truncate text-sm text-muted">{item.body}</span>
                   </span>
-                  <span className="mt-0.5 block truncate text-sm text-muted">{item.body}</span>
-                </span>
-                <span className="shrink-0 text-xs text-muted">{formatNotifiedAt(item.createdAt)}</span>
+                  <span className="shrink-0 text-xs text-muted">{formatNotifiedAt(item.createdAt)}</span>
+                </button>
               </li>
             ))}
           </ul>

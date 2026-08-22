@@ -119,7 +119,7 @@ public class ApplicationService {
                             NotificationType.VENDOR_APPLICATION_SUBMITTED,
                             "새 참가 신청이 접수되었습니다",
                             "'" + businessName + "'에서 참가 신청을 접수했습니다.",
-                            null,
+                            "/fair-admin/participations?fairId=" + fairId,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));
@@ -517,7 +517,7 @@ public class ApplicationService {
         Business business = businessMapper.selectById(application.getBusinessId());
 
         if(business != null) {
-            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_APPROVED,
+            notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId, NotificationType.VENDOR_APPLICATION_APPROVED,
                     "참가 신청이 승인되었습니다",
                     "참가비 " + finalPrice + "원을 " + paymentDueAt.toLocalDate() + "까지 결제해주세요.",
                     () -> withRecipientEmail(business.getOwnerId(), email ->
@@ -578,7 +578,7 @@ public class ApplicationService {
         Business business = businessMapper.selectById(application.getBusinessId());
 
         if(business != null) {
-            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_REJECTED,
+            notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId, NotificationType.VENDOR_APPLICATION_REJECTED,
                     "참가 신청이 반려되었습니다",
                     "반려 사유: " + request.getRejectReason(),
                     () -> withRecipientEmail(business.getOwnerId(), email ->
@@ -684,7 +684,7 @@ public class ApplicationService {
                             NotificationType.VENDOR_APPLICATION_CANCEL_REQUESTED,
                             "참가 취소 요청이 접수되었습니다",
                             "'" + businessName + "'에서 참가 취소를 요청했습니다.",
-                            null,
+                            "/fair-admin/cancellation-requests?fairId=" + fairId,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));
@@ -758,7 +758,7 @@ public class ApplicationService {
         Business business = businessMapper.selectById(application.getBusinessId());
 
         if(business != null) {
-            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
+            notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId, NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
                     "참가 취소 요청이 승인되었습니다",
                     "신청이 취소 처리되었습니다.",
                     () -> withRecipientEmail(business.getOwnerId(),
@@ -857,7 +857,7 @@ public class ApplicationService {
         Business business = businessMapper.selectById(application.getBusinessId());
 
         if(business != null) {
-            notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_REJECTED,
+            notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId, NotificationType.VENDOR_APPLICATION_CANCEL_REJECTED,
                     "참가 취소 요청이 반려되었습니다",
                     "취소 요청이 반려되었습니다.",
                     () -> withRecipientEmail(business.getOwnerId(),
@@ -957,8 +957,8 @@ public class ApplicationService {
      * 본 로직(승인/반려/취소 처리)은 이미 끝난 뒤이므로 예외를 던져 되돌리지 않는다
      * (RefundService.notifyRefundCompleted와 동일한 이유).
      */
-    private void notifyApplicationEvent(Long recipientUserId, NotificationType type, String title, String body,
-                                        Runnable emailAction) {
+    private void notifyApplicationEvent(Long recipientUserId, Long applicationId, NotificationType type,
+                                        String title, String body, Runnable emailAction) {
 
         try {
 
@@ -968,7 +968,7 @@ public class ApplicationService {
                     type,
                     title,
                     body,
-                    null,
+                    "/participations/me/" + applicationId,
                     List.of(DeliveryChannel.IN_APP),
                     null
             ));
@@ -987,13 +987,13 @@ public class ApplicationService {
 
     }
 
-    private void notifyApplicationEventAfterCommit(Long recipientUserId, NotificationType type, String title,
-                                                    String body, Runnable emailAction) {
+    private void notifyApplicationEventAfterCommit(Long recipientUserId, Long applicationId, NotificationType type,
+                                                    String title, String body, Runnable emailAction) {
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                notifyApplicationEvent(recipientUserId, type, title, body, emailAction);
+                notifyApplicationEvent(recipientUserId, applicationId, type, title, body, emailAction);
             }
         });
 
@@ -1062,7 +1062,7 @@ public class ApplicationService {
             // 알림 - 사업자 취소로 신청이 강제 취소됐다는 걸 소유자에게 알림
             if (business != null) {
 
-                notifyApplicationEventAfterCommit(business.getOwnerId(),
+                notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId,
                         NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
                         "사업자 승인 취소로 참가 신청이 취소되었습니다",
                         "관리자가 사업자를 취소 처리하여 신청이 취소되었습니다.",
