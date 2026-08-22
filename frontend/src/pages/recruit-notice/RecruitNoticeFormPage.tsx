@@ -1,5 +1,5 @@
 import { AlertCircle, ArrowLeft, Send } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -13,6 +13,7 @@ import { getRecruitNotice, upsertRecruitNotice, type RecruitNoticeUpsertRequest 
 import { useAuth } from "../../contexts/AuthContext";
 import { EmptyState } from "../../components/common/EmptyState";
 import { useFairSelector } from "../../contexts/FairSelectorContext";
+import { useConfirm } from "../../components/ui/useConfirm";
 
 interface FormState {
   title: string;
@@ -62,6 +63,10 @@ export function RecruitNoticeFormPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedForm, setLoadedForm] = useState<FormState>(initialForm);
 
+  const submitLockRef = useRef(false);
+
+  const { confirm, confirmDialog } = useConfirm();
+
   useEffect(() => {
     if (!fairId) return;
     let ignore = false;
@@ -104,28 +109,46 @@ export function RecruitNoticeFormPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationErrors = validate(form);
-    if (imageUploading) validationErrors.push("이미지 업로드가 끝날 때까지 잠시만 기다려 주세요.");
-    setErrors(validationErrors);
-    if (validationErrors.length > 0) return;
-    if (!fairId || !user) return;
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
 
-    const payload: RecruitNoticeUpsertRequest = {
-      title: form.title.trim(),
-      content: form.content.trim(),
-      recruitDeadline: toIsoDateTime(form.recruitDeadline),
-      imageObjectKey: imageObjectKey ?? undefined,
-    };
-
-    setSubmitting(true);
-    setSubmitError(null);
     try {
-      await upsertRecruitNotice(Number(fairId), payload);
-      navigate(`/fairs/${fairId}/recruit-notice`);
-    } catch (error) {
-      setSubmitError(error instanceof ApiError ? error.message : "모집 공고를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      const validationErrors = validate(form);
+      if (imageUploading) validationErrors.push("이미지 업로드가 끝날 때까지 잠시만 기다려 주세요.");
+      setErrors(validationErrors);
+      if (validationErrors.length > 0) return;
+
+      if (new Date(form.recruitDeadline) <= new Date()) {
+        const proceed = await confirm({
+          title: "마감일시가 이미 지났어요",
+          description: "이 시각으로 저장하면 공고가 저장 즉시 마감 처리돼요. 계속할까요?",
+          confirmLabel: "그대로 저장",
+          danger: true,
+        });
+        if (!proceed) return;
+      }
+
+      if (!fairId || !user) return;
+
+      const payload: RecruitNoticeUpsertRequest = {
+        title: form.title.trim(),
+        content: form.content.trim(),
+        recruitDeadline: toIsoDateTime(form.recruitDeadline),
+        imageObjectKey: imageObjectKey ?? undefined,
+      };
+
+      setSubmitting(true);
+      setSubmitError(null);
+      try {
+        await upsertRecruitNotice(Number(fairId), payload);
+        navigate(`/fairs/${fairId}/recruit-notice`);
+      } catch (error) {
+        setSubmitError(error instanceof ApiError ? error.message : "모집 공고를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
+      } finally {
+        setSubmitting(false);
+      }
     } finally {
-      setSubmitting(false);
+      submitLockRef.current = false;
     }
   }
 
@@ -206,6 +229,7 @@ export function RecruitNoticeFormPage() {
           </form>
         </>
       )}
+      {confirmDialog}
     </PageContainer>
   );
 }
