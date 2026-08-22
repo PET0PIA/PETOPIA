@@ -26,7 +26,8 @@ import { TypingIndicator } from "./TypingIndicator";
  *
  * 화면이 셋으로 나뉜다.
  * - MENU: 인사말 + 버튼. 상담 개념이 없고 메시지 리스트를 그리지 않는다.
- * - ANSWER: 고정 답변 본문 + 상담원 연결. 상담을 만들지 않는다.
+ * - ANSWER: 누른 버튼과 고정 답변을 말풍선으로 그리고 상담원 연결을 붙인다. 화면만 대화처럼
+ *   보일 뿐 상담도 메시지도 만들지 않는다.
  * - THREAD: 지난 상담과 진행 중 상담을 한 스크롤로 이은 화면. 실시간 수신은 여기서만 돈다.
  *
  * 나누는 이유는 비용과 오해 둘이다. 위젯은 모든 고객 페이지에 떠 있는데, 고정 답변만 읽고
@@ -320,7 +321,12 @@ export function ChatWidget() {
     );
   }
 
-  const title = screen === "ANSWER" ? (answerMenu?.label ?? "") : screen === "THREAD" ? "문의 내역" : "펫토피아 상담";
+  /*
+   * ANSWER는 첫 화면과 같은 제목을 쓴다. 유형은 사용자 말풍선이 이미 말하고 있어서
+   * 헤더가 되풀이할 이유가 없고, 제목이 그대로면 화면이 바뀐 게 아니라 대화가 이어진
+   * 것으로 읽힌다.
+   */
+  const title = screen === "THREAD" ? "문의 내역" : "펫토피아 상담";
 
   return (
     <div
@@ -376,6 +382,7 @@ export function ChatWidget() {
       {screen === "ANSWER" && answerMenu ? (
         <FixedAnswerView
           menu={answerMenu}
+          greeting={bootstrap?.greeting ?? ""}
           agentMenu={agentMenu}
           withinBusinessHours={bootstrap?.withinBusinessHours ?? false}
           connecting={busy}
