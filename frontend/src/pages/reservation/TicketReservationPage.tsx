@@ -115,7 +115,14 @@ export function TicketReservationPage() {
   const [availability, setAvailability] = useState<ReservationAvailability | null>(null);
   const [fair, setFair] = useState<FairPublicSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // 예매 정보(availability) 조회 실패 사유. 페이지 전체의 실패가 아니라 "사전예약을 못 하는
+  // 이유"다 - 이 조회는 예매 창이 닫히면 R003으로 실패하는데, 그때도 현장예매는 열려 있을 수 있다.
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  // 행사 정보(이름·장소·운영기간) 조회 실패. 예매를 막지는 않고 안내만 띄운다 - 예전에는 이
+  // 실패를 통째로 삼켜서, 사용자는 왜 행사명 자리에 "행사 #11"만 보이는지 알 수 없었다.
+  // 사유 문자열을 담지 않고 불리언만 두는 이유: 이 조회의 에러 메시지("요청한 리소스를 찾을 수
+  // 없습니다" 등)를 정상 동작하는 예매 폼 위에 그대로 띄우면 오히려 오해를 만든다.
+  const [fairInfoFailed, setFairInfoFailed] = useState(false);
 
   const [type, setType] = useState<ReservationType>("ADVANCE");
   const [selectedVisitDate, setSelectedVisitDate] = useState<string | null>(null);
@@ -148,26 +155,29 @@ export function TicketReservationPage() {
   useEffect(() => {
     if (!idValid) return; // 잘못된 경로 파라미터면 요청하지 않는다
     let alive = true;
-    // 행사 이름·장소는 fair 도메인, 예약금·날짜는 예약 도메인에서 각각 가져온다.
-    // 행사 정보 조회는 실패해도 예매는 계속할 수 있게 막지 않는다(이름만 못 보여줄 뿐).
-    getFairPublicSummary(id)
-      .then((res) => {
-        if (alive) setFair(res);
-      })
-      .catch(() => {
-        /* 헤더 표시용이라 실패를 치명적으로 다루지 않는다. */
-      });
-    getReservationAvailability(id)
-      .then((res) => {
-        if (alive) setAvailability(res);
-      })
-      .catch((err: unknown) => {
+    // 행사 이름·장소·운영기간은 fair 도메인, 예약금·날짜는 예약 도메인에서 각각 가져온다.
+    // 어느 쪽도 단독으로 치명적이지 않다 - 행사 정보가 없으면 이름만 못 보여주고, 예매 정보가
+    // 없으면 사전예약만 막힌다(현장예매는 운영기간으로 판단하므로 계속 가능하다). 그래서 둘 다
+    // 기다렸다가 한 번에 반영한다 - 한쪽만 먼저 도착한 순간에 "둘 다 실패" 판정이 나면 안 된다.
+    Promise.allSettled([getFairPublicSummary(id), getReservationAvailability(id)]).then(
+      ([fairResult, availabilityResult]) => {
         if (!alive) return;
-        setLoadError(err instanceof ApiError ? err.message : "예매 정보를 불러오지 못했어요.");
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+        if (fairResult.status === "fulfilled") {
+          setFair(fairResult.value);
+          setFairInfoFailed(false);
+        } else {
+          setFairInfoFailed(true);
+        }
+        if (availabilityResult.status === "fulfilled") {
+          setAvailability(availabilityResult.value);
+          setAvailabilityError(null);
+        } else {
+          const reason = availabilityResult.reason;
+          setAvailabilityError(reason instanceof ApiError ? reason.message : "예매 정보를 불러오지 못했어요.");
+        }
+        setLoading(false);
+      },
+    );
     return () => {
       alive = false;
     };
@@ -194,12 +204,15 @@ export function TicketReservationPage() {
     );
   }
 
-  if (loadError || !availability) {
+  // 예매 정보 실패만으로 페이지를 닫으면 안 된다 - 사전예약 기간이 끝난 운영 중 행사에서
+  // 현장예매까지 함께 막히기 때문이다(현장예매 입구가 이 화면뿐이다). 행사 정보까지 못 받아
+  // 이 행사에 대해 아는 게 하나도 없을 때만 안내로 끝낸다.
+  if (!availability && !fair) {
     return (
       <div className="mx-auto max-w-3xl py-2">
         <EmptyState
           title="지금은 예매할 수 없어요."
-          description={loadError ?? "예매 정보를 불러오지 못했어요."}
+          description={availabilityError ?? "예매 정보를 불러오지 못했어요."}
           actionTo="/fairs/upcoming"
           actionLabel="예매 가능한 행사 보기"
         />
@@ -210,9 +223,13 @@ export function TicketReservationPage() {
   const fairName = fair?.name ?? `행사 #${id}`;
   const period = formatPeriod(fair?.operationStartDate ?? null, fair?.operationEndDate ?? null);
 
-  const selectedDate = availability.dates.find((date) => date.visitDate === selectedVisitDate) ?? null;
+  const selectedDate = availability?.dates.find((date) => date.visitDate === selectedVisitDate) ?? null;
 
-  const price = availability.reservationFee; // 사전예약금
+  // 동반 반려동물 허용 여부. 두 API가 같은 fairs.pet_allowed(NOT NULL)를 읽으므로 값이 어긋나지
+  // 않는다 - 예매 정보를 못 받았을 때 행사 정보로 대신 판단해도 안전하다.
+  const petAllowed = availability?.petAllowed ?? fair?.petAllowed ?? false;
+
+  const price = availability?.reservationFee ?? 0; // 사전예약금(예매 정보가 없으면 사전예약 자체를 안 그린다)
   const isPaid = price > 0;
   const advanceVisitDate = selectedDate?.visitDate ?? null;
 
@@ -224,7 +241,8 @@ export function TicketReservationPage() {
   //   제외한다). 날짜는 내려오지만 전부 매진이면 진행할 수 없는 폼을 띄우게 되므로 제외한다.
   // - 현장예매: 오늘이 행사 운영기간 안일 때만 노출(현장예매는 운영 당일에만 생성 가능).
   // 여러 날 행사에선 운영 중에도 남은 날짜 사전예약이 열려 있어 둘 다 뜰 수 있다.
-  const advanceAvailable = availability.dates.some(isReservableDate);
+  // 예매 정보를 못 받았으면(예매 창이 닫힘 등) 사전예약은 불가하고, 현장예매만 남는다.
+  const advanceAvailable = !!availability && availability.dates.some(isReservableDate);
   const onsiteAvailable = isOperatingToday(fair?.operationStartDate ?? null, fair?.operationEndDate ?? null);
   const bothTypes = advanceAvailable && onsiteAvailable;
   // 실제로 그릴 유형. 둘 다면 사용자가 고른 type을, 하나만 되면 그쪽으로 고정한다.
@@ -476,7 +494,7 @@ export function TicketReservationPage() {
   // 사전예약·현장예매 어느 쪽도 지금은 불가능하면(접수 전/후, 매진, 행사 종료 등) 폼 대신 안내를 띄운다.
   if (!advanceAvailable && !onsiteAvailable) {
     // 날짜는 내려왔는데 전부 잔여석이 없는 경우와, 애초에 접수 기간이 아닌 경우를 구분해 안내한다.
-    const allSoldOut = availability.dates.length > 0;
+    const allSoldOut = (availability?.dates.length ?? 0) > 0;
     return (
       <div className="mx-auto max-w-3xl py-2">
         <EmptyState
@@ -484,7 +502,7 @@ export function TicketReservationPage() {
           description={
             allSoldOut
               ? "모든 방문일이 마감됐어요. 예매 가능한 다른 행사를 확인해 주세요."
-              : "예매 접수가 마감되었거나 아직 시작되지 않았어요. 예매 가능한 다른 행사를 확인해 주세요."
+              : (availabilityError ?? "예매 접수가 마감되었거나 아직 시작되지 않았어요. 예매 가능한 다른 행사를 확인해 주세요.")
           }
           actionTo="/fairs/upcoming"
           actionLabel="예매 가능한 행사 보기"
@@ -501,6 +519,12 @@ export function TicketReservationPage() {
       {/* 행사 정보 */}
       <Card className="mb-6 p-5">
         <h2 className="text-lg font-extrabold text-ink">{fairName}</h2>
+        {/* 예매를 막지 않는 안내. 이름·장소·기간이 비는 이유를 알려주되 흐름은 그대로 둔다. */}
+        {fairInfoFailed && (
+          <p className="mt-1.5 text-sm text-muted" role="status">
+            행사 정보를 불러오지 못했어요. 이름·장소·기간이 안 보일 수 있지만 예매는 계속할 수 있어요.
+          </p>
+        )}
         <div className="mt-2 flex flex-col gap-1.5 text-sm text-muted">
           {fair?.placeName && (
             <span className="flex items-center gap-2">
@@ -554,11 +578,11 @@ export function TicketReservationPage() {
           </h3>
           {/* 사전예약을 그리는 시점엔 예약 가능한 날짜가 반드시 하나는 있다(advanceAvailable).
               아래 빈 목록 분기는 판정이 바뀌었을 때를 대비한 안전망으로만 남겨둔다. */}
-          {availability.dates.length === 0 ? (
+          {(availability?.dates.length ?? 0) === 0 ? (
             <Card className="mb-6 p-4 text-sm text-muted">지금 예매할 수 있는 방문일이 없어요.</Card>
           ) : (
             <div className="mb-6 grid gap-3 sm:grid-cols-3">
-              {availability.dates.map((date) => {
+              {(availability?.dates ?? []).map((date) => {
                 const soldOut = !isReservableDate(date);
                 const selected = date.visitDate === selectedVisitDate;
                 return (
@@ -590,7 +614,7 @@ export function TicketReservationPage() {
 
           {/* 동반 반려동물. 동반 금지 행사에서는 이 블록이 아예 그려지지 않는다(정책 P2). */}
           <PetCompanionPicker
-            petAllowed={availability.petAllowed}
+            petAllowed={petAllowed}
             value={petIds}
             onChange={setPetIds}
             disabled={submitting}
@@ -646,7 +670,7 @@ export function TicketReservationPage() {
           </Card>
 
           <PetCompanionPicker
-            petAllowed={availability.petAllowed}
+            petAllowed={petAllowed}
             value={petIds}
             onChange={setPetIds}
             disabled={submitting}

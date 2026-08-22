@@ -1,4 +1,31 @@
+import type { FairStatus } from "../../api/fair";
+import { todayInSeoul } from "../../utils/date";
+
 export const fairCategoryLabels: Record<string, string> = { DOG: "강아지", CAT: "고양이", ETC: "기타" };
+
+/**
+ * 행사가 지금 운영 중인지. 서버 status를 먼저 믿고, status가 비어 있을 때만 운영기간으로 판정한다.
+ *
+ * FairDetailPage의 ended 판정과 짝을 이룬다 - 한쪽에만 날짜 폴백을 두면 status가 비었을 때
+ * "종료도 아니고 진행 중도 아닌" 상태가 되어, 운영 중인 행사의 현장예매 입구(목록·상세 CTA가
+ * 유일한 입구다)가 조용히 막힌다.
+ *
+ * status가 비는 경우: 공개 목록·상세를 만드는 쿼리는 모두 fairs.status(NOT NULL)를 선택하므로
+ * 지금은 비지 않는다. 다만 Fair 객체가 여러 쿼리에 공유돼서, status를 안 고르는 쿼리가 끼어들면
+ * null이 된다(FairService가 매핑에 null 가드를 둔 이유이기도 하다). 그 경우의 안전망이다.
+ *
+ * 오늘은 브라우저 시간대가 아니라 Asia/Seoul 기준으로 구한다(해외 기기에서 하루 밀림 방지).
+ */
+export function isFairInProgress(
+  status: FairStatus | null,
+  operationStartDate: string | null,
+  operationEndDate: string | null,
+): boolean {
+  if (status) return status === "IN_PROGRESS";
+  if (!operationStartDate || !operationEndDate) return false;
+  const today = todayInSeoul();
+  return operationStartDate <= today && today <= operationEndDate;
+}
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
