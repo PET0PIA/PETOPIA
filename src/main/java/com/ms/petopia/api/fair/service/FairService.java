@@ -878,7 +878,8 @@ public class FairService {
                 fair.getOperationEndDate(),
                 !Boolean.FALSE.equals(fair.getPetAllowed()),
                 Boolean.TRUE.equals(fair.getReservable()),
-                Boolean.TRUE.equals(fair.getRecruiting())
+                Boolean.TRUE.equals(fair.getRecruiting()),
+                fair.getStatus() == null ? null : fair.getStatus().name()
         );
     }
 

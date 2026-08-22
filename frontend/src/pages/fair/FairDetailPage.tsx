@@ -116,10 +116,17 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
     );
   }
 
-  const ended = !!fair.operationEndDate && fair.operationEndDate < todayInSeoul();
+  // 생애주기(진행 중·종료)는 서버 status를 먼저 믿는다. 목록의 FairPublicListItem.status 주석과
+  // 같은 원칙으로, 사용자 PC 날짜가 틀려도 판정이 흔들리지 않게 한다. status가 비어 있을 때만
+  // (백엔드가 null로 줄 수 있다) 날짜로 판정한다 - 운영종료일이 없는 행사도 이 경우에 들어온다.
+  const endedByDate = !!fair.operationEndDate && fair.operationEndDate < todayInSeoul();
+  const ended = fair.status === "ENDED" ? true : fair.status === "IN_PROGRESS" ? false : endedByDate;
   const indoorOutdoor = fair.indoorOutdoor ? INDOOR_OUTDOOR_LABELS[fair.indoorOutdoor] ?? null : null;
   // 예매 가능 = 예매 창이 열려(availability 성공) 잔여석 있는 날짜가 하나라도 있음.
   const reservable = !ended && !!availability && availability.dates.some((date) => date.available);
+  // 이미 열린 행사. 당일 예매는 막혀 있어(사전예약은 오늘 이후 운영일만 대상) reservable이 false가
+  // 되는데, 그렇다고 "예매 준비 중"이라고 하면 이미 하고 있는 행사를 아직 안 열린 것처럼 알리게 된다.
+  const inProgress = fair.status === "IN_PROGRESS";
   const schedule = availability?.dates ?? [];
 
   return (
@@ -138,7 +145,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
           )}
           <span className="min-w-0 flex-1 truncate text-sm font-extrabold sm:text-base">{fair.name}</span>
           <div className="shrink-0">
-            <ReserveButton reservable={reservable} ended={ended} fairId={fair.fairId} size="sm" />
+            <ReserveButton reservable={reservable} ended={ended} inProgress={inProgress} fairId={fair.fairId} size="sm" />
           </div>
         </div>
       </div>
@@ -201,7 +208,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
               </p>
             )}
             <div>
-              <ReserveButton reservable={reservable} ended={ended} fairId={fair.fairId} size="lg" />
+              <ReserveButton reservable={reservable} ended={ended} inProgress={inProgress} fairId={fair.fairId} size="lg" />
               {!reservable && !ended && availabilityError && <p className="mt-2 text-sm text-muted">{availabilityError}</p>}
             </div>
           </div>
@@ -254,7 +261,19 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
 }
 
 /** 예매 CTA. 상단 헤더(size="lg")와 스크롤 고정 바(size="sm")가 같은 상태 판정을 공유한다. */
-function ReserveButton({ reservable, ended, fairId, size }: { reservable: boolean; ended: boolean; fairId: number; size: "lg" | "sm" }) {
+function ReserveButton({
+  reservable,
+  ended,
+  inProgress,
+  fairId,
+  size,
+}: {
+  reservable: boolean;
+  ended: boolean;
+  inProgress: boolean;
+  fairId: number;
+  size: "lg" | "sm";
+}) {
   const sizeClass = size === "lg" ? "min-h-12 px-8 text-base" : "min-h-10 px-5 text-sm";
   if (reservable) {
     return (
@@ -272,7 +291,7 @@ function ReserveButton({ reservable, ended, fairId, size }: { reservable: boolea
       className={`inline-flex cursor-not-allowed items-center justify-center rounded-button bg-surface-alt font-bold text-muted ${sizeClass}`}
       aria-disabled="true"
     >
-      {ended ? "종료된 행사" : "예매 준비 중"}
+      {ended ? "종료된 행사" : inProgress ? "진행 중" : "예매 준비 중"}
     </span>
   );
 }
