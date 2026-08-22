@@ -5,6 +5,7 @@ import {
   closeAdminConversation,
   fetchAdminConversation,
   fetchAdminConversations,
+  fetchUnansweredCount,
   replyToConversation,
   type AdminChatConversationDetail,
   type AdminChatConversationSummary,
@@ -29,9 +30,9 @@ const LIST_REFRESH_MS = 5000;
 /*
  * 탭은 상태가 아니라 "상담사가 하는 일" 기준이다.
  *
- * 답변이 필요한 것과 이미 답한 것을 한 목록에 둔다. 나눠 두면 고객이 답하지 않은 상담이
- * 다른 탭에서 잊힌 채 종료되지 않고 남는다. 무엇을 먼저 볼지는 정렬(답변 필요가 위)과
- * 배지가 알려주므로, 탭까지 나눌 이유가 없다.
+ * 답변을 기다리는 것과 이미 답해서 고객 반응을 기다리는 것은 한 목록에 둔다. 나눠 두면
+ * 고객이 답하지 않은 상담이 다른 탭에서 잊힌 채 종료되지 않고 남는다. 무엇을 먼저 볼지는
+ * 정렬(답변 필요가 위)과 배지가 알려주므로, 그 둘까지 탭으로 쪼갤 이유가 없다.
  */
 const FILTER_TABS: { label: string; value: AdminChatFilter }[] = [
   { label: "처리 중", value: "OPEN" },
@@ -133,6 +134,14 @@ export function AdminChatPage() {
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 답변 대기 건수. 목록에서 세지 않고 서버가 전체를 센다.
+   *
+   * 목록에서 세면 페이지 크기(20)를 넘는 건수가 잘리고, `AI 응대`나 `종료` 탭을 보는 동안에는
+   * 그 탭에 대기 건이 없으니 0이 된다 - 화면 맨 위의 숫자가 보고 있는 탭에 따라 달라지면
+   * 그 숫자를 신뢰할 수 없다. 필터와 무관해야 하는 값이므로 조회도 분리한다.
+   */
+  const [waitingCount, setWaitingCount] = useState<number | null>(null);
 
   const { onTyping, stopTyping } = useTypingSignal(selectedId);
 
@@ -156,9 +165,11 @@ export function AdminChatPage() {
   useEffect(() => {
     let canceled = false;
     const run = () =>
-      fetchAdminConversations(filter)
-        .then((list) => {
-          if (!canceled) setConversations(list.items);
+      Promise.all([fetchAdminConversations(filter), fetchUnansweredCount()])
+        .then(([list, unanswered]) => {
+          if (canceled) return;
+          setConversations(list.items);
+          setWaitingCount(unanswered);
         })
         .catch(() => {
           if (!canceled) setError("상담 목록을 불러오지 못했어요.");
@@ -261,15 +272,17 @@ export function AdminChatPage() {
     }
   };
 
-  // AI_HANDLED는 세지 않는다. 서버의 대기 배지(countWaiting)와 같은 정의여야, 같은 데이터를
-  // 두고 두 화면이 다른 숫자를 말하지 않는다.
-  const waitingCount = conversations.filter((item) => item.status === "WAITING_AGENT").length;
+
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="상담 문의"
-        description={`답변을 기다리는 상담이 ${waitingCount}건 있어요.`}
+        description={
+          waitingCount == null
+            ? "상담 목록을 불러오고 있어요."
+            : `답변을 기다리는 상담이 ${waitingCount}건 있어요.`
+        }
         action={
           <Link
             to="/admin/chat/settings"

@@ -227,6 +227,7 @@ public enum ErrorCode {
     CHAT_MENU_CODE_DUPLICATED(HttpStatus.CONFLICT, "CH012", "이미 사용 중인 문의 유형 코드입니다."),
     CHAT_BUSINESS_HOUR_INVALID(HttpStatus.BAD_REQUEST, "CH013", "운영시간 설정이 올바르지 않습니다."),
     CHAT_MENU_NOT_CONNECTABLE(HttpStatus.BAD_REQUEST, "CH014", "상담사 연결용 문의 유형이 아닙니다."),
+    CHAT_FIXED_ANSWER_REQUIRED(HttpStatus.BAD_REQUEST, "CH015", "고정 답변 유형은 답변 내용을 입력해야 합니다."),
     ;
 
     private final HttpStatus httpStatus;

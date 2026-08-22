@@ -355,7 +355,10 @@ export function ChatWidget() {
           {/* 상태 점은 MENU에만 둔다. 다른 화면에서는 제목이 그 자리를 쓰고, 운영시간은
               이미 접수 안내나 연결 버튼 아래 문장으로 전달됐다. */}
           {screen === "MENU" && bootstrap && (
-            <ChatBusinessHourBadge within={bootstrap.withinBusinessHours} />
+            <ChatBusinessHourBadge
+              within={bootstrap.withinBusinessHours}
+              closesAt={bootstrap.closesAt}
+            />
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -385,6 +388,7 @@ export function ChatWidget() {
           greeting={bootstrap?.greeting ?? ""}
           agentMenu={agentMenu}
           withinBusinessHours={bootstrap?.withinBusinessHours ?? false}
+          closesAt={bootstrap?.closesAt ?? null}
           connecting={busy}
           error={error}
           onConnectAgent={handleConnectAgent}

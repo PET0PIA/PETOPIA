@@ -24,11 +24,14 @@ import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -93,6 +96,35 @@ class ChatConversationServiceTest {
                 .isEqualTo(ErrorCode.CHAT_MENU_NOT_CONNECTABLE);
 
         verify(conversationMapper, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("운영시간 안이면 bootstrap이 종료 시각을 함께 준다 - '얼마나 여유가 있나'까지 알려준다")
+    void bootstrap_운영시간내에는_종료시각을_준다() {
+        given(menuMapper.selectActiveMenus()).willReturn(List.of());
+        given(businessHourService.isWithinBusinessHours(NIGHT)).willReturn(true);
+        given(businessHourService.closingTime(NIGHT)).willReturn(LocalTime.of(18, 0));
+        given(settingMapper.selectValue(anyString())).willReturn("");
+
+        var response = service.bootstrap(null, null);
+
+        assertThat(response.withinBusinessHours()).isTrue();
+        assertThat(response.closesAt()).isEqualTo(LocalTime.of(18, 0));
+    }
+
+    @Test
+    @DisplayName("운영시간 밖이면 종료 시각을 주지 않는다 - 닫혀 있는데 종료 시각을 보여주면 안 된다")
+    void bootstrap_운영시간외에는_종료시각이_없다() {
+        given(menuMapper.selectActiveMenus()).willReturn(List.of());
+        given(businessHourService.isWithinBusinessHours(NIGHT)).willReturn(false);
+        given(settingMapper.selectValue(anyString())).willReturn("");
+
+        var response = service.bootstrap(null, null);
+
+        assertThat(response.withinBusinessHours()).isFalse();
+        assertThat(response.closesAt()).isNull();
+        // 닫혀 있으면 조회 자체를 하지 않는다. 안 그러면 경계 시각에 두 판정이 어긋난다.
+        verify(businessHourService, never()).closingTime(any());
     }
 
     @Test

@@ -63,6 +63,11 @@ export interface ChatBootstrap {
   greeting: string;
   menus: ChatMenu[];
   withinBusinessHours: boolean;
+  /**
+   * 오늘 상담이 끝나는 시각(`"18:00:00"`). **운영시간 안일 때만 채워진다** -
+   * 밖에서는 null이라 "닫혀 있는데 종료 시각을 보여주는" 화면이 만들어지지 않는다.
+   */
+  closesAt: string | null;
   /** 여러 상담에 걸친 최근 메시지(오래된 순). `문의 내역` 화면이 이걸 그대로 이어서 그린다. */
   history: ChatMessage[];
   /**
@@ -76,6 +81,16 @@ export interface ChatBootstrap {
    * 메시지 본문은 history에 있으므로 여기 messages는 비어 있다.
    */
   ongoing: ChatConversation | null;
+}
+
+/**
+ * 서버가 주는 `"HH:mm:ss"`를 화면용 `"HH:mm"`으로 줄인다.
+ *
+ * 초를 버리는 이유는 상담 운영시간에 초 단위가 의미 없기 때문이다. 이 변환을 화면마다
+ * `slice(0, 5)`로 흩어 놓으면 나중에 서버가 형식을 바꿀 때 고칠 자리를 다 찾아야 한다.
+ */
+export function formatBusinessHourTime(value: string): string {
+  return value.slice(0, 5);
 }
 
 /**

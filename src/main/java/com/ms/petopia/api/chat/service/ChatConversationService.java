@@ -106,12 +106,18 @@ public class ChatConversationService {
                     messageMapper.selectRecentByRequester(userId, guestKey, HISTORY_PAGE_SIZE));
         }
 
+        // 판정을 한 시각으로 묶는다. isWithinBusinessHours와 closingTime이 서로 다른 now를
+        // 보면 경계 시각(18:00)에 "상담 가능 · 18:00까지"와 "운영시간 아님"이 뒤섞인다.
+        LocalDateTime now = timeProvider.now();
+        boolean within = businessHourService.isWithinBusinessHours(now);
+
         // hasHistory를 따로 내리는 이유: 프론트가 history.length로 재현하면 나중에 이력
         // 페이지네이션이 붙는 순간(첫 페이지가 비어 있을 수 있다) 판정이 어긋난다.
         return new ChatBootstrapResponse(
                 setting(SETTING_GREETING),
                 menus,
-                businessHourService.isWithinBusinessHours(timeProvider.now()),
+                within,
+                within ? businessHourService.closingTime(now) : null,
                 history,
                 !history.isEmpty(),
                 ongoing);
