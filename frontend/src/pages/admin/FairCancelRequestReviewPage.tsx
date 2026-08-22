@@ -59,6 +59,12 @@ export function FairCancelRequestReviewPage() {
   const [queue, setQueue] = useState<FairCancelRequestQueueItem[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
+  // 승인/반려 후 큐를 다시 받아오는 트리거. 아래 useEffect의 activeQueueStatus는 항상 effect가
+  // 실행되는 시점의 최신값이라, 탭을 바꾼 직후 승인/반려가 끝나도 이 값을 올리기만 하면
+  // 항상 "지금 탭" 기준으로 다시 조회된다(예전엔 승인/반려 핸들러가 직접 재조회하면서 버튼을
+  // 누른 시점의 탭을 클로저로 들고 있어, 그 사이 탭을 바꾸면 새 탭 목록이 옛 탭 데이터로
+  // 덮어써질 수 있었다).
+  const [queueRefreshKey, setQueueRefreshKey] = useState(0);
 
   // 행사 ID를 직접 타이핑하지 않고 이름으로 찾도록, 전체 행사 목록(상태 무관)을 한 번 받아와
   // 검색용 드롭다운을 채운다.
@@ -82,21 +88,8 @@ export function FairCancelRequestReviewPage() {
   // 매겨서, 응답이 왔을 때 그게 여전히 "지금 선택"에 대한 요청인지 확인한다.
   const requestsRequestIdRef = useRef(0);
 
-  // 승인/반려 후, 그리고 탭(심사 대기/승인/반려)을 바꿀 때마다 큐를 다시 받아온다.
-  async function refreshQueue() {
-    setQueueLoading(true);
-    setQueueError(null);
-    try {
-      const data = await getFairCancelRequestQueue(activeQueueStatus);
-      setQueue(data);
-    } catch (error) {
-      setQueue([]);
-      setQueueError(error instanceof ApiError ? error.message : "취소 신청 목록을 불러오지 못했어요.");
-    } finally {
-      setQueueLoading(false);
-    }
-  }
-
+  // 탭(심사 대기/승인/반려)을 바꾸거나, 승인/반려 후 queueRefreshKey가 올라갈 때마다 큐를
+  // 다시 받아온다. alive 가드로 응답이 늦게 와도 그 사이 탭이 바뀌었으면 버린다.
   useEffect(() => {
     let alive = true;
     setQueueLoading(true);
@@ -116,7 +109,7 @@ export function FairCancelRequestReviewPage() {
     return () => {
       alive = false;
     };
-  }, [activeQueueStatus]);
+  }, [activeQueueStatus, queueRefreshKey]);
 
   useEffect(() => {
     let alive = true;
@@ -179,7 +172,7 @@ export function FairCancelRequestReviewPage() {
     try {
       await reviewFairCancelRequest(fairId, request.fairCancelRequestId, { decision: "APPROVE" });
       await loadRequests(fairId);
-      void refreshQueue();
+      setQueueRefreshKey((key) => key + 1);
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
     } finally {
@@ -203,7 +196,7 @@ export function FairCancelRequestReviewPage() {
         rejectReason: rejectReason.trim(),
       });
       await loadRequests(fairId);
-      void refreshQueue();
+      setQueueRefreshKey((key) => key + 1);
       setRejectTarget(null);
       setRejectReason("");
     } catch (error) {

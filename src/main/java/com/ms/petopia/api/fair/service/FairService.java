@@ -5,6 +5,7 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairDateWithStats;
 import com.ms.petopia.api.fair.dto.FairInfoResponse;
 import com.ms.petopia.api.fair.dto.FairOpeningFeeSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
@@ -19,6 +20,7 @@ import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.UpdateFairInfoRequest;
 import com.ms.petopia.api.fair.dto.UpdateReservationPeriodRequest;
+import com.ms.petopia.api.fair.mapper.FairDateMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.auth.domain.User;
@@ -90,6 +92,7 @@ public class FairService {
     private static final Pattern MANAGER_PHONE_PATTERN = Pattern.compile("^01[0-9]-?\\d{3,4}-?\\d{4}$");
 
     private final FairMapper fairMapper;
+    private final FairDateMapper fairDateMapper;
     private final AuthMapper authMapper;
     private final FairTimeProvider timeProvider;
     private final StorageService storageService;
@@ -433,6 +436,13 @@ public class FairService {
      * 한다"는 검증({@code validateNotInPast})도 적용하지 않는다. 이미 운영 중인 행사는 일정
      * 시작일이 과거인 게 정상이라(예: 종료일만 늘리는 경우), 수정할 때마다 시작일을 오늘
      * 이후로 바꾸도록 강제하면 오히려 불편하다.
+     *
+     * <p>운영 기간은 이번 요청에서 실제로 바뀌는 값만 요청 DTO에서 가져오고, 생략된 쪽은 DB에
+     * 남은 기존 값을 그대로 써서 최종 기간을 계산한 뒤 검증한다(PATCH라 시작일·종료일 중
+     * 하나만 보낼 수 있어서, 요청 DTO의 두 값만 보고 순서를 판단하면 나머지 한쪽과 조합했을 때
+     * 유효한지 알 수 없다). 그 최종 기간이 이미 등록된 운영일({@code fair_dates})을 하나라도
+     * 벗어나면 저장을 거부한다 - 운영일 자체는 이 화면에서 안 건드리지만, 운영 기간만 좁혀
+     * 놓으면 그 운영일들이 근거를 잃기 때문이다.
      */
     @Transactional
     public FairInfoResponse updateFairInfo(
@@ -446,6 +456,7 @@ public class FairService {
 
         fairAdminAccessGuard.checkAssigned(fairId);
         Fair fair = findFairOrThrow(fairId);
+        validateOperationPeriodAgainstExistingDates(fair, request, setFields);
 
         Fair update = new Fair();
         update.setFairId(fairId);
@@ -489,7 +500,31 @@ public class FairService {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         validateManagerPhoneFormat(request.managerPhone());
-        validatePeriod(request.operationStartDate(), request.operationEndDate(), ErrorCode.FAIR_INVALID_OPERATION_PERIOD);
+    }
+
+    /**
+     * setFields에 있는 값만 요청에서, 없는 값은 fair에 남은 기존 값을 써서 최종 운영 기간을
+     * 만들고, 순서(시작 ≤ 종료)와 기존 운영일 포함 여부를 함께 검증한다. 이번 요청이 운영
+     * 기간을 아예 건드리지 않았으면(둘 다 setFields에 없음) 검사하지 않는다.
+     */
+    private void validateOperationPeriodAgainstExistingDates(Fair fair, UpdateFairInfoRequest request, Set<String> setFields) {
+        if (!setFields.contains("operationStartDate") && !setFields.contains("operationEndDate")) {
+            return;
+        }
+        LocalDate mergedStart = setFields.contains("operationStartDate") ? request.operationStartDate() : fair.getOperationStartDate();
+        LocalDate mergedEnd = setFields.contains("operationEndDate") ? request.operationEndDate() : fair.getOperationEndDate();
+        validatePeriod(mergedStart, mergedEnd, ErrorCode.FAIR_INVALID_OPERATION_PERIOD);
+        if (mergedStart == null && mergedEnd == null) {
+            return;
+        }
+
+        boolean existingDateOutOfRange = fairDateMapper.selectByFairIdWithStats(fair.getFairId()).stream()
+                .map(FairDateWithStats::getOperationDate)
+                .anyMatch(operationDate -> (mergedStart != null && operationDate.isBefore(mergedStart))
+                        || (mergedEnd != null && operationDate.isAfter(mergedEnd)));
+        if (existingDateOutOfRange) {
+            throw new CommonException(ErrorCode.FAIR_OPERATION_PERIOD_EXCLUDES_EXISTING_DATES);
+        }
     }
 
     private FairInfoResponse toFairInfoResponse(Fair fair) {

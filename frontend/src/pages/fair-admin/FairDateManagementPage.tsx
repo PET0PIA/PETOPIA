@@ -1,5 +1,5 @@
 import { AlertCircle, AlertTriangle, CalendarRange, Info, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   createFairDate,
@@ -80,6 +80,15 @@ export function FairDateManagementPage() {
 
   // 콘솔 상단 바의 "관리 행사" 선택기가 현재 행사를 정한다(페이지 이동/새로고침에도 유지).
   const { fairId } = useFairSelector();
+
+  // 포스터 업로드는 비동기라, 업로드 중에 다른 행사로 전환하면 ImageUploadField는
+  // key={fairId}로 리마운트되지만 이미 시작된 업로드 프로미스는 취소되지 않는다. 완료 시
+  // 예전 렌더의 콜백(그 시점의 fairId를 클로저로 들고 있음)이 그대로 호출되므로, 지금
+  // 선택된 fairId와 다르면 무시해서 이전 행사의 objectKey가 지금 행사 state에 섞이는 걸 막는다.
+  const currentFairIdRef = useRef(fairId);
+  useEffect(() => {
+    currentFairIdRef.current = fairId;
+  }, [fairId]);
 
   const [fairDates, setFairDates] = useState<FairDate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -232,6 +241,15 @@ export function FairDateManagementPage() {
       setFormError(`이미 ${editingFairDate.reservedCount}건 예약된 운영일이에요. 정원을 그보다 적게 줄일 수 없어요.`);
       return;
     }
+
+    const proceed = await confirm({
+      title: editingFairDate ? "운영일을 저장할까요?" : "운영일을 추가할까요?",
+      description: editingFairDate
+        ? "입력한 정원·입장 시간으로 저장할까요?"
+        : "입력한 날짜·정원·입장 시간으로 새 운영일을 추가할까요?",
+      confirmLabel: "저장",
+    });
+    if (!proceed) return;
 
     setSaving(true);
     setFormError(null);
@@ -560,12 +578,14 @@ export function FairDateManagementPage() {
                   layout="stacked"
                   initialImageUrl={posterImageUrl}
                   onObjectKeyChange={(key) => {
+                    if (currentFairIdRef.current !== fairId) return; // 이전 행사에서 시작된 업로드가 뒤늦게 끝난 경우
                     setPosterImageObjectKey(key);
                     if (key) setPosterRemoved(false);
                   }}
                   onUploadingChange={setPosterImageUploading}
                   removable
                   onRemove={() => {
+                    if (currentFairIdRef.current !== fairId) return;
                     setPosterImageObjectKey(null);
                     setPosterRemoved(true);
                   }}

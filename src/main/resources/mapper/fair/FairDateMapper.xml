@@ -59,6 +59,12 @@
         ORDER BY fd.operation_date ASC
     </select>
 
+    <!--
+        reserved_count <= #{capacity} 조건: FairDateService#update가 미리 SELECT로 확인한
+        이후에도 그 사이 새 사전예약이 들어와 reserved_count가 올라갈 수 있다. 이 조건이 없으면
+        그 레이스 상황에서 정원이 예약 건수 아래로 내려간 채 UPDATE가 그대로 성공해버린다.
+        영향받은 행이 0건이면 이 레이스에 걸린 것이니 서비스 계층에서 다시 거부한다.
+    -->
     <update id="update">
         UPDATE fair_dates
            SET capacity = #{capacity},
@@ -66,10 +72,13 @@
                entry_end_time = #{entryEndTime},
                updated_at = #{updatedAt}
          WHERE fair_date_id = #{fairDateId}
+           AND reserved_count <= #{capacity}
     </update>
 
+    <!-- reserved_count = 0 조건: update와 동일한 이유로, SELECT와 DELETE 사이에 새 예약이
+         들어오는 레이스를 막는다. -->
     <delete id="deleteById">
-        DELETE FROM fair_dates WHERE fair_date_id = #{fairDateId}
+        DELETE FROM fair_dates WHERE fair_date_id = #{fairDateId} AND reserved_count = 0
     </delete>
 
 </mapper>
