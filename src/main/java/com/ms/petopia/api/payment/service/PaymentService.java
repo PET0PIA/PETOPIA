@@ -578,7 +578,10 @@ public class PaymentService {
         row.setTossPaymentKey(tossResponse.paymentKey());
         row.setVirtualAccountBankCode(virtualAccount.bankCode());
         row.setVirtualAccountNumber(virtualAccount.accountNumber());
-        row.setVirtualAccountDueDate(virtualAccount.dueDate());
+        // dueDate는 토스가 오프셋 붙은 값으로 내려주므로(TossPaymentResponse.VirtualAccount
+        // 참고) OffsetDateTime으로 받았다가 여기서 LocalDateTime으로 변환해 저장한다 - 서버·DB가
+        // 전부 Asia/Seoul 고정이라 오프셋을 버려도 벽시계 시각은 그대로 맞다.
+        row.setVirtualAccountDueDate(virtualAccount.dueDate() != null ? virtualAccount.dueDate().toLocalDateTime() : null);
         row.setVirtualAccountSecret(virtualAccount.secret());
         row.setUpdatedAt(now);
 
