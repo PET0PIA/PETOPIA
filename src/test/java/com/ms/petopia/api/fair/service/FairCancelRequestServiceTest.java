@@ -17,8 +17,14 @@ import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.notification.dto.DeliveryChannel;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
+import com.ms.petopia.api.notification.dto.SaveNotificationDto;
+import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +34,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,6 +50,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class FairCancelRequestServiceTest {
@@ -68,12 +77,24 @@ class FairCancelRequestServiceTest {
     @Mock
     private FairAdminAccessGuard fairAdminAccessGuard;
 
+    @Mock
+    private NotificationService notificationService;
+
     @InjectMocks
     private FairCancelRequestService cancelRequestService;
 
     @BeforeEach
     void setUpTime() {
         org.mockito.Mockito.lenient().when(timeProvider.now()).thenReturn(NOW);
+        // review()가 승인/반려 심사 결과를 requestedBy에게 알리는 afterCommit 콜백을
+        // 등록하므로(FairServiceTest와 동일한 이유), 활성 트랜잭션 동기화 컨텍스트가 있어야
+        // registerSynchronization이 IllegalStateException 없이 통과한다.
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TransactionSynchronizationManager.clearSynchronization();
     }
 
     // ===== create =====
@@ -269,6 +290,7 @@ class FairCancelRequestServiceTest {
         given(cancelRequestMapper.selectById(CANCEL_REQUEST_ID)).willReturn(cancelRequest(FairCancelRequestStatus.PENDING));
         given(cancelRequestMapper.update(any())).willReturn(1);
         given(fairMapper.update(any())).willReturn(1);
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithName("2026 서울 펫페어"));
 
         ReviewFairCancelRequestResponse response = cancelRequestService.review(
                 FAIR_ID, CANCEL_REQUEST_ID, REVIEWER_ID, new ReviewFairCancelRequestRequest(FairReviewDecision.APPROVE, null)
@@ -293,6 +315,17 @@ class FairCancelRequestServiceTest {
                 eq(ActionType.FAIR_CANCEL_APPROVE), eq(TargetType.FAIR), eq(FAIR_ID),
                 isNull(), eq(Map.of("fairCancelRequestId", CANCEL_REQUEST_ID, "canceledAt", NOW))
         );
+
+        // 알림은 afterCommit 콜백이라 트랜잭션이 실제로 커밋되기 전까지는 호출되지 않는다.
+        verifyNoInteractions(notificationService);
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        ArgumentCaptor<SaveNotificationDto.Request> notifCaptor = ArgumentCaptor.forClass(SaveNotificationDto.Request.class);
+        verify(notificationService).save(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().userId()).isEqualTo(REQUESTED_BY);
+        assertThat(notifCaptor.getValue().recipientType()).isEqualTo(RecipientType.EVENT_ADMIN);
+        assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_CANCEL_REQUEST_APPROVED);
+        assertThat(notifCaptor.getValue().channels()).containsExactly(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL);
+        assertThat(notifCaptor.getValue().body()).contains("2026 서울 펫페어");
     }
 
     @Test
@@ -317,6 +350,7 @@ class FairCancelRequestServiceTest {
     void review_반려하면_행사는_건드리지않는다() {
         given(cancelRequestMapper.selectById(CANCEL_REQUEST_ID)).willReturn(cancelRequest(FairCancelRequestStatus.PENDING));
         given(cancelRequestMapper.update(any())).willReturn(1);
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithName("2026 서울 펫페어"));
 
         ReviewFairCancelRequestResponse response = cancelRequestService.review(
                 FAIR_ID, CANCEL_REQUEST_ID, REVIEWER_ID,
@@ -328,6 +362,14 @@ class FairCancelRequestServiceTest {
         assertThat(response.canceledAt()).isNull();
         verify(fairMapper, never()).update(any());
         verify(auditLogService, never()).record(any(), any(), any(), any(), any(), any(), any(), any());
+
+        verifyNoInteractions(notificationService);
+        TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        ArgumentCaptor<SaveNotificationDto.Request> notifCaptor = ArgumentCaptor.forClass(SaveNotificationDto.Request.class);
+        verify(notificationService).save(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().userId()).isEqualTo(REQUESTED_BY);
+        assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_CANCEL_REQUEST_REJECTED);
+        assertThat(notifCaptor.getValue().body()).contains("서류 미비");
     }
 
     @Test
@@ -421,6 +463,14 @@ class FairCancelRequestServiceTest {
         Fair fair = new Fair();
         fair.setFairId(FAIR_ID);
         fair.setStatus(status);
+        return fair;
+    }
+
+    /** review() 성공 경로에서 알림 본문에 쓰는 행사 이름 조회용. */
+    private Fair fairWithName(String name) {
+        Fair fair = new Fair();
+        fair.setFairId(FAIR_ID);
+        fair.setName(name);
         return fair;
     }
 

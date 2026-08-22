@@ -175,7 +175,6 @@ public class FairCancelRequestService {
         // fairId 소속 여부(404) 확인용. 존재 자체는 레이스가 없는 값이라 미리 조회해도 안전하다 -
         // 상태(PENDING) 판단만 아래 조건부 UPDATE로 넘긴다. requestedBy는 알림 수신자로 쓴다.
         FairCancelRequest existing = findCancelRequestInFair(fairId, cancelRequestId);
-        Fair fair = findFairOrThrow(fairId);
         boolean approved = request.decision() == FairReviewDecision.APPROVE;
         if (!approved && (request.rejectReason() == null || request.rejectReason().isBlank())) {
             throw new CommonException(ErrorCode.FAIR_CANCEL_REJECT_REASON_REQUIRED);
@@ -225,6 +224,9 @@ public class FairCancelRequestService {
             );
         }
 
+        // 알림용 행사 이름은 여기서, 즉 심사가 실제로 통과한 뒤에만 조회한다 - 위 검증/동시성
+        // 체크에서 이미 실패해 반환할 예외라면 이 조회 자체가 불필요하다.
+        Fair fair = findFairOrThrow(fairId);
         notifyCancelReviewAfterCommit(existing.getRequestedBy(), approved, fair.getName(), update.getRejectReason());
 
         return new ReviewFairCancelRequestResponse(
