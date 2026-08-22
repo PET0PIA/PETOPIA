@@ -13,6 +13,7 @@ import { getRecruitNotice, upsertRecruitNotice, type RecruitNoticeUpsertRequest 
 import { useAuth } from "../../contexts/AuthContext";
 import { EmptyState } from "../../components/common/EmptyState";
 import { useFairSelector } from "../../contexts/FairSelectorContext";
+import { useConfirm } from "../../components/ui/useConfirm";
 
 interface FormState {
   title: string;
@@ -62,6 +63,8 @@ export function RecruitNoticeFormPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedForm, setLoadedForm] = useState<FormState>(initialForm);
 
+  const { confirm, confirmDialog } = useConfirm();
+
   useEffect(() => {
     if (!fairId) return;
     let ignore = false;
@@ -108,6 +111,17 @@ export function RecruitNoticeFormPage() {
     if (imageUploading) validationErrors.push("이미지 업로드가 끝날 때까지 잠시만 기다려 주세요.");
     setErrors(validationErrors);
     if (validationErrors.length > 0) return;
+
+    if (new Date(form.recruitDeadline) <= new Date()) {
+      const proceed = await confirm({
+        title: "마감일시가 이미 지났어요",
+        description: "이 시각으로 저장하면 공고가 저장 즉시 마감 처리돼요. 계속할까요?",
+        confirmLabel: "그대로 저장",
+        danger: true,
+      });
+      if (!proceed) return;
+    }
+
     if (!fairId || !user) return;
 
     const payload: RecruitNoticeUpsertRequest = {
@@ -206,6 +220,7 @@ export function RecruitNoticeFormPage() {
           </form>
         </>
       )}
+      {confirmDialog}
     </PageContainer>
   );
 }

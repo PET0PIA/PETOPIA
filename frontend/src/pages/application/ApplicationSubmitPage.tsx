@@ -14,6 +14,7 @@ import { AttachmentUploadField } from "../../components/ui/AttachmentUploadField
 import { HallBoothMap } from "../../components/booth-map/HallBoothMap";
 import { ApiError } from "../../api/client";
 import { getMyBusinesses, type Business } from "../../api/business";
+import { getRecruitNotice } from "../../api/recruitNotice";
 import {
   getBoothSlots,
   submitApplication,
@@ -121,6 +122,7 @@ export function ApplicationSubmitPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<ApplicationResponse | null>(null);
+  const [recruitClosed, setRecruitClosed] = useState(false);
 
   const errorsRef = useRef<HTMLDivElement>(null);
 
@@ -138,14 +140,21 @@ export function ApplicationSubmitPage() {
 
     setLoading(true);
     setLoadError(null);
-    Promise.all([getBoothSlots(Number(fairId)), getMyBusinesses()])
-      .then(([slots, myBusinesses]) => {
+    Promise.all([
+      getBoothSlots(Number(fairId)),
+      getMyBusinesses(),
+      getRecruitNotice(Number(fairId)).catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 404) return null; // 공고 없음 = 마감 아님
+        throw error;
+      }),
+    ])
+      .then(([slots, myBusinesses, notice]) => {
         if (ignore) return;
         setBoothSlots(slots);
         setHasAnyBusiness(myBusinesses.length > 0);
         setHasPendingReview(myBusinesses.some((business) => business.approvalStatus === "PENDING_REVIEW"));
-        // 승인된 사업자만 신청 가능 - 심사대기/반려/취소된 사업자는 목록/셀렉트에서 제외
         setBusinesses(myBusinesses.filter((business) => business.approvalStatus === "APPROVED"));
+        setRecruitClosed(notice?.closed ?? false);
       })
       .catch((error) => {
         if (ignore) return;
@@ -212,6 +221,21 @@ export function ApplicationSubmitPage() {
         ) : (
           <EmptyState title="신청 정보를 불러오지 못했어요" description={loadError} />
         )}
+      </PageContainer>
+    );
+  }
+
+  // 모집공고가 마감됐으면 사업자 등록 유무와 상관없이 여기서 바로 막는다 - 사업자 없는
+  // 사용자가 등록까지 마치고 돌아왔더니 이미 마감이었다는 걸 뒤늦게 알게 되는 걸 방지.
+  if (recruitClosed) {
+    return (
+      <PageContainer className="py-10">
+        <EmptyState
+          title="모집이 마감됐어요"
+          description="이 행사의 참가업체 모집이 이미 마감돼 신청할 수 없어요."
+          actionTo={`/fairs/${fairId}/recruit-notice`}
+          actionLabel="모집 공고 확인하기"
+        />
       </PageContainer>
     );
   }
