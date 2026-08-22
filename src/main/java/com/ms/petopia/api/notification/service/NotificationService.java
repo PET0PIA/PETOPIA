@@ -5,6 +5,8 @@ import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.DeliveryStatus;
+import com.ms.petopia.api.notification.dto.NotificationType;
+import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.entity.Notification;
 import com.ms.petopia.api.notification.entity.NotificationDelivery;
 import com.ms.petopia.api.notification.mapper.NotificationDeliveryMapper;
@@ -19,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -130,5 +133,28 @@ public class NotificationService {
     @Transactional
     public void markAllAsRead(Long userId){
         notificationDeliveryMapper.updateReadAtAllInApp(userId, LocalDateTime.now());
+    }
+
+    /**
+     * 활성 SUPER_ADMIN 전원에게 같은 알림을 개별 저장한다(인앱 전용).
+     * 한 명 저장에 실패해도 나머지 관리자 발송은 계속 진행한다.
+     */
+    public void notifySuperAdmins(NotificationType type, String title, String body) {
+        for (Long adminUserId : authMapper.selectSuperAdminUserIds()) {
+            try {
+                save(new SaveNotificationDto.Request(
+                        adminUserId,
+                        RecipientType.SUPER_ADMIN,
+                        type,
+                        title,
+                        body,
+                        null,
+                        List.of(DeliveryChannel.IN_APP),
+                        null
+                ));
+            } catch (Exception e) {
+                log.error("SUPER_ADMIN 알림 저장 실패. adminUserId={}, type={}", adminUserId, type, e);
+            }
+        }
     }
 }
