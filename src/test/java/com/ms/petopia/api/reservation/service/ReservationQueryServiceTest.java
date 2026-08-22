@@ -29,6 +29,8 @@ class ReservationQueryServiceTest {
     private ReservationMapper reservationMapper;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private ReservationPetService reservationPetService;
     @InjectMocks
     private ReservationQueryService service;
 
@@ -178,6 +180,99 @@ class ReservationQueryServiceTest {
                 .isInstanceOf(CommonException.class)
                 .extracting(exception -> ((CommonException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    @Test
+    void detailWithoutPaymentRowHasNoPaymentFields() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CONFIRMED", "ADVANCE", 0, null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        // 무료 예약은 결제 행 자체가 없다. 화면은 두 값이 null이면 결제 줄을 그리지 않는다.
+        assertThat(detail.paymentId()).isNull();
+        assertThat(detail.paymentMethod()).isNull();
+    }
+
+    @Test
+    void detailOfCompletedPaymentShowsRealMethod() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(withPayment(
+                detailRow("CONFIRMED", "ADVANCE", 10_000, null),
+                1042L, "COMPLETED", "카드", null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.paymentId()).isEqualTo(1042L);
+        assertThat(detail.paymentMethod()).isEqualTo("카드");
+    }
+
+    @Test
+    void detailOfCompletedEasyPayAppendsProvider() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(withPayment(
+                detailRow("CONFIRMED", "ADVANCE", 10_000, null),
+                1042L, "COMPLETED", "간편결제", "네이버페이"));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        // 간편결제는 대분류만으로는 어디로 결제했는지 알 수 없어 제공사를 함께 붙인다.
+        assertThat(detail.paymentMethod()).isEqualTo("간편결제 (네이버페이)");
+    }
+
+    @Test
+    void detailBeforePaymentCompletionHidesTemporaryMethod() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 1, 9, 0);
+        given(timeProvider.now()).willReturn(now);
+        given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(withPayment(
+                detailRow("PENDING_PAYMENT", "ADVANCE", 10_000, now.plusMinutes(10)),
+                1042L, "PENDING", "TOSS", null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        // 결제 완료 전 method는 우리가 넣어둔 임시값이라 화면에 그대로 나가면 안 된다.
+        assertThat(detail.paymentId()).isEqualTo(1042L);
+        assertThat(detail.paymentMethod()).isEqualTo("결제 전");
+    }
+
+    @Test
+    void detailOfCompletedPaymentWithBlankMethodFallsBack() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(withPayment(
+                detailRow("CONFIRMED", "ADVANCE", 10_000, null),
+                1042L, "COMPLETED", "   ", null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        // 정상적으로는 안 생기는 조합. 빈 값을 그대로 뿌려 화면을 비워두지 않는다.
+        assertThat(detail.paymentMethod()).isEqualTo("결제 전");
+    }
+
+    @Test
+    void detailOfCanceledReservationKeepsPaidMethod() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(withPayment(
+                detailRow("CANCELED", "ADVANCE", 10_000, null),
+                1042L, "COMPLETED", "카드", null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        // 환불은 refund 행으로 기록되고 결제 행은 COMPLETED로 남는다. "무엇으로 결제했었나"는
+        // 취소 후에도 사용자가 확인해야 하는 정보라 의도적으로 그대로 노출한다.
+        assertThat(detail.paymentId()).isEqualTo(1042L);
+        assertThat(detail.paymentMethod()).isEqualTo("카드");
+    }
+
+    /** detailRow에 결제 행 정보를 얹는다. 결제 행이 없는(무료) 예약은 이 헬퍼를 안 쓴다. */
+    private ReservationListRow withPayment(
+            ReservationListRow row, Long paymentId, String paymentStatus, String method, String easyPayProvider
+    ) {
+        row.setPaymentId(paymentId);
+        row.setPaymentStatus(paymentStatus);
+        row.setPaymentMethod(method);
+        row.setEasyPayProvider(easyPayProvider);
+        return row;
     }
 
     private ReservationListRow detailRow(String status, String type, long amount, LocalDateTime paymentExpiresAt) {

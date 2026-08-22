@@ -39,6 +39,7 @@ public class ReservationVisitDateChangeService {
     private final EntryMapper entryMapper;
     private final ReservationTimeProvider timeProvider;
     private final NotificationService notificationService;
+    private final ReservationPetService reservationPetService;
 
     /** 확정된 사전예약의 방문 날짜와 발급된 QR 유효시간을 함께 변경한다. */
     @Transactional
@@ -80,7 +81,10 @@ public class ReservationVisitDateChangeService {
             throw new CommonException(ErrorCode.RESERVATION_CHANGE_DEADLINE_EXCEEDED);
         }
 
+        // 날짜가 그대로여도 반려동물만 바꾸려는 요청일 수 있다 - 정원·QR·이력은 건드리지 않고
+        // 동반 정보만 교체한 뒤 현재 정보를 돌려준다.
         if (request.visitDate().equals(reservation.getVisitDate())) {
+            replacePetsIfRequested(reservationId, userId, reservation.getFairId(), request);
             return response(reservationId, reservation.getVisitDate(), targetDate, reservation.getStatus());
         }
         if (!targetDate.getOperationDate().isAfter(timeProvider.today())) {
@@ -120,6 +124,7 @@ public class ReservationVisitDateChangeService {
                 userId,
                 now
         );
+        replacePetsIfRequested(reservationId, userId, reservation.getFairId(), request);
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -142,6 +147,30 @@ public class ReservationVisitDateChangeService {
         });
 
         return response(reservationId, reservation.getVisitDate(), targetDate, reservation.getStatus());
+    }
+
+    /**
+     * 요청에 petIds가 있을 때만 동반 정보를 교체한다. null이면 손대지 않는다 -
+     * "날짜만 바꾸려는 요청"이 동반 정보를 조용히 지워버리면 안 된다.
+     *
+     * <p>동반 허용 여부는 여기서 따로 조회한다. 위의 예약 조회는 reservations에
+     * {@code FOR UPDATE}를 걸고 있어, 같은 쿼리에 fairs를 조인하면 잠금 범위가 넓어진다.
+     */
+    private void replacePetsIfRequested(
+            Long reservationId,
+            Long userId,
+            Long fairId,
+            UpdateReservationVisitDateRequest request
+    ) {
+        if (request.petIds() == null) {
+            return;
+        }
+        reservationPetService.replacePets(
+                reservationId,
+                userId,
+                reservationPetService.isFairPetAllowed(fairId),
+                request.petIds()
+        );
     }
 
     private void validateRequest(

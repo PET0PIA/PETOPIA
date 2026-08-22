@@ -25,6 +25,8 @@ public record FairApplicationDetailResponse(
         String category,
         String posterImageUrl,
         String noticeText,
+        /** 반려동물 동반 가능 여부. */
+        boolean petAllowed,
         String placeName,
         String address,
         String indoorOutdoor,

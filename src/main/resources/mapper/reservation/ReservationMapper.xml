@@ -11,6 +11,7 @@
              , reservation_end_date
              , published_at
              , canceled_at
+             , pet_allowed
           FROM fairs
          WHERE fair_id = #{fairId}
     </select>
@@ -35,6 +36,16 @@
          ORDER BY fd.operation_date ASC
     </select>
 
+    <!--
+        내 예약 목록. 만료(EXPIRED) 예약은 여기서 제외한다.
+
+        예전에는 프론트가 받아온 페이지에서 걸러냈다. 그러면 만료 건이 페이지 정원을 차지해
+        그 뒤의 유효한 예약이 화면에 나올 방법이 없었고(목록 화면은 첫 페이지만 받는다),
+        totalElements·hasNext도 실제 표시 건수와 어긋났다. 그래서 숨김 규칙을 여기로 모았다.
+
+        취소(CANCELED)는 제외하지 않는다 - 결제·환불 내역을 다시 확인할 일이 있어 목록에 남긴다.
+        아래 countMyReservations의 조건과 반드시 같아야 한다(한쪽만 걸면 개수와 목록이 어긋난다).
+    -->
     <select id="selectMyReservations" resultType="ReservationListRow">
         SELECT r.reservation_id
              , f.name AS fair_name
@@ -56,14 +67,17 @@
      LEFT JOIN entry_records er
             ON er.reservation_id = r.reservation_id
          WHERE r.user_id = #{userId}
+           AND r.status != 'EXPIRED'
          ORDER BY r.created_at DESC, r.reservation_id DESC
          LIMIT #{limit} OFFSET #{offset}
     </select>
 
+    <!-- selectMyReservations와 같은 조건으로 센다(위 주석 참고). -->
     <select id="countMyReservations" resultType="long">
         SELECT COUNT(*)
           FROM reservations
          WHERE user_id = #{userId}
+           AND status != 'EXPIRED'
     </select>
 
     <select id="selectReservationForOwner" resultType="ReservationListRow">
@@ -81,6 +95,10 @@
              , r.reserved_at
              , r.payment_expires_at
              , er.first_checked_in_at AS checked_in_at
+             , p.payment_id
+             , p.status AS payment_status
+             , p.method AS payment_method
+             , p.easy_pay_provider AS easy_pay_provider
           FROM reservations r
           JOIN fairs f
             ON f.fair_id = r.fair_id
@@ -89,6 +107,12 @@
            AND fd.operation_date = r.visit_date
      LEFT JOIN entry_records er
             ON er.reservation_id = r.reservation_id
+     <!-- 상세 화면의 "결제 ID / 결제수단"용. 예약금 결제는 idempotency_key가
+          "RESERVATION_DEPOSIT_{예약ID}"로 UNIQUE라 예약 1건당 최대 1행이므로 행이 늘지 않는다.
+          무료 예약은 결제 행이 없어 네 값 모두 NULL로 온다. -->
+     LEFT JOIN payment p
+            ON p.reservation_id = r.reservation_id
+           AND p.payment_type = 'RESERVATION_DEPOSIT'
          WHERE r.reservation_id = #{reservationId}
            AND r.user_id = #{userId}
     </select>
@@ -114,6 +138,7 @@
              , f.reservation_fee
              , f.published_at
              , f.canceled_at
+             , f.pet_allowed
              , fd.fair_date_id
              , fd.operation_date
              , fd.capacity

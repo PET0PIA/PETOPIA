@@ -51,6 +51,8 @@ export interface CreateFairApplicationRequest {
   /** presigned 업로드로 받은 임시 객체 키(파일 자체가 아니라 objectKey를 보낸다). */
   posterImageObjectKey?: string;
   noticeText?: string;
+  /** 반려동물 동반 가능 여부. 안 보내면 서버가 기본값(true)으로 저장한다. */
+  petAllowed?: boolean;
   placeName?: string;
   address?: string;
   indoorOutdoor?: IndoorOutdoor;
@@ -87,6 +89,7 @@ export interface FairApplicationDetail {
   category: FairCategory | null;
   posterImageUrl: string | null;
   noticeText: string | null;
+  petAllowed: boolean;
   placeName: string | null;
   address: string | null;
   indoorOutdoor: IndoorOutdoor | null;
@@ -143,6 +146,8 @@ export interface UpdateFairApplicationRequest {
    * 기존 포스터를 삭제한다. */
   posterImageObjectKey?: string | null;
   noticeText?: string | null;
+  /** 반려동물 동반 가능 여부. NOT NULL 컬럼이라 null은 보낼 수 없다(400). */
+  petAllowed?: boolean;
   placeName?: string | null;
   address?: string | null;
   indoorOutdoor?: IndoorOutdoor | null;
@@ -208,6 +213,8 @@ export interface FairPublicSummary {
   category: FairCategory | null;
   posterImageUrl: string | null;
   noticeText: string | null;
+  /** 반려동물 동반 가능 여부. 예약 화면이 반려동물 선택 UI를 띄울지 판단하는 기준이다. */
+  petAllowed: boolean;
   placeName: string | null;
   address: string | null;
   indoorOutdoor: IndoorOutdoor | null;
@@ -238,6 +245,8 @@ export interface FairPublicListItem {
   placeName: string | null;
   operationStartDate: string | null;
   operationEndDate: string | null;
+  /** 반려동물 동반 가능 여부. "반려동물 동반" 배지에 쓴다. */
+  petAllowed: boolean;
   /** 사전예약 가능 여부(예매 기간 안 + 정원 남은 미래 운영일 존재). "사전예약중" 배지에 쓴다. */
   reservable: boolean;
   /** 참가기업 부스 모집중 여부(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯). "참가기업 모집중" 배지에 쓴다. */
@@ -300,6 +309,21 @@ export interface PublishFairResponse {
  */
 export function publishFair(fairId: number) {
   return apiClient.patch<PublishFairResponse>(`/api/fairs/${fairId}/publish`);
+}
+
+export interface FairPublishStatusResponse {
+  fairId: number;
+  status: string;
+  /** 아직 공개하지 않았으면 null. */
+  publishedAt: string | null;
+}
+
+/**
+ * 운영일·정원 관리 화면이 진입 시 지금 공개 상태를 미리 조회한다(publish와 동일 권한 -
+ * 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN). publishFair와 달리 상태를 바꾸지 않는다.
+ */
+export function getFairPublishStatus(fairId: number) {
+  return apiClient.get<FairPublishStatusResponse>(`/api/fairs/${fairId}/publish-status`);
 }
 
 export interface Hall {

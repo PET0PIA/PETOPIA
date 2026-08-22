@@ -1,4 +1,4 @@
-import { ChevronLeft, CreditCard, QrCode } from "lucide-react";
+import { ChevronLeft, CreditCard, PawPrint, QrCode } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -10,6 +10,7 @@ import { DropdownMenu } from "../../components/ui/DropdownMenu";
 import { QrCanvas } from "../../components/ui/QrCanvas";
 import { useConfirm } from "../../components/ui/useConfirm";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
+import { PetCompanionPicker } from "../../components/reservation/PetCompanionPicker";
 import { ApiError } from "../../api/client";
 import { createReservationDepositPayment } from "../../api/payment";
 import {
@@ -20,6 +21,7 @@ import {
   getReservationDetail,
   type ReservationAvailabilityDate,
   type ReservationDetail,
+  type ReservationPet,
 } from "../../api/reservation";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -73,6 +75,19 @@ function BackLink() {
   );
 }
 
+/*
+ * 예약 시점 스냅샷의 알레르기 문구. '기타' 같은 직접 입력 항목은 라벨 대신 적어둔 내용을
+ * 보여주는 게 정보량이 많다. "있음"인데 항목이 비어 있으면 여부만 적는다.
+ */
+function formatPetAllergies(pet: ReservationPet): string {
+  if (pet.hasAllergy === false) return "알레르기 없음";
+  if (pet.hasAllergy === null) return "알레르기 미입력";
+  if (pet.allergies.length === 0) return "알레르기 있음";
+  return pet.allergies
+    .map((allergy) => (allergy.requiresText && allergy.otherText ? `${allergy.label}(${allergy.otherText})` : allergy.label))
+    .join(", ");
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -116,6 +131,9 @@ export function ReservationDetailPage() {
   const [selectedNewDate, setSelectedNewDate] = useState<string | null>(null);
   const [changeSubmitting, setChangeSubmitting] = useState(false);
   const [changeError, setChangeError] = useState<string | null>(null);
+  // 방문일 변경 다이얼로그에서 고른 동반 반려동물. 다이얼로그를 열 때 현재 예약값으로 채운다.
+  const [changePetIds, setChangePetIds] = useState<number[]>([]);
+  const [changePetAllowed, setChangePetAllowed] = useState(false);
 
   const id = Number(reservationId);
   // 경로 파라미터가 양의 정수가 아니면(예: /reservations/me/abc) NaN을 API URL에 싣지 않는다.
@@ -240,11 +258,21 @@ export function ReservationDetailPage() {
     setSelectedNewDate(target.visitDate);
     setChangeError(null);
     setAvailError(null);
+    // 지금 담긴 반려동물을 그대로 채워 둔다 - 다이얼로그를 열었다는 것만으로 동반이
+    // 지워지면 안 되고, 사용자가 여기서 고친 결과가 곧 저장될 목록이 된다.
+    // 이 목록은 예약 스냅샷이라 그 뒤 삭제된 반려동물이 섞여 있을 수 있다. 그건 아래 피커가
+    // 보유 목록을 불러온 뒤 걸러낸다(PetCompanionPicker의 loadPets 참고) - 여기서 미리
+    // 걸러낼 수는 없다. 지금 무엇을 보유했는지는 그 조회가 끝나야 알 수 있다.
+    setChangePetIds(target.pets.map((pet) => pet.petId));
+    setChangePetAllowed(false);
     setDateDialogOpen(true);
     // 예매 화면과 같은 방식으로 이 행사의 예약 가능 운영일·잔여석을 불러온다.
     setAvailLoading(true);
     getReservationAvailability(target.fairId)
-      .then((res) => setAvailDates(res.dates))
+      .then((res) => {
+        setAvailDates(res.dates);
+        setChangePetAllowed(res.petAllowed);
+      })
       .catch((err: unknown) =>
         setAvailError(err instanceof ApiError ? err.message : "예약 가능한 날짜를 불러오지 못했어요."),
       )
@@ -256,9 +284,18 @@ export function ReservationDetailPage() {
     setChangeSubmitting(true);
     setChangeError(null);
     try {
-      const res = await changeVisitDate(id, selectedNewDate);
-      setReservation((previous) =>
-        previous
+      // 동반 정보는 "동반 가능"을 확인했을 때만 보낸다. 확인했다면 이 다이얼로그가 "지금 화면에
+      // 보이는 목록이 곧 저장될 목록"이다. 금지 행사이거나 예약 가능 조회가 실패해 허용 여부를
+      // 모를 때는 필드를 빼서 보내고, 서버는 "없으면 기존 동반 정보 유지"로 읽는다 - 그 상황에는
+      // 목록 UI가 그려지지 않아 사용자가 비울 수도 없으니, 담겼던 반려동물을 그대로 보내면 R024로
+      // 거절돼 방문일 변경까지 막히고, 빈 배열을 보내면 요청하지 않은 동반 해제가 조용히 일어난다.
+      const res = await changeVisitDate(id, selectedNewDate, changePetAllowed ? changePetIds : undefined);
+      // 서버가 스냅샷을 다시 뜬 결과를 화면에 그대로 반영하려면 상세를 다시 읽어야 한다
+      // (변경 응답에는 반려동물이 없다. 날짜·QR 유효시간만 돌려준다).
+      const refreshed = await getReservationDetail(id).catch(() => null);
+      setReservation((previous) => {
+        if (refreshed) return refreshed;
+        return previous
           ? {
               ...previous,
               visitDate: res.visitDate,
@@ -266,8 +303,8 @@ export function ReservationDetailPage() {
               entryEndTime: res.entryEndTime,
               reservationStatus: res.reservationStatus,
             }
-          : previous,
-      );
+          : previous;
+      });
       setDateDialogOpen(false);
     } catch (err) {
       // R018 변경 마감 / R002 날짜 불가 / R004 마감 / R013 상태 불가
@@ -437,8 +474,43 @@ export function ReservationDetailPage() {
           />
           <DetailRow label="예약 확정시각" value={formatDateTime(reservation.reservedAt)} />
           <DetailRow label="최초 입장시각" value={formatDateTime(reservation.checkedInAt)} />
+          {/* 결제 줄은 결제 행이 있는 유료 예약에서만 그린다(무료 예약은 서버가 null로 내려준다). */}
+          {reservation.paymentId !== null && (
+            <DetailRow label="결제 ID" value={String(reservation.paymentId)} />
+          )}
+          {reservation.paymentMethod !== null && (
+            <DetailRow label="결제수단" value={reservation.paymentMethod} />
+          )}
         </dl>
       </Card>
+
+      {/* 동반 반려동물. 없으면 카드 자체를 그리지 않는다 - 동반이 없는 예약에 빈 카드가 남으면
+          "왜 여기가 비었지" 하는 화면이 된다. */}
+      {reservation.pets.length > 0 && (
+        <Card className="p-6">
+          <h2 className="mb-4 flex items-center gap-2 text-sm font-extrabold text-muted">
+            <PawPrint size={16} aria-hidden="true" />
+            동반 반려동물
+          </h2>
+          <ul className="space-y-3">
+            {reservation.pets.map((pet) => (
+              <li key={pet.reservationPetId} className="rounded-card border border-line bg-page p-4">
+                <p className="text-sm font-extrabold text-ink">
+                  {pet.name}
+                  <span className="ml-2 text-xs font-normal text-muted">
+                    {pet.species}
+                    {pet.breed ? ` · ${pet.breed}` : ""}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-muted">{formatPetAllergies(pet)}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted">
+            예약할 때 저장된 정보예요. 마이페이지에서 반려동물 정보를 고쳐도 이 기록은 바뀌지 않아요.
+          </p>
+        </Card>
+      )}
 
       <Dialog open={dateDialogOpen} onClose={() => setDateDialogOpen(false)} title="방문일 변경">
         <div className="space-y-4">
@@ -481,6 +553,16 @@ export function ReservationDetailPage() {
               })}
             </div>
           )}
+
+          {/* 방문일을 바꾸면서 동반 반려동물도 함께 고칠 수 있다. 같은 날짜로 두고 반려동물만
+              바꿔도 저장된다(정원·QR은 건드리지 않는다). */}
+          <PetCompanionPicker
+            petAllowed={changePetAllowed}
+            value={changePetIds}
+            onChange={setChangePetIds}
+            disabled={changeSubmitting}
+            initialCompanion={reservation.pets.length > 0 ? true : null}
+          />
 
           {changeError && <p className="text-sm font-bold text-primary-strong">{changeError}</p>}
 

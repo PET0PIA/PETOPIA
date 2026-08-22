@@ -27,6 +27,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -52,6 +53,8 @@ class ReservationVisitDateChangeServiceTest {
     private ReservationTimeProvider timeProvider;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private ReservationPetService reservationPetService;
     @InjectMocks
     private ReservationVisitDateChangeService service;
 
@@ -92,6 +95,64 @@ class ReservationVisitDateChangeServiceTest {
         verify(changeMapper).insertVisitDateChangedHistory(
                 RESERVATION_ID, CURRENT_DATE, TARGET_DATE, USER_ID, NOW
         );
+    }
+
+    @Test
+    void replacesPetsWhenPetIdsAreSentWithVisitDateChange() {
+        given(changeMapper.selectReservationForUpdate(RESERVATION_ID)).willReturn(reservation("CONFIRMED"));
+        given(changeMapper.selectFairDatesForUpdate(eq(FAIR_ID), any())).willReturn(List.of(
+                fairDate(CURRENT_DATE, 100), fairDate(TARGET_DATE, 100)
+        ));
+        given(timeProvider.now()).willReturn(NOW);
+        given(timeProvider.today()).willReturn(LocalDate.of(2026, 8, 4));
+        given(capacityMapper.occupy(FAIR_ID, TARGET_DATE)).willReturn(1);
+        given(changeMapper.updateVisitDate(RESERVATION_ID, TARGET_DATE, NOW)).willReturn(1);
+        given(reservationPetService.isFairPetAllowed(FAIR_ID)).willReturn(true);
+
+        service.changeVisitDate(
+                RESERVATION_ID, USER_ID, new UpdateReservationVisitDateRequest(TARGET_DATE, List.of(7L))
+        );
+
+        verify(reservationPetService).replacePets(RESERVATION_ID, USER_ID, true, List.of(7L));
+    }
+
+    @Test
+    void keepsPetsUntouchedWhenPetIdsAreOmitted() {
+        given(changeMapper.selectReservationForUpdate(RESERVATION_ID)).willReturn(reservation("CONFIRMED"));
+        given(changeMapper.selectFairDatesForUpdate(eq(FAIR_ID), any())).willReturn(List.of(
+                fairDate(CURRENT_DATE, 100), fairDate(TARGET_DATE, 100)
+        ));
+        given(timeProvider.now()).willReturn(NOW);
+        given(timeProvider.today()).willReturn(LocalDate.of(2026, 8, 4));
+        given(capacityMapper.occupy(FAIR_ID, TARGET_DATE)).willReturn(1);
+        given(changeMapper.updateVisitDate(RESERVATION_ID, TARGET_DATE, NOW)).willReturn(1);
+
+        // 날짜만 바꾸려는 요청이 동반 정보를 조용히 지워버리면 안 된다.
+        service.changeVisitDate(
+                RESERVATION_ID, USER_ID, new UpdateReservationVisitDateRequest(TARGET_DATE)
+        );
+
+        verify(reservationPetService, never()).replacePets(any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    void replacesPetsWithoutTouchingCapacityWhenVisitDateIsUnchanged() {
+        given(changeMapper.selectReservationForUpdate(RESERVATION_ID)).willReturn(reservation("CONFIRMED"));
+        given(changeMapper.selectFairDatesForUpdate(eq(FAIR_ID), any())).willReturn(List.of(
+                fairDate(CURRENT_DATE, 100)
+        ));
+        given(timeProvider.now()).willReturn(NOW);
+        given(reservationPetService.isFairPetAllowed(FAIR_ID)).willReturn(true);
+
+        // 같은 날짜 + 반려동물만 교체. 정원·QR·변경 이력은 건드리지 않아야 한다.
+        service.changeVisitDate(
+                RESERVATION_ID, USER_ID, new UpdateReservationVisitDateRequest(CURRENT_DATE, List.of(7L))
+        );
+
+        verify(reservationPetService).replacePets(RESERVATION_ID, USER_ID, true, List.of(7L));
+        verify(capacityMapper, never()).occupy(any(), any());
+        verify(changeMapper, never()).updateVisitDate(any(), any(), any());
+        verify(changeMapper, never()).insertVisitDateChangedHistory(any(), any(), any(), any(), any());
     }
 
     @Test

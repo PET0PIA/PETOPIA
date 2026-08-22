@@ -9,7 +9,6 @@ import { getMyReservations, type ReservationListItem } from "../../api/reservati
 import {
   formatEntryTime,
   formatVisitDateDow,
-  hiddenFromListReservationStatuses,
   inactiveReservationStatuses,
   reservationStatusLabels,
   reservationStatusTones,
@@ -38,11 +37,6 @@ export function MyReservationsPage() {
     };
   }, []);
 
-  // 만료·취소처럼 더 이상 유효하지 않은 지난 예약은 목록에서 감춘다.
-  const visibleReservations = reservations.filter(
-    (item) => !hiddenFromListReservationStatuses.includes(item.reservationStatus),
-  );
-
   return (
     <div className="mx-auto max-w-3xl py-2">
       <PageHeader
@@ -55,7 +49,7 @@ export function MyReservationsPage() {
         <p className="py-16 text-center text-sm text-muted">예약 목록을 불러오는 중이에요…</p>
       ) : error ? (
         <EmptyState title="예약 목록을 불러오지 못했어요." description={error} />
-      ) : visibleReservations.length === 0 ? (
+      ) : reservations.length === 0 ? (
         <EmptyState
           title="아직 예약한 행사가 없어요."
           description="티켓 예매에서 관심 있는 행사를 예약하면 이곳에서 확인할 수 있어요."
@@ -64,7 +58,7 @@ export function MyReservationsPage() {
         />
       ) : (
         <ul className="flex flex-col gap-3">
-          {visibleReservations.map((item) => {
+          {reservations.map((item) => {
             const inactive = inactiveReservationStatuses.includes(item.reservationStatus);
             return (
               <li key={item.reservationId}>

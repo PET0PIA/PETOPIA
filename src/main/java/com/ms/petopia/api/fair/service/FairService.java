@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -81,6 +82,9 @@ public class FairService {
     private static final Set<FairStatus> PUBLISHABLE_STATUSES =
             EnumSet.of(FairStatus.PREPARING, FairStatus.IN_PROGRESS);
 
+    /** UserUpdateRequest/EmailSignupRequest 등과 동일한 이 프로젝트의 휴대폰 번호 형식 검증 관례. */
+    private static final Pattern MANAGER_PHONE_PATTERN = Pattern.compile("^01[0-9]-?\\d{3,4}-?\\d{4}$");
+
     private final FairMapper fairMapper;
     private final AuthMapper authMapper;
     private final FairTimeProvider timeProvider;
@@ -110,6 +114,8 @@ public class FairService {
         fair.setCategory(request.category());
         fair.setPosterImageUrl(resolveImageUrl(request.posterImageObjectKey()));
         fair.setNoticeText(request.noticeText());
+        // null이면 매퍼가 컬럼 자체를 빼고 INSERT하므로 DB 기본값(TRUE)이 들어간다(정책 P1).
+        fair.setPetAllowed(request.petAllowed());
         fair.setPlaceName(request.placeName());
         fair.setAddress(request.address());
         applyGeocoding(fair, request.address());
@@ -354,6 +360,7 @@ public class FairService {
         // 매퍼가 이 값을 무시하고 기존 URL을 그대로 둔다.
         update.setPosterImageUrl(setFields.contains("posterImageUrl") ? resolveImageUrl(request.posterImageObjectKey()) : null);
         update.setNoticeText(request.noticeText());
+        update.setPetAllowed(request.petAllowed());
         update.setPlaceName(request.placeName());
         update.setAddress(request.address());
         if (setFields.contains("address")) {
@@ -573,6 +580,19 @@ public class FairService {
         return new PublishFairResponse(fairId, fair.getStatus().name(), now);
     }
 
+    /**
+     * 운영일·정원 관리 화면이 진입 시 지금 공개 상태를 미리 알기 위해 쓴다. {@link #publish}와
+     * 같은 접근 검증({@link FairAdminAccessGuard#checkAssigned})을 쓰되, 상태를 바꾸지 않고
+     * 그대로 조회만 한다 - 이 화면이 EVENT_ADMIN도 접근 가능해서(publish와 동일 권한),
+     * SUPER_ADMIN 전용인 {@link #getApplication}은 쓸 수 없다.
+     */
+    @Transactional(readOnly = true)
+    public PublishFairResponse getPublishStatus(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
+        Fair fair = findFairOrThrow(fairId);
+        return new PublishFairResponse(fairId, fair.getStatus().name(), fair.getPublishedAt());
+    }
+
     private void validateReviewRequest(Long reviewerId, ReviewFairApplicationRequest request) {
         if (reviewerId == null || reviewerId <= 0 || request == null || request.decision() == null) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
@@ -611,6 +631,9 @@ public class FairService {
                 fair.getCategory(),
                 fair.getPosterImageUrl(),
                 fair.getNoticeText(),
+                //NOT NULL 컬럼이지만 pet_allowed를 SELECT하지 않는 쿼리로 읽은 Fair면 null일 수
+                //있다 - 그때는 정책 기본값(동반 가능)으로 본다.
+                !Boolean.FALSE.equals(fair.getPetAllowed()),
                 fair.getPlaceName(),
                 fair.getAddress(),
                 fair.getIndoorOutdoor(),
@@ -645,6 +668,7 @@ public class FairService {
                 fair.getCategory(),
                 fair.getPosterImageUrl(),
                 fair.getNoticeText(),
+                !Boolean.FALSE.equals(fair.getPetAllowed()),
                 fair.getPlaceName(),
                 fair.getAddress(),
                 fair.getIndoorOutdoor(),
@@ -665,6 +689,7 @@ public class FairService {
                 fair.getPlaceName(),
                 fair.getOperationStartDate(),
                 fair.getOperationEndDate(),
+                !Boolean.FALSE.equals(fair.getPetAllowed()),
                 Boolean.TRUE.equals(fair.getReservable()),
                 Boolean.TRUE.equals(fair.getRecruiting())
         );
@@ -694,6 +719,7 @@ public class FairService {
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        validateManagerPhoneFormat(request.managerPhone());
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
                 request.vendorRecruitStartDate(), request.vendorRecruitEndDate(),
@@ -738,6 +764,16 @@ public class FairService {
         }
     }
 
+    /** managerPhone은 선택 입력이라 값이 없으면(null/빈 문자열) 검사하지 않는다. 있으면 형식만 확인한다. */
+    private void validateManagerPhoneFormat(String managerPhone) {
+        if (isBlank(managerPhone)) {
+            return;
+        }
+        if (!MANAGER_PHONE_PATTERN.matcher(managerPhone.trim()).matches()) {
+            throw new CommonException(ErrorCode.FAIR_INVALID_MANAGER_PHONE);
+        }
+    }
+
     /**
      * updateApplication 전용 검증. createApplication과 달리 PATCH라 필드가 null일 수 있으므로
      * "필수" 대신 "보냈다면 빈 문자열이면 안 된다"만 확인한다. name/managerName은
@@ -753,12 +789,15 @@ public class FairService {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if ((setFields.contains("name") && request.name() == null)
-                || (setFields.contains("managerName") && request.managerName() == null)) {
+                || (setFields.contains("managerName") && request.managerName() == null)
+                // pet_allowed는 NOT NULL 컬럼이다 - 명시적 null로 지우려 하면 UPDATE에서 터진다.
+                || (setFields.contains("petAllowed") && request.petAllowed() == null)) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        validateManagerPhoneFormat(request.managerPhone());
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
                 request.vendorRecruitStartDate(), request.vendorRecruitEndDate(),

@@ -26,6 +26,20 @@ function formatIsNeutered(value: boolean): string {
   return value ? "완료" : "안 함";
 }
 
+/*
+ * 알레르기 표시 문구. "있음"인데 항목이 비어 있을 수 있다(여부만 답하고 항목은 아직
+ * 안 고른 상태) - 그때 빈칸으로 두면 등록증이 잘못 만들어진 것처럼 보이므로 여부만 적는다.
+ * '기타' 같은 직접 입력 항목은 라벨 대신 사용자가 적은 내용을 보여주는 게 정보량이 많다.
+ */
+function formatAllergies(pet: Pet): string {
+  if (pet.hasAllergy === false) return "없음";
+  const allergies = pet.allergies ?? [];
+  if (allergies.length === 0) return "있음";
+  return allergies
+    .map((allergy) => (allergy.requiresText && allergy.otherText ? `${allergy.label}(${allergy.otherText})` : allergy.label))
+    .join(", ");
+}
+
 export function PetDetailPage() {
   const { petId } = useParams<{ petId: string }>();
   const navigate = useNavigate();
@@ -217,6 +231,13 @@ export function PetDetailPage() {
                   <div className="flex items-baseline gap-3">
                     <dt className="w-16 shrink-0 font-bold text-muted">중성화</dt>
                     <dd className="text-ink">{formatIsNeutered(pet.isNeutered)}</dd>
+                  </div>
+                )}
+                {/* 중성화와 같은 이유로 미입력(null)이면 행 자체를 숨긴다. */}
+                {pet.hasAllergy !== null && (
+                  <div className="flex items-baseline gap-3">
+                    <dt className="w-16 shrink-0 font-bold text-muted">알레르기</dt>
+                    <dd className="text-ink">{formatAllergies(pet)}</dd>
                   </div>
                 )}
               </dl>

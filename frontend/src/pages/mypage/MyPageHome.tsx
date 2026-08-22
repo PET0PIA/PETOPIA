@@ -12,7 +12,6 @@ import { getMyReservations } from "../../api/reservation";
 import {
   formatEntryTime,
   formatVisitDateDow,
-  hiddenFromListReservationStatuses,
   reservationStatusLabels,
   reservationStatusTones,
 } from "../reservation/reservationDisplay";
@@ -79,10 +78,8 @@ function CardNote({ children }: { children: ReactNode }) {
 
 function ReservationCard() {
   const { data, loading, error } = useCardData(loadReservations);
-  // 취소·만료된 지난 예약은 목록 화면과 같은 규칙으로 감춘다.
-  const items = (data?.items ?? [])
-    .filter((item) => !hiddenFromListReservationStatuses.includes(item.reservationStatus))
-    .slice(0, RESERVATION_PREVIEW);
+  // 만료 예약은 서버가 목록에서 빼주므로 받은 순서대로 앞에서 두 건만 쓴다.
+  const items = (data?.items ?? []).slice(0, RESERVATION_PREVIEW);
 
   return (
     <CardSection title="예약 내역" to="/mypage/reservations">

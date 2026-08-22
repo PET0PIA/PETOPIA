@@ -30,6 +30,8 @@ interface FormState {
   name: string;
   description: string;
   category: "" | "DOG" | "CAT" | "ETC";
+  /** 반려동물 동반 가능 여부. 서버가 NOT NULL이라 "선택 안 함"이 없다. */
+  petAllowed: "true" | "false";
   noticeText: string;
   placeName: string;
   address: string;
@@ -53,6 +55,7 @@ function formStateFromDetail(detail: FairApplicationDetail): FormState {
     name: detail.name,
     description: detail.description ?? "",
     category: detail.category ?? "",
+    petAllowed: detail.petAllowed ? "true" : "false",
     noticeText: detail.noticeText ?? "",
     placeName: detail.placeName ?? "",
     address: detail.address ?? "",
@@ -103,11 +106,17 @@ function PeriodFields({ title, startId, startValue, endId, endValue, onStart, on
   );
 }
 
+// FairApplicationNewPage.tsx/EditProfilePage.tsx의 PHONE_PATTERN과 동일 - 이 프로젝트의 휴대폰 번호 형식 검증 관례.
+const PHONE_PATTERN = /^01[0-9]-?\d{3,4}-?\d{4}$/;
+
 function validate(form: FormState): string[] {
   const errors: string[] = [];
   if (form.name.trim() === "") errors.push("행사명을 입력해 주세요.");
   if (form.managerName.trim() === "") errors.push("담당자 이름을 입력해 주세요.");
   if (form.managerEmail.trim() === "") errors.push("담당자 이메일을 입력해 주세요.");
+  if (form.managerPhone.trim() !== "" && !PHONE_PATTERN.test(form.managerPhone.trim())) {
+    errors.push("담당자 연락처 형식이 올바르지 않아요. (예: 010-1234-5678)");
+  }
   if (form.reservationFee !== "" && Number(form.reservationFee) < 0) errors.push("예약금은 0 이상이어야 해요.");
 
   const periods: Array<[string, string, string]> = [
@@ -136,6 +145,7 @@ function toRequest(form: FormState, uploadedPosterKey: string | null, posterRemo
     category: form.category || null,
     posterImageObjectKey: uploadedPosterKey ?? (posterRemoved ? null : undefined),
     noticeText: form.noticeText.trim() || null,
+    petAllowed: form.petAllowed === "true",
     placeName: form.placeName.trim() || null,
     address: form.address.trim() || null,
     indoorOutdoor: form.indoorOutdoor || null,
@@ -361,6 +371,14 @@ function FairApplicationEditContent({ id }: { id: number }) {
                 <div>
                   {label("description", "행사 소개")}
                   <Textarea id="description" value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="행사를 소개해 주세요." />
+                </div>
+                <div>
+                  {label("petAllowed", "반려동물 동반")}
+                  <Select id="petAllowed" value={form.petAllowed} onChange={(event) => update("petAllowed", event.target.value as FormState["petAllowed"])}>
+                    <option value="true">동반 가능</option>
+                    <option value="false">동반 금지</option>
+                  </Select>
+                  <p className="mt-1.5 text-xs text-muted">동반 금지로 두면 관람객이 예약할 때 반려동물을 선택할 수 없어요.</p>
                 </div>
                 <div>
                   {label("noticeText", "관람 안내사항")}

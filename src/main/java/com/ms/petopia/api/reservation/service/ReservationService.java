@@ -33,6 +33,7 @@ public class ReservationService {
     private final ReservationNumberGenerator reservationNumberGenerator;
     private final ReservationTimeProvider timeProvider;
     private final EntryQrService entryQrService;
+    private final ReservationPetService reservationPetService;
 
     // 실시간 예약현황 이벤트 발행
     private final ApplicationEventPublisher eventPublisher;
@@ -123,6 +124,9 @@ public class ReservationService {
         }
 
         reservationMapper.insertCreatedHistory(row.getReservationId(), userId, status);
+        // 동반 반려동물 스냅샷. 반려동물은 인원이 아니므로 정원 점유(위)·QR 발급(아래) 어디에도
+        // 영향을 주지 않는다(정책 P6) - 예약 행이 만들어진 뒤에 값만 덧붙인다.
+        reservationPetService.attachPets(row.getReservationId(), userId, context.isPetAllowed(), request.petIds());
         String entryQrToken = paymentRequired ? null : entryQrService.issueForReservation(row.getReservationId());
 
         // 실시간 예약 현황용

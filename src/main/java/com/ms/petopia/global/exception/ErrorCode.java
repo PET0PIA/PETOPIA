@@ -28,6 +28,9 @@ public enum ErrorCode {
     // ===== Pet =====
     PET_NOT_FOUND(HttpStatus.NOT_FOUND, "PT001", "존재하지 않는 반려동물입니다."),
     PET_ACCESS_DENIED(HttpStatus.FORBIDDEN, "PT002", "본인의 반려동물만 조회·수정·삭제할 수 있습니다."),
+    PET_ALLERGY_TYPE_NOT_FOUND(HttpStatus.NOT_FOUND, "PT003", "존재하지 않는 알레르기 항목입니다."),
+    PET_ALLERGY_TYPE_INACTIVE(HttpStatus.BAD_REQUEST, "PT004", "더 이상 선택할 수 없는 알레르기 항목입니다."),
+    PET_ALLERGY_SELECTION_INVALID(HttpStatus.BAD_REQUEST, "PT005", "알레르기 여부와 선택한 항목이 맞지 않습니다."),
 
     // ===== Auth =====
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "A001", "인증이 필요합니다."),
@@ -136,6 +139,7 @@ public enum ErrorCode {
     FAIR_RESERVATION_START_IN_PAST(HttpStatus.BAD_REQUEST, "F031", "예약 시작일은 오늘 이후여야 합니다."),
     FAIR_OPERATION_START_IN_PAST(HttpStatus.BAD_REQUEST, "F032", "행사 운영 시작일은 오늘 이후여야 합니다."),
     FAIR_APPLICATION_VENDOR_NOT_ALLOWED(HttpStatus.FORBIDDEN, "F033", "참가업체 계정은 행사 개최를 신청할 수 없습니다."),
+    FAIR_INVALID_MANAGER_PHONE(HttpStatus.BAD_REQUEST, "F034", "담당자 연락처 형식이 올바르지 않습니다. (예: 01012345678 또는 010-1234-5678)"),
 
     // ===== Reservation =====
     RESERVATION_FAIR_NOT_FOUND(HttpStatus.NOT_FOUND, "R001", "예약할 행사를 찾을 수 없습니다."),
@@ -163,6 +167,8 @@ public enum ErrorCode {
     // 프론트는 이 코드를 받으면 대기 화면으로 보내 토큰을 발급받게 한다.
     WAITING_ROOM_TICKET_REQUIRED(HttpStatus.TOO_MANY_REQUESTS, "R022", "대기열을 통과한 뒤 이용할 수 있습니다."),
     WAITING_ROOM_POLICY_CONFLICT(HttpStatus.CONFLICT, "R023", "대기열 설정이 다른 관리자에 의해 변경되었습니다."),
+    RESERVATION_PET_NOT_ALLOWED(HttpStatus.CONFLICT, "R024", "이 행사는 반려동물 동반이 불가합니다."),
+    RESERVATION_PET_NOT_FOUND(HttpStatus.NOT_FOUND, "R025", "동반할 반려동물을 찾을 수 없습니다."),
 
     // ===== Notification =====
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "N001", "존재하지 않는 알림입니다."),

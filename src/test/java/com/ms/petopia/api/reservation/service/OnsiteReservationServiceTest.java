@@ -50,6 +50,8 @@ class OnsiteReservationServiceTest {
     @Mock
     private EntryQrService entryQrService;
     @Mock
+    private ReservationPetService reservationPetService;
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
@@ -78,6 +80,36 @@ class OnsiteReservationServiceTest {
         verify(reservationMapper).insertReservation(captor.capture());
         assertThat(captor.getValue().getReservationType()).isEqualTo("ONSITE_DIRECT");
         assertThat(captor.getValue().getReservedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("현장예매도 동반 반려동물을 스냅샷으로 담는다")
+    void create_onsiteReservation_attachesPets() {
+        givenOpenContext(0);
+        givenUserAndNoDuplicate();
+        given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801PET00001");
+        assignGeneratedReservationId();
+
+        service.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateOnsiteReservationRequest(null, null, java.util.List.of(7L))
+        );
+
+        verify(reservationPetService).attachPets(RESERVATION_ID, USER_ID, true, java.util.List.of(7L));
+    }
+
+    @Test
+    @DisplayName("본문 없이 호출한 무료 현장예매는 동반 없음으로 처리한다")
+    void create_onsiteReservationWithoutBody_attachesNoPets() {
+        givenOpenContext(0);
+        givenUserAndNoDuplicate();
+        given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801PET00002");
+        assignGeneratedReservationId();
+
+        service.create(FAIR_ID, USER_ID, null);
+
+        verify(reservationPetService).attachPets(RESERVATION_ID, USER_ID, true, null);
     }
 
     @Test
@@ -257,6 +289,7 @@ class OnsiteReservationServiceTest {
         context.setEntryEndTime(LocalTime.of(18, 0));
         context.setOnsitePrice(price);
         context.setOnsiteSalesStatus(status);
+        context.setPetAllowed(true);
         return context;
     }
 

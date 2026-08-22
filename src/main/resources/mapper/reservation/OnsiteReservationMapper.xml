@@ -15,6 +15,7 @@
              , f.status AS fair_status
              , f.published_at
              , f.canceled_at
+             , f.pet_allowed
              , fd.fair_date_id
              , fd.operation_date
              , fd.entry_start_time

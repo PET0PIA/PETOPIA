@@ -112,6 +112,7 @@ public class SecurityConfig {
                         // Fair 도메인 - 공개(publish)는 그 행사 담당 EVENT_ADMIN도 할 수 있다. 담당
                         // fair인지(소유자 검증)는 FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/publish").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/publish-status").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/fair-cancel-requests/*/review").hasRole("SUPER_ADMIN")
                         // Fair 도메인 - 취소 신청 큐(전체 행사를 가로질러 조회, fairId 없이 접근).
                         // "/api/fairs/*/fair-cancel-requests"와 경로 자체가 다르므로(prefix가
@@ -143,7 +144,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews").permitAll()
                         // Review 도메인 - 행사관리자 통계(카테고리별 태그 TOP5 등)는 그 행사 담당
                         // EVENT_ADMIN 또는 SUPER_ADMIN만 - FairAdminAccessGuard가 서비스 계층에서 확인한다.
-                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/stats").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/stats", "/api/fairs/*/reviews/stats/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // FeedbackTag 도메인 - 태그 마스터 활성 목록 조회는 누구나(리뷰 마법사에서 사용).
                         // 등록·수정·사용현황 조회는 SUPER_ADMIN만.
                         .requestMatchers(HttpMethod.GET, "/api/feedback-tags").permitAll()
