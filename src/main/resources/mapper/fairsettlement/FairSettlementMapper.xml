@@ -87,6 +87,7 @@
         UPDATE fair_settlement
         SET gross_amount = #{grossAmount},
         refund_amount = #{refundAmount},
+        commission_rate = #{commissionRate},
         commission_amount = #{commissionAmount},
         net_amount = #{netAmount},
         needs_recalculation = FALSE,

@@ -60,6 +60,8 @@ export interface ConfirmedBoothResponse {
   boothId: number;
   businessName: string;
   imageUrl: string | null;
+  category: string | null;
+  targetAnimal: BoothTargetAnimal | null;
   slotNumber: string;
   posX: number | null;
   posY: number | null;

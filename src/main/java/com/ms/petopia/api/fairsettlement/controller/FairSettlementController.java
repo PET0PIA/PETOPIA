@@ -36,10 +36,14 @@ public class FairSettlementController {
         return fairSettlementService.confirm(fairSettlementId, userId);
     }
 
-    // 정산 재계산(SUPER_ADMIN 전용, 2026-08-22 재조정 - 담당 EVENT_ADMIN도 불가).
+    // 정산 재계산(SUPER_ADMIN 전용, 2026-08-22 재조정 - 담당 EVENT_ADMIN도 불가). 요율이
+    // 바뀌었으면 감사로그(SETTLEMENT_RATE_CHANGED)에 남기므로 행위자 userId가 필요하다.
     @PutMapping("/settlements/final/{fairSettlementId}/recalculate")
-    public FairSettlementResponse recalculate(@PathVariable Long fairSettlementId) {
-        return fairSettlementService.recalculate(fairSettlementId);
+    public FairSettlementResponse recalculate(
+            @PathVariable Long fairSettlementId,
+            @AuthenticationPrincipal Long userId
+    ) {
+        return fairSettlementService.recalculate(fairSettlementId, userId);
     }
 
     // 확정된 정산을 PENDING으로 되돌린다(SUPER_ADMIN 전용, SecurityConfig에서도 강제).
