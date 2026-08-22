@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { downloadVisitStatsExcel } from "../../api/statistics";
+import { ReviewStatsSection } from "../../components/fair-admin/ReviewStatsSection";
 import { VisitStatsSection } from "../../components/fair-admin/VisitStatsSection";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -89,7 +90,12 @@ export function VisitStatisticsPage() {
         <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 방문 통계가 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
       )}
 
-      {fairId !== null && <VisitStatsSection fairId={fairId} />}
+      {fairId !== null && (
+        <div className="flex flex-col gap-10">
+          <VisitStatsSection fairId={fairId} />
+          <ReviewStatsSection fairId={fairId} />
+        </div>
+      )}
     </div>
   );
 }
