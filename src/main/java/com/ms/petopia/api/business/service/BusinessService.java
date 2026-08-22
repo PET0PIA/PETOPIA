@@ -4,6 +4,7 @@ import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.auth.service.UserRoleService;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.request.BusinessRejectRequest;
@@ -45,6 +46,7 @@ public class BusinessService {
     private final ApplicationService applicationService;
     private final NotificationService notificationService;
     private final AuthMapper authMapper;
+    private final MailService mailService;
 
     // 사업자 등록(국세청 진위확인 포함)
     public BusinessResponse registerBusiness(Long ownerId, BusinessRegisterRequest request) {
@@ -206,7 +208,9 @@ public class BusinessService {
         // 알림
         notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_APPROVED,
                 "사업자 등록이 승인되었습니다",
-                "사업자 등록이 승인되어 참가 신청이 가능합니다.");
+                "사업자 등록이 승인되어 참가 신청이 가능합니다.",
+                () -> withRecipientEmail(business.getOwnerId(),
+                        email -> mailService.sendBusinessApprovedEmail(email)));
 
         return BusinessReviewResultResponse.builder()
                 .businessId(businessId)
@@ -243,7 +247,9 @@ public class BusinessService {
         // 알림
         notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_REJECTED,
                 "사업자 등록이 반려되었습니다",
-                "반려 사유: " + request.getRejectReason());
+                "반려 사유: " + request.getRejectReason(),
+                () -> withRecipientEmail(business.getOwnerId(),
+                        email -> mailService.sendBusinessRejectedEmail(email, request.getRejectReason())));
 
         return BusinessReviewResultResponse.builder()
                 .businessId(businessId)
@@ -288,7 +294,9 @@ public class BusinessService {
         // 알림
         notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_REVOKED,
                 "사업자 등록이 취소되었습니다",
-                "취소 사유: " + request.getRevokeReason());
+                "취소 사유: " + request.getRevokeReason(),
+                () -> withRecipientEmail(business.getOwnerId(),
+                        email -> mailService.sendBusinessRevokedEmail(email, request.getRevokeReason())));
 
         return BusinessReviewResultResponse.builder()
                 .businessId(businessId)
@@ -304,7 +312,8 @@ public class BusinessService {
      * 본 로직(승인/반려/취소 처리)은 이미 끝난 뒤이므로 예외를 던져 되돌리지 않는다
      * (ApplicationService.notifyApplicationEvent와 동일한 이유).
      */
-    private void notifyBusinessEvent(Long recipientUserId, NotificationType type, String title, String body) {
+    private void notifyBusinessEvent(Long recipientUserId, NotificationType type, String title, String body,
+                                     Runnable emailAction) {
 
         try {
 
@@ -315,7 +324,7 @@ public class BusinessService {
                     title,
                     body,
                     null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                    List.of(DeliveryChannel.IN_APP),
                     null
             ));
 
@@ -323,16 +332,33 @@ public class BusinessService {
             log.error("사업자 심사 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
         }
 
+        if (emailAction != null) {
+            try {
+                emailAction.run();
+            } catch (Exception e) {
+                log.error("사업자 심사 이메일 발송 실패. recipientUserId={}, type={}", recipientUserId, type, e);
+            }
+        }
+
     }
 
-    private void notifyBusinessEventAfterCommit(Long recipientUserId, NotificationType type, String title, String body) {
+    private void notifyBusinessEventAfterCommit(Long recipientUserId, NotificationType type, String title,
+                                                 String body, Runnable emailAction) {
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                notifyBusinessEvent(recipientUserId, type, title, body);
+                notifyBusinessEvent(recipientUserId, type, title, body, emailAction);
             }
         });
+
+    }
+
+    private void withRecipientEmail(Long userId, java.util.function.Consumer<String> action) {
+        User user = authMapper.selectUserById(userId);
+        if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+            action.accept(user.getEmail());
+        }
 
     }
 

@@ -4,6 +4,7 @@ import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.auth.service.UserRoleService;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.dto.request.BusinessRegisterRequest;
 import com.ms.petopia.api.business.dto.request.BusinessRejectRequest;
@@ -77,6 +78,9 @@ class BusinessServiceTest {
 
     @Mock
     private AuthMapper authMapper;
+
+    @Mock
+    private MailService mailService;
 
     @InjectMocks
     private BusinessService businessService;
@@ -536,7 +540,7 @@ class BusinessServiceTest {
         }
 
         @Test
-        @DisplayName("승인 성공 시 소유자에게 인앱+이메일로 BUSINESS_APPROVED 알림을 보낸다")
+        @DisplayName("승인 성공 시 소유자에게 인앱 알림과 HTML 이메일을 각각 보낸다")
         void notifiesOwnerWhenApproved() {
 
             // given
@@ -545,16 +549,19 @@ class BusinessServiceTest {
             given(businessMapper.selectByIdForReview(1L)).willReturn(business);
             given(businessMapper.updateApprovalApproved(eq(1L), eq(2L), any())).willReturn(1);
             given(businessMapper.existsApprovedBusinessForOwner(10L, 1L)).willReturn(false);
+            given(authMapper.selectUserById(10L)).willReturn(
+                    User.builder().userId(10L).email("owner10@test.com").role("VENDOR").build());
 
             // when
             businessService.approveBusiness(2L, 1L);
             simulateTransactionCommit();
 
-            // then: 소유자(10L)에게 BUSINESS_APPROVED 타입으로, IN_APP+EMAIL 채널 모두 알림이 저장됐는지 확인
+            // then: 인앱은 IN_APP 채널만(이메일은 MailService가 별도 HTML로 보낸다), 이메일은 승인 안내 메서드로 발송
             verify(notificationService).save(argThat(req ->
                     req.userId().equals(10L)
                             && req.type() == NotificationType.BUSINESS_APPROVED
-                            && req.channels().containsAll(List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL))));
+                            && req.channels().equals(List.of(DeliveryChannel.IN_APP))));
+            verify(mailService).sendBusinessApprovedEmail("owner10@test.com");
 
         }
 
@@ -626,7 +633,7 @@ class BusinessServiceTest {
         }
 
         @Test
-        @DisplayName("반려 성공 시 소유자에게 인앱+이메일로 BUSINESS_REJECTED 알림을 보낸다")
+        @DisplayName("반려 성공 시 소유자에게 인앱 알림과 HTML 이메일을 각각 보낸다")
         void notifiesOwnerWhenRejected() {
 
             // given
@@ -636,17 +643,20 @@ class BusinessServiceTest {
 
             given(businessMapper.selectByIdForReview(1L)).willReturn(business);
             given(businessMapper.updateApprovalRejected(eq(1L), eq(2L), eq("서류 불일치"), any())).willReturn(1);
+            given(authMapper.selectUserById(10L)).willReturn(
+                    User.builder().userId(10L).email("owner10@test.com").role("VENDOR").build());
 
             // when
             businessService.rejectBusiness(2L, 1L, request);
             simulateTransactionCommit();
 
-            // then: 소유자(10L)에게 BUSINESS_REJECTED 타입으로, IN_APP+EMAIL 채널 모두 알림이 저장됐는지 확인
+            // then: 인앱은 IN_APP 채널만, 반려 사유는 이메일 쪽으로 전달됐는지 확인
             verify(notificationService).save(argThat(req ->
                     req.userId().equals(10L)
                             && req.type() == NotificationType.BUSINESS_REJECTED
                             && req.body().contains("서류 불일치")
-                            && req.channels().containsAll(List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL))));
+                            && req.channels().equals(List.of(DeliveryChannel.IN_APP))));
+            verify(mailService).sendBusinessRejectedEmail("owner10@test.com", "서류 불일치");
 
         }
 
@@ -746,7 +756,7 @@ class BusinessServiceTest {
         }
 
         @Test
-        @DisplayName("취소 성공 시 소유자에게 인앱+이메일로 BUSINESS_REVOKED 알림을 보낸다")
+        @DisplayName("취소 성공 시 소유자에게 인앱 알림과 HTML 이메일을 각각 보낸다")
         void notifiesOwnerWhenRevoked() {
 
             // given
@@ -757,17 +767,20 @@ class BusinessServiceTest {
             given(businessMapper.selectByIdForReview(1L)).willReturn(business);
             given(businessMapper.updateApprovalRevoked(eq(1L), eq(2L), eq("조작 서류 발각"), any())).willReturn(1);
             given(businessMapper.existsApprovedBusinessForOwner(10L, 1L)).willReturn(false);
+            given(authMapper.selectUserById(10L)).willReturn(
+                    User.builder().userId(10L).email("owner10@test.com").role("VENDOR").build());
 
             // when
             businessService.revokeBusiness(2L, 1L, request);
             simulateTransactionCommit();
 
-            // then: 소유자(10L)에게 BUSINESS_REVOKED 타입으로, IN_APP+EMAIL 채널 모두 알림이 저장됐는지 확인
+            // then: 인앱은 IN_APP 채널만, 취소 사유는 이메일 쪽으로 전달됐는지 확인
             verify(notificationService).save(argThat(req ->
                     req.userId().equals(10L)
                             && req.type() == NotificationType.BUSINESS_REVOKED
                             && req.body().contains("조작 서류 발각")
-                            && req.channels().containsAll(List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL))));
+                            && req.channels().equals(List.of(DeliveryChannel.IN_APP))));
+            verify(mailService).sendBusinessRevokedEmail("owner10@test.com", "조작 서류 발각");
 
         }
 

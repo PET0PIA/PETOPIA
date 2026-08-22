@@ -2,6 +2,7 @@ package com.ms.petopia.api.refund.service;
 
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
@@ -24,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -69,6 +72,7 @@ public class RefundService {
     private final FairAdminAccessGuard fairAdminAccessGuard;
     private final RecruitNoticeMapper recruitNoticeMapper;
     private final AuthMapper authMapper;
+    private final MailService mailService;
 
     /**
      * 환불 요청자가 결제 소유자 또는 그 행사 담당 EVENT_ADMIN/SUPER_ADMIN인지 확인한다
@@ -236,13 +240,30 @@ public class RefundService {
                     "환불 금액 " + refund.getRefundAmount() + "원이 처리되었습니다. "
                             + "카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.",
                     null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                    List.of(DeliveryChannel.IN_APP),
                     null
             ));
         } catch (Exception e) {
             log.error("환불 완료 알림 저장 실패. refundId={}, paymentId={}",
                     refund.getRefundId(), refund.getPaymentId(), e);
         }
+        Long payerUserId = payment.getPayerUserId();
+        Long refundId = refund.getRefundId();
+        Long paymentId = refund.getPaymentId();
+        long refundAmount = refund.getRefundAmount();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    User user = authMapper.selectUserById(payerUserId);
+                    if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+                        mailService.sendRefundCompletedEmail(user.getEmail(), refundAmount);
+                    }
+                } catch (Exception e) {
+                    log.error("환불 완료 이메일 발송 실패. refundId={}, paymentId={}", refundId, paymentId, e);
+                }
+            }
+        });
         notifyRefundCompletedToAdmins(payment, refund);
     }
 
