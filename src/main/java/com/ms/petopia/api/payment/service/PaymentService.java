@@ -725,20 +725,25 @@ public class PaymentService {
     }
 
     private void notifyPaymentCompleted(PaymentRow row) {
-        try {
-            notificationService.save(new SaveNotificationDto.Request(
-                    row.getPayerUserId(),
-                    RecipientType.USER,
-                    NotificationType.PAYMENT_COMPLETED,
-                    "결제가 완료되었습니다",
-                    row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
-                    null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
-                    null
-            ));
-        } catch (Exception e) {
-            log.error("결제 완료 알림 저장 실패. paymentId={}, userId={}",
-                    row.getPaymentId(), row.getPayerUserId(), e);
+        // RESERVATION_DEPOSIT은 예약 도메인이 별도로 RESERVATION_CONFIRMED를 보내므로
+        // (ReservationPaymentCompletionService.complete() 참고) 사용자에게는 이 알림을 생략한다 —
+        // 안 그러면 같은 결제 1건에 "결제 완료"와 "예약 확정" 알림이 중복으로 간다.
+        if (!"RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
+            try {
+                notificationService.save(new SaveNotificationDto.Request(
+                        row.getPayerUserId(),
+                        RecipientType.USER,
+                        NotificationType.PAYMENT_COMPLETED,
+                        "결제가 완료되었습니다",
+                        row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
+                        null,
+                        List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                        null
+                ));
+            } catch (Exception e) {
+                log.error("결제 완료 알림 저장 실패. paymentId={}, userId={}",
+                        row.getPaymentId(), row.getPayerUserId(), e);
+            }
         }
         notifyPaymentCompletedToAdmins(row);
     }
