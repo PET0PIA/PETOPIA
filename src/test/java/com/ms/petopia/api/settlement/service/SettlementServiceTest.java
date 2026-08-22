@@ -22,6 +22,7 @@ import com.ms.petopia.api.settlement.dto.SettlementRow;
 import com.ms.petopia.api.settlement.mapper.SettlementMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -90,6 +92,20 @@ class SettlementServiceTest {
     void stubFairNotCanceledByDefault() {
         lenient().when(fairContractClient.getCancellationStatus(anyLong()))
                 .thenReturn(notCanceledStatus(10L));
+    }
+
+    @BeforeEach
+    void setUpTransactionSynchronization() {
+        // notifySettlementCompletedAfterCommit이 정산 확정 알림을 afterCommit 콜백으로
+        // 미루므로(커밋 전 발송 방지), 활성 트랜잭션 동기화 컨텍스트가 있어야
+        // registerSynchronization이 IllegalStateException 없이 통과한다
+        // (FairCancelRequestServiceTest와 동일한 이유).
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    @AfterEach
+    void tearDownTransactionSynchronization() {
+        TransactionSynchronizationManager.clearSynchronization();
     }
 
     private FairCancellationStatus notCanceledStatus(Long fairId) {
