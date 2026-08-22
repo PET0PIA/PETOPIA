@@ -49,4 +49,18 @@ public class PaymentRow {
     /** 입금 웹훅 검증용 secret. 절대 API 응답으로 노출하면 안 돼서 toString에서도 제외한다. */
     @Exclude
     private String virtualAccountSecret;
+
+    /**
+     * 아래 6개는 REFUND 테이블을 LEFT JOIN해서 채운다(selectByIdWithRefund/selectByFilter 전용 -
+     * selectById/selectByIdForUpdate 등 내부 비즈니스 로직이 쓰는 조회는 그대로 둬서 불필요한
+     * JOIN 비용을 안 지운다). 이 결제에 걸린 환불이 없으면 전부 null. UK_REFUND_PAYMENT
+     * 덕분에 결제 1건당 환불은 최대 1건이라 컬럼으로 바로 붙여도 행이 늘어나지 않는다.
+     */
+    private Long refundId;
+    private String refundStatus;
+    private Long refundAmount;
+    private String refundReason;
+    private String refundRequestedByDomain;
+    private LocalDateTime refundRequestedAt;
+    private LocalDateTime refundProcessedAt;
 }

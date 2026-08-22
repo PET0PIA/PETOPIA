@@ -4,6 +4,8 @@ import com.ms.petopia.api.refund.dto.RefundRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 /**
  * REFUND 테이블 조회용 매퍼.
  *
@@ -20,6 +22,13 @@ public interface RefundMapper {
      * 정산 집계 시 "이 결제가 환불됐는지"를 판단하는 데 쓴다.
      */
     RefundRow selectByPaymentId(@Param("paymentId") Long paymentId);
+
+    /**
+     * selectByPaymentId를 여러 건 한 번에 조회하는 배치 버전(2026-08-22). 결제 여러 건의
+     * 환불 여부를 한 번에 확인해야 하는 정산 집계(FairSettlementService.aggregate)에서
+     * 건당 쿼리를 피하려고 쓴다. paymentIds가 비어있으면 빈 리스트를 그대로 반환한다.
+     */
+    List<RefundRow> selectByPaymentIds(@Param("paymentIds") List<Long> paymentIds);
 
     /**
      * selectByPaymentId와 같지만 잠금 읽기다. "이미 환불됐으면 그걸 재사용, 없으면 새로 생성"을

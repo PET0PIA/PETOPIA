@@ -43,6 +43,15 @@ export interface PaymentDetail {
   virtualAccountBankCode: string | null;
   virtualAccountNumber: string | null;
   virtualAccountDueDate: string | null;
+  // 아래 7개는 이 결제에 걸린 환불이 있을 때만 값이 있다(없으면 전부 null). getPayments/
+  // getMyPayments(목록)와 getPayment(상세)만 채워준다 - 그 외 결제 생성/확정 응답에는 항상 null.
+  refundId: number | null;
+  refundStatus: "REQUESTED" | "COMPLETED" | "REJECTED" | null;
+  refundAmount: number | null;
+  refundReason: string | null;
+  refundRequestedByDomain: string | null;
+  refundRequestedAt: string | null;
+  refundProcessedAt: string | null;
 }
 
 export interface PaymentListResult {

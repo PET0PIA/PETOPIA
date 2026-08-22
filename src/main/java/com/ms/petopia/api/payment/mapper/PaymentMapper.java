@@ -1,5 +1,6 @@
 package com.ms.petopia.api.payment.mapper;
 
+import com.ms.petopia.api.payment.dto.FairRevenueSummaryRow;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -21,6 +22,14 @@ public interface PaymentMapper {
      * 서비스 계층의 책임으로 남겨둔다).
      */
     PaymentRow selectById(@Param("paymentId") Long paymentId);
+
+    /**
+     * selectById와 동일하지만 REFUND 테이블을 LEFT JOIN해서 환불 정보(있으면)까지 한 번에 담아온다.
+     * HTTP 상세조회 진입점({@code GET /api/payments/{paymentId}}) 전용 - 결제 상세 화면에
+     * "환불 정보" 섹션을 보여주기 위함. 다른 내부 호출부는 불필요한 JOIN을 피하려고 그대로
+     * selectById를 쓴다.
+     */
+    PaymentRow selectByIdWithRefund(@Param("paymentId") Long paymentId);
 
     /**
      * selectById와 동일하지만 {@code FOR UPDATE}로 행을 잠근다. 환불(RefundService)과 정산 계산
@@ -146,6 +155,12 @@ public interface PaymentMapper {
             @Param("fairId") Long fairId, @Param("businessId") Long businessId);
 
     /**
+     * 행사별 최종정산 집계용(2026-08-22) — 위와 같은 조건이지만 businessId 없이 그 행사에
+     * 참가한 모든 업체의 완료된 참가비(VENDOR_FEE) 결제를 합쳐서 조회한다.
+     */
+    List<PaymentRow> selectCompletedVendorFeePaymentsByFair(@Param("fairId") Long fairId);
+
+    /**
      * 조건별 결제 목록 조회. {@code GET /api/payments}(관리자용, fairId·businessId·paymentType·
      * status·reservationId 조합)와 {@code GET /api/me/payments}(마이페이지, payerUserId만)가
      * 같이 쓴다. 파라미터가 null이면 그 조건은 걸지 않는다(전부 AND로 조합).
@@ -168,4 +183,17 @@ public interface PaymentMapper {
             @Param("status") String status,
             @Param("payerUserId") Long payerUserId,
             @Param("reservationId") Long reservationId);
+
+    /**
+     * 행사별 매출 요약(SUPER_ADMIN 정산·수수료 화면용) — 행사마다 완료된 예약금(티켓)과
+     * 참가비 합계를 각각 환불 차감해서 한 행씩 반환한다. 매출이 없는 행사도(둘 다 0으로)
+     * 전부 포함한다 - fairs 테이블 기준으로 LEFT JOIN하기 때문.
+     */
+    List<FairRevenueSummaryRow> selectFairRevenueSummary();
+
+    /**
+     * 위 selectFairRevenueSummary와 같은 집계를 행사 하나로 좁힌 버전(EVENT_ADMIN 담당 행사
+     * 정산 화면용, 2026-08-22). 그 fairId가 fairs에 없으면 null.
+     */
+    FairRevenueSummaryRow selectFairRevenueSummaryByFairId(@Param("fairId") Long fairId);
 }
