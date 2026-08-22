@@ -72,14 +72,14 @@
 - `needsAgentReply()` → `WAITING_AGENT`만 `true`.
 - `ChatLockReason` → `CLOSED` 하나만 남김.
 
-## 4. 스키마 — `V46__chat_rework.sql`
+## 4. 스키마 — `V48__chat_rework.sql`
 
-`V28~V30`은 이미 머지되었으므로 손대지 않는다. 변경은 전부 V46 한 파일에 담는다.
+`V28~V30`은 이미 머지되었으므로 손대지 않는다. 변경은 전부 V48 한 파일에 담는다.
 
-번호 근거: dev의 마지막 번호는 `V44`이고, `V45`는 `feature/settlement-fair-revenue-summary`가
-이미 쓰고 있다. 그 브랜치가 먼저 들어오지 않으면 번호가 한 칸 비는데 Flyway는 이를 문제 삼지
-않는다. **다만 머지 직전에 dev의 최신 번호를 한 번 더 확인한다** — 지금 열려 있는 브랜치가
-그 브랜치 하나뿐이라는 보장은 없다.
+번호는 처음 `V46`으로 잡았다가 `V48`로 올렸다. ~~머지 직전에 dev의 최신 번호를 한 번 더
+확인한다~~고 적어둔 그 확인을 하지 않아, PR이 열려 있는 동안 다른 브랜치가 `V47`을 먼저
+머지·배포했다. 운영 DB가 47까지 적용된 뒤 46이 도착하자 Flyway가 기동을 막았다 — 경위와
+후속 처리는 12-3에 적었다.
 
 ```sql
 -- 1) 고정형 버튼 클릭 집계
@@ -95,7 +95,9 @@ CREATE TABLE `chat_menu_click` (
 ) COMMENT = '고정형 문의 유형 클릭 집계';
 
 -- 2) AI 유형 버튼 정리 (기존 데이터 방어. 시딩에는 AI 유형이 없다)
-UPDATE `chat_menu` SET `is_active` = 0 WHERE `answer_type` = 'AI';
+-- 내리는 것만으로는 부족하다. 값이 'AI'로 남으면 enum에 없는 값이 되고, 비활성 행까지 읽는
+-- 관리자 목록 조회가 Enum.valueOf에서 터진다 - 12-3.
+UPDATE `chat_menu` SET `is_active` = 0, `answer_type` = 'FIXED' WHERE `answer_type` = 'AI';
 ALTER TABLE `chat_menu`
     MODIFY COLUMN `answer_type` VARCHAR(10) NOT NULL COMMENT 'FIXED | AGENT',
     DROP COLUMN `ai_context`;
@@ -188,7 +190,7 @@ Redis(`ChatAiRateLimiter`)가 아니라 **대화 행의 조건부 UPDATE**로 �
 사용자 메시지 커밋이 한 트랜잭션에 묶인다. Redis로 하면 "장애 시 열어줄까 닫을까"라는 답 없는
 질문이 생긴다 — 닫으면 야간 자동 응대가 통째로 멈추고, 열면 정작 막으려던 중복이 그대로 난다.
 
-V46에 컬럼 한 개를 더한다.
+V48에 컬럼 한 개를 더한다.
 
 ```sql
 ALTER TABLE `chat_conversation`
@@ -372,7 +374,7 @@ ALTER TABLE `chat_conversation`
 
 ## 7. 작업 순서
 
-1. **스키마** — `V46__chat_rework.sql` 작성, 로컬 마이그레이션 검증.
+1. **스키마** — `V48__chat_rework.sql` 작성, 로컬 마이그레이션 검증.
 2. **백엔드 상태 모델** — enum(`ChatAnswerType`, `ChatConversationStatus`, `ChatLockReason`), 매퍼 statement 교체. 이 단계에서 컴파일이 깨지는 지점이 곧 영향 범위 목록이 된다.
 3. **백엔드 AI 경로** — 한도 관련 코드 제거, `AI_CONTEXT`/`AI_CLOSING_NOTE` 반영, `AI_HANDLED` 전이.
 4. **백엔드 API** — 클릭 집계 엔드포인트, `start()` 유형 제한, bootstrap 응답 확장.
@@ -488,7 +490,7 @@ ALTER TABLE `chat_conversation`
 ## 10. 수동 검증 결과 (2026-08-22)
 
 로컬 `petopia_db`가 V27 미적용 상태로 드리프트돼 있어 그 스키마는 손대지 않고, 별도 스키마
-`petopia_verify`에 앱을 띄워 검증했다. **V1→V46 42개 마이그레이션이 한 번에 깨끗히 적용됐다** —
+`petopia_verify`에 앱을 띄워 검증했다. **V1→V46(현재 V48) 42개 마이그레이션이 한 번에 깨끗히 적용됐다** —
 4장을 부분 체인(V28→V30→V41→V46)으로만 확인했던 것보다 강한 검증이다.
 
 | 항목 | 결과 | 확인 방법 |
@@ -570,3 +572,45 @@ PR #226에 붙은 자동 리뷰 10건(인라인 7 · diff 밖 1 · nitpick 2)을
 테스트는 40건(이관 안내의 상태 게이트 1건 추가). `Docstring Coverage` 사전 점검(38.68% <
 80%)은 경고로 남겨둔다 - 이 레포의 다른 화면과 같은 밀도이고, 임계를 맞추려면 이 PR과
 무관한 함수까지 손대야 한다.
+
+### 12-3. 배포 사고 — 마이그레이션 번호 충돌 (2026-08-22 23:05)
+
+`main` 머지 뒤 앱이 기동하지 못했다. 그런데 ALB는 옛 컨테이너로 계속 트래픽을 보냈고 Vercel은
+`main`에서 새 프론트를 배포했기 때문에, **화면만 새 버전이 되고 API는 구버전이 답하는** 상태가
+몇십 분 유지됐다. 장애로 보이지 않아서 더 오래 갔다.
+
+```
+FlywayValidateException: Validate failed: Migrations have failed validation
+Detected resolved migration not applied to database: 46.
+```
+
+경위. 이 PR이 열려 있는 동안 다른 브랜치가 `V47__drop_pet_age_snapshot.sql`을 먼저 머지·배포해
+운영 DB가 47까지 적용됐다. 그 뒤 도착한 46은 Flyway에게 "과거 번호"이고, `out-of-order: false`는
+그것을 적용하지 않고 기동을 막는다. 4장에 **"머지 직전에 dev의 최신 번호를 한 번 더 확인한다"**
+고 적어두고 그 확인을 하지 않은 것이 원인이다.
+
+사용자에게 보인 증상 세 개는 전부 이 하나에서 나왔다.
+
+| 증상 | 새 프론트가 기대한 것 | 구 백엔드가 준 것 |
+| --- | --- | --- |
+| 고정 답변 말풍선이 빈다 | bootstrap 응답의 `fixedAnswer` | 그 필드가 없다(재설계 이전 DTO) |
+| 관리자 화면에 고정 답변 입력창이 없는 버튼이 있다 | `answerType`이 FIXED \| AGENT | `VENDOR_INQUIRY`가 `AI` → select는 값이 없으면 첫 option을 그린다 |
+| 클릭 집계가 404 (`C003`) | `POST /menus/{code}/clicks` | 그 매핑이 없다(이번 PR에서 추가) |
+
+처리.
+
+1. `V46__chat_rework.sql` → `V48__chat_rework.sql`로 번호를 올렸다. `out-of-order`를 켜는 쪽이
+   더 짧지만, 그 플래그는 지금 같은 사고를 막으려고 의도적으로 꺼둔 값이라(application.yaml)
+   켜면 다음부터 같은 상황이 조용히 지나간다. 46은 운영에 적용된 적이 없어(에러가 "not
+   applied"다) 부분 적용을 되돌릴 일도 없었다.
+2. 같은 파일의 AI 행 정리에 `answer_type = 'FIXED'` 변환을 더했다. 원래는 비활성만 시켰는데,
+   값이 'AI'로 남으면 `selectAllMenus`(비활성 포함)가 `ChatAnswerType`에 없는 값을 만나
+   `Enum.valueOf`에서 던진다 — 배포가 성공하는 순간 상담 설정 화면 전체가 500이 될 자리였다.
+   운영의 `VENDOR_INQUIRY`가 실제로 그 행이다.
+
+다음에 같은 사고를 막는 방법. 번호는 짐작하지 말고 머지 직전에 `git fetch && ls
+src/main/resources/db/migration | sort -V | tail -1`로 확인한다. 열린 PR이 마이그레이션을 들고
+있는지도 함께 본다 - 이번에는 PR 목록만 봤으면 V47을 미리 봤다.
+
+로컬에 V46을 적용한 스키마가 있으면(10장의 `petopia_verify`) 이 rename 뒤에는 "applied
+migration not resolved: 46"으로 막힌다. 그 스키마는 다시 만들어야 한다.
