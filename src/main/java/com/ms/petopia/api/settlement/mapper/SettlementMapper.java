@@ -25,6 +25,12 @@ public interface SettlementMapper {
     List<SettlementRow> selectByFairId(@Param("fairId") Long fairId);
 
     /**
+     * fairId·businessId 둘 다 선택적인 조건 조회(SUPER_ADMIN 전용 통합검색, 2026-08-21).
+     * 넘긴 값만 AND로 조합한다 - 서비스 계층이 최소 하나는 채워졌는지 검증한다.
+     */
+    List<SettlementRow> selectByFilter(@Param("fairId") Long fairId, @Param("businessId") Long businessId);
+
+    /**
      * 결제 PK가 포함된 정산의 PK를 조회한다(UK_SETTLEMENT_ITEM_PAYMENT 덕분에 결제 1건당 최대
      * 1행). 포함된 정산이 없으면 null. {@link #markNeedsRecalculation} 호출 대상을 찾는 데 쓴다.
      *

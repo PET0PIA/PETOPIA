@@ -9,7 +9,7 @@ import { ApiError } from "../../api/client";
 import { getFairPublicSummary, type FairPublicSummary } from "../../api/fair";
 import { getReservationAvailability, type ReservationAvailability } from "../../api/reservation";
 import { todayInSeoul } from "../../utils/date";
-import { fairCategoryLabels, formatFairPeriodDow } from "./fairCard";
+import { fairCategoryLabels, formatFairPeriodDow, isFairInProgress } from "./fairCard";
 import { FairParticipatingBooths } from "./FairParticipatingBooths";
 import { FairReviews } from "./FairReviews";
 
@@ -116,10 +116,20 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
     );
   }
 
-  const ended = !!fair.operationEndDate && fair.operationEndDate < todayInSeoul();
+  // 생애주기(진행 중·종료)는 서버 status를 먼저 믿는다. 목록의 FairPublicListItem.status 주석과
+  // 같은 원칙으로, 사용자 PC 날짜가 틀려도 판정이 흔들리지 않게 한다. status가 비어 있을 때만
+  // (백엔드가 null로 줄 수 있다) 날짜로 판정한다 - 운영종료일이 없는 행사도 이 경우에 들어온다.
+  const endedByDate = !!fair.operationEndDate && fair.operationEndDate < todayInSeoul();
+  const ended = fair.status === "ENDED" ? true : fair.status === "IN_PROGRESS" ? false : endedByDate;
   const indoorOutdoor = fair.indoorOutdoor ? INDOOR_OUTDOOR_LABELS[fair.indoorOutdoor] ?? null : null;
   // 예매 가능 = 예매 창이 열려(availability 성공) 잔여석 있는 날짜가 하나라도 있음.
   const reservable = !ended && !!availability && availability.dates.some((date) => date.available);
+  // 운영 중인 행사. 사전예약이 닫혔어도(reservable=false) 현장예매는 열려 있을 수 있으므로
+  // 버튼을 비활성으로 막지 않고 예매 화면으로 보낸다 - 그 화면이 사전예약과 현장예매를 둘 다
+  // 다루고, 판매 상태·입장 마감 같은 최종 판정은 백엔드가 한다.
+  // 위 ended가 status를 먼저 보므로 진행 중이면 ended는 반드시 false다(!ended는 불필요).
+  // status가 비었을 때 운영기간으로 판정하는 폴백은 ended와 같은 규칙을 쓴다(isFairInProgress).
+  const inProgress = isFairInProgress(fair.status, fair.operationStartDate, fair.operationEndDate);
   const schedule = availability?.dates ?? [];
 
   return (
@@ -138,7 +148,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
           )}
           <span className="min-w-0 flex-1 truncate text-sm font-extrabold sm:text-base">{fair.name}</span>
           <div className="shrink-0">
-            <ReserveButton reservable={reservable} ended={ended} fairId={fair.fairId} size="sm" />
+            <ReserveButton reservable={reservable} ended={ended} inProgress={inProgress} fairId={fair.fairId} size="sm" />
           </div>
         </div>
       </div>
@@ -201,8 +211,12 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
               </p>
             )}
             <div>
-              <ReserveButton reservable={reservable} ended={ended} fairId={fair.fairId} size="lg" />
-              {!reservable && !ended && availabilityError && <p className="mt-2 text-sm text-muted">{availabilityError}</p>}
+              <ReserveButton reservable={reservable} ended={ended} inProgress={inProgress} fairId={fair.fairId} size="lg" />
+              {/* 사전예약 조회 실패 사유(R003 등)는 할 수 있는 행동이 없을 때만 띄운다 -
+                  현장예매 버튼 아래에 "예약을 접수하지 않는 행사"라고 붙으면 서로 어긋난다. */}
+              {!reservable && !ended && !inProgress && availabilityError && (
+                <p className="mt-2 text-sm text-muted">{availabilityError}</p>
+              )}
             </div>
           </div>
         </div>
@@ -254,15 +268,30 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
 }
 
 /** 예매 CTA. 상단 헤더(size="lg")와 스크롤 고정 바(size="sm")가 같은 상태 판정을 공유한다. */
-function ReserveButton({ reservable, ended, fairId, size }: { reservable: boolean; ended: boolean; fairId: number; size: "lg" | "sm" }) {
+function ReserveButton({
+  reservable,
+  ended,
+  inProgress,
+  fairId,
+  size,
+}: {
+  reservable: boolean;
+  ended: boolean;
+  inProgress: boolean;
+  fairId: number;
+  size: "lg" | "sm";
+}) {
   const sizeClass = size === "lg" ? "min-h-12 px-8 text-base" : "min-h-10 px-5 text-sm";
-  if (reservable) {
+  // 예매 화면은 사전예약·현장예매를 둘 다 다루므로, 둘 중 하나라도 가능성이 있으면 링크를 준다.
+  // 운영 중인데 사전예약만 닫힌 행사를 비활성 버튼으로 막으면 현장예매 입구까지 사라진다.
+  const actionLabel = reservable ? "예매하기" : inProgress ? "현장예매" : null;
+  if (actionLabel) {
     return (
       <Link
         to={`/tickets/${fairId}`}
         className={`inline-flex items-center justify-center gap-1 rounded-button bg-primary-strong font-bold text-white transition hover:opacity-90 ${sizeClass}`}
       >
-        예매하기
+        {actionLabel}
         <ChevronRight size={size === "lg" ? 18 : 16} aria-hidden="true" />
       </Link>
     );

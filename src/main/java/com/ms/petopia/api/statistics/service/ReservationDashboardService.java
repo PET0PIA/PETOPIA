@@ -100,6 +100,7 @@ public class ReservationDashboardService {
         dto.setAgeGroupBreakdown(dashboardMapper.selectAgeGroupBreakdown(fairId));
         dto.setPetSpeciesBreakdown(dashboardMapper.selectPetSpeciesBreakdown(fairId));
         dto.setPetBreedBreakdown(dashboardMapper.selectPetBreedBreakdown(fairId));
+        dto.setPetAllergyBreakdown(dashboardMapper.selectPetAllergyBreakdown(fairId));
         dto.setAvgPetAge(dashboardMapper.selectAvgPetAge(fairId));
         dto.setAvgBoothsPerVisitor(dashboardMapper.selectAvgBoothsPerVisitor(fairId));
         return dto;

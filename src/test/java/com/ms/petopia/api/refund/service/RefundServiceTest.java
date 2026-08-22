@@ -1,6 +1,7 @@
 package com.ms.petopia.api.refund.service;
 
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
+import com.ms.petopia.api.fairsettlement.mapper.FairSettlementMapper;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
@@ -15,6 +16,7 @@ import com.ms.petopia.api.refund.mapper.RefundMapper;
 import com.ms.petopia.api.settlement.mapper.SettlementMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,9 +30,11 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -46,6 +50,11 @@ class RefundServiceTest {
     @Mock
     private SettlementMapper settlementMapper;
 
+    // 2026-08-22 행사별 최종정산 도메인 추가로 RefundService의 새 의존성 - 대부분 테스트는 이
+    // 도메인과 무관해서 기본값(포함된 정산 없음)만 lenient로 깔아둔다.
+    @Mock
+    private FairSettlementMapper fairSettlementMapper;
+
     @Mock
     private NotificationService notificationService;
 
@@ -54,6 +63,11 @@ class RefundServiceTest {
 
     @InjectMocks
     private RefundService refundService;
+
+    @BeforeEach
+    void setUpFairSettlementDefault() {
+        lenient().when(fairSettlementMapper.selectFairSettlementIdByPaymentId(anyLong())).thenReturn(null);
+    }
 
     private static final RefundRequest USER_CANCEL_REQUEST =
             new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.RESERVATION);
@@ -180,6 +194,38 @@ class RefundServiceTest {
 
         assertThat(result.status()).isEqualTo("COMPLETED");
         verify(settlementMapper).markNeedsRecalculation(5L);
+    }
+
+    @Test
+    @DisplayName("PENDING 행사 최종정산에 포함된 결제는 환불하면서 재계산 필요 표시를 남긴다")
+    void refund_대기중행사정산에포함됨_재계산필요표시하고환불허용() {
+        // Arrange: 업체별 정산(settlement)과는 별개 테이블(fair_settlement_item)이라 둘 다
+        // 체크해야 한다(2026-08-22 추가) - 여기선 업체별 정산엔 없고 행사 최종정산에만 포함된 상황.
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
+        given(fairSettlementMapper.selectFairSettlementIdByPaymentId(1L)).willReturn(7L);
+        given(fairSettlementMapper.markNeedsRecalculation(7L)).willReturn(1);
+
+        RefundResponse result = refundService.refund(1L, 99L, USER_CANCEL_REQUEST);
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        verify(fairSettlementMapper).markNeedsRecalculation(7L);
+    }
+
+    @Test
+    @DisplayName("이미 CONFIRMED 행사 최종정산에 포함된 결제는 환불할 수 없다")
+    void refund_확정행사정산에포함됨_예외를던진다() {
+        given(paymentMapper.selectByIdForUpdate(1L)).willReturn(completedPaymentRow());
+        given(settlementMapper.selectSettlementIdByPaymentId(1L)).willReturn(null);
+        given(fairSettlementMapper.selectFairSettlementIdByPaymentId(1L)).willReturn(7L);
+        given(fairSettlementMapper.markNeedsRecalculation(7L)).willReturn(0);
+
+        assertThatThrownBy(() -> refundService.refund(1L, 99L, USER_CANCEL_REQUEST))
+                .isInstanceOf(CommonException.class)
+                .extracting(e -> ((CommonException) e).getErrorCode())
+                .isEqualTo(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE);
+
+        verify(refundMapper, never()).insert(any(RefundRow.class));
     }
 
     @Test

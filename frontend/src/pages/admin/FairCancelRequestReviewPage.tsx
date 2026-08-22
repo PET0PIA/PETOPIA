@@ -9,6 +9,7 @@ import {
   type FairApplicationSummary,
   type FairCancelRequestItem,
   type FairCancelRequestQueueItem,
+  type FairCancelRequestStatus,
 } from "../../api/fair";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -31,6 +32,21 @@ const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
   REJECTED: "neutral",
 };
 
+// 심사 대기뿐 아니라 승인·반려된 취소 신청도 행사를 하나씩 검색하지 않고 탭으로 바로
+// 훑어볼 수 있게 한다(2026-08-22 사용자 피드백) - ParticipationReviewPage.tsx의 REVIEW_TABS와
+// 동일한 패턴.
+const QUEUE_TABS: { status: FairCancelRequestStatus; label: string }[] = [
+  { status: "PENDING", label: "심사 대기" },
+  { status: "APPROVED", label: "승인" },
+  { status: "REJECTED", label: "반려" },
+];
+
+const QUEUE_EMPTY_MESSAGE: Record<FairCancelRequestStatus, string> = {
+  PENDING: "심사 대기 중인 취소 신청이 없어요.",
+  APPROVED: "승인된 취소 신청이 없어요.",
+  REJECTED: "반려된 취소 신청이 없어요.",
+};
+
 function formatDateTime(value: string | null) {
   if (!value) return "-";
   return new Date(value).toLocaleString("ko-KR");
@@ -39,9 +55,16 @@ function formatDateTime(value: string | null) {
 export function FairCancelRequestReviewPage() {
   const { confirm, confirmDialog } = useConfirm();
 
+  const [activeQueueStatus, setActiveQueueStatus] = useState<FairCancelRequestStatus>("PENDING");
   const [queue, setQueue] = useState<FairCancelRequestQueueItem[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
+  // 승인/반려 후 큐를 다시 받아오는 트리거. 아래 useEffect의 activeQueueStatus는 항상 effect가
+  // 실행되는 시점의 최신값이라, 탭을 바꾼 직후 승인/반려가 끝나도 이 값을 올리기만 하면
+  // 항상 "지금 탭" 기준으로 다시 조회된다(예전엔 승인/반려 핸들러가 직접 재조회하면서 버튼을
+  // 누른 시점의 탭을 클로저로 들고 있어, 그 사이 탭을 바꾸면 새 탭 목록이 옛 탭 데이터로
+  // 덮어써질 수 있었다).
+  const [queueRefreshKey, setQueueRefreshKey] = useState(0);
 
   // 행사 ID를 직접 타이핑하지 않고 이름으로 찾도록, 전체 행사 목록(상태 무관)을 한 번 받아와
   // 검색용 드롭다운을 채운다.
@@ -65,33 +88,20 @@ export function FairCancelRequestReviewPage() {
   // 매겨서, 응답이 왔을 때 그게 여전히 "지금 선택"에 대한 요청인지 확인한다.
   const requestsRequestIdRef = useRef(0);
 
-  // 승인/반려 후 큐를 새로고침할 때 재사용한다. 최초 마운트 시 큐를 받아오는 아래 useEffect는
-  // queueLoading의 초기값이 이미 true라 이 함수 대신 별도로 fetch만 한다(react-hooks/set-state-in-effect
-  // 회피 - effect 안에서 setState를 동기 호출하는 함수를 부르면 안 된다).
-  async function loadQueue() {
-    setQueueLoading(true);
-    setQueueError(null);
-    try {
-      const data = await getFairCancelRequestQueue("PENDING");
-      setQueue(data);
-    } catch (error) {
-      setQueue([]);
-      setQueueError(error instanceof ApiError ? error.message : "취소 심사 대기 목록을 불러오지 못했어요.");
-    } finally {
-      setQueueLoading(false);
-    }
-  }
-
+  // 탭(심사 대기/승인/반려)을 바꾸거나, 승인/반려 후 queueRefreshKey가 올라갈 때마다 큐를
+  // 다시 받아온다. alive 가드로 응답이 늦게 와도 그 사이 탭이 바뀌었으면 버린다.
   useEffect(() => {
     let alive = true;
-    getFairCancelRequestQueue("PENDING")
+    setQueueLoading(true);
+    setQueueError(null);
+    getFairCancelRequestQueue(activeQueueStatus)
       .then((data) => {
         if (alive) setQueue(data);
       })
       .catch((error: unknown) => {
         if (!alive) return;
         setQueue([]);
-        setQueueError(error instanceof ApiError ? error.message : "취소 심사 대기 목록을 불러오지 못했어요.");
+        setQueueError(error instanceof ApiError ? error.message : "취소 신청 목록을 불러오지 못했어요.");
       })
       .finally(() => {
         if (alive) setQueueLoading(false);
@@ -99,7 +109,7 @@ export function FairCancelRequestReviewPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [activeQueueStatus, queueRefreshKey]);
 
   useEffect(() => {
     let alive = true;
@@ -162,7 +172,7 @@ export function FairCancelRequestReviewPage() {
     try {
       await reviewFairCancelRequest(fairId, request.fairCancelRequestId, { decision: "APPROVE" });
       await loadRequests(fairId);
-      void loadQueue();
+      setQueueRefreshKey((key) => key + 1);
     } catch (error) {
       setReviewError(error instanceof ApiError ? error.message : "승인 처리에 실패했어요.");
     } finally {
@@ -186,7 +196,7 @@ export function FairCancelRequestReviewPage() {
         rejectReason: rejectReason.trim(),
       });
       await loadRequests(fairId);
-      void loadQueue();
+      setQueueRefreshKey((key) => key + 1);
       setRejectTarget(null);
       setRejectReason("");
     } catch (error) {
@@ -201,7 +211,22 @@ export function FairCancelRequestReviewPage() {
       <PageHeader eyebrow="전체 운영" title="행사 취소 신청 처리" description="행사 관리자가 신청한 취소를 검토하고 승인 또는 반려해요." />
 
       <div className="mb-6">
-        <h2 className="mb-3 text-sm font-extrabold text-muted">심사 대기 중인 취소 신청</h2>
+        <div className="mb-3 flex gap-1 border-b border-line">
+          {QUEUE_TABS.map((tab) => (
+            <button
+              key={tab.status}
+              type="button"
+              onClick={() => setActiveQueueStatus(tab.status)}
+              className={`px-3 py-2 text-sm font-bold ${
+                activeQueueStatus === tab.status
+                  ? "border-b-2 border-primary-strong text-ink"
+                  : "text-muted hover:text-ink"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
         {queueLoading ? (
           <div className="surface grid min-h-24 place-items-center text-sm text-muted">불러오는 중이에요...</div>
         ) : queueError ? (
@@ -210,7 +235,7 @@ export function FairCancelRequestReviewPage() {
             <p>{queueError}</p>
           </div>
         ) : queue.length === 0 ? (
-          <EmptyState title="심사 대기 중인 취소 신청이 없어요." description="새 취소 신청이 들어오면 이곳에 표시돼요." />
+          <EmptyState title={QUEUE_EMPTY_MESSAGE[activeQueueStatus]} description="새 취소 신청이 들어오거나 상태가 바뀌면 이곳에 표시돼요." />
         ) : (
           <Table>
             <thead>
@@ -218,7 +243,7 @@ export function FairCancelRequestReviewPage() {
                 <th className="px-4 py-3">행사</th>
                 <th className="px-4 py-3">사유</th>
                 <th className="px-4 py-3">신청일</th>
-                <th className="px-4 py-3" aria-label="심사" />
+                <th className="px-4 py-3" aria-label="상세" />
               </tr>
             </thead>
             <tbody>
@@ -229,7 +254,7 @@ export function FairCancelRequestReviewPage() {
                   <td className="px-4 py-3 text-muted">{formatDateTime(item.createdAt)}</td>
                   <td className="px-4 py-3 text-right">
                     <Button variant="outline" onClick={() => openFair(item.fairId)}>
-                      심사하기
+                      {activeQueueStatus === "PENDING" ? "심사하기" : "확인"}
                     </Button>
                   </td>
                 </tr>
@@ -305,9 +330,10 @@ export function FairCancelRequestReviewPage() {
                 <td className="px-4 py-3 text-muted">{formatDateTime(request.reviewedAt)}</td>
                 <td className="px-4 py-3">
                   {request.status === "PENDING" && (
-                    <div className="flex justify-end gap-2">
+                    <div className="flex shrink-0 justify-end gap-2">
                       <Button
                         variant="outline"
+                        className="shrink-0 whitespace-nowrap"
                         onClick={() => {
                           setRejectTarget(request);
                           setRejectReason("");
@@ -317,7 +343,7 @@ export function FairCancelRequestReviewPage() {
                       >
                         <X size={16} />반려
                       </Button>
-                      <Button onClick={() => handleApprove(request)} disabled={reviewingId === request.fairCancelRequestId}>
+                      <Button className="shrink-0 whitespace-nowrap" onClick={() => handleApprove(request)} disabled={reviewingId === request.fairCancelRequestId}>
                         <Check size={16} />
                         {reviewingId === request.fairCancelRequestId ? "처리 중..." : "승인"}
                       </Button>

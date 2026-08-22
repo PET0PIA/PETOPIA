@@ -120,7 +120,8 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, null, null, 40L,
-                        null, null, null, null
+                        null, null, null, null,
+                        null, null, null, null, null, null, null
                 )
         );
 
@@ -141,6 +142,31 @@ class PaymentControllerTest {
     }
 
     @Test
+    void getsPaymentDetailWithRefundInfo() throws Exception {
+        // Arrange: 환불된 결제 상세 조회 - 응답 JSON에 refund* 필드가 그대로 노출되는지 확인
+        given(paymentService.getPayment(1L, 99L)).willReturn(
+                new PaymentResponse(
+                        1L, "PAYMENT_1", "RESERVATION_DEPOSIT", 10000L, "COMPLETED", "TOSS",
+                        LocalDateTime.of(2026, 8, 3, 10, 0),
+                        LocalDateTime.of(2026, 8, 3, 10, 0),
+                        10L, null, 99L, 500L, null,
+                        null, null, null, null,
+                        5L, "COMPLETED", 10000L, "USER_CANCEL", "RESERVATION",
+                        LocalDateTime.of(2026, 8, 4, 9, 0), LocalDateTime.of(2026, 8, 4, 9, 5)
+                )
+        );
+
+        mockMvc.perform(get("/api/payments/1")
+                        .with(authenticatedAs(99L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refundId").value(5))
+                .andExpect(jsonPath("$.refundStatus").value("COMPLETED"))
+                .andExpect(jsonPath("$.refundAmount").value(10000))
+                .andExpect(jsonPath("$.refundReason").value("USER_CANCEL"))
+                .andExpect(jsonPath("$.refundRequestedByDomain").value("RESERVATION"));
+    }
+
+    @Test
     void getsPaymentByReservationId() throws Exception {
         given(paymentService.getByReservationId(500L)).willReturn(
                 new PaymentResponse(
@@ -148,7 +174,8 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 5, 10, 0),
                         LocalDateTime.of(2026, 8, 5, 10, 0),
                         10L, null, 90L, 500L, null,
-                        null, null, null, null
+                        null, null, null, null,
+                        null, null, null, null, null, null, null
                 )
         );
 
@@ -206,7 +233,8 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, null, null, 40L,
-                        null, null, null, null
+                        null, null, null, null,
+                        null, null, null, null, null, null, null
                 )
         );
 
@@ -252,7 +280,8 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 4, 10, 0),
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, 99L, null, 40L,
-                        null, null, null, null
+                        null, null, null, null,
+                        null, null, null, null, null, null, null
                 )
         );
 
@@ -302,7 +331,8 @@ class PaymentControllerTest {
                         null,
                         LocalDateTime.of(2026, 8, 5, 10, 0),
                         10L, null, 99L, 500L, null,
-                        null, null, null, null
+                        null, null, null, null,
+                        null, null, null, null, null, null, null
                 )
         );
 
@@ -348,7 +378,8 @@ class PaymentControllerTest {
                         null,
                         LocalDateTime.of(2026, 8, 6, 10, 0),
                         10L, null, 3L, null, null,
-                        null, null, null, null
+                        null, null, null, null,
+                        null, null, null, null, null, null, null
                 )
         );
 
@@ -381,7 +412,8 @@ class PaymentControllerTest {
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
                                 10L, 20L, 99L, null, 40L,
-                                null, null, null, null
+                                null, null, null, null,
+                                null, null, null, null, null, null, null
                         )
                 ), 0, 20, 1L, 1)
         );
@@ -471,7 +503,8 @@ class PaymentControllerTest {
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
                                 10L, 20L, 99L, null, 40L,
-                                null, null, null, null
+                                null, null, null, null,
+                                null, null, null, null, null, null, null
                         )
                 ), 0, 20, 1L, 1));
 

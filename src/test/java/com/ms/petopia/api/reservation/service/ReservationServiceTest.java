@@ -23,6 +23,7 @@ import org.springframework.dao.DuplicateKeyException;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -338,10 +339,32 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("당일 사전예약은 생성할 수 없다")
-    void create_당일사전예약_방문일선택불가예외를던진다() {
+    @DisplayName("당일 운영일이라도 지금 시각이 입장 가능 시간 안이면 사전예약을 생성한다")
+    void create_당일운영일_입장가능시간안이면_예약을생성한다() {
         ReservationCreationContext context = reservableContext(0);
         context.setOperationDate(TODAY);
+        context.setEntryStartTime(NOW.toLocalTime().minusHours(1));
+        context.setEntryEndTime(NOW.toLocalTime().plusHours(1));
+        givenDefaultCreationData(context);
+        given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260801ABC12345");
+
+        CreateReservationResponse response = reservationService.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateReservationRequest(VISIT_DATE, null, null)
+        );
+
+        assertThat(response.reservationStatus()).isEqualTo("CONFIRMED");
+        verify(reservationMapper).insertReservation(any(ReservationInsertRow.class));
+    }
+
+    @Test
+    @DisplayName("당일 운영일인데 지금 시각이 입장 가능 시간 밖이면 방문일을 선택할 수 없다")
+    void create_당일운영일_입장가능시간밖이면_방문일선택불가예외를던진다() {
+        ReservationCreationContext context = reservableContext(0);
+        context.setOperationDate(TODAY);
+        context.setEntryStartTime(NOW.toLocalTime().plusHours(1));
+        context.setEntryEndTime(NOW.toLocalTime().plusHours(2));
         given(reservationMapper.selectCreationContext(FAIR_ID, VISIT_DATE)).willReturn(context);
 
         assertErrorCode(
@@ -411,22 +434,28 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("일반 회원이 아닌 계정은 예약할 수 없다")
-    void create_일반회원이아닌계정_접근거부예외를던진다() {
-        ReservationUserSnapshot user = activeUser();
-        user.setRole("EVENT_ADMIN");
-        givenCreationDataWithUser(user);
+    @DisplayName("관리자 계정도 개인 자격으로는 예약할 수 있다")
+    void create_관리자계정_예약을생성한다() {
+        ReservationUserSnapshot admin = activeUser();
+        admin.setRole("EVENT_ADMIN");
+        givenCreationDataWithUser(admin);
+        given(capacityMapper.occupy(FAIR_ID, VISIT_DATE)).willReturn(1);
+        given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260731ABC12345");
+        willAnswer(invocation -> {
+            ReservationInsertRow row = invocation.getArgument(0);
+            row.setReservationId(RESERVATION_ID);
+            return 1;
+        }).given(reservationMapper).insertReservation(any(ReservationInsertRow.class));
 
-        assertErrorCode(
-                () -> reservationService.create(
-                        FAIR_ID,
-                        USER_ID,
-                        new CreateReservationRequest(VISIT_DATE, null, null)
-                ),
-                ErrorCode.ACCESS_DENIED
+        CreateReservationResponse response = reservationService.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateReservationRequest(VISIT_DATE, null, null)
         );
 
-        verify(reservationMapper, never()).insertReservation(any());
+        assertThat(response.reservationId()).isEqualTo(RESERVATION_ID);
+        assertThat(response.reservationStatus()).isEqualTo("CONFIRMED");
+        verify(reservationMapper).insertReservation(any(ReservationInsertRow.class));
     }
 
     @Test

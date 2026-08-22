@@ -16,6 +16,7 @@ public class VisitStatsDto {
     private List<LabelCountDto> ageGroupBreakdown; // 연령대
     private List<LabelCountDto> petSpeciesBreakdown; // 반려동물 종
     private List<PetBreedStatDto> petBreedBreakdown; // 반려동물 품종
+    private List<LabelCountDto> petAllergyBreakdown; // 반려동물 알레르기
     private Double avgPetAge; // 평균 반려동물 나이, 데이터 없으면 null
     private Double avgBoothsPerVisitor; // 방문자 1명당 평균 방문 부스 수, 데이터 없으면 null
 }

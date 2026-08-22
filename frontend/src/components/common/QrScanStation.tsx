@@ -8,9 +8,9 @@ import { Card } from "../ui/Card";
  * 입력 수단(카메라·리더기), 재스캔 쿨다운, 결과 표시/결과음까지만 담당하고
  * 스캔 API 호출과 결과 배너·로그는 페이지가 맡는다.
  *
- * 카메라 인식은 브라우저 내장 BarcodeDetector만 쓴다. 디코딩 라이브러리를 번들에 넣지 않는
- * 대신 미지원 브라우저(Safari·Firefox)에서는 쓸 수 없으므로, 그때는 리더기 입력으로 안내한다.
- * 게이트·부스 기본 장비는 USB 스캐너이고 카메라는 보조 수단이라 이 절충이 맞다.
+ * 카메라 인식은 jsQR로 직접 해독한다. 브라우저 내장 BarcodeDetector는 윈도우·리눅스 크롬/엣지에
+ * 아예 없어서 담당자 PC를 가리므로 쓰지 않는다. 해독기는 카메라를 켤 때 동적 import로 받아
+ * 일반 사용자 번들에는 넣지 않는다. 게이트·부스 기본 장비는 여전히 USB 스캐너이고 카메라는 보조 수단이다.
  */
 export type ScanTone = "pass" | "info" | "reject";
 
@@ -20,22 +20,10 @@ export interface ScanFeedback {
   title: string;
 }
 
-interface DetectedBarcode {
-  rawValue: string;
-}
-
-interface BarcodeDetectorLike {
-  detect(source: HTMLVideoElement): Promise<DetectedBarcode[]>;
-}
-
-declare global {
-  interface Window {
-    BarcodeDetector?: new (options?: { formats?: string[] }) => BarcodeDetectorLike;
-  }
-}
-
 /** 프레임을 읽는 주기. 더 촘촘하게 돌려도 인식률은 그대로이고 CPU만 먹는다. */
 const DETECT_INTERVAL_MS = 250;
+/** 해독에 쓰는 프레임 폭. 원본 해상도로 넘겨도 인식률은 거의 같고 CPU만 더 쓴다. */
+const DETECT_WIDTH = 480;
 /**
  * 같은 QR을 다시 서버로 보내기까지 기다리는 시간. 카메라 앞에 QR이 계속 머무르므로
  * 이게 없으면 초당 4회씩 같은 토큰으로 스캔 API를 때린다(그리고 감사 로그가 그만큼 쌓인다).
@@ -100,7 +88,9 @@ export function QrScanStation({ inputId, onScan, extraFields }: QrScanStationPro
   const audioContextRef = useRef<AudioContext | null>(null);
   const flashTimerRef = useRef(0);
 
-  const cameraSupported = typeof window !== "undefined" && window.BarcodeDetector !== undefined;
+  // 카메라는 https·localhost에서만 열린다. http로 IP 접속하면 mediaDevices 자체가 없다.
+  const cameraSupported =
+    typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia !== undefined;
 
   /** 결과음. 소리는 보조 신호라 재생이 막혀도 스캔 처리에는 영향을 주지 않는다. */
   function playBeep(tone: ScanTone) {
@@ -214,20 +204,48 @@ export function QrScanStation({ inputId, onScan, extraFields }: QrScanStationPro
         // 자동재생이 막힌 경우 - 프리뷰만 멈추고 인식 루프는 그대로 진행한다.
       }
 
-      const detector = new window.BarcodeDetector!({ formats: ["qr_code"] });
+      // 해독기는 카메라를 켤 때만 받는다(일반 사용자 번들에서 빼기 위해 동적 import).
+      // 배포 직후 낡은 페이지가 사라진 청크를 부르거나 네트워크가 끊기면 이 요청이 실패한다.
+      // 그냥 두면 카메라는 켜진 채 인식만 조용히 멈춰 담당자가 이유를 알 수 없으므로,
+      // 카메라를 끄고(정리 함수가 트랙까지 끊는다) 이유를 보여준다.
+      const decoder = await import("jsqr").catch(() => null);
+      if (cancelled) return;
+      if (decoder === null) {
+        setCameraError("QR 인식 기능을 불러오지 못했어요. 새로고침하거나 리더기 입력을 사용해 주세요.");
+        setCameraOn(false);
+        return;
+      }
+      const jsQR = decoder.default;
+
+      // 프레임을 옮겨 픽셀을 직접 읽을 캔버스. 화면에는 붙이지 않는다.
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (context === null) {
+        setCameraError("이 브라우저에서는 카메라 화면을 읽을 수 없어요. 리더기 입력을 사용해 주세요.");
+        setCameraOn(false);
+        return;
+      }
+
       const tick = async () => {
         if (cancelled) return;
         try {
-          const codes = await detector.detect(video);
-          const value = codes[0]?.rawValue?.trim() ?? "";
-          const now = Date.now();
-          const isRepeat = value === lastToken && now - lastSentAt < SAME_TOKEN_COOLDOWN_MS;
-          if (value !== "" && !isRepeat) {
-            lastToken = value;
-            await runScanRef.current(value);
-            // 쿨다운은 응답을 받은 시점부터 센다. 요청 시점부터 재면 응답이 늦을수록
-            // 담당자가 결과를 볼 수 있는 시간이 줄어든다.
-            lastSentAt = Date.now();
+          // 프리뷰가 붙기 전 초기 프레임은 크기가 0이라 그릴 것이 없다.
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            const scale = Math.min(1, DETECT_WIDTH / video.videoWidth);
+            canvas.width = Math.round(video.videoWidth * scale);
+            canvas.height = Math.round(video.videoHeight * scale);
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+            const value = jsQR(frame.data, frame.width, frame.height)?.data.trim() ?? "";
+            const now = Date.now();
+            const isRepeat = value === lastToken && now - lastSentAt < SAME_TOKEN_COOLDOWN_MS;
+            if (value !== "" && !isRepeat) {
+              lastToken = value;
+              await runScanRef.current(value);
+              // 쿨다운은 응답을 받은 시점부터 센다. 요청 시점부터 재면 응답이 늦을수록
+              // 담당자가 결과를 볼 수 있는 시간이 줄어든다.
+              lastSentAt = Date.now();
+            }
           }
         } catch {
           // 프레임 하나를 못 읽는 건 정상이다(초점·흔들림). 다음 프레임에서 다시 시도한다.
@@ -294,7 +312,8 @@ export function QrScanStation({ inputId, onScan, extraFields }: QrScanStationPro
         <div className="mb-4 space-y-3">
           {!cameraSupported ? (
             <p className="text-sm text-muted">
-              이 브라우저는 카메라 QR 인식을 지원하지 않아요. Chrome·Edge에서 열거나 리더기 입력을 사용해 주세요.
+              이 주소에서는 카메라를 쓸 수 없어요. 브라우저가 https 또는 localhost 접속에서만 카메라를
+              허용해요. localhost로 접속하거나 리더기 입력을 사용해 주세요.
             </p>
           ) : (
             <>

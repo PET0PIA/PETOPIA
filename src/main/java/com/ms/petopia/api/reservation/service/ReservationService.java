@@ -66,8 +66,9 @@ public class ReservationService {
             throw new CommonException(ErrorCode.RESERVATION_DATE_NOT_AVAILABLE);
         }
 
-        LocalDate today = timeProvider.today();
-        validateFair(context, today);
+        LocalDateTime now = timeProvider.now();
+        LocalDate today = now.toLocalDate();
+        validateFair(context, today, now);
 
         if (reservationMapper.existsActiveReservation(fairId, userId, request.visitDate())) {
             throw new CommonException(ErrorCode.DUPLICATED_RESERVATION);
@@ -88,7 +89,6 @@ public class ReservationService {
             throw new CommonException(ErrorCode.RESERVATION_SOLD_OUT);
         }
 
-        LocalDateTime now = timeProvider.now();
         String status = paymentRequired ? PENDING_PAYMENT : CONFIRMED;
         LocalDateTime paymentExpiresAt = paymentRequired ? now.plusMinutes(PAYMENT_WAIT_MINUTES) : null;
         String reservationNo = reservationNumberGenerator.generate(today);
@@ -155,7 +155,7 @@ public class ReservationService {
         }
     }
 
-    private void validateFair(ReservationCreationContext context, LocalDate today) {
+    private void validateFair(ReservationCreationContext context, LocalDate today, LocalDateTime now) {
         if (context.getPublishedAt() == null
                 || context.getCanceledAt() != null
                 || context.getReservationStartDate() == null
@@ -165,7 +165,13 @@ public class ReservationService {
             throw new CommonException(ErrorCode.RESERVATION_NOT_OPEN);
         }
 
-        if (!context.getOperationDate().isAfter(today)) {
+        // 미래 운영일이면 항상 가능. 오늘 운영일이면 지금 시각이 그 날 입장 가능 시간
+        // (entry_start_time~entry_end_time) 안일 때만 당일 사전예약을 허용한다.
+        boolean isFutureOperationDate = context.getOperationDate().isAfter(today);
+        boolean isTodayWithinEntryWindow = context.getOperationDate().isEqual(today)
+                && !now.toLocalTime().isBefore(context.getEntryStartTime())
+                && !now.toLocalTime().isAfter(context.getEntryEndTime());
+        if (!isFutureOperationDate && !isTodayWithinEntryWindow) {
             throw new CommonException(ErrorCode.RESERVATION_DATE_NOT_AVAILABLE);
         }
 
@@ -178,7 +184,9 @@ public class ReservationService {
         if (user == null) {
             throw new CommonException(ErrorCode.USER_NOT_FOUND);
         }
-        if (!"ACTIVE".equals(user.getStatus()) || !"USER".equals(user.getRole())) {
+        // 역할은 보지 않는다 - 관리자·사업자 계정도 개인 자격으로는 관람객이라 예약할 수 있다.
+        // 로그인만 되어 있으면 통과시키고, 정지·탈퇴 계정만 막는다.
+        if (!"ACTIVE".equals(user.getStatus())) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
     }

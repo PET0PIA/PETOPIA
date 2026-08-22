@@ -1,17 +1,16 @@
-import { AlertCircle, ChevronLeft, ChevronRight, Search, User } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
-import { getMyPayments, getPayments, type PaymentDetail, type PaymentListResult, type PaymentStatus, type PaymentType } from "../../api/payment";
+import { getPayments, type PaymentDetail, type PaymentListResult, type PaymentStatus, type PaymentType } from "../../api/payment";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Table } from "../../components/ui/Table";
 import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
-import { formatAmount, formatDateTime, paymentTypeLabels, statusLabels, statusTone } from "./paymentDisplay";
+import { formatAmount, formatDateTime, paymentStatusLabel, paymentStatusTone, paymentTypeLabels } from "./paymentDisplay";
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
@@ -40,7 +39,7 @@ function PaymentTable({ result }: { result: PaymentListResult }) {
             <td className="whitespace-nowrap px-4 py-3 text-ink">{paymentTypeLabels[row.paymentType]}</td>
             <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatAmount(row.amount)}</td>
             <td className="whitespace-nowrap px-4 py-3">
-              <Badge tone={statusTone[row.status]}>{statusLabels[row.status]}</Badge>
+              <Badge tone={paymentStatusTone(row.status, row.refundStatus)}>{paymentStatusLabel(row.status, row.refundStatus)}</Badge>
             </td>
             <td className="whitespace-nowrap px-4 py-3 text-muted">{formatDateTime(row.createdAt)}</td>
             <td className="whitespace-nowrap px-4 py-3">
@@ -181,82 +180,11 @@ function AdminListSection() {
   );
 }
 
-// 로그인 사용자 본인의 결제 내역(마이페이지). 인증 도메인이 아직 없어서 userId를 직접 입력받는다.
-function MyPaymentsSection() {
-  const [userIdInput, setUserIdInput] = useState("1");
-  const [result, setResult] = useState<PaymentListResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load(page: number) {
-    const parsed = Number(userIdInput);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setError("사용자 ID는 1 이상의 숫자로 입력해 주세요.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getMyPayments(parsed, page);
-      setResult(data);
-    } catch (err) {
-      setResult(null);
-      setError(errorMessage(err, "내 결제 내역을 불러오지 못했어요."));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    load(0);
-  }
-
-  return (
-    <section>
-      <Card className="mb-6 p-5">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <label htmlFor="mp-user-id" className="mb-1.5 block text-sm font-bold text-ink">사용자 ID (임시 헤더 X-User-Id)</label>
-            <Input id="mp-user-id" className="input-no-spinner" type="number" min={1} value={userIdInput} onChange={(event) => setUserIdInput(event.target.value)} placeholder="예: test1" />
-          </div>
-          <Button type="submit" variant="outline" disabled={loading}>
-            <User size={16} />내 결제 조회
-          </Button>
-        </form>
-      </Card>
-
-      {error && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <p>{error}</p>
-        </div>
-      )}
-
-      {loading && <div className="surface grid min-h-32 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
-
-      {result && !loading && (
-        <>
-          <PaymentTable result={result} />
-          <Pagination result={result} onPage={load} />
-        </>
-      )}
-    </section>
-  );
-}
-
 export function PaymentListPage() {
-  const [tab, setTab] = useState<"admin" | "me">("admin");
-
   return (
     <div className="mx-auto max-w-5xl py-2">
-      <PageHeader eyebrow="결제" title="결제 목록" description="조건별 전체 결제 목록과 특정 사용자의 결제 내역을 조회해요." />
-      <div className="mb-6 flex gap-2">
-        <Button variant={tab === "admin" ? "primary" : "outline"} onClick={() => setTab("admin")}>전체 목록</Button>
-        <Button variant={tab === "me" ? "primary" : "outline"} onClick={() => setTab("me")}>내 결제 내역</Button>
-      </div>
-      {tab === "admin" ? <AdminListSection /> : <MyPaymentsSection />}
+      <PageHeader eyebrow="결제" title="결제 목록" description="조건별 전체 결제 목록을 조회해요." />
+      <AdminListSection />
     </div>
   );
 }

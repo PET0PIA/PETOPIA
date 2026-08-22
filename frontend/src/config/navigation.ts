@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Ban, BarChart3, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardX, CreditCard, FileCheck2, Headset, Image, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Store, Ticket, Trash2, UsersRound } from "lucide-react";
+import { Ban, BarChart3, Bell, Building2, CalendarDays, ClipboardCheck, ClipboardX, CreditCard, FileCheck2, Headset, Image, LayoutDashboard, ListOrdered, Map, Megaphone, MessageSquare, PlusCircle, QrCode, ReceiptText, RotateCcw, ScrollText, Settings2, Star, Store, Ticket, Trash2, UsersRound } from "lucide-react";
 import type { UserRole } from "../api/auth";
 
 export interface NavigationItem {
@@ -57,9 +57,11 @@ export const superAdminNavigation: NavigationItem[] = [
     label: "결제·정산",
     icon: CreditCard,
     children: [
-      { label: "결제 상세 조회", path: "/admin/payments", icon: CreditCard },
+      // "결제 상세 조회"는 별도 메뉴가 아니라 결제 목록에서 "상세" 클릭으로만 들어간다
+      // (/admin/payments?id= - PaymentListPage.tsx 참고). 환불 조회 메뉴도 없앴다 - 환불
+      // 정보는 이제 결제 목록의 상태 배지("환불완료")와 결제 상세의 "환불 정보" 섹션에
+      // 흡수됐다(2026-08-21, 결제·정산 화면 통합).
       { label: "결제 목록", path: "/admin/payments/list", icon: ListOrdered },
-      { label: "환불 조회", path: "/admin/refunds", icon: RotateCcw },
       { label: "정산·수수료율", path: "/admin/settlements", icon: ReceiptText },
     ],
   },

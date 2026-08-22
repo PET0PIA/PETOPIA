@@ -251,13 +251,31 @@
         ORDER BY count DESC
     </select>
 
-    <!-- 평균 반려동물 나이. 데이터 없으면 NULL 반환 -->
+    <!-- 평균 반려동물 나이. 입장 시점 기준으로 계산해 과거 행사 통계가 시간이 지나도 변하지 않는다. 데이터 없으면 NULL 반환 -->
     <select id="selectAvgPetAge" resultType="java.lang.Double">
-        SELECT AVG(rp.pet_age_snapshot)
+        SELECT AVG(TIMESTAMPDIFF(YEAR, rp.pet_birth_date_snapshot, enr.first_checked_in_at))
         FROM entry_records enr
             JOIN reservations r ON r.reservation_id = enr.reservation_id
             LEFT JOIN reservation_pets rp ON rp.reservation_id = r.reservation_id
         WHERE enr.fair_id = #{fairId}
-            AND rp.pet_age_snapshot IS NOT NULL
+            AND rp.pet_birth_date_snapshot IS NOT NULL
+    </select>
+
+    <!-- 반려동물 알레르기 분포. 알레르기가 없는 반려동물은 분포에서 빠져야 하므로 INNER JOIN -->
+    <select id="selectPetAllergyBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT pat.label AS label,
+               COUNT(*)  AS count
+          FROM entry_records enr
+          JOIN reservations r
+                ON r.reservation_id = enr.reservation_id
+          JOIN reservation_pets rp
+                ON rp.reservation_id = r.reservation_id
+          JOIN reservation_pet_allergies rpa
+                ON rpa.reservation_pet_id = rp.reservation_pet_id
+          JOIN pet_allergy_types pat
+                ON pat.allergy_type_id = rpa.allergy_type_id
+         WHERE enr.fair_id = #{fairId}
+         GROUP BY pat.allergy_type_id, pat.label
+         ORDER BY count DESC
     </select>
 </mapper>
