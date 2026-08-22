@@ -19,8 +19,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
@@ -34,6 +32,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -44,7 +43,6 @@ import static org.mockito.Mockito.verify;
  *   - AI 예약 조건이 "운영시간 밖 + 상담사 미개입 + 진행 중 호출 없음"으로 좁혀졌는가
  */
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class ChatConversationServiceTest {
 
     private static final long CONVERSATION_ID = 100L;
@@ -68,7 +66,10 @@ class ChatConversationServiceTest {
 
     @BeforeEach
     void setUp() {
-        given(timeProvider.now()).willReturn(NIGHT);
+        // 클릭 집계처럼 시각을 읽지 않는 경로도 있어 미사용을 허용한다. 이 한 건만 풀고
+        // 나머지는 STRICT_STUBS로 둔다 - 클래스 전체를 LENIENT로 두면 서비스가 어떤 협력
+        // 객체를 더 이상 부르지 않게 되어도 테스트가 그대로 통과한다.
+        lenient().when(timeProvider.now()).thenReturn(NIGHT);
     }
 
     private ChatMenu menu(ChatAnswerType type) {
@@ -222,7 +223,8 @@ class ChatConversationServiceTest {
     @DisplayName("상담사가 배정된 대화에는 AI가 끼어들지 않는다 - 사람이 한 말을 자동 답변이 뒤집을 수 있다")
     void sendUserMessage_상담사배정된_대화는_발행하지_않는다() {
         givenSendableConversation(42L);
-        given(businessHourService.isWithinBusinessHours(NIGHT)).willReturn(false);
+        // 운영시간을 준비하지 않는다. 배정 검사가 그보다 앞이라 여기까지 오지 않는다 -
+        // 스텁을 남겨두면 "운영시간 밖이라서 막혔나"로 읽혀 판정 순서가 흐려진다.
 
         service.sendUserMessage(CONVERSATION_ID, "문의합니다", null, GUEST_KEY);
 

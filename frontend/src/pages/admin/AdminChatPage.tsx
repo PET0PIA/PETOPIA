@@ -145,46 +145,61 @@ export function AdminChatPage() {
 
   const { onTyping, stopTyping } = useTypingSignal(selectedId);
 
-  /** 답변·종료 직후처럼 즉시 갱신이 필요할 때 쓴다(폴링을 기다리지 않도록). */
-  const loadList = useCallback(async (current: AdminChatFilter) => {
-    try {
-      const list = await fetchAdminConversations(current);
-      setConversations(list.items);
-    } catch {
-      setError("상담 목록을 불러오지 못했어요.");
-    }
-  }, []);
+  /**
+   * 목록과 미답변 건수를 갱신한다. 폴링과 답변·종료 직후가 같은 함수를 쓴다.
+   *
+   * 두 조회를 `Promise.all`로 묶지 않는다. 묶으면 건수 조회 하나가 실패해도 목록 갱신까지
+   * 함께 버려져, 그 주기 동안 대기열이 멈춘 화면으로 남는다 - 상담사에게 목록은 업무 자체고
+   * 건수는 그 요약이라, 요약을 못 읽었다고 업무를 감출 이유가 없다.
+   *
+   * 답변·종료 직후에도 건수를 함께 부르는 이유: 목록만 갱신하면 방금 답한 상담은 목록에서
+   * 사라지는데 머리말의 숫자는 다음 폴링(5초)까지 이전 값으로 남는다.
+   */
+  const refresh = useCallback(
+    (current: AdminChatFilter, isCanceled: () => boolean = () => false) => {
+      const list = fetchAdminConversations(current)
+        .then((data) => {
+          if (!isCanceled()) setConversations(data.items);
+        })
+        .catch(() => {
+          if (!isCanceled()) setError("상담 목록을 불러오지 못했어요.");
+        });
+
+      const count = fetchUnansweredCount()
+        .then((unanswered) => {
+          if (!isCanceled()) setWaitingCount(unanswered);
+        })
+        .catch(() => {
+          // 배지 숫자 하나가 이번 주기에 뒤처지는 것은 목록이 멈추는 것보다 가볍다.
+          // 배너까지 띄우면 목록은 멀쩡한데 화면 전체가 실패한 것처럼 읽힌다.
+        });
+
+      return Promise.all([list, count]);
+    },
+    [],
+  );
 
   /*
    * 목록 폴링. 첫 조회도 인터벌과 같은 경로를 타게 해서, 탭이 백그라운드일 때 도는 갱신과
    * 화면 진입 시 갱신이 어긋나지 않게 한다.
    *
-   * setState를 콜백(then) 안에서만 호출하는 형태로 둔다 - 이펙트 본문에서 곧바로 부르면
+   * setState는 refresh 안의 콜백(then)에서만 부른다 - 이펙트 본문에서 곧바로 부르면
    * 렌더가 연쇄로 도는 패턴이 되고, 프로젝트 lint 규칙도 이를 막는다.
    */
   useEffect(() => {
     let canceled = false;
-    const run = () =>
-      Promise.all([fetchAdminConversations(filter), fetchUnansweredCount()])
-        .then(([list, unanswered]) => {
-          if (canceled) return;
-          setConversations(list.items);
-          setWaitingCount(unanswered);
-        })
-        .catch(() => {
-          if (!canceled) setError("상담 목록을 불러오지 못했어요.");
-        });
+    const run = () => void refresh(filter, () => canceled);
 
-    void run();
+    run();
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void run();
+      if (document.visibilityState === "visible") run();
     }, LIST_REFRESH_MS);
 
     return () => {
       canceled = true;
       window.clearInterval(timer);
     };
-  }, [filter]);
+  }, [filter, refresh]);
 
   /*
    * 열어둔 대화도 목록과 같은 주기로 다시 읽는다.
@@ -239,7 +254,7 @@ export function AdminChatPage() {
       stopTyping();
       setDetail(await replyToConversation(selectedId, content));
       setReply("");
-      void loadList(filter);
+      void refresh(filter);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "답변을 보내지 못했어요.");
     } finally {
@@ -266,7 +281,7 @@ export function AdminChatPage() {
     try {
       await closeAdminConversation(selectedId);
       setDetail(await fetchAdminConversation(selectedId));
-      void loadList(filter);
+      void refresh(filter);
     } catch {
       setError("상담을 종료하지 못했어요.");
     }

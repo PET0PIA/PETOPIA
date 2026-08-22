@@ -90,6 +90,9 @@ public class ChatAiAnswerService {
     /**
      * 답변을 만들어 붙인다.
      *
+     * <p>답변을 얻은 뒤 곧바로 저장하지 않는다. {@link ChatConversationMapper#markAiHandled}의
+     * 조건부 전이를 먼저 통과해야 한다 - 그 전이가 이 트랜잭션의 저장 권한이다.
+     *
      * @return 실제로 AI 답변을 남겼는지. 반납은 성공·실패 모두에서 필요하므로 이 값으로
      *         반납을 판단하지 않는다 - 호출자가 로그와 이관 안내를 가르는 데 쓴다.
      */
@@ -106,19 +109,26 @@ public class ChatAiAnswerService {
             return false;
         }
 
+        // 조건부 전이를 저장 권한으로 쓴다. 순서가 반대였을 때(붙인 뒤에 전이) 전이가 실패한
+        // 경우 - 그 사이 상담사가 답했거나 사용자가 종료한 경우 - 답변만 남았다. 사람이
+        // 이어받은 상담에 자동 답변이 뒤늦게 끼어들고, 끝낸 창에 말풍선이 하나 더 붙는다.
+        // 되돌릴 수 없는 쓰기 앞에 판정을 두면 그 창이 닫힌다.
+        //
+        // 이 순서는 stale 창을 넘겨 겹친 두 작업의 중복 답변도 함께 막는다. 먼저 도착한 쪽이
+        // AI_HANDLED로 넘기면 뒤이은 쪽은 여기서 0을 받고 자기 답변을 버린다.
+        if (conversationMapper.markAiHandled(event.conversationId(), timeProvider.now()) != 1) {
+            log.info("AI 답변을 저장하지 않는다. 그 사이 상담사가 답했거나 대화가 끝났다. conversationId={}",
+                    event.conversationId());
+            return false;
+        }
+
         // 답변과 마무리 안내를 한 말풍선으로 묶는다. 따로 붙이면 짧은 안내가 독립 메시지로
         // 쌓여, 몇 번 주고받은 뒤에는 창의 절반이 같은 안내로 채워진다.
         String body = answer.get() + "\n\n" + setting(SETTING_AI_CLOSING_NOTE, DEFAULT_AI_CLOSING_NOTE);
         messageWriter.append(event.conversationId(), ChatSenderType.AI, null, null, body);
 
         conversationMapper.incrementAiAnswerCount(event.conversationId());
-
-        // 전이에 실패하면(그 사이 상담사가 답했거나 대화가 끝난 경우) 그대로 둔다. 사람이 답한
-        // 상담을 "자동 응대로 마무리됨"으로 되돌리면 대기열에서 사라진다. 화면에 알릴 상태
-        // 변화도 없으므로 이벤트도 보내지 않는다.
-        if (conversationMapper.markAiHandled(event.conversationId(), timeProvider.now()) == 1) {
-            messageWriter.publishStatus(event.conversationId(), ChatConversationStatus.AI_HANDLED);
-        }
+        messageWriter.publishStatus(event.conversationId(), ChatConversationStatus.AI_HANDLED);
         return true;
     }
 

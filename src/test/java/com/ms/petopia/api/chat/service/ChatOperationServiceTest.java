@@ -15,8 +15,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,7 +31,6 @@ import static org.mockito.Mockito.verify;
  * 쪽에는 흔적조차 남지 않는다. 운영자가 실수를 알아챌 경로가 클릭 지표뿐이라 서버에서 막는다.
  */
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class ChatOperationServiceTest {
 
     @Mock private ChatMenuMapper menuMapper;

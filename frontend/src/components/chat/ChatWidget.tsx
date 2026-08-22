@@ -290,6 +290,13 @@ export function ChatWidget() {
       setConversation({ ...updated, messages: [] });
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "메시지를 보내지 못했어요.");
+      /*
+       * 실패 원인이 상태 불일치일 수 있다. 상담사가 방금 종료한 대화에 보내면 서버는
+       * CHAT_ALREADY_CLOSED를 주는데, 문구만 띄우면 입력창은 그대로 열려 있어 사용자는
+       * 같은 실패를 반복한다. 서버 상태를 다시 읽어 잠금을 맞춘다 - SSE 상태 이벤트나
+       * 폴백 폴링이 도착하면 어차피 수렴하지만, 그때까지 잘못된 화면이 남는다.
+       */
+      void syncFromServer(conversation.conversationId);
     } finally {
       setBusy(false);
     }
@@ -325,8 +332,14 @@ export function ChatWidget() {
    * ANSWER는 첫 화면과 같은 제목을 쓴다. 유형은 사용자 말풍선이 이미 말하고 있어서
    * 헤더가 되풀이할 이유가 없고, 제목이 그대로면 화면이 바뀐 게 아니라 대화가 이어진
    * 것으로 읽힌다.
+   *
+   * THREAD는 둘을 겸한다 - 지난 이력만 읽는 화면과 진행 중 상담을 이어가는 화면. 진행
+   * 중인데 제목이 `문의 내역`이면 방금 상담원 연결로 시작한 대화가 지난 기록처럼 읽혀,
+   * 사용자는 여기에 써도 전달되는지 확신하지 못한다. 입력창과 `상담 종료` 버튼이 뜨는
+   * 조건(activeConversation)을 제목도 그대로 따른다.
    */
-  const title = screen === "THREAD" ? "문의 내역" : "펫토피아 상담";
+  const title =
+    screen === "THREAD" ? (activeConversation ? "상담 진행 중" : "문의 내역") : "펫토피아 상담";
 
   return (
     <div

@@ -55,8 +55,12 @@ public interface ChatConversationMapper {
      * <p>이름이 {@code markAiAnswered}였을 때와 달리 <b>잠그지 않는다.</b> {@code AI_HANDLED}는
      * 입력이 열린 상태이고, 바뀌는 것은 상담사 대기열에 뜨는지 여부뿐이다.
      *
+     * <p><b>이 전이가 AI 답변의 저장 권한이다.</b> 호출자는 1을 받은 뒤에만 말풍선을 붙이고
+     * 지표를 올린다 - 반대 순서였을 때는 전이가 실패해도 답변이 남아, 상담사가 이어받은
+     * 대화나 끝난 대화에 자동 답변이 뒤늦게 끼어들었다.
+     *
      * @return 1이면 전이 성공. 0이면 그 사이 상담사가 답했거나 대화가 끝난 것이라
-     *         되돌리지 않는 편이 맞다.
+     *         되돌리지 않는 편이 맞고, 그 답변도 저장하지 않는다.
      */
     int markAiHandled(@Param("conversationId") Long conversationId,
                       @Param("now") LocalDateTime now);
@@ -70,6 +74,10 @@ public interface ChatConversationMapper {
      *
      * <p>호출 <b>전에</b> 선점해야 한다. 호출한 뒤에 표시하면 동시에 들어온 두 요청이 모두
      * 빈 값을 보고 Claude를 두 번 부른다.
+     *
+     * <p>상담사가 배정된 대화는 선점되지 않는다. 서비스도 같은 검사를 하지만 그쪽은
+     * 트랜잭션 시작 시점의 행을 보므로, 그 사이 배정이 일어나면 통과한다 - 배타를 실제로
+     * 집행하는 것은 이 UPDATE의 조건이다.
      *
      * @param staleBefore 이 시각보다 오래된 선점은 없는 것으로 본다. 프로세스가 죽어 반납되지
      *                    않은 행을 스스로 풀어주기 위한 값이다.

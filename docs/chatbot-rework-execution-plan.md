@@ -385,14 +385,16 @@ ALTER TABLE `chat_conversation`
 
 ## 8. 테스트
 
-~~현재 `src/test`에는 상담 관련 테스트가 하나도 없다.~~ **작성됨** — 34건.
+~~현재 `src/test`에는 상담 관련 테스트가 하나도 없다.~~ **작성됨** — 39건(`./gradlew test
+--tests "com.ms.petopia.api.chat.*"` 실행 건수).
 
 | 클래스 | 건수 | 무엇을 지키는가 |
 | --- | --- | --- |
-| `ChatConversationServiceTest` | 10 | 고정형이 상담을 못 만드는가, 클릭이 세션을 안 만드는가, AI 예약 조건 |
-| `ChatAiAnswerServiceTest` | 6 | 마무리 안내가 한 말풍선인가, 전이 실패 시 되돌리지 않는가, 이관 안내 중복 |
-| `ChatConversationStatusTest` | 12 | 잠금·대기 판정 규칙 자체 |
+| `ChatConversationServiceTest` | 12 | 고정형이 상담을 못 만드는가, 클릭이 세션을 안 만드는가, AI 예약 조건 |
+| `ChatAiAnswerServiceTest` | 6 | 마무리 안내가 한 말풍선인가, 전이 실패 시 아무것도 저장하지 않는가, 이관 안내 중복 |
+| `ChatConversationStatusTest` | 12 | 잠금·대기 판정 규칙 자체(`@EnumSource`로 상태마다 한 건씩 돈다) |
 | `ChatMapperSqlContractTest` | 6 | **enum과 SQL의 상태 목록이 어긋나지 않는가** |
+| `ChatOperationServiceTest` | 3 | 고정 답변 유형이 본문 없이 저장되지 않는가 |
 
 `ChatMapperSqlContractTest`가 이 재설계에서 가장 값이 나가는 테스트다. 기대값을 문자열로 적지
 않고 enum에서 뽑아내므로, 상태를 하나 추가하면 이 테스트가 먼저 깨지면서 "그 상태를 SQL 목록에
@@ -401,23 +403,33 @@ ALTER TABLE `chat_conversation`
 
 ### 단위 / 통합
 
-- `ChatConversationServiceTest`
+클래스별 실제 케이스다. 위 표의 건수와 이 목록이 어긋나면 목록이 낡은 것이다.
+
+- `ChatConversationServiceTest` (12)
   - 고정형 코드로 `start()` 호출 → `CHAT_MENU_NOT_CONNECTABLE`
+  - bootstrap은 운영시간 안에서만 종료 시각을 준다. 밖에서는 null이고 조회 자체를 하지 않는다 (2건)
   - `logMenuClick` → 세션·메시지 생성 없음, 클릭 행 1건
+  - 내려간 버튼의 클릭 → `CHAT_MENU_NOT_FOUND`, 클릭 행 없음
   - 운영시간 내 질문 → AI 이벤트 미발행, 상태 `WAITING_AGENT`
   - 운영시간 외 질문 → AI 이벤트 발행
   - 같은 대화에서 운영시간 외 질문 5회 반복 → 5회 모두 이벤트 발행 (한도 없음 확인)
-  - 상담사 배정된 대화의 운영시간 외 질문 → 이벤트 미발행
-  - 진행 중 호출이 있는 대화의 추가 질문 → 이벤트 미발행, 반납 뒤 다음 질문은 발행 (5-2-2)
-  - `ai_call_started_at`이 3분보다 오래된 대화 → 다시 선점된다
-- `ChatAiAnswerServiceTest`
-  - 답변 본문 끝에 `AI_CLOSING_NOTE`가 붙는다
+  - 진행 중 호출이 있는 대화의 추가 질문 → 이벤트 미발행 (5-2-2)
+  - 선점 요청의 stale 기준 시각이 현재보다 과거다
+  - 상담사 배정된 대화 → 이벤트 미발행, `claimAiCall`도 부르지 않는다
+  - 종료된 대화 → `CHAT_ALREADY_CLOSED`
+- `ChatAiAnswerServiceTest` (6)
+  - 답변 본문 끝에 `AI_CLOSING_NOTE`가 같은 말풍선으로 붙는다
   - 성공 시 상태 `AI_HANDLED`, `ai_answer_count` 증가
-  - `AI_HANDLED` 대화도 `acceptsUserMessage()`가 참
-  - `AI_HANDLED` 대화에 `markWaitingAgent`가 1행을 반영한다 (5-2-1. enum만 고치면 여기서 잡힌다)
-  - 이관(빈 답변) 시 `AI_ESCALATE_NOTICE`가 한 번만 붙고 상태는 `WAITING_AGENT`로 남는다
-- `AdminChatServiceTest` — `OPEN` 필터와 `countWaiting`에 `AI_HANDLED`가 섞이지 않는다
-- 매퍼 테스트 — `selectMenuStats`가 고정형(대화 0건)에도 클릭 수를 채워 반환한다
+  - **전이 실패 시 말풍선·지표·상태 이벤트 어느 것도 남지 않는다** (12장)
+  - 이관(빈 답변) 시 `AI_ESCALATE_NOTICE`가 붙고 상태는 `WAITING_AGENT`로 남는다
+  - 같은 이관 안내는 다시 붙지 않는다(행 잠금 뒤 확인)
+  - `releaseCall`이 선점을 반납한다
+- `ChatConversationStatusTest` (12) — `acceptsUserMessage()`는 `CLOSED`만 거짓, `needsAgentReply()`는
+  `WAITING_AGENT`만 참, `AI_HANDLED`는 잠기지 않는다, 답변 유형에 `AI`가 없다
+- `ChatMapperSqlContractTest` (6) — `markWaitingAgent` 허용 목록(5-2-1) / `countWaiting` 대기 정의 /
+  `OPEN` 필터에 `AI_HANDLED` 없음 / `markAiHandled`의 `WAITING_AGENT` 가드 / `claimAiCall`이 횟수가
+  아니라 stale로 판정 / 옛 상태값 잔존 없음
+- `ChatOperationServiceTest` (3) — `FIXED`는 빈 본문으로 생성·수정 모두 거부, `AGENT`는 빈 본문 허용
 
 ### 수동 검증
 
@@ -439,6 +451,9 @@ ALTER TABLE `chat_conversation`
   무관한 선행 상태이고(머지 이전 커밋에서도 같은 7건이 실패한다), 로컬 스키마를 다시 만들면
   풀린다. 컨텍스트를 띄우는 통합 테스트 7건이 같은 이유로 실패한다.
 - 상담사 콘솔의 `AI 응대` 탭은 서버 필터·프론트 탭까지 붙였지만 실제 데이터로 확인하지 않았다.
+- 아직 없는 테스트 두 건: `AdminChatService`의 `OPEN` 필터·`countWaiting`을 서비스 레벨에서 보는
+  것과, `selectMenuStats`가 대화 0건인 고정형에도 클릭 수를 채우는지 보는 매퍼 테스트. 앞은
+  `ChatMapperSqlContractTest`가 SQL 모양으로, 뒤는 10장의 지표 표 확인이 각각 대신하고 있다.
 
 ## 11. 관리자 화면 점검 (2026-08-22)
 
@@ -516,3 +531,22 @@ ALTER TABLE `chat_conversation`
 3. 같은 대화에 연달아 두 번 질문했을 때 답변이 하나만 오는가(진행 중 호출 가드)
 
 1·2는 단위 테스트가, 3은 SQL 직접 검증이 각각 덮고 있어 회귀 위험은 낮다.
+
+## 12. PR 리뷰 반영 (2026-08-22)
+
+PR #226에 붙은 자동 리뷰 10건(인라인 7 · diff 밖 1 · nitpick 2)을 코드와 대조했다. 고친 것과
+고치지 않기로 한 것을 함께 남긴다 - 뒤쪽이 더 중요하다. 같은 지적이 다음 리뷰에도 올라온다.
+
+| 지적 | 판단 | 처리 |
+| --- | --- | --- |
+| AI 답변을 붙이기 **전에** `markAiHandled`를 통과해야 한다 | 유효 | 전이를 저장 권한으로 쓴다. 0을 받으면 말풍선·지표·상태 이벤트 전부 남기지 않고 로그만 남긴다 |
+| 선점(`claimAiCall`)과 상담사 배정이 원자적으로 배타가 아니다 | 유효 | `assigned_admin_id IS NULL`을 UPDATE 조건으로 옮겼다. 서비스의 사전 검사는 트랜잭션 시작 시점의 행을 보므로 배타를 집행하지 못한다 |
+| 콘솔의 목록과 미답변 건수를 `Promise.all`로 묶었다 | 유효 | 각각 반영한다. 건수 조회가 실패해도 대기열은 갱신되고, 답변·종료 직후에도 같은 함수로 배지까지 맞춘다 |
+| 전송 실패 후 대화 상태를 다시 맞추지 않는다 | 유효 | 실패 경로에서 `syncFromServer` 한 번. `CHAT_ALREADY_CLOSED`에 입력창이 열린 채 남지 않는다 |
+| 진행 중 상담인데 헤더 제목이 `문의 내역` | 유효 | 진행 중이면 `상담 진행 중`. 입력창이 뜨는 조건을 제목도 따른다 |
+| 테스트 건수 34 ↔ 39 불일치 | 유효 | 8장 표를 실제 실행 건수로 맞추고, 없는 테스트 두 건을 「남은 것」으로 내렸다 |
+| `closesAt` 주석이 `"HH:mm:ss"` | 유효 | 서버는 ISO로 내려주고 초가 0이면 생략한다(`"18:00"`). 주석만 고쳤다 - `slice(0, 5)`는 양쪽 다 맞다 |
+| 클래스 전체 `Strictness.LENIENT` | 유효 | 세 테스트 클래스에서 제거. 레포의 다른 74개 Mockito 테스트와 같은 기준이 됐고, 그 즉시 미사용 스텁 한 건(배정 검사가 운영시간 판정보다 앞이라 소비되지 않던 스텁)이 잡혔다 |
+| 클릭 집계를 `FIXED`로 제한하라 | **반영 안 함** | 전제가 틀렸다. `상담원 연결` 버튼의 클릭도 의도적으로 집계한다(위젯이 부른다). 접수 수와 나란히 놓으면 "누르고 그만둔 비율"이 보이고, 막으면 그 지표가 사라지면서 연결 클릭마다 4xx가 나간다 |
+| `markInProgress`가 진행 중 AI 선점을 거부해야 한다 | **반영 안 함** | 상담사의 인수는 항상 이겨야 한다. AI 호출이 도는 동안 답변이 실패하면 콘솔이 막힌다 |
+| 선점에 호출별 소유자 토큰을 둬라 | **반영 안 함** | 컬럼과 이벤트 필드를 늘려 남는 손해가 Claude 호출 1건이다. 겹친 두 작업이 답변을 둘 다 저장하는 일은 위 첫 항목이 막는다 - 뒤에 도착한 쪽은 전이에서 0을 받고 자기 답변을 버린다 |

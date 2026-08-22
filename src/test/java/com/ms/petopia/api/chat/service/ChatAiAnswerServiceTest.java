@@ -13,8 +13,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -35,7 +34,6 @@ import static org.mockito.Mockito.verify;
  * 화면에 무엇이 남는지를 본다. Claude 호출 자체(ClaudeSupportResponder)는 Mock이다.
  */
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class ChatAiAnswerServiceTest {
 
     private static final long CONVERSATION_ID = 100L;
@@ -59,9 +57,26 @@ class ChatAiAnswerServiceTest {
         given(messageMapper.selectRecentByConversation(eq(CONVERSATION_ID), anyInt()))
                 .willReturn(List.of());
         given(settingMapper.selectValue("AI_CONTEXT")).willReturn("참고 정보");
-        given(settingMapper.selectValue("AI_CLOSING_NOTE")).willReturn(CLOSING_NOTE);
+        // 전이 실패 경로는 본문을 만들기 전에 끝나므로 이 값을 읽지 않는다. 공통 준비에
+        // 남겨두되 그 한 건만 미사용을 허용한다 - 나머지 스텁은 STRICT_STUBS로 계속 검출한다.
+        lenient().when(settingMapper.selectValue("AI_CLOSING_NOTE")).thenReturn(CLOSING_NOTE);
         given(responder.answer(eq(CONVERSATION_ID), any(), eq("참고 정보")))
                 .willReturn(Optional.of(answer));
+    }
+
+    /**
+     * 응답기가 답하지 않기로 한 경우.
+     *
+     * <p>AI_CONTEXT까지 준비한다. 이관 판정도 프롬프트 조립을 거치므로 서비스가 그 값을
+     * 읽는데, 준비하지 않으면 STRICT_STUBS가 "다른 인자로 호출됐다"로 먼저 실패한다.
+     */
+    private void givenEscalation() {
+        given(messageMapper.selectRecentByConversation(eq(CONVERSATION_ID), anyInt()))
+                .willReturn(List.of());
+        given(settingMapper.selectValue("AI_CONTEXT")).willReturn("참고 정보");
+        given(settingMapper.selectValue("AI_ESCALATE_NOTICE")).willReturn(ESCALATE_NOTE);
+        given(responder.answer(eq(CONVERSATION_ID), any(), eq("참고 정보")))
+                .willReturn(Optional.empty());
     }
 
     @Test
@@ -94,23 +109,26 @@ class ChatAiAnswerServiceTest {
     }
 
     @Test
-    @DisplayName("그 사이 상담사가 답했으면 상태를 되돌리지 않는다 - 사람이 답한 상담이 대기열에서 사라진다")
-    void tryAnswer_전이실패하면_상태이벤트를_보내지_않는다() {
+    @DisplayName("전이가 실패하면 답변도 지표도 남기지 않는다 - 사람이 이어받은 대화에 자동 답변이 끼어들면 안 된다")
+    void tryAnswer_전이실패하면_아무것도_저장하지_않는다() {
         givenAnswer("답변입니다.");
+        // 그 사이 상담사가 답했거나(IN_PROGRESS) 사용자가 종료했다(CLOSED).
         given(conversationMapper.markAiHandled(CONVERSATION_ID, NOW)).willReturn(0);
 
-        service.tryAnswer(event);
+        boolean answered = service.tryAnswer(event);
 
+        assertThat(answered).isFalse();
+        // 순서가 반대였을 때 실제로 남던 세 가지다. 상태만 지키고 말풍선을 붙이면 화면에는
+        // 막으려던 그 답변이 그대로 나타난다.
+        verify(messageWriter, never()).append(anyLong(), any(), any(), any(), any());
+        verify(conversationMapper, never()).incrementAiAnswerCount(anyLong());
         verify(messageWriter, never()).publishStatus(anyLong(), any());
     }
 
     @Test
     @DisplayName("답하지 못하면 이관 안내를 남긴다 - 조용히 끝내면 '입력창은 열려 있는데 답이 없는' 화면이 된다")
     void tryAnswer_이관하면_안내를_남긴다() {
-        given(messageMapper.selectRecentByConversation(eq(CONVERSATION_ID), anyInt()))
-                .willReturn(List.of());
-        given(settingMapper.selectValue("AI_ESCALATE_NOTICE")).willReturn(ESCALATE_NOTE);
-        given(responder.answer(eq(CONVERSATION_ID), any(), any())).willReturn(Optional.empty());
+        givenEscalation();
         given(messageMapper.existsSystemMessage(CONVERSATION_ID, ESCALATE_NOTE)).willReturn(false);
 
         boolean answered = service.tryAnswer(event);
@@ -124,10 +142,7 @@ class ChatAiAnswerServiceTest {
     @Test
     @DisplayName("같은 이관 안내가 이미 있으면 다시 붙이지 않는다 - 같은 주제를 다시 물으면 같은 판정이 나온다")
     void tryAnswer_이관안내는_중복되지_않는다() {
-        given(messageMapper.selectRecentByConversation(eq(CONVERSATION_ID), anyInt()))
-                .willReturn(List.of());
-        given(settingMapper.selectValue("AI_ESCALATE_NOTICE")).willReturn(ESCALATE_NOTE);
-        given(responder.answer(eq(CONVERSATION_ID), any(), any())).willReturn(Optional.empty());
+        givenEscalation();
         given(messageMapper.existsSystemMessage(CONVERSATION_ID, ESCALATE_NOTE)).willReturn(true);
 
         service.tryAnswer(event);
