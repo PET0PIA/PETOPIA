@@ -370,21 +370,30 @@ public class SettlementService {
     private void notifySettlementCompleted(Long fairId, Long settlementId) {
         try {
             Long adminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
-            if (adminUserId == null) {
-                return;
+            if (adminUserId != null) {
+                notificationService.save(new SaveNotificationDto.Request(
+                        adminUserId,
+                        RecipientType.EVENT_ADMIN,
+                        NotificationType.SETTLEMENT_COMPLETED,
+                        "정산이 확정되었습니다",
+                        "행사 정산(ID: " + settlementId + ")이 확정 처리되었습니다.",
+                        null,
+                        List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                        null
+                ));
             }
-            notificationService.save(new SaveNotificationDto.Request(
-                    adminUserId,
-                    RecipientType.EVENT_ADMIN,
-                    NotificationType.SETTLEMENT_COMPLETED,
-                    "정산이 확정되었습니다",
-                    "행사 정산(ID: " + settlementId + ")이 확정 처리되었습니다.",
-                    null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
-                    null
-            ));
         } catch (Exception e) {
             log.error("정산 확정 알림 저장 실패. fairId={}, settlementId={}", fairId, settlementId, e);
+        }
+
+        try {
+            notificationService.notifySuperAdmins(
+                    NotificationType.SETTLEMENT_COMPLETED,
+                    "정산이 확정되었습니다",
+                    "행사 정산(ID: " + settlementId + ", fairId=" + fairId + ")이 확정 처리되었습니다."
+            );
+        } catch (Exception e) {
+            log.error("정산 확정 SUPER_ADMIN 알림 저장 실패. fairId={}, settlementId={}", fairId, settlementId, e);
         }
     }
 

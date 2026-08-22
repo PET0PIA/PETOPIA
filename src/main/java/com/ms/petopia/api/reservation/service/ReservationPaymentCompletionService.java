@@ -1,14 +1,19 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.reservation.dto.PaymentConfirmationReservationRow;
+import com.ms.petopia.api.reservation.dto.ReservationListRow;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletedCommand;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletionResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentReceiptRow;
+import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationPaymentConfirmationMapper;
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실시간 통계 확인용
 import com.ms.petopia.global.exception.CommonException;
@@ -24,17 +29,26 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReservationPaymentCompletionService {
 
+    private static final Map<String, String> RESERVATION_TYPE_LABELS = Map.of(
+            "ADVANCE", "사전예약",
+            "ONSITE_DIRECT", "현장예매"
+    );
+
     private final ReservationPaymentConfirmationMapper confirmationMapper;
+    private final ReservationMapper reservationMapper;
     private final EntryQrService entryQrService;
     private final ReservationTimeProvider timeProvider;
     private final ApplicationEventPublisher eventPublisher; // 실시간 통계 확인용
     private final NotificationService notificationService;
+    private final MailService mailService;
+    private final AuthMapper authMapper;
 
     /**
      * 결제 도메인이 검증한 성공 통지를 예약 상태에 반영한다.
@@ -112,6 +126,11 @@ public class ReservationPaymentCompletionService {
         eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
 
         Long notifyUserId = reservation.getUserId();
+        Long reservationId = command.reservationId();
+        // 입장 QR은 이 시점에 멱등 발급되며, 예약확정 페이지에서 나중에 조회해도 동일한 토큰이 나온다
+        // (EntryQrTokenService가 reservationId를 결정적으로 서명하기 때문) — 그래서 이메일에 넣는
+        // QR과 화면에 그려지는 QR이 항상 같다.
+        String qrToken = entryQrService.issueForPaymentCompletion(reservationId);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -123,22 +142,54 @@ public class ReservationPaymentCompletionService {
                             "예약이 확정되었습니다",
                             "결제가 완료되어 예약이 확정되었습니다.",
                             null,
-                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            List.of(DeliveryChannel.IN_APP),
                             null
                     ));
                 } catch (Exception e) {
                     log.error("예약 확정 알림 저장 실패. userId={}, reservationId={}",
-                            notifyUserId, command.reservationId(), e);
+                            notifyUserId, reservationId, e);
                 }
+                sendConfirmationEmail(notifyUserId, reservationId, qrToken);
             }
         });
 
         return new ReservationPaymentCompletionResponse(
-                command.reservationId(),
+                reservationId,
                 "CONFIRMED",
                 false,
-                entryQrService.issueForPaymentCompletion(command.reservationId())
+                qrToken
         );
+    }
+
+    /** 예약확정 HTML 이메일(QR 이미지 포함)을 보낸다. 실패해도 예약 확정 처리에는 영향 없음. */
+    private void sendConfirmationEmail(Long userId, Long reservationId, String qrToken) {
+        try {
+            User user = authMapper.selectUserById(userId);
+            if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+                log.warn("예약확정 이메일 발송 스킵 — 이메일 주소 없음. userId={}, reservationId={}", userId, reservationId);
+                return;
+            }
+            ReservationListRow row = reservationMapper.selectReservationForOwner(reservationId, userId);
+            if (row == null) {
+                log.warn("예약확정 이메일 발송 스킵 — 예약 조회 실패. userId={}, reservationId={}", userId, reservationId);
+                return;
+            }
+            String typeLabel = RESERVATION_TYPE_LABELS.getOrDefault(row.getReservationType(), row.getReservationType());
+            mailService.sendReservationConfirmedEmail(
+                    user.getEmail(),
+                    row.getReservationNo(),
+                    row.getFairName(),
+                    typeLabel,
+                    row.getVisitDate(),
+                    row.getEntryStartTime(),
+                    row.getEntryEndTime(),
+                    row.getAmount(),
+                    row.getReservedAt(),
+                    qrToken
+            );
+        } catch (Exception e) {
+            log.error("예약확정 이메일 발송 실패. userId={}, reservationId={}", userId, reservationId, e);
+        }
     }
 
     private void validateCommand(ReservationPaymentCompletedCommand command) {
