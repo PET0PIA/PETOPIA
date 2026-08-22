@@ -59,7 +59,7 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
   // 되므로(깜빡이거나 잘못된 안내), 조회가 끝났는지 따로 든다.
   const [petsLoaded, setPetsLoaded] = useState(false);
   const [selectedPetIds, setSelectedPetIds] = useState<number[]>([]);
-  const [need, setNeed] = useState("");
+  const [selectedNeeds, setSelectedNeeds] = useState<string[]>([]);
   const [customNeed, setCustomNeed] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
@@ -98,11 +98,21 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
     setSelectedPetIds((prev) => (prev.includes(petId) ? prev.filter((id) => id !== petId) : [...prev, petId]));
   }
 
+  function toggleNeed(value: string) {
+    setSelectedNeeds((prev) => {
+      const next = prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value];
+      if (value === "기타" && prev.includes(value)) setCustomNeed("");
+      return next;
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const trimmedNeed = (need === "기타" ? customNeed : need).trim();
-    if (selectedPetIds.length === 0 && trimmedNeed.length === 0) {
+    const trimmedCustomNeed = customNeed.trim();
+    const needs = selectedNeeds.filter((value) => value !== "기타");
+    if (selectedNeeds.includes("기타") && trimmedCustomNeed.length > 0) needs.push(trimmedCustomNeed);
+    if (selectedPetIds.length === 0 && needs.length === 0) {
       setFormError("반려동물을 선택하거나, 필요한 제품·서비스를 선택해 주세요.");
       return;
     }
@@ -115,7 +125,7 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
 
     const payload = {
       petIds: selectedPetIds.length > 0 ? selectedPetIds : undefined,
-      need: trimmedNeed.length > 0 ? trimmedNeed : undefined,
+      need: needs.length > 0 ? needs.join(", ") : undefined,
     };
 
     // 두 API가 독립적이라(하나가 실패해도 다른 하나는 보여줄 수 있게) allSettled로 따로 처리한다.
@@ -181,41 +191,22 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
           )}
 
           <fieldset>
-            <legend className="mb-2 block text-sm font-bold text-ink">필요한 제품·서비스 (선택)</legend>
+            <legend className="mb-2 block text-sm font-bold text-ink">필요한 제품·서비스 (여러 개 선택 가능)</legend>
             <div className="grid gap-2 sm:grid-cols-2">
-              <label
-                className={`flex cursor-pointer items-center gap-2 rounded-button border p-3 text-sm transition-colors ${
-                  need === "" ? "border-primary-strong bg-primary-soft ring-2 ring-primary ring-offset-1 ring-offset-page" : "border-line bg-card hover:bg-surface-alt"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="recommendation-need"
-                  value=""
-                  checked={need === ""}
-                  onChange={() => {
-                    setNeed("");
-                    setCustomNeed("");
-                  }}
-                  className="accent-primary-strong"
-                />
-                선택 안 함
-              </label>
               {NEED_OPTIONS.map((option) => (
                 <label
                   key={option.value}
                   className={`flex cursor-pointer items-start gap-2 rounded-button border p-3 transition-colors ${
-                    need === option.value
+                    selectedNeeds.includes(option.value)
                       ? "border-primary-strong bg-primary-soft ring-2 ring-primary ring-offset-1 ring-offset-page"
                       : "border-line bg-card hover:bg-surface-alt"
                   }`}
                 >
                   <input
-                    type="radio"
-                    name="recommendation-need"
+                    type="checkbox"
                     value={option.value}
-                    checked={need === option.value}
-                    onChange={(event) => setNeed(event.target.value)}
+                    checked={selectedNeeds.includes(option.value)}
+                    onChange={() => toggleNeed(option.value)}
                     className="mt-0.5 accent-primary-strong"
                   />
                   <span>
@@ -226,17 +217,16 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
               ))}
               <label
                 className={`flex cursor-pointer items-start gap-2 rounded-button border p-3 transition-colors ${
-                  need === "기타"
+                  selectedNeeds.includes("기타")
                     ? "border-primary-strong bg-primary-soft ring-2 ring-primary ring-offset-1 ring-offset-page"
                     : "border-line bg-card hover:bg-surface-alt"
                 }`}
               >
                 <input
-                  type="radio"
-                  name="recommendation-need"
+                  type="checkbox"
                   value="기타"
-                  checked={need === "기타"}
-                  onChange={() => setNeed("기타")}
+                  checked={selectedNeeds.includes("기타")}
+                  onChange={() => toggleNeed("기타")}
                   className="mt-0.5 accent-primary-strong"
                 />
                 <span>
@@ -245,7 +235,7 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
                 </span>
               </label>
             </div>
-            {need === "기타" && (
+            {selectedNeeds.includes("기타") && (
               <Input
                 className="mt-3"
                 value={customNeed}

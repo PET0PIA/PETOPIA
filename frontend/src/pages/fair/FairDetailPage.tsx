@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, ImageOff, MapPin, PawPrint } from "lucide-react";
+import { CalendarDays, ChevronRight, ImageOff, MapPin, PawPrint, Store } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { KakaoMap } from "../../components/map/KakaoMap";
@@ -9,7 +9,7 @@ import { ApiError } from "../../api/client";
 import { getFairPublicSummary, type FairPublicSummary } from "../../api/fair";
 import { getReservationAvailability, type ReservationAvailability } from "../../api/reservation";
 import { todayInSeoul } from "../../utils/date";
-import { fairCategoryLabels, formatFairPeriodDow } from "./fairCard";
+import { fairCategoryLabels, formatFairPeriodDow, isFairInProgress } from "./fairCard";
 import { FairParticipatingBooths } from "./FairParticipatingBooths";
 import { FairReviews } from "./FairReviews";
 
@@ -124,9 +124,12 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
   const indoorOutdoor = fair.indoorOutdoor ? INDOOR_OUTDOOR_LABELS[fair.indoorOutdoor] ?? null : null;
   // 예매 가능 = 예매 창이 열려(availability 성공) 잔여석 있는 날짜가 하나라도 있음.
   const reservable = !ended && !!availability && availability.dates.some((date) => date.available);
-  // 이미 열린 행사. 당일 예매는 막혀 있어(사전예약은 오늘 이후 운영일만 대상) reservable이 false가
-  // 되는데, 그렇다고 "예매 준비 중"이라고 하면 이미 하고 있는 행사를 아직 안 열린 것처럼 알리게 된다.
-  const inProgress = fair.status === "IN_PROGRESS";
+  // 운영 중인 행사. 사전예약이 닫혔어도(reservable=false) 현장예매는 열려 있을 수 있으므로
+  // 버튼을 비활성으로 막지 않고 예매 화면으로 보낸다 - 그 화면이 사전예약과 현장예매를 둘 다
+  // 다루고, 판매 상태·입장 마감 같은 최종 판정은 백엔드가 한다.
+  // 위 ended가 status를 먼저 보므로 진행 중이면 ended는 반드시 false다(!ended는 불필요).
+  // status가 비었을 때 운영기간으로 판정하는 폴백은 ended와 같은 규칙을 쓴다(isFairInProgress).
+  const inProgress = isFairInProgress(fair.status, fair.operationStartDate, fair.operationEndDate);
   const schedule = availability?.dates ?? [];
 
   return (
@@ -208,8 +211,21 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
               </p>
             )}
             <div>
-              <ReserveButton reservable={reservable} ended={ended} inProgress={inProgress} fairId={fair.fairId} size="lg" />
-              {!reservable && !ended && availabilityError && <p className="mt-2 text-sm text-muted">{availabilityError}</p>}
+              <div className="flex items-center gap-2">
+                <ReserveButton reservable={reservable} ended={ended} inProgress={inProgress} fairId={fair.fairId} size="lg" />
+                <Link
+                  to={`/fairs/${fair.fairId}/booths`}
+                  className="inline-flex min-h-12 items-center justify-center gap-1 rounded-button border border-line bg-card px-6 text-base font-bold text-ink transition hover:bg-page"
+                >
+                  <Store size={18} aria-hidden="true" />
+                  참가 부스 보기
+                </Link>
+              </div>
+              {/* 사전예약 조회 실패 사유(R003 등)는 할 수 있는 행동이 없을 때만 띄운다 -
+                  현장예매 버튼 아래에 "예약을 접수하지 않는 행사"라고 붙으면 서로 어긋난다. */}
+              {!reservable && !ended && !inProgress && availabilityError && (
+                <p className="mt-2 text-sm text-muted">{availabilityError}</p>
+              )}
             </div>
           </div>
         </div>
@@ -275,13 +291,16 @@ function ReserveButton({
   size: "lg" | "sm";
 }) {
   const sizeClass = size === "lg" ? "min-h-12 px-8 text-base" : "min-h-10 px-5 text-sm";
-  if (reservable) {
+  // 예매 화면은 사전예약·현장예매를 둘 다 다루므로, 둘 중 하나라도 가능성이 있으면 링크를 준다.
+  // 운영 중인데 사전예약만 닫힌 행사를 비활성 버튼으로 막으면 현장예매 입구까지 사라진다.
+  const actionLabel = reservable ? "예매하기" : inProgress ? "현장예매" : null;
+  if (actionLabel) {
     return (
       <Link
         to={`/tickets/${fairId}`}
         className={`inline-flex items-center justify-center gap-1 rounded-button bg-primary-strong font-bold text-white transition hover:opacity-90 ${sizeClass}`}
       >
-        예매하기
+        {actionLabel}
         <ChevronRight size={size === "lg" ? 18 : 16} aria-hidden="true" />
       </Link>
     );
@@ -291,7 +310,7 @@ function ReserveButton({
       className={`inline-flex cursor-not-allowed items-center justify-center rounded-button bg-surface-alt font-bold text-muted ${sizeClass}`}
       aria-disabled="true"
     >
-      {ended ? "종료된 행사" : inProgress ? "진행 중" : "예매 준비 중"}
+      {ended ? "종료된 행사" : "예매 준비 중"}
     </span>
   );
 }

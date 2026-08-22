@@ -4,6 +4,9 @@ import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.fairsettlement.dto.FairSettlementItemRow;
@@ -29,6 +32,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -65,6 +70,8 @@ public class FairSettlementService {
     private final AuditLogService auditLogService;
     private final FairContractClient fairContractClient;
     private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final AuthMapper authMapper;
+    private final MailService mailService;
 
     /**
      * 행사 하나의 최종정산을 계산해서 확정 전 상태(PENDING)로 만든다. 그 행사에 참가한 모든
@@ -276,7 +283,7 @@ public class FairSettlementService {
                 Map.of("status", "CONFIRMED")
         );
 
-        notifySettlementCompleted(row.getFairId(), fairSettlementId);
+        notifySettlementCompletedAfterCommit(row);
 
         return FairSettlementResponse.from(row);
     }
@@ -342,24 +349,59 @@ public class FairSettlementService {
         }
     }
 
-    private void notifySettlementCompleted(Long fairId, Long fairSettlementId) {
+    private void notifySettlementCompletedAfterCommit(FairSettlementRow row) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notifySettlementCompleted(row);
+            }
+        });
+    }
+
+    private void notifySettlementCompleted(FairSettlementRow row) {
+        Long fairId = row.getFairId();
+        Long fairSettlementId = row.getFairSettlementId();
         try {
             Long adminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
-            if (adminUserId == null) {
-                return;
+            if (adminUserId != null) {
+                notificationService.save(new SaveNotificationDto.Request(
+                        adminUserId,
+                        RecipientType.EVENT_ADMIN,
+                        NotificationType.SETTLEMENT_COMPLETED,
+                        "행사 정산이 확정되었습니다",
+                        "행사 최종정산(ID: " + fairSettlementId + ")이 확정 처리되었습니다.",
+                        null,
+                        List.of(DeliveryChannel.IN_APP),
+                        null
+                ));
+                sendSettlementCompletedEmail(adminUserId, row);
             }
-            notificationService.save(new SaveNotificationDto.Request(
-                    adminUserId,
-                    RecipientType.EVENT_ADMIN,
-                    NotificationType.SETTLEMENT_COMPLETED,
-                    "행사 정산이 확정되었습니다",
-                    "행사 최종정산(ID: " + fairSettlementId + ")이 확정 처리되었습니다.",
-                    null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
-                    null
-            ));
         } catch (Exception e) {
             log.error("행사 정산 확정 알림 저장 실패. fairId={}, fairSettlementId={}", fairId, fairSettlementId, e);
+        }
+
+        try {
+            notificationService.notifySuperAdmins(
+                    NotificationType.SETTLEMENT_COMPLETED,
+                    "행사 정산이 확정되었습니다",
+                    "행사 최종정산(ID: " + fairSettlementId + ", fairId=" + fairId + ")이 확정 처리되었습니다."
+            );
+        } catch (Exception e) {
+            log.error("행사 정산 확정 SUPER_ADMIN 알림 저장 실패. fairId={}, fairSettlementId={}", fairId, fairSettlementId, e);
+        }
+    }
+
+    private void sendSettlementCompletedEmail(Long adminUserId, FairSettlementRow row) {
+        try {
+            User user = authMapper.selectUserById(adminUserId);
+            if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+                return;
+            }
+            mailService.sendSettlementCompletedEmail(user.getEmail(), "행사 최종정산", row.getFairSettlementId(),
+                    row.getGrossAmount(), row.getRefundAmount(), row.getCommissionAmount(), row.getNetAmount());
+        } catch (Exception e) {
+            log.error("행사 정산 확정 이메일 발송 실패. fairId={}, fairSettlementId={}",
+                    row.getFairId(), row.getFairSettlementId(), e);
         }
     }
 

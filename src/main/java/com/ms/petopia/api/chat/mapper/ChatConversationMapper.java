@@ -39,9 +39,9 @@ public interface ChatConversationMapper {
     /**
      * 대화 행을 잠근다(값은 쓰지 않는다).
      *
-     * <p>같은 대화에 AI 답변 작업이 둘 동시에 돌 수 있다 - {@link #claimAiAnswer}는 한도가
-     * 남아 있으면 연달아 들어온 두 요청을 모두 통과시킨다. 그래서 "이미 붙었는지 읽어보고
-     * 없으면 붙인다" 식의 판정은 둘이 같은 스냅샷을 보고 둘 다 붙이는 창이 있다.
+     * <p>같은 대화에 AI 답변 작업이 둘 동시에 돌 수 있다 - {@link #claimAiCall}의 stale 창이
+     * 지나면 뒤이은 질문이 다시 선점할 수 있고, 그때 두 작업이 겹친다. 그래서 "이미 붙었는지
+     * 읽어보고 없으면 붙인다" 식의 판정은 둘이 같은 스냅샷을 보고 둘 다 붙이는 창이 있다.
      *
      * <p>읽기 전에 이 잠금을 잡으면 뒤에 온 쪽이 앞의 커밋을 기다린 뒤 판정하므로 그 창이
      * 닫힌다. 잠금 구간은 Claude 호출 <b>이후</b>의 쓰기 몇 줄뿐이고, 잠그는 순서도
@@ -50,31 +50,48 @@ public interface ChatConversationMapper {
     void lockById(@Param("conversationId") Long conversationId);
 
     /**
-     * AI가 답한 뒤 입력을 잠근다.
+     * AI가 응대를 마쳤다고 표시한다.
      *
-     * @return 1이면 잠금 성공. 0이면 그 사이 상담사가 답했거나 대화가 끝난 것이라
-     *         잠그지 않는 편이 맞다.
+     * <p>이름이 {@code markAiAnswered}였을 때와 달리 <b>잠그지 않는다.</b> {@code AI_HANDLED}는
+     * 입력이 열린 상태이고, 바뀌는 것은 상담사 대기열에 뜨는지 여부뿐이다.
+     *
+     * <p><b>이 전이가 AI 답변의 저장 권한이다.</b> 호출자는 1을 받은 뒤에만 말풍선을 붙이고
+     * 지표를 올린다 - 반대 순서였을 때는 전이가 실패해도 답변이 남아, 상담사가 이어받은
+     * 대화나 끝난 대화에 자동 답변이 뒤늦게 끼어들었다.
+     *
+     * @return 1이면 전이 성공. 0이면 그 사이 상담사가 답했거나 대화가 끝난 것이라
+     *         되돌리지 않는 편이 맞고, 그 답변도 저장하지 않는다.
      */
-    int markAiAnswered(@Param("conversationId") Long conversationId,
-                       @Param("now") LocalDateTime now);
+    int markAiHandled(@Param("conversationId") Long conversationId,
+                      @Param("now") LocalDateTime now);
 
     /**
-     * AI 답변 슬롯을 선점한다.
+     * 진행 중인 AI 호출을 선점한다.
      *
-     * <p>호출 <b>전에</b> 카운트를 올려야 한다. 호출한 뒤에 올리면, 동시에 들어온 두 요청이
-     * 모두 0을 보고 Claude를 두 번 부른다(비용은 두 배, 답변은 중복).
+     * <p><b>횟수 한도가 아니라 중복 제거다.</b> 답을 기다리다 같은 질문을 연달아 보내면
+     * 호출이 동시에 여러 건 돌고, 답변이 순서 없이 한 창에 쌓인다. 앞 답변이 도착해 반납되면
+     * 다음 질문은 그대로 답을 받는다.
      *
-     * @param limit 대화당 허용 횟수
+     * <p>호출 <b>전에</b> 선점해야 한다. 호출한 뒤에 표시하면 동시에 들어온 두 요청이 모두
+     * 빈 값을 보고 Claude를 두 번 부른다.
+     *
+     * <p>상담사가 배정된 대화는 선점되지 않는다. 서비스도 같은 검사를 하지만 그쪽은
+     * 트랜잭션 시작 시점의 행을 보므로, 그 사이 배정이 일어나면 통과한다 - 배타를 실제로
+     * 집행하는 것은 이 UPDATE의 조건이다.
+     *
+     * @param staleBefore 이 시각보다 오래된 선점은 없는 것으로 본다. 프로세스가 죽어 반납되지
+     *                    않은 행을 스스로 풀어주기 위한 값이다.
      * @return 1이면 선점 성공
      */
-    int claimAiAnswer(@Param("conversationId") Long conversationId,
-                      @Param("limit") int limit);
+    int claimAiCall(@Param("conversationId") Long conversationId,
+                    @Param("now") LocalDateTime now,
+                    @Param("staleBefore") LocalDateTime staleBefore);
 
-    /** 선점했지만 답변하지 못했을 때 되돌린다(대기열 정원 반납과 같은 패턴). */
-    int releaseAiAnswer(@Param("conversationId") Long conversationId);
+    /** 선점을 반납한다. 성공·이관·예외·큐 거부 네 경로 모두에서 불린다. */
+    int releaseAiCall(@Param("conversationId") Long conversationId);
 
-    /** 선점 직후 몇 번째 답변인지 알아내려고 읽는다(마지막 답변이면 종료 안내를 붙여야 한다). */
-    Integer selectAiAnswerCount(@Param("conversationId") Long conversationId);
+    /** AI가 응대한 횟수. 한도가 아니라 지표용이라 조건 없이 올린다. */
+    int incrementAiAnswerCount(@Param("conversationId") Long conversationId);
 
     /** 상담사가 답했을 때. 잠금이 풀린다. */
     int markInProgress(@Param("conversationId") Long conversationId,

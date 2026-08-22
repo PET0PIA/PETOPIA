@@ -1,5 +1,8 @@
 package com.ms.petopia.api.refund.service;
 
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
@@ -8,6 +11,7 @@ import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RefundResponse;
 import com.ms.petopia.api.refund.dto.RefundRow;
@@ -21,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -64,6 +70,9 @@ public class RefundService {
     private final FairSettlementMapper fairSettlementMapper;
     private final NotificationService notificationService;
     private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final RecruitNoticeMapper recruitNoticeMapper;
+    private final AuthMapper authMapper;
+    private final MailService mailService;
 
     /**
      * 환불 요청자가 결제 소유자 또는 그 행사 담당 EVENT_ADMIN/SUPER_ADMIN인지 확인한다
@@ -231,12 +240,66 @@ public class RefundService {
                     "환불 금액 " + refund.getRefundAmount() + "원이 처리되었습니다. "
                             + "카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.",
                     null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                    List.of(DeliveryChannel.IN_APP),
                     null
             ));
         } catch (Exception e) {
             log.error("환불 완료 알림 저장 실패. refundId={}, paymentId={}",
                     refund.getRefundId(), refund.getPaymentId(), e);
+        }
+        Long payerUserId = payment.getPayerUserId();
+        Long refundId = refund.getRefundId();
+        Long paymentId = refund.getPaymentId();
+        long refundAmount = refund.getRefundAmount();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    User user = authMapper.selectUserById(payerUserId);
+                    if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+                        mailService.sendRefundCompletedEmail(user.getEmail(), refundAmount);
+                    }
+                } catch (Exception e) {
+                    log.error("환불 완료 이메일 발송 실패. refundId={}, paymentId={}", refundId, paymentId, e);
+                }
+            }
+        });
+        notifyRefundCompletedToAdmins(payment, refund);
+    }
+
+    /** 환불 발생을 행사 담당 EVENT_ADMIN에게 알린다. 실패해도 환불 처리에는 영향 없음. */
+    private void notifyRefundCompletedToAdmins(PaymentRow payment, RefundRow refund) {
+        String payerNickname = resolvePayerNickname(payment.getPayerUserId());
+        String body = payerNickname + "님의 환불 " + refund.getRefundAmount() + "원이 처리되었습니다.";
+
+        try {
+            Long adminUserId = payment.getFairId() == null
+                    ? null : recruitNoticeMapper.selectAdminUserIdByFairId(payment.getFairId());
+            if (adminUserId != null) {
+                notificationService.save(new SaveNotificationDto.Request(
+                        adminUserId,
+                        RecipientType.EVENT_ADMIN,
+                        NotificationType.REFUND_COMPLETED,
+                        "환불이 접수되었습니다",
+                        body,
+                        null,
+                        List.of(DeliveryChannel.IN_APP),
+                        null
+                ));
+            }
+        } catch (Exception e) {
+            log.error("환불 완료 EVENT_ADMIN 알림 저장 실패. refundId={}, paymentId={}, fairId={}",
+                    refund.getRefundId(), refund.getPaymentId(), payment.getFairId(), e);
+        }
+    }
+
+    private String resolvePayerNickname(Long payerUserId) {
+        try {
+            User user = authMapper.selectUserById(payerUserId);
+            return user != null && user.getNickname() != null ? user.getNickname() : "알 수 없는 사용자";
+        } catch (Exception e) {
+            log.warn("결제자 닉네임 조회 실패. payerUserId={}", payerUserId, e);
+            return "알 수 없는 사용자";
         }
     }
 

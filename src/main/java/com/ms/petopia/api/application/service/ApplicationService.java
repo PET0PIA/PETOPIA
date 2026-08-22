@@ -4,6 +4,9 @@ import com.ms.petopia.api.application.domain.*;
 import com.ms.petopia.api.application.dto.request.*;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.booth.domain.Booth;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
@@ -28,6 +31,7 @@ import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -56,6 +60,11 @@ public class ApplicationService {
     private final BoothMapper boothMapper;
     private final BoothSlotService boothSlotService;
     private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final AuthMapper authMapper;
+    private final MailService mailService;
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     // 부스 슬롯 목록 + 잠금 상태 조회
     public List<BoothSlotLockStatusResponse> getBoothSlots(Long fairId) {
@@ -479,7 +488,10 @@ public class ApplicationService {
         if(business != null) {
             notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_APPROVED,
                     "참가 신청이 승인되었습니다",
-                    "참가비 " + finalPrice + "원을 " + paymentDueAt.toLocalDate() + "까지 결제해주세요.");
+                    "참가비 " + finalPrice + "원을 " + paymentDueAt.toLocalDate() + "까지 결제해주세요.",
+                    () -> withRecipientEmail(business.getOwnerId(), email ->
+                            mailService.sendVendorApplicationApprovedEmail(email, finalPrice,
+                                    paymentDueAt.toLocalDate(), frontendUrl + "/vendor/participations")));
         }
 
         return ApplicationReviewResultResponse.builder()
@@ -537,7 +549,9 @@ public class ApplicationService {
         if(business != null) {
             notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_REJECTED,
                     "참가 신청이 반려되었습니다",
-                    "반려 사유: " + request.getRejectReason());
+                    "반려 사유: " + request.getRejectReason(),
+                    () -> withRecipientEmail(business.getOwnerId(), email ->
+                            mailService.sendVendorApplicationRejectedEmail(email, request.getRejectReason())));
         }
 
         return ApplicationReviewResultResponse.builder()
@@ -686,7 +700,9 @@ public class ApplicationService {
         if(business != null) {
             notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
                     "참가 취소 요청이 승인되었습니다",
-                    "신청이 취소 처리되었습니다.");
+                    "신청이 취소 처리되었습니다.",
+                    () -> withRecipientEmail(business.getOwnerId(),
+                            email -> mailService.sendVendorApplicationCancelApprovedEmail(email)));
         }
 
         return ApplicationCancelRequestResultResponse.builder()
@@ -783,7 +799,9 @@ public class ApplicationService {
         if(business != null) {
             notifyApplicationEventAfterCommit(business.getOwnerId(), NotificationType.VENDOR_APPLICATION_CANCEL_REJECTED,
                     "참가 취소 요청이 반려되었습니다",
-                    "취소 요청이 반려되었습니다.");
+                    "취소 요청이 반려되었습니다.",
+                    () -> withRecipientEmail(business.getOwnerId(),
+                            email -> mailService.sendVendorApplicationCancelRejectedEmail(email)));
         }
 
         return ApplicationCancelRequestResultResponse.builder()
@@ -879,7 +897,8 @@ public class ApplicationService {
      * 본 로직(승인/반려/취소 처리)은 이미 끝난 뒤이므로 예외를 던져 되돌리지 않는다
      * (RefundService.notifyRefundCompleted와 동일한 이유).
      */
-    private void notifyApplicationEvent(Long recipientUserId, NotificationType type, String title, String body) {
+    private void notifyApplicationEvent(Long recipientUserId, NotificationType type, String title, String body,
+                                        Runnable emailAction) {
 
         try {
 
@@ -890,7 +909,7 @@ public class ApplicationService {
                     title,
                     body,
                     null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                    List.of(DeliveryChannel.IN_APP),
                     null
             ));
 
@@ -898,17 +917,34 @@ public class ApplicationService {
             log.error("참가 신청 알림 저장 실패. recipientUserId={}, type={}", recipientUserId, type, e);
         }
 
+        if (emailAction != null) {
+            try {
+                emailAction.run();
+            } catch (Exception e) {
+                log.error("참가 신청 이메일 발송 실패. recipientUserId={}, type={}", recipientUserId, type, e);
+            }
+        }
+
     }
 
-    private void notifyApplicationEventAfterCommit(Long recipientUserId, NotificationType type, String title, String body) {
+    private void notifyApplicationEventAfterCommit(Long recipientUserId, NotificationType type, String title,
+                                                    String body, Runnable emailAction) {
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                notifyApplicationEvent(recipientUserId, type, title, body);
+                notifyApplicationEvent(recipientUserId, type, title, body, emailAction);
             }
         });
 
+    }
+
+    /** 이메일 액션 안에서 공통으로 쓰는 수신자 이메일 조회 — 없으면 조용히 건너뛴다. */
+    private void withRecipientEmail(Long userId, java.util.function.Consumer<String> action) {
+        User user = authMapper.selectUserById(userId);
+        if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+            action.accept(user.getEmail());
+        }
     }
 
     /*
@@ -969,7 +1005,9 @@ public class ApplicationService {
                 notifyApplicationEventAfterCommit(business.getOwnerId(),
                         NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
                         "사업자 승인 취소로 참가 신청이 취소되었습니다",
-                        "관리자가 사업자를 취소 처리하여 신청이 취소되었습니다.");
+                        "관리자가 사업자를 취소 처리하여 신청이 취소되었습니다.",
+                        () -> withRecipientEmail(business.getOwnerId(),
+                                email -> mailService.sendVendorApplicationCancelApprovedEmail(email)));
 
             }
 

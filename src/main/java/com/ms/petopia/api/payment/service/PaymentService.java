@@ -5,6 +5,9 @@ import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
@@ -17,6 +20,7 @@ import com.ms.petopia.api.payment.client.ReservationPaymentContractClient;
 import com.ms.petopia.api.payment.client.TossPaymentClient;
 import com.ms.petopia.api.payment.dto.*;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
+import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
 import com.ms.petopia.api.refund.dto.RefundReason;
 import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RequestedByDomain;
@@ -63,6 +67,9 @@ public class PaymentService {
     private final ApplicationService applicationService;
     private final RefundService refundService;
     private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final RecruitNoticeMapper recruitNoticeMapper;
+    private final AuthMapper authMapper;
+    private final MailService mailService;
 
     // RefundService.refund()의 actingUserId는 원래 "누가 환불을 처리했는지" 기록하는 값인데,
     // 여기서는 사람이 아니라 시스템(이 메서드)이 자동으로 트리거하는 환불이라 실제 유저 ID가 없다.
@@ -723,20 +730,76 @@ public class PaymentService {
     }
 
     private void notifyPaymentCompleted(PaymentRow row) {
+        // RESERVATION_DEPOSIT은 예약 도메인이 별도로 RESERVATION_CONFIRMED를 보내므로
+        // (ReservationPaymentCompletionService.complete() 참고) 사용자에게는 이 알림을 생략한다 —
+        // 안 그러면 같은 결제 1건에 "결제 완료"와 "예약 확정" 알림이 중복으로 간다.
+        if (!"RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
+            try {
+                notificationService.save(new SaveNotificationDto.Request(
+                        row.getPayerUserId(),
+                        RecipientType.USER,
+                        NotificationType.PAYMENT_COMPLETED,
+                        "결제가 완료되었습니다",
+                        row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
+                        null,
+                        List.of(DeliveryChannel.IN_APP),
+                        null
+                ));
+            } catch (Exception e) {
+                log.error("결제 완료 알림 저장 실패. paymentId={}, userId={}",
+                        row.getPaymentId(), row.getPayerUserId(), e);
+            }
+            sendPaymentCompletedEmail(row);
+        }
+        notifyPaymentCompletedToAdmins(row);
+    }
+
+    private void sendPaymentCompletedEmail(PaymentRow row) {
         try {
-            notificationService.save(new SaveNotificationDto.Request(
-                    row.getPayerUserId(),
-                    RecipientType.USER,
-                    NotificationType.PAYMENT_COMPLETED,
-                    "결제가 완료되었습니다",
-                    row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
-                    null,
-                    List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
-                    null
-            ));
+            User user = authMapper.selectUserById(row.getPayerUserId());
+            if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+                return;
+            }
+            mailService.sendPaymentCompletedEmail(user.getEmail(), row.getAmount(), row.getMethod(), row.getPaidAt());
         } catch (Exception e) {
-            log.error("결제 완료 알림 저장 실패. paymentId={}, userId={}",
+            log.error("결제 완료 이메일 발송 실패. paymentId={}, userId={}",
                     row.getPaymentId(), row.getPayerUserId(), e);
+        }
+    }
+
+    /** 결제 발생을 행사 담당 EVENT_ADMIN에게 알린다. 실패해도 결제 처리에는 영향 없음. */
+    private void notifyPaymentCompletedToAdmins(PaymentRow row) {
+        String payerNickname = resolvePayerNickname(row.getPayerUserId());
+        String body = payerNickname + "님이 " + row.getAmount() + "원을 결제했습니다.";
+
+        try {
+            Long adminUserId = row.getFairId() == null
+                    ? null : recruitNoticeMapper.selectAdminUserIdByFairId(row.getFairId());
+            if (adminUserId != null) {
+                notificationService.save(new SaveNotificationDto.Request(
+                        adminUserId,
+                        RecipientType.EVENT_ADMIN,
+                        NotificationType.PAYMENT_COMPLETED,
+                        "결제가 접수되었습니다",
+                        body,
+                        null,
+                        List.of(DeliveryChannel.IN_APP),
+                        null
+                ));
+            }
+        } catch (Exception e) {
+            log.error("결제 완료 EVENT_ADMIN 알림 저장 실패. paymentId={}, fairId={}",
+                    row.getPaymentId(), row.getFairId(), e);
+        }
+    }
+
+    private String resolvePayerNickname(Long payerUserId) {
+        try {
+            User user = authMapper.selectUserById(payerUserId);
+            return user != null && user.getNickname() != null ? user.getNickname() : "알 수 없는 사용자";
+        } catch (Exception e) {
+            log.warn("결제자 닉네임 조회 실패. payerUserId={}", payerUserId, e);
+            return "알 수 없는 사용자";
         }
     }
 

@@ -1,6 +1,7 @@
 package com.ms.petopia.api.chat.service;
 
 import com.ms.petopia.api.chat.dto.AdminChatMenuRequest;
+import com.ms.petopia.api.chat.dto.ChatAnswerType;
 import com.ms.petopia.api.chat.dto.AdminChatMenuResponse;
 import com.ms.petopia.api.chat.dto.ChatBusinessHour;
 import com.ms.petopia.api.chat.dto.ChatMenuStat;
@@ -45,14 +46,31 @@ public class ChatOperationService {
         return AdminChatMenuResponse.fromAll(menuMapper.selectAllMenus());
     }
 
+    /**
+     * 고정 답변 유형은 답변 본문이 반드시 있어야 한다.
+     *
+     * <p>비어 있으면 눌러도 빈 말풍선만 나오는 죽은 버튼이 된다. 고정형이 상담을 만들지 않게
+     * 된 뒤로는 그 버튼을 눌러도 상담사에게 흔적조차 남지 않아, 운영자가 실수를 알아챌 경로가
+     * 클릭 지표뿐이다. 여기서 막는다.
+     *
+     * <p>{@code @NotBlank}로 선언하지 않는 이유: 유형에 따라 필수 여부가 달라지는 조건부
+     * 제약이라 필드 단위 애너테이션으로는 표현되지 않는다.
+     */
+    private void validateFixedAnswer(AdminChatMenuRequest request) {
+        if (request.answerType() == ChatAnswerType.FIXED
+                && (request.fixedAnswer() == null || request.fixedAnswer().isBlank())) {
+            throw new CommonException(ErrorCode.CHAT_FIXED_ANSWER_REQUIRED);
+        }
+    }
+
     @Transactional
     public AdminChatMenuResponse createMenu(AdminChatMenuRequest request) {
+        validateFixedAnswer(request);
         ChatMenu menu = ChatMenu.builder()
                 .code(request.code())
                 .label(request.label())
                 .answerType(request.answerType())
                 .fixedAnswer(request.fixedAnswer())
-                .aiContext(request.aiContext())
                 // 순서를 안 주면 맨 뒤에 붙인다. 0으로 두면 새 버튼이 맨 위로 올라가는데,
                 // 운영자가 기대하는 동작이 아니다(추가했더니 1번 버튼이 바뀌어 있다).
                 .displayOrder(request.displayOrder() != null
@@ -72,6 +90,8 @@ public class ChatOperationService {
 
     @Transactional
     public AdminChatMenuResponse updateMenu(Long menuId, AdminChatMenuRequest request) {
+        validateFixedAnswer(request);
+
         ChatMenu existing = menuMapper.selectById(menuId);
         if (existing == null) {
             throw new CommonException(ErrorCode.CHAT_MENU_NOT_FOUND);
@@ -80,7 +100,6 @@ public class ChatOperationService {
         existing.setLabel(request.label());
         existing.setAnswerType(request.answerType());
         existing.setFixedAnswer(request.fixedAnswer());
-        existing.setAiContext(request.aiContext());
         existing.setDisplayOrder(request.displayOrder() != null ? request.displayOrder() : existing.getDisplayOrder());
         existing.setIsActive(request.isActive() == null || request.isActive());
         menuMapper.update(existing);

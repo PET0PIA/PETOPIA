@@ -186,7 +186,9 @@ public class OnsiteReservationService {
         if (user == null) {
             throw new CommonException(ErrorCode.USER_NOT_FOUND);
         }
-        if (!"ACTIVE".equals(user.getStatus()) || !"USER".equals(user.getRole())) {
+        // 역할은 보지 않는다 - 관리자·사업자 계정도 개인 자격으로는 관람객이라 예약할 수 있다.
+        // 로그인만 되어 있으면 통과시키고, 정지·탈퇴 계정만 막는다.
+        if (!"ACTIVE".equals(user.getStatus())) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
         }
     }

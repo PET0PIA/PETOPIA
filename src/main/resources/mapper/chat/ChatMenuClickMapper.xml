@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.chat.mapper.ChatMenuClickMapper">
+
+    <!--
+      clicked_at은 컬럼 기본값(CURRENT_TIMESTAMP)에 맡긴다. 이 값은 지표 전용이라
+      테스트에서 시간을 고정할 이유가 없고, 애플리케이션 시각을 실어 보내면 서버 시간대
+      설정이 어긋났을 때 집계만 조용히 틀어진다.
+    -->
+    <insert id="insert">
+        INSERT INTO chat_menu_click (menu_id, user_id, guest_key)
+        VALUES (#{menuId}, #{userId}, #{guestKey})
+    </insert>
+
+</mapper>

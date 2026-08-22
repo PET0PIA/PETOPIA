@@ -11,14 +11,10 @@ package com.ms.petopia.api.chat.event;
  *       응답을 못 하면 사용자는 메시지가 안 보내진 줄 알고 다시 누른다.</li>
  * </ul>
  *
- * @param aiContext      이 문의 유형에 설정된 도메인 지식(운영자가 관리자 화면에서 편집한다)
- * @param lastAnswer     이번이 마지막 허용 횟수인지. 마지막이면 답변 뒤에 종료 안내를 붙이고
- *                       입력을 잠근다. 호출 시점에 이미 슬롯을 선점했으므로 여기서 다시
- *                       세지 않고 그때 계산한 값을 실어 보낸다.
+ * <p>대화 ID 하나만 싣는다. 참고 지식({@code AI_CONTEXT})은 전역 설정이라 소비하는 쪽이
+ * 직접 읽는 편이 낫고 - 이벤트에 실으면 발행 시점의 값이 얼어붙는다 - 남은 횟수 개념은
+ * 한도가 사라지면서 함께 없어졌다.
+ *
  */
-public record ChatAiAnswerRequestedEvent(
-        Long conversationId,
-        String aiContext,
-        boolean lastAnswer
-) {
+public record ChatAiAnswerRequestedEvent(Long conversationId) {
 }

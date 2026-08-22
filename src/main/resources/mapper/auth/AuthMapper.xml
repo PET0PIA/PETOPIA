@@ -151,6 +151,14 @@
            FOR UPDATE
     </select>
 
+    <!-- 전체관리자 알림 발송 대상 - 활성 SUPER_ADMIN 전원 -->
+    <select id="selectSuperAdminUserIds" resultType="long">
+        SELECT user_id
+          FROM users
+         WHERE role = 'SUPER_ADMIN'
+           AND status = 'ACTIVE'
+    </select>
+
     <!-- ===== 이메일 인증 코드 (user_tokens) ===== -->
 
     <insert id="insertUserToken"
