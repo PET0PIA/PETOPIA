@@ -13,16 +13,26 @@ const GUEST_KEY_HEADER = "X-Chat-Guest-Key";
 
 const GUEST_KEY_STORAGE = "chat-guest-key";
 
-export type ChatAnswerType = "FIXED" | "AI" | "AGENT";
+/**
+ * 버튼이 무엇으로 답하는지.
+ *
+ * FIXED는 위젯이 저장된 답변을 즉시 렌더한다(세션을 만들지 않는다).
+ * AGENT는 상담 세션을 만들어 상담사 대기열로 보낸다.
+ * "AI"는 없다 - AI는 버튼 유형이 아니라 운영시간 외 대체 응대다.
+ */
+export type ChatAnswerType = "FIXED" | "AGENT";
 export type ChatSenderType = "USER" | "BOT" | "AI" | "AGENT" | "SYSTEM";
-export type ChatConversationStatus = "BOT" | "WAITING_AGENT" | "AI_ANSWERED" | "IN_PROGRESS" | "CLOSED";
-export type ChatLockReason = "AI_ANSWERED" | "CLOSED";
+export type ChatConversationStatus = "BOT" | "WAITING_AGENT" | "AI_HANDLED" | "IN_PROGRESS" | "CLOSED";
+/** 입력이 잠기는 경우는 상담 종료 하나뿐이다. */
+export type ChatLockReason = "CLOSED";
 
 export interface ChatMenu {
   menuId: number;
   code: string;
   label: string;
   answerType: ChatAnswerType;
+  /** FIXED일 때 즉시 렌더할 본문. AGENT면 null이다. */
+  fixedAnswer: string | null;
 }
 
 export interface ChatMessage {
@@ -53,13 +63,38 @@ export interface ChatBootstrap {
   greeting: string;
   menus: ChatMenu[];
   withinBusinessHours: boolean;
-  /** 여러 상담에 걸친 최근 메시지(오래된 순). 채팅창은 이걸 그대로 이어서 그린다. */
+  /**
+   * 오늘 상담이 끝나는 시각(`"18:00"`). **운영시간 안일 때만 채워진다** -
+   * 밖에서는 null이라 "닫혀 있는데 종료 시각을 보여주는" 화면이 만들어지지 않는다.
+   */
+  closesAt: string | null;
+  /** 여러 상담에 걸친 최근 메시지(오래된 순). `문의 내역` 화면이 이걸 그대로 이어서 그린다. */
   history: ChatMessage[];
+  /**
+   * 지난 상담이 있는지. `문의 내역` 버튼 노출 판단에 쓴다.
+   * `history.length`로 재현하지 않는다 - 서버가 판정 주체여야 이력 페이지네이션이 붙어도
+   * 어긋나지 않는다.
+   */
+  hasHistory: boolean;
   /**
    * 가장 최근 대화의 **상태만** 담는다(잠금 여부·전송 대상 ID).
    * 메시지 본문은 history에 있으므로 여기 messages는 비어 있다.
    */
   ongoing: ChatConversation | null;
+}
+
+/**
+ * 서버가 주는 시각을 화면용 `"HH:mm"`으로 줄인다.
+ *
+ * 서버는 ISO 형식으로 내려주는데 초가 0이면 그 자리가 생략된다 - 운영시간은 보통 정시라
+ * 실제로 오는 값은 대부분 `"18:00"`이고, 분 아래를 쓰는 설정에서만 `"18:30:30"`처럼 온다.
+ * 그래서 자르기 전 길이를 가정하지 않고 앞 5글자만 취한다(양쪽 다 같은 결과가 된다).
+ *
+ * 초를 버리는 이유는 상담 운영시간에 초 단위가 의미 없기 때문이다. 이 변환을 화면마다
+ * `slice(0, 5)`로 흩어 놓으면 나중에 서버가 형식을 바꿀 때 고칠 자리를 다 찾아야 한다.
+ */
+export function formatBusinessHourTime(value: string): string {
+  return value.slice(0, 5);
 }
 
 /**
@@ -109,6 +144,23 @@ export async function fetchChatBootstrap(): Promise<ChatBootstrap> {
     headers: guestHeaders(),
   });
   return response.data;
+}
+
+/**
+ * 고정형 버튼 클릭을 집계에 남긴다.
+ *
+ * 답변은 bootstrap이 이미 실어 보냈으므로 이 호출은 화면과 무관하다. 그래서 결과를
+ * 기다리지 않고, 실패해도 사용자에게 알리지 않는다(fire-and-forget). 지표가 한 건
+ * 비는 것과 답변 화면이 늦게 뜨는 것 중 후자가 훨씬 나쁘다.
+ */
+export function logMenuClick(menuCode: string): void {
+  void apiClient
+    .post<void>(`/api/chat/menus/${encodeURIComponent(menuCode)}/clicks`, undefined, {
+      headers: guestHeaders(),
+    })
+    .catch(() => {
+      // 집계 실패는 사용자가 할 수 있는 게 없다. 조용히 넘긴다.
+    });
 }
 
 export async function startConversation(menuCode: string): Promise<ChatConversation> {

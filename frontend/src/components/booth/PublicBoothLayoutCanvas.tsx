@@ -18,6 +18,27 @@ interface BoothSummary {
 /** 도면 이미지가 없을 때(또는 아직 안 불러왔을 때) 쓰는 기본 비율. BoothCanvas.tsx와 동일. */
 const DEFAULT_ASPECT_RATIO = 16 / 10;
 
+/** 정보 패널 크기 추정치(w-64=256px, 내용 포함 최대 높이). 클릭 지점이 화면 끝에 가까울 때
+ * 패널이 뷰포트 밖으로 잘리지 않게 clamp하는 데만 쓴다 - 정확한 높이 측정 대신 여유 있게 잡는다. */
+const PANEL_WIDTH = 256;
+const PANEL_MAX_HEIGHT = 200;
+const PANEL_MARGIN = 16;
+
+interface PanelPosition {
+  top: number;
+  left: number;
+}
+
+/** 클릭 좌표(뷰포트 기준) 살짝 아래에 패널을 띄우되, 화면 밖으로 나가지 않게 보정한다. */
+function clampPanelPosition(clientX: number, clientY: number): PanelPosition {
+  const maxLeft = window.innerWidth - PANEL_WIDTH - PANEL_MARGIN;
+  const maxTop = window.innerHeight - PANEL_MAX_HEIGHT - PANEL_MARGIN;
+  return {
+    left: Math.min(Math.max(clientX, PANEL_MARGIN), Math.max(maxLeft, PANEL_MARGIN)),
+    top: Math.min(Math.max(clientY + 8, PANEL_MARGIN), Math.max(maxTop, PANEL_MARGIN)),
+  };
+}
+
 function groupByHall(rows: ConfirmedBoothResponse[]): HallGroup[] {
   const map = new Map<number, HallGroup>();
   for (const row of rows) {
@@ -57,7 +78,8 @@ interface PublicBoothLayoutCanvasProps {
  * (Booth 도메인, kimchaerin9670 파트)만 그대로 사용한다 - 백엔드 변경이 필요 없다
  * (petopia-booth-public-view-idea 스킬 참고).
  *
- * 부스를 클릭하면 화면 우하단에 업체명·부스번호·한줄소개 패널이 뜬다. 한줄소개(intro)는
+ * 부스를 클릭하면 클릭한 위치 살짝 아래에 업체명·부스번호·한줄소개 패널이 뜬다(화면 끝
+ * 근처 클릭 시 잘리지 않게 clampPanelPosition으로 보정). 한줄소개(intro)는
  * confirmed-booths 응답에 없어서, 클릭 시점에 GET /api/booths/{boothId}(역시 이미 공개
  * API)를 한 번 더 불러온다 - 미리 전부 불러오지 않아 N+1 부담이 없고, 같은 부스를 다시
  * 클릭하면 캐시된 값을 재사용한다. 도면(캔버스)의 빈 공간을 클릭하면 패널이 사라지고,
@@ -74,6 +96,7 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
   const [error, setError] = useState<string | null>(null);
 
   const [selectedBoothId, setSelectedBoothId] = useState<number | null>(null);
+  const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
   const [detailsCache, setDetailsCache] = useState<Record<number, BoothResponse>>({});
   const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
 
@@ -92,6 +115,7 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
     setHalls([]);
     setError(null);
     setSelectedBoothId(null);
+    setPanelPosition(null);
     setLoading(true);
     setDetailsCache({});
     setLoadingDetailId(null);
@@ -145,8 +169,9 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
 
   const boothSummaries = useMemo(() => buildBoothSummaries(halls), [halls]);
 
-  function selectBooth(boothId: number) {
+  function selectBooth(boothId: number, clientX: number, clientY: number) {
     setSelectedBoothId(boothId);
+    setPanelPosition(clampPanelPosition(clientX, clientY));
     if (detailsCache[boothId]) return; // 이미 불러온 적 있으면 재사용
     setLoadingDetailId(boothId);
     getBooth(boothId)
@@ -183,7 +208,10 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
           <h3 className="mb-2 text-sm font-bold text-ink">{hall.hallName}</h3>
           <div
             role="presentation"
-            onClick={() => setSelectedBoothId(null)}
+            onClick={() => {
+              setSelectedBoothId(null);
+              setPanelPosition(null);
+            }}
             className="relative w-full overflow-hidden rounded-card border border-line bg-page"
             style={{
               aspectRatio: loadedRatios[hall.hallId] ?? DEFAULT_ASPECT_RATIO,
@@ -204,7 +232,7 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
                   aria-label={`${slot.businessName} 부스(${slot.slotNumber})`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    selectBooth(slot.boothId);
+                    selectBooth(slot.boothId, event.clientX, event.clientY);
                   }}
                   className={`absolute flex items-center justify-center overflow-hidden rounded-md border-2 px-1 text-center text-[11px] font-bold transition-colors ${
                     isSelected
@@ -226,13 +254,20 @@ export function PublicBoothLayoutCanvas({ fairId }: PublicBoothLayoutCanvasProps
         </div>
       ))}
 
-      {selectedBoothId != null && selectedSummary && (
+      {selectedBoothId != null && selectedSummary && panelPosition && (
         // 뷰포트 기준(fixed)으로 띄운다 - 홀이 여러 개일 때 absolute였다면 부모(컴포넌트
-        // 루트) 기준이라 마지막 홀 아래로 밀려나 스크롤해야 보였다.
-        <div className="fixed bottom-4 right-4 z-10 w-64 max-w-[calc(100%-2rem)] rounded-card border border-line bg-card p-4 shadow-lg">
+        // 루트) 기준이라 마지막 홀 아래로 밀려나 스크롤해야 보였다. 위치는 클릭한 지점
+        // 살짝 아래(clampPanelPosition)로, 화면 끝 근처 클릭 시 잘리지 않게 보정한다.
+        <div
+          className="fixed z-10 w-64 max-w-[calc(100%-2rem)] rounded-card border border-line bg-card p-4 shadow-lg"
+          style={{ top: panelPosition.top, left: panelPosition.left }}
+        >
           <button
             type="button"
-            onClick={() => setSelectedBoothId(null)}
+            onClick={() => {
+              setSelectedBoothId(null);
+              setPanelPosition(null);
+            }}
             aria-label="닫기"
             className="absolute right-2 top-2 grid size-7 place-items-center rounded-full text-muted hover:bg-page hover:text-ink"
           >

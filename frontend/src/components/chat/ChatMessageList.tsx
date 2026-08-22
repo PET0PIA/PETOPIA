@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ChatMessage } from "../../api/chat";
+import { ChatBubble } from "./ChatBubble";
 
 interface ChatMessageListProps {
   greeting: string;
@@ -16,33 +17,6 @@ function SystemNote({ content }: { content: string }) {
     <p className="whitespace-pre-line px-6 text-center text-xs leading-relaxed text-muted">
       {content}
     </p>
-  );
-}
-
-function Bubble({ message }: { message: ChatMessage }) {
-  const isUser = message.senderType === "USER";
-
-  return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div className="max-w-[85%]">
-        {/*
-          AI 답변에는 배지를 붙인다. 사람이 쓴 답변과 구분되지 않으면, 자동 답변에 섞인
-          오정보를 사용자가 상담사의 확답으로 받아들인다.
-        */}
-        {message.senderType === "AI" && (
-          <span className="mb-1 inline-block rounded-pill bg-sun-soft px-2 py-0.5 text-[11px] font-bold text-ink">
-            자동 답변
-          </span>
-        )}
-        <div
-          className={`whitespace-pre-line rounded-card px-3 py-2 text-sm leading-relaxed ${
-            isUser ? "bg-primary-strong text-white" : "bg-surface-alt text-ink"
-          }`}
-        >
-          {message.content}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -86,7 +60,7 @@ export function ChatMessageList({ greeting, messages }: ChatMessageListProps) {
             {message.senderType === "SYSTEM" ? (
               <SystemNote content={message.content} />
             ) : (
-              <Bubble message={message} />
+              <ChatBubble senderType={message.senderType} content={message.content} />
             )}
           </div>
         );

@@ -10,12 +10,13 @@ interface ChatComposerProps {
 }
 
 /**
- * 잠금 사유별 안내. 사용자가 할 행동이 다르므로 문구도 달라야 한다 -
- * 하나는 기다리면 풀리고, 다른 하나는 새 문의를 시작해야 한다.
+ * 잠금 사유별 안내.
+ *
+ * 사유가 하나뿐이어도 Record로 남긴다. 사유가 늘어날 때 분기를 다시 만드는 것보다
+ * 이 표에 한 줄을 더하는 편이 낫고, 타입이 빠짐없이 채우도록 강제한다.
  */
 const LOCK_NOTICE: Record<ChatLockReason, string> = {
-  AI_ANSWERED: "자동 답변을 드렸어요. 상담사가 이어서 답변드릴 때까지 기다려주세요.",
-  CLOSED: "종료된 상담이에요. 새로 문의하시려면 문의 유형을 선택해주세요.",
+  CLOSED: "종료된 상담이에요. 새로 문의하시려면 아래에서 다시 시작해주세요.",
 };
 
 export function ChatComposer({ locked, lockReason, sending, onSend }: ChatComposerProps) {

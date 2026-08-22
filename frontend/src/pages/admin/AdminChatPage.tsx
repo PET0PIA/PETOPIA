@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { MessageSquare, Send } from "lucide-react";
 import {
   closeAdminConversation,
   fetchAdminConversation,
   fetchAdminConversations,
+  fetchUnansweredCount,
   replyToConversation,
   type AdminChatConversationDetail,
   type AdminChatConversationSummary,
@@ -29,12 +30,16 @@ const LIST_REFRESH_MS = 5000;
 /*
  * 탭은 상태가 아니라 "상담사가 하는 일" 기준이다.
  *
- * 답변이 필요한 것과 이미 답한 것을 한 목록에 둔다. 나눠 두면 고객이 답하지 않은 상담이
- * 다른 탭에서 잊힌 채 종료되지 않고 남는다. 무엇을 먼저 볼지는 정렬(답변 필요가 위)과
- * 배지가 알려주므로, 탭까지 나눌 이유가 없다.
+ * 답변을 기다리는 것과 이미 답해서 고객 반응을 기다리는 것은 한 목록에 둔다. 나눠 두면
+ * 고객이 답하지 않은 상담이 다른 탭에서 잊힌 채 종료되지 않고 남는다. 무엇을 먼저 볼지는
+ * 정렬(답변 필요가 위)과 배지가 알려주므로, 그 둘까지 탭으로 쪼갤 이유가 없다.
  */
 const FILTER_TABS: { label: string; value: AdminChatFilter }[] = [
   { label: "처리 중", value: "OPEN" },
+  // 자동 응대는 별도 탭이다. "처리 중"에 섞으면 아침에 출근한 상담사가 이미 답이 나간
+  // 대화를 미답변으로 읽고 다시 붙잡는다. 그렇다고 안 보이게 두면 자동 응대는 아무도
+  // 검수하지 않는 채널이 된다.
+  { label: "AI 응대", value: "AI_HANDLED" },
   { label: "종료", value: "CLOSED" },
   { label: "전체", value: "ALL" },
 ];
@@ -50,11 +55,12 @@ function formatWaiting(seconds: number): string {
 }
 
 const STATUS_BADGE: Record<ChatConversationStatus, { label: string; style: string }> = {
-  // 답을 기다리는 두 상태만 강조한다. 색을 여러 개 쓰면 정작 봐야 할 것이 묻힌다.
+  // 답을 기다리는 상태만 강조한다. 색을 여러 개 쓰면 정작 봐야 할 것이 묻힌다.
   WAITING_AGENT: { label: "답변 대기", style: "bg-sun-soft text-ink" },
-  AI_ANSWERED: { label: "AI 답변함 · 잠김", style: "bg-sun-soft text-ink" },
   IN_PROGRESS: { label: "진행 중", style: "bg-leaf-soft text-ink" },
-  BOT: { label: "봇 응대", style: "bg-surface-alt text-muted" },
+  // 강조하지 않는다. 사람이 답할 차례가 아니고, 입력도 열려 있어 고객은 막혀 있지 않다.
+  AI_HANDLED: { label: "AI 응대함", style: "bg-surface-alt text-muted" },
+  BOT: { label: "질문 없음", style: "bg-surface-alt text-muted" },
   CLOSED: { label: "종료", style: "bg-surface-alt text-muted" },
 };
 
@@ -67,6 +73,8 @@ const STATUS_BADGE: Record<ChatConversationStatus, { label: string; style: strin
  */
 const SENDER_LABEL: Record<Exclude<ChatSenderType, "SYSTEM">, string> = {
   USER: "고객",
+  // 고정 답변이 세션을 만들지 않게 된 뒤로 새로 쌓이지 않는 값이다. 지난 상담에는 남아 있어
+  // 표를 지우지 않는다 - 지우면 옛 대화를 열 때 라벨이 비어버린다.
   BOT: "자동 응답(고정 답변)",
   AI: "AI 자동 답변",
   AGENT: "상담사",
@@ -126,47 +134,97 @@ export function AdminChatPage() {
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 답변 대기 건수. 목록에서 세지 않고 서버가 전체를 센다.
+   *
+   * 목록에서 세면 페이지 크기(20)를 넘는 건수가 잘리고, `AI 응대`나 `종료` 탭을 보는 동안에는
+   * 그 탭에 대기 건이 없으니 0이 된다 - 화면 맨 위의 숫자가 보고 있는 탭에 따라 달라지면
+   * 그 숫자를 신뢰할 수 없다. 필터와 무관해야 하는 값이므로 조회도 분리한다.
+   */
+  const [waitingCount, setWaitingCount] = useState<number | null>(null);
+  /**
+   * 건수 조회가 실패했는지. `waitingCount`의 null과 나눠 갖는다.
+   *
+   * null 하나로 "아직 못 받았다"와 "받아오지 못했다"를 겸하면, 첫 조회가 실패한 순간 머리말이
+   * "상담 목록을 불러오고 있어요"로 굳는다 - 목록은 이미 떠 있는데 화면 맨 위만 계속 로딩이라고
+   * 말하는 상태가 된다. 건수 실패를 조용히 넘기는 것과, 그것을 로딩으로 위장하는 것은 다르다.
+   */
+  const [waitingCountFailed, setWaitingCountFailed] = useState(false);
 
   const { onTyping, stopTyping } = useTypingSignal(selectedId);
 
-  /** 답변·종료 직후처럼 즉시 갱신이 필요할 때 쓴다(폴링을 기다리지 않도록). */
-  const loadList = useCallback(async (current: AdminChatFilter) => {
-    try {
-      const list = await fetchAdminConversations(current);
-      setConversations(list.items);
-    } catch {
-      setError("상담 목록을 불러오지 못했어요.");
-    }
-  }, []);
+  /**
+   * 갱신 세대. 늦게 도착한 옛 응답이 새 상태를 덮지 않게 한다.
+   *
+   * 폴링(5초)과 답변·종료 직후 갱신은 겹칠 수 있고, 응답이 보낸 순서대로 온다는 보장도 없다.
+   * 특히 답변 직후 탭을 바꾸면 이전 필터의 목록이 새 탭 화면에 실릴 수 있다 - 그쪽 호출은
+   * 이펙트 밖이라 취소 플래그가 없다. 겹쳤을 때 이기는 쪽을 "가장 마지막에 시작한 갱신"으로
+   * 못박는다.
+   */
+  const refreshGeneration = useRef(0);
+
+  /**
+   * 목록과 미답변 건수를 갱신한다. 폴링과 답변·종료 직후가 같은 함수를 쓴다.
+   *
+   * 두 조회를 `Promise.all`로 묶지 않는다. 묶으면 건수 조회 하나가 실패해도 목록 갱신까지
+   * 함께 버려져, 그 주기 동안 대기열이 멈춘 화면으로 남는다 - 상담사에게 목록은 업무 자체고
+   * 건수는 그 요약이라, 요약을 못 읽었다고 업무를 감출 이유가 없다.
+   *
+   * 답변·종료 직후에도 건수를 함께 부르는 이유: 목록만 갱신하면 방금 답한 상담은 목록에서
+   * 사라지는데 머리말의 숫자는 다음 폴링(5초)까지 이전 값으로 남는다.
+   */
+  const refresh = useCallback(
+    (current: AdminChatFilter, isCanceled: () => boolean = () => false) => {
+      const generation = ++refreshGeneration.current;
+      const stale = () => isCanceled() || generation !== refreshGeneration.current;
+
+      const list = fetchAdminConversations(current)
+        .then((data) => {
+          if (!stale()) setConversations(data.items);
+        })
+        .catch(() => {
+          if (!stale()) setError("상담 목록을 불러오지 못했어요.");
+        });
+
+      const count = fetchUnansweredCount()
+        .then((unanswered) => {
+          if (stale()) return;
+          setWaitingCount(unanswered);
+          setWaitingCountFailed(false);
+        })
+        .catch(() => {
+          // 배너는 띄우지 않는다 - 배지 숫자 하나가 이번 주기에 뒤처지는 것은 목록이 멈추는
+          // 것보다 가볍고, 목록은 멀쩡한데 화면 전체가 실패한 것처럼 읽히면 더 나쁘다.
+          // 다만 로딩으로 위장하지도 않는다(머리말이 이 값을 갈라 쓴다).
+          if (!stale()) setWaitingCountFailed(true);
+        });
+
+      return Promise.all([list, count]);
+    },
+    [],
+  );
 
   /*
    * 목록 폴링. 첫 조회도 인터벌과 같은 경로를 타게 해서, 탭이 백그라운드일 때 도는 갱신과
    * 화면 진입 시 갱신이 어긋나지 않게 한다.
    *
-   * setState를 콜백(then) 안에서만 호출하는 형태로 둔다 - 이펙트 본문에서 곧바로 부르면
+   * setState는 refresh 안의 콜백(then)에서만 부른다 - 이펙트 본문에서 곧바로 부르면
    * 렌더가 연쇄로 도는 패턴이 되고, 프로젝트 lint 규칙도 이를 막는다.
    */
   useEffect(() => {
     let canceled = false;
-    const run = () =>
-      fetchAdminConversations(filter)
-        .then((list) => {
-          if (!canceled) setConversations(list.items);
-        })
-        .catch(() => {
-          if (!canceled) setError("상담 목록을 불러오지 못했어요.");
-        });
+    const run = () => void refresh(filter, () => canceled);
 
-    void run();
+    run();
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void run();
+      if (document.visibilityState === "visible") run();
     }, LIST_REFRESH_MS);
 
     return () => {
       canceled = true;
       window.clearInterval(timer);
     };
-  }, [filter]);
+  }, [filter, refresh]);
 
   /*
    * 열어둔 대화도 목록과 같은 주기로 다시 읽는다.
@@ -221,7 +279,7 @@ export function AdminChatPage() {
       stopTyping();
       setDetail(await replyToConversation(selectedId, content));
       setReply("");
-      void loadList(filter);
+      void refresh(filter);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "답변을 보내지 못했어요.");
     } finally {
@@ -248,22 +306,25 @@ export function AdminChatPage() {
     try {
       await closeAdminConversation(selectedId);
       setDetail(await fetchAdminConversation(selectedId));
-      void loadList(filter);
+      void refresh(filter);
     } catch {
       setError("상담을 종료하지 못했어요.");
     }
   };
 
-  // AI가 답한 대화도 사람 답변을 기다리는 건 같다. 오히려 그쪽은 사용자 입력이 잠겨 있다.
-  const waitingCount = conversations.filter(
-    (item) => item.status === "WAITING_AGENT" || item.status === "AI_ANSWERED",
-  ).length;
+
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="상담 문의"
-        description={`답변을 기다리는 상담이 ${waitingCount}건 있어요.`}
+        description={
+          waitingCount != null
+            ? `답변을 기다리는 상담이 ${waitingCount}건 있어요.`
+            : waitingCountFailed
+              ? "답변 대기 건수를 불러오지 못했어요. 잠시 후 다시 표시돼요."
+              : "상담 목록을 불러오고 있어요."
+        }
         action={
           <Link
             to="/admin/chat/settings"

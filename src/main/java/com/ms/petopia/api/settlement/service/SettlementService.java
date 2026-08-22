@@ -4,6 +4,9 @@ import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.commisionrate.service.CommissionRateService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
@@ -31,6 +34,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -71,6 +76,8 @@ public class SettlementService {
     private final AuditLogService auditLogService;
     private final FairContractClient fairContractClient;
     private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final AuthMapper authMapper;
+    private final MailService mailService;
 
     /**
      * 특정 행사·업체의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
@@ -280,7 +287,7 @@ public class SettlementService {
                 Map.of("status", "CONFIRMED")
         );
 
-        notifySettlementCompleted(row.getFairId(), row.getSettlementId());
+        notifySettlementCompletedAfterCommit(row);
 
         return SettlementResponse.from(row);
     }
@@ -367,7 +374,18 @@ public class SettlementService {
         }
     }
 
-    private void notifySettlementCompleted(Long fairId, Long settlementId) {
+    private void notifySettlementCompletedAfterCommit(SettlementRow row) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notifySettlementCompleted(row);
+            }
+        });
+    }
+
+    private void notifySettlementCompleted(SettlementRow row) {
+        Long fairId = row.getFairId();
+        Long settlementId = row.getSettlementId();
         try {
             Long adminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
             if (adminUserId != null) {
@@ -378,9 +396,10 @@ public class SettlementService {
                         "정산이 확정되었습니다",
                         "행사 정산(ID: " + settlementId + ")이 확정 처리되었습니다.",
                         null,
-                        List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                        List.of(DeliveryChannel.IN_APP),
                         null
                 ));
+                sendSettlementCompletedEmail(adminUserId, row);
             }
         } catch (Exception e) {
             log.error("정산 확정 알림 저장 실패. fairId={}, settlementId={}", fairId, settlementId, e);
@@ -394,6 +413,19 @@ public class SettlementService {
             );
         } catch (Exception e) {
             log.error("정산 확정 SUPER_ADMIN 알림 저장 실패. fairId={}, settlementId={}", fairId, settlementId, e);
+        }
+    }
+
+    private void sendSettlementCompletedEmail(Long adminUserId, SettlementRow row) {
+        try {
+            User user = authMapper.selectUserById(adminUserId);
+            if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+                return;
+            }
+            mailService.sendSettlementCompletedEmail(user.getEmail(), "정산", row.getSettlementId(),
+                    row.getGrossAmount(), row.getRefundAmount(), row.getCommissionAmount(), row.getNetAmount());
+        } catch (Exception e) {
+            log.error("정산 확정 이메일 발송 실패. fairId={}, settlementId={}", row.getFairId(), row.getSettlementId(), e);
         }
     }
 
