@@ -113,6 +113,14 @@ public class SecurityConfig {
                         // fair인지(소유자 검증)는 FairAdminAccessGuard가 서비스 계층에서 한 번 더 확인한다.
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/publish").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/publish-status").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Fair 도메인 - 사전예약 기간 조회·수정도 publish와 동일하게 그 행사 담당
+                        // EVENT_ADMIN 또는 SUPER_ADMIN만 가능(소유자 검증은 FairAdminAccessGuard).
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/reservation-period").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/reservation-period").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Fair 도메인 - "행사 정보 관리" 탭(정보성 필드 수정)도 publish와 동일하게
+                        // 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만 가능.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/fair-info").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/fair-info").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*/fair-cancel-requests/*/review").hasRole("SUPER_ADMIN")
                         // Fair 도메인 - 취소 신청 큐(전체 행사를 가로질러 조회, fairId 없이 접근).
                         // "/api/fairs/*/fair-cancel-requests"와 경로 자체가 다르므로(prefix가

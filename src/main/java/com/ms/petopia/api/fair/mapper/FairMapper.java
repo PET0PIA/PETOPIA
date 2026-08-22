@@ -71,6 +71,13 @@ public interface FairMapper {
     int updateApplication(@Param("fair") Fair fair, @Param("setFields") Set<String> setFields);
 
     /**
+     * "행사 정보 관리" 화면 전용 갱신(FairService#updateFairInfo). {@link #updateApplication}과
+     * 달리 status 조건이나 리셋이 없다 - 승인·공개된 뒤에도 정보성 필드를 아무 상태에서나
+     * 고칠 수 있게 하는 용도라서다. setFields에 있는 필드만 반영한다.
+     */
+    int updateFairInfo(@Param("fair") Fair fair, @Param("setFields") Set<String> setFields);
+
+    /**
      * 취소된({@code canceled_at IS NOT NULL}) 행사 중, 아직 정리할 PENDING·WAITING_FOR_DEPOSIT
      * 예약금·참가비 결제가 남아있는 것만 오래된 취소순으로 조회한다({@code
      * FairCancelPendingPaymentService} 전용). {@code

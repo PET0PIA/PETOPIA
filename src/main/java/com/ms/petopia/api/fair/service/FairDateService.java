@@ -22,9 +22,11 @@ import java.util.List;
 /**
  * fair_dates(운영일·정원) CRUD.
  *
- * <p>정원 축소·삭제가 기존 예약·현장예매 정책과 충돌할 수 있어도 여기서 막지 않는다 -
- * {@link FairDateResponse}의 reservedCount/onsiteSalesConfigured로 관리자 화면이 경고만
- * 보여주고, 계속 진행할지는 관리자 판단에 맡긴다.
+ * <p>예약자가 있는(reservedCount &gt; 0) 운영일은 삭제할 수 없고, 정원도 이미 예약된 인원보다
+ * 적게 줄일 수 없다(2026-08-22 사용자 피드백) - 삭제하거나 정원을 그 아래로 줄이면 이미 예약한
+ * 사람들의 예약이 근거를 잃기 때문이다. 그 외(정원 증가, 입장 시간 변경)는 계속 자유롭게
+ * 바꿀 수 있다. 현장예매 정책 충돌은 여전히 막지 않는다 - {@link FairDateResponse}의
+ * onsiteSalesConfigured로 관리자 화면이 경고만 보여주고, 계속 진행할지는 관리자 판단에 맡긴다.
  *
  * <p>취소됐거나(canceled_at) 종료된(ENDED) 행사는 운영일 자체를 더 관리할 이유가 없어
  * create/update/delete 모두에서 막는다. RECEIVED/PAYMENT_PENDING/PREPARING/IN_PROGRESS는
@@ -80,6 +82,11 @@ public class FairDateService {
         validateFairEditable(findFairOrThrow(fairId));
         validateUpdateRequest(request);
 
+        FairDateWithStats current = fairDateMapper.selectByIdWithStats(fairDateId);
+        if (current != null && request.capacity() < current.getReservedCount()) {
+            throw new CommonException(ErrorCode.FAIR_DATE_CAPACITY_BELOW_RESERVED);
+        }
+
         FairDate update = new FairDate();
         update.setFairDateId(fairDateId);
         update.setCapacity(request.capacity());
@@ -96,6 +103,12 @@ public class FairDateService {
         findFairDateInFair(fairId, fairDateId);
         fairAdminAccessGuard.checkAssigned(fairId);
         validateFairEditable(findFairOrThrow(fairId));
+
+        FairDateWithStats current = fairDateMapper.selectByIdWithStats(fairDateId);
+        if (current != null && current.getReservedCount() > 0) {
+            throw new CommonException(ErrorCode.FAIR_DATE_HAS_RESERVATIONS);
+        }
+
         fairDateMapper.deleteById(fairDateId);
     }
 

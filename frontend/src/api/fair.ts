@@ -326,6 +326,81 @@ export function getFairPublishStatus(fairId: number) {
   return apiClient.get<FairPublishStatusResponse>(`/api/fairs/${fairId}/publish-status`);
 }
 
+export interface ReservationPeriodResponse {
+  fairId: number;
+  /** 아직 설정 안 됐으면 null. */
+  reservationStartDate: string | null;
+  /** 아직 설정 안 됐으면 null. */
+  reservationEndDate: string | null;
+}
+
+/** 운영일·정원 관리 화면에서 현재 사전예약 기간을 보여준다(publish-status와 동일 권한). */
+export function getReservationPeriod(fairId: number) {
+  return apiClient.get<ReservationPeriodResponse>(`/api/fairs/${fairId}/reservation-period`);
+}
+
+/**
+ * 사전예약 기간을 수정한다. 승인·공개된 뒤에는 신청서 수정(updateFairApplication)으로 못
+ * 바꾸므로, 운영일·정원 관리 화면에서 담당자가 직접 조정할 때 쓴다. 둘 다 필수다(부분 수정 아님).
+ */
+export function updateReservationPeriod(
+  fairId: number,
+  payload: { reservationStartDate: string; reservationEndDate: string }
+) {
+  return apiClient.patch<ReservationPeriodResponse>(`/api/fairs/${fairId}/reservation-period`, payload);
+}
+
+/**
+ * "행사 정보 관리" 탭에서 승인·공개된 뒤에도 고칠 수 있는 정보성 필드만 담는다. 예약금·기한·
+ * 모집/예약 기간·managerEmail은 포함하지 않는다(별도 화면).
+ */
+export interface FairInfo {
+  fairId: number;
+  name: string;
+  description: string | null;
+  category: FairCategory | null;
+  posterImageUrl: string | null;
+  noticeText: string | null;
+  placeName: string | null;
+  address: string | null;
+  indoorOutdoor: IndoorOutdoor | null;
+  operationStartDate: string | null;
+  operationEndDate: string | null;
+  managerName: string;
+  managerPhone: string | null;
+}
+
+export interface UpdateFairInfoRequest {
+  name: string;
+  description?: string | null;
+  category?: FairCategory | null;
+  /** 새로 업로드한 임시 objectKey. 포스터를 새로 첨부하지 않았고 지우지도 않을 거면 이 키
+   * 자체를 요청 객체에서 빼서(undefined) 보내야 기존 포스터가 유지된다. null을 보내면
+   * 기존 포스터를 삭제한다. */
+  posterImageObjectKey?: string | null;
+  noticeText?: string | null;
+  placeName?: string | null;
+  address?: string | null;
+  indoorOutdoor?: IndoorOutdoor | null;
+  operationStartDate?: string | null;
+  operationEndDate?: string | null;
+  managerName: string;
+  managerPhone?: string | null;
+}
+
+/** 운영일·정원 관리("행사 정보 관리") 화면에서 현재 정보성 필드 값을 불러온다(publish-status와 동일 권한). */
+export function getFairInfo(fairId: number) {
+  return apiClient.get<FairInfo>(`/api/fairs/${fairId}/fair-info`);
+}
+
+/**
+ * 승인·공개된 뒤에도 이름/소개/카테고리/포스터/유의사항/장소/일정/담당자명·연락처를 고친다.
+ * 신청서 수정(updateFairApplication)과 달리 RECEIVED/REJECTED 상태 제약이 없다.
+ */
+export function updateFairInfo(fairId: number, payload: UpdateFairInfoRequest) {
+  return apiClient.patch<FairInfo>(`/api/fairs/${fairId}/fair-info`, payload);
+}
+
 export interface Hall {
   hallId: number;
   fairId: number;

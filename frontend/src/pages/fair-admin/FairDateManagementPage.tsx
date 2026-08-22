@@ -1,25 +1,66 @@
-import { AlertCircle, AlertTriangle, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, CalendarRange, Info, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../../api/client";
 import {
   createFairDate,
   deleteFairDate,
   getFairDates,
+  getFairInfo,
   getFairPublishStatus,
+  getReservationPeriod,
   publishFair,
   updateFairDate,
+  updateFairInfo,
+  updateReservationPeriod,
   type CreateFairDateRequest,
+  type FairCategory,
   type FairDate,
+  type IndoorOutdoor,
   type UpdateFairDateRequest,
+  type UpdateFairInfoRequest,
 } from "../../api/fair";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
 import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
+import { ImageUploadField } from "../../components/ui/ImageUploadField";
 import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Select";
 import { Table } from "../../components/ui/Table";
+import { Textarea } from "../../components/ui/Textarea";
 import { useConfirm } from "../../components/ui/useConfirm";
 import { useFairSelector } from "../../contexts/FairSelectorContext";
+
+// FairApplicationNewPage.tsx/FairApplicationEditPage.tsx의 PHONE_PATTERN과 동일 - 이 프로젝트의
+// 휴대폰 번호 형식 검증 관례.
+const PHONE_PATTERN = /^01[0-9]-?\d{3,4}-?\d{4}$/;
+
+interface FairInfoFormState {
+  name: string;
+  description: string;
+  category: "" | FairCategory;
+  noticeText: string;
+  placeName: string;
+  address: string;
+  indoorOutdoor: "" | IndoorOutdoor;
+  operationStartDate: string;
+  operationEndDate: string;
+  managerName: string;
+  managerPhone: string;
+}
+
+function validateFairInfo(form: FairInfoFormState): string[] {
+  const errors: string[] = [];
+  if (form.name.trim() === "") errors.push("행사명을 입력해 주세요.");
+  if (form.managerName.trim() === "") errors.push("담당자 이름을 입력해 주세요.");
+  if (form.managerPhone.trim() !== "" && !PHONE_PATTERN.test(form.managerPhone.trim())) {
+    errors.push("담당자 연락처 형식이 올바르지 않아요. (예: 010-1234-5678)");
+  }
+  if (form.operationStartDate !== "" && form.operationEndDate !== "" && form.operationEndDate < form.operationStartDate) {
+    errors.push("운영 기간의 종료일이 시작일보다 빠를 수 없어요.");
+  }
+  return errors;
+}
 
 interface FairDateFormState {
   operationDate: string;
@@ -59,6 +100,24 @@ export function FairDateManagementPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
+  // 사전예약 기간 - 진입 시 getReservationPeriod로 현재 값을 불러와 폼에 채워둔다.
+  // 아직 설정 안 됐으면(null) 빈 문자열로 둬서 date input이 비어 보이게 한다.
+  const [reservationStartDate, setReservationStartDate] = useState("");
+  const [reservationEndDate, setReservationEndDate] = useState("");
+  const [savingPeriod, setSavingPeriod] = useState(false);
+  const [periodError, setPeriodError] = useState<string | null>(null);
+
+  // 행사 정보(정보성 필드) - 진입 시 getFairInfo로 현재 값을 불러와 폼에 채워둔다. 승인·공개된
+  // 뒤에도 이름/소개/카테고리/포스터/유의사항/장소/일정/담당자명·연락처를 여기서 고칠 수 있다.
+  const [fairInfo, setFairInfo] = useState<FairInfoFormState | null>(null);
+  const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null);
+  const [posterImageObjectKey, setPosterImageObjectKey] = useState<string | null>(null);
+  const [posterImageUploading, setPosterImageUploading] = useState(false);
+  const [posterRemoved, setPosterRemoved] = useState(false);
+  const [infoErrors, setInfoErrors] = useState<string[]>([]);
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [infoSubmitError, setInfoSubmitError] = useState<string | null>(null);
+
   useEffect(() => {
     if (fairId === null) return;
     let ignore = false;
@@ -66,6 +125,15 @@ export function FairDateManagementPage() {
     setLoadError(null);
     setPublishedAt(null);
     setPublishError(null);
+    setReservationStartDate("");
+    setReservationEndDate("");
+    setPeriodError(null);
+    setFairInfo(null);
+    setPosterImageUrl(null);
+    setPosterImageObjectKey(null);
+    setPosterRemoved(false);
+    setInfoErrors([]);
+    setInfoSubmitError(null);
 
     getFairDates(fairId)
       .then((data) => { if (!ignore) setFairDates(data); })
@@ -81,6 +149,36 @@ export function FairDateManagementPage() {
 
     getFairPublishStatus(fairId)
       .then((data) => { if (!ignore) setPublishedAt(data.publishedAt); })
+      .catch(() => {});
+
+    getReservationPeriod(fairId)
+      .then((data) => {
+        if (!ignore) {
+          setReservationStartDate(data.reservationStartDate ?? "");
+          setReservationEndDate(data.reservationEndDate ?? "");
+        }
+      })
+      .catch(() => {});
+
+    getFairInfo(fairId)
+      .then((data) => {
+        if (!ignore) {
+          setFairInfo({
+            name: data.name,
+            description: data.description ?? "",
+            category: data.category ?? "",
+            noticeText: data.noticeText ?? "",
+            placeName: data.placeName ?? "",
+            address: data.address ?? "",
+            indoorOutdoor: data.indoorOutdoor ?? "",
+            operationStartDate: data.operationStartDate ?? "",
+            operationEndDate: data.operationEndDate ?? "",
+            managerName: data.managerName,
+            managerPhone: data.managerPhone ?? "",
+          });
+          setPosterImageUrl(data.posterImageUrl);
+        }
+      })
       .catch(() => {});
 
     return () => { ignore = true; };
@@ -128,12 +226,11 @@ export function FairDateManagementPage() {
     }
 
     if (editingFairDate && capacity < editingFairDate.reservedCount) {
-      const proceed = await confirm({
-        title: "정원을 예약 건수보다 적게 줄일까요?",
-        description: `이미 ${editingFairDate.reservedCount}건 예약된 운영일이에요. 정원을 그보다 적은 ${capacity}명으로 줄이면 초과예약 상태가 될 수 있어요. 그래도 저장할까요?`,
-        confirmLabel: "그래도 저장",
-      });
-      if (!proceed) return;
+      // 백엔드(FairDateService#update)도 동일하게 막는다 - 이미 예약된 인원보다 정원을
+      // 적게 줄이면 그 예약들이 근거를 잃는다. 여기서는 요청을 보내기 전에 먼저 막아
+      // 불필요한 API 호출과 에러 메시지를 피한다.
+      setFormError(`이미 ${editingFairDate.reservedCount}건 예약된 운영일이에요. 정원을 그보다 적게 줄일 수 없어요.`);
+      return;
     }
 
     setSaving(true);
@@ -168,18 +265,21 @@ export function FairDateManagementPage() {
   async function handleDeleteFairDate(fairDate: FairDate) {
     if (fairId === null) return;
 
-    const warnings: string[] = [];
-    if (fairDate.reservedCount > 0) warnings.push(`이미 예약이 ${fairDate.reservedCount}건 있어요`);
-    if (fairDate.onsiteSalesConfigured) warnings.push("현장예매 정책이 설정돼 있어요");
+    // 예약자가 있으면 백엔드(FairDateService#delete)가 무조건 거부한다 - 확인창을 띄워도
+    // 소용없으니 여기서 바로 막는다.
+    if (fairDate.reservedCount > 0) {
+      setLoadError(`이미 예약이 ${fairDate.reservedCount}건 있는 운영일은 삭제할 수 없어요.`);
+      return;
+    }
 
-    const description = warnings.length > 0
-      ? `${fairDate.operationDate} 운영일은 ${warnings.join(", ")}. 삭제하면 관련 데이터와 어긋날 수 있어요. 그래도 삭제할까요?`
+    const description = fairDate.onsiteSalesConfigured
+      ? `${fairDate.operationDate} 운영일은 현장예매 정책이 설정돼 있어요. 삭제하면 관련 데이터와 어긋날 수 있어요. 그래도 삭제할까요?`
       : `${fairDate.operationDate} 운영일을 삭제할까요?`;
     const proceed = await confirm({
       title: "운영일을 삭제할까요?",
       description,
       confirmLabel: "삭제",
-      danger: warnings.length > 0,
+      danger: fairDate.onsiteSalesConfigured,
     });
     if (!proceed) return;
 
@@ -209,6 +309,85 @@ export function FairDateManagementPage() {
       setPublishError(error instanceof ApiError ? error.message : "공개 처리에 실패했어요.");
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function handleSaveReservationPeriod(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (fairId === null) return;
+    if (reservationStartDate === "" || reservationEndDate === "") {
+      setPeriodError("사전예약 시작일과 종료일을 모두 입력해 주세요.");
+      return;
+    }
+    if (reservationStartDate > reservationEndDate) {
+      setPeriodError("종료일은 시작일보다 빠를 수 없어요.");
+      return;
+    }
+
+    setSavingPeriod(true);
+    setPeriodError(null);
+    try {
+      const result = await updateReservationPeriod(fairId, { reservationStartDate, reservationEndDate });
+      setReservationStartDate(result.reservationStartDate ?? "");
+      setReservationEndDate(result.reservationEndDate ?? "");
+    } catch (error) {
+      setPeriodError(error instanceof ApiError ? error.message : "사전예약 기간을 저장하지 못했어요.");
+    } finally {
+      setSavingPeriod(false);
+    }
+  }
+
+  function updateFairInfoField<K extends keyof FairInfoFormState>(key: K, value: FairInfoFormState[K]) {
+    setFairInfo((previous) => (previous ? { ...previous, [key]: value } : previous));
+  }
+
+  async function handleSaveFairInfo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (fairId === null || !fairInfo) return;
+
+    const validationErrors = validateFairInfo(fairInfo);
+    if (posterImageUploading) validationErrors.push("포스터 이미지 업로드가 끝날 때까지 잠시만 기다려 주세요.");
+    setInfoErrors(validationErrors);
+    if (validationErrors.length > 0) return;
+
+    setSavingInfo(true);
+    setInfoSubmitError(null);
+    try {
+      const payload: UpdateFairInfoRequest = {
+        name: fairInfo.name.trim(),
+        description: fairInfo.description.trim() || null,
+        category: fairInfo.category || null,
+        posterImageObjectKey: posterImageObjectKey ?? (posterRemoved ? null : undefined),
+        noticeText: fairInfo.noticeText.trim() || null,
+        placeName: fairInfo.placeName.trim() || null,
+        address: fairInfo.address.trim() || null,
+        indoorOutdoor: fairInfo.indoorOutdoor || null,
+        operationStartDate: fairInfo.operationStartDate || null,
+        operationEndDate: fairInfo.operationEndDate || null,
+        managerName: fairInfo.managerName.trim(),
+        managerPhone: fairInfo.managerPhone.trim() || null,
+      };
+      const result = await updateFairInfo(fairId, payload);
+      setFairInfo({
+        name: result.name,
+        description: result.description ?? "",
+        category: result.category ?? "",
+        noticeText: result.noticeText ?? "",
+        placeName: result.placeName ?? "",
+        address: result.address ?? "",
+        indoorOutdoor: result.indoorOutdoor ?? "",
+        operationStartDate: result.operationStartDate ?? "",
+        operationEndDate: result.operationEndDate ?? "",
+        managerName: result.managerName,
+        managerPhone: result.managerPhone ?? "",
+      });
+      setPosterImageUrl(result.posterImageUrl);
+      setPosterImageObjectKey(null);
+      setPosterRemoved(false);
+    } catch (error) {
+      setInfoSubmitError(error instanceof ApiError ? error.message : "행사 정보를 저장하지 못했어요.");
+    } finally {
+      setSavingInfo(false);
     }
   }
 
@@ -289,7 +468,14 @@ export function FairDateManagementPage() {
                     <button type="button" aria-label={`${fairDate.operationDate} 수정`} className="rounded-button p-2 text-muted hover:bg-page hover:text-ink" onClick={() => openEditDialog(fairDate)}>
                       <Pencil size={16} />
                     </button>
-                    <button type="button" aria-label={`${fairDate.operationDate} 삭제`} className="rounded-button p-2 text-muted hover:bg-page hover:text-primary-strong" onClick={() => handleDeleteFairDate(fairDate)}>
+                    <button
+                      type="button"
+                      aria-label={`${fairDate.operationDate} 삭제`}
+                      title={fairDate.reservedCount > 0 ? "예약자가 있는 운영일은 삭제할 수 없어요." : undefined}
+                      disabled={fairDate.reservedCount > 0}
+                      className="rounded-button p-2 text-muted hover:bg-page hover:text-primary-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
+                      onClick={() => handleDeleteFairDate(fairDate)}
+                    >
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -300,6 +486,164 @@ export function FairDateManagementPage() {
         </Table>
       )}
 
+      {fairId !== null && !loading && (
+        <div className="surface mt-6 p-6">
+          <div className="mb-4 flex items-start gap-3">
+            <CalendarRange size={18} className="mt-0.5 shrink-0 text-muted" />
+            <div>
+              <h3 className="text-sm font-extrabold text-ink">사전예약 기간</h3>
+              <p className="mt-1 text-xs text-muted">
+                관람객이 티켓을 사전예약할 수 있는 기간이에요. 운영일 당일이어도 이 기간 안이면서
+                그 날 입장 가능 시간 안이면 당일 사전예약도 받을 수 있어요.
+              </p>
+            </div>
+          </div>
+          <form onSubmit={handleSaveReservationPeriod} className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label htmlFor="reservationStartDate" className="mb-1.5 block text-sm font-bold text-ink">
+                시작일<span className="ml-1 text-primary-strong">*</span>
+              </label>
+              <Input
+                id="reservationStartDate"
+                type="date"
+                value={reservationStartDate}
+                onChange={(event) => setReservationStartDate(event.target.value)}
+                required
+              />
+            </div>
+            <div className="flex-1">
+              <label htmlFor="reservationEndDate" className="mb-1.5 block text-sm font-bold text-ink">
+                종료일<span className="ml-1 text-primary-strong">*</span>
+              </label>
+              <Input
+                id="reservationEndDate"
+                type="date"
+                value={reservationEndDate}
+                onChange={(event) => setReservationEndDate(event.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" disabled={savingPeriod}>{savingPeriod ? "저장 중..." : "저장"}</Button>
+          </form>
+          {periodError && <p className="mt-2 text-sm font-bold text-primary-strong">{periodError}</p>}
+        </div>
+      )}
+
+      {fairId !== null && !loading && fairInfo && (
+        <div className="surface mt-6 p-6">
+          <div className="mb-4 flex items-start gap-3">
+            <Info size={18} className="mt-0.5 shrink-0 text-muted" />
+            <div>
+              <h3 className="text-sm font-extrabold text-ink">행사 정보</h3>
+              <p className="mt-1 text-xs text-muted">
+                승인·공개된 뒤에도 이름·소개·포스터·장소·일정처럼 신청 당시 비워뒀거나 잘못 적은
+                정보성 항목을 여기서 고칠 수 있어요. 예약금·기한·모집/예약 기간은 이미 진행 중인
+                예약·모집에 영향을 줄 수 있어 이 화면에서 다루지 않아요.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveFairInfo} className="space-y-5">
+            {infoErrors.length > 0 && (
+              <ul className="list-inside list-disc space-y-1 text-sm font-bold text-primary-strong">
+                {infoErrors.map((error) => <li key={error}>{error}</li>)}
+              </ul>
+            )}
+            {infoSubmitError && <p className="text-sm font-bold text-primary-strong">{infoSubmitError}</p>}
+
+            <div className="flex flex-col gap-6 sm:flex-row sm:gap-8">
+              <div className="shrink-0">
+                <ImageUploadField
+                  key={fairId}
+                  label="포스터 이미지"
+                  previewClassName="aspect-[4/5] w-40"
+                  layout="stacked"
+                  initialImageUrl={posterImageUrl}
+                  onObjectKeyChange={(key) => {
+                    setPosterImageObjectKey(key);
+                    if (key) setPosterRemoved(false);
+                  }}
+                  onUploadingChange={setPosterImageUploading}
+                  removable
+                  onRemove={() => {
+                    setPosterImageObjectKey(null);
+                    setPosterRemoved(true);
+                  }}
+                />
+              </div>
+              <div className="flex-1 space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="infoName" className="mb-1.5 block text-sm font-bold text-ink">행사명<span className="ml-1 text-primary-strong">*</span></label>
+                    <Input id="infoName" value={fairInfo.name} onChange={(event) => updateFairInfoField("name", event.target.value)} required />
+                  </div>
+                  <div>
+                    <label htmlFor="infoCategory" className="mb-1.5 block text-sm font-bold text-ink">카테고리</label>
+                    <Select id="infoCategory" value={fairInfo.category} onChange={(event) => updateFairInfoField("category", event.target.value as FairInfoFormState["category"])}>
+                      <option value="">선택 안 함</option>
+                      <option value="DOG">강아지</option>
+                      <option value="CAT">고양이</option>
+                      <option value="ETC">기타</option>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="infoDescription" className="mb-1.5 block text-sm font-bold text-ink">행사 소개</label>
+                  <Textarea id="infoDescription" value={fairInfo.description} onChange={(event) => updateFairInfoField("description", event.target.value)} placeholder="행사를 소개해 주세요." />
+                </div>
+                <div>
+                  <label htmlFor="infoNoticeText" className="mb-1.5 block text-sm font-bold text-ink">관람 안내사항</label>
+                  <Textarea id="infoNoticeText" value={fairInfo.noticeText} onChange={(event) => updateFairInfoField("noticeText", event.target.value)} placeholder="방문객이 꼭 알아야 할 관람 안내사항을 입력해 주세요." />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="infoPlaceName" className="mb-1.5 block text-sm font-bold text-ink">장소명</label>
+                <Input id="infoPlaceName" value={fairInfo.placeName} onChange={(event) => updateFairInfoField("placeName", event.target.value)} placeholder="예: 서울 코엑스 C홀" />
+              </div>
+              <div>
+                <label htmlFor="infoIndoorOutdoor" className="mb-1.5 block text-sm font-bold text-ink">실내/실외</label>
+                <Select id="infoIndoorOutdoor" value={fairInfo.indoorOutdoor} onChange={(event) => updateFairInfoField("indoorOutdoor", event.target.value as FairInfoFormState["indoorOutdoor"])}>
+                  <option value="">선택 안 함</option>
+                  <option value="INDOOR">실내</option>
+                  <option value="OUTDOOR">실외</option>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="infoAddress" className="mb-1.5 block text-sm font-bold text-ink">주소</label>
+              <Input id="infoAddress" value={fairInfo.address} onChange={(event) => updateFairInfoField("address", event.target.value)} placeholder="상세 주소를 입력해 주세요." />
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-sm font-bold text-ink">행사 운영 기간</p>
+              <div className="flex max-w-md items-center gap-3">
+                <Input id="infoOperationStartDate" type="date" aria-label="행사 운영 시작일" value={fairInfo.operationStartDate} onChange={(event) => updateFairInfoField("operationStartDate", event.target.value)} className="min-w-0 flex-1" />
+                <span className="shrink-0 text-sm text-muted" aria-hidden="true">~</span>
+                <Input id="infoOperationEndDate" type="date" aria-label="행사 운영 종료일" value={fairInfo.operationEndDate} onChange={(event) => updateFairInfoField("operationEndDate", event.target.value)} className="min-w-0 flex-1" />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="infoManagerName" className="mb-1.5 block text-sm font-bold text-ink">담당자 이름<span className="ml-1 text-primary-strong">*</span></label>
+                <Input id="infoManagerName" value={fairInfo.managerName} onChange={(event) => updateFairInfoField("managerName", event.target.value)} required />
+              </div>
+              <div>
+                <label htmlFor="infoManagerPhone" className="mb-1.5 block text-sm font-bold text-ink">담당자 연락처</label>
+                <Input id="infoManagerPhone" value={fairInfo.managerPhone} onChange={(event) => updateFairInfoField("managerPhone", event.target.value)} placeholder="예: 010-1234-5678" />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button type="submit" disabled={savingInfo}>{savingInfo ? "저장 중..." : "저장"}</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title={editingFairDate ? "운영일 수정" : "운영일 추가"}>
         <form onSubmit={handleSaveFairDate} className="space-y-4">
           {formError && <p className="text-sm font-bold text-primary-strong">{formError}</p>}
@@ -307,7 +651,7 @@ export function FairDateManagementPage() {
           {editingFairDate && editingFairDate.reservedCount > 0 && (
             <div className="flex items-start gap-2 rounded-button border border-primary-strong/30 bg-primary-soft p-3 text-xs text-primary-strong">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-              <p>이미 {editingFairDate.reservedCount}건 예약된 운영일이에요. 정원을 예약 건수보다 적게 줄이면 초과예약 상태가 될 수 있어요.</p>
+              <p>이미 {editingFairDate.reservedCount}건 예약된 운영일이에요. 정원을 예약 건수보다 적게 줄일 수 없어요.</p>
             </div>
           )}
 
