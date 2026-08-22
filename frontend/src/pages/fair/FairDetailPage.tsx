@@ -9,7 +9,7 @@ import { ApiError } from "../../api/client";
 import { getFairPublicSummary, type FairPublicSummary } from "../../api/fair";
 import { getReservationAvailability, type ReservationAvailability } from "../../api/reservation";
 import { todayInSeoul } from "../../utils/date";
-import { fairCategoryLabels, formatFairPeriodDow } from "./fairCard";
+import { fairCategoryLabels, formatFairPeriodDow, isFairInProgress } from "./fairCard";
 import { FairParticipatingBooths } from "./FairParticipatingBooths";
 import { FairReviews } from "./FairReviews";
 
@@ -127,8 +127,9 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
   // 운영 중인 행사. 사전예약이 닫혔어도(reservable=false) 현장예매는 열려 있을 수 있으므로
   // 버튼을 비활성으로 막지 않고 예매 화면으로 보낸다 - 그 화면이 사전예약과 현장예매를 둘 다
   // 다루고, 판매 상태·입장 마감 같은 최종 판정은 백엔드가 한다.
-  // 위 ended가 status를 먼저 보므로 IN_PROGRESS면 ended는 반드시 false다(!ended는 불필요).
-  const inProgress = fair.status === "IN_PROGRESS";
+  // 위 ended가 status를 먼저 보므로 진행 중이면 ended는 반드시 false다(!ended는 불필요).
+  // status가 비었을 때 운영기간으로 판정하는 폴백은 ended와 같은 규칙을 쓴다(isFairInProgress).
+  const inProgress = isFairInProgress(fair.status, fair.operationStartDate, fair.operationEndDate);
   const schedule = availability?.dates ?? [];
 
   return (

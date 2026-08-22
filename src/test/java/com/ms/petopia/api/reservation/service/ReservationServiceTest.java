@@ -434,22 +434,28 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("일반 회원이 아닌 계정은 예약할 수 없다")
-    void create_일반회원이아닌계정_접근거부예외를던진다() {
-        ReservationUserSnapshot user = activeUser();
-        user.setRole("EVENT_ADMIN");
-        givenCreationDataWithUser(user);
+    @DisplayName("관리자 계정도 개인 자격으로는 예약할 수 있다")
+    void create_관리자계정_예약을생성한다() {
+        ReservationUserSnapshot admin = activeUser();
+        admin.setRole("EVENT_ADMIN");
+        givenCreationDataWithUser(admin);
+        given(capacityMapper.occupy(FAIR_ID, VISIT_DATE)).willReturn(1);
+        given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260731ABC12345");
+        willAnswer(invocation -> {
+            ReservationInsertRow row = invocation.getArgument(0);
+            row.setReservationId(RESERVATION_ID);
+            return 1;
+        }).given(reservationMapper).insertReservation(any(ReservationInsertRow.class));
 
-        assertErrorCode(
-                () -> reservationService.create(
-                        FAIR_ID,
-                        USER_ID,
-                        new CreateReservationRequest(VISIT_DATE, null, null)
-                ),
-                ErrorCode.ACCESS_DENIED
+        CreateReservationResponse response = reservationService.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateReservationRequest(VISIT_DATE, null, null)
         );
 
-        verify(reservationMapper, never()).insertReservation(any());
+        assertThat(response.reservationId()).isEqualTo(RESERVATION_ID);
+        assertThat(response.reservationStatus()).isEqualTo("CONFIRMED");
+        verify(reservationMapper).insertReservation(any(ReservationInsertRow.class));
     }
 
     @Test

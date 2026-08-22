@@ -118,6 +118,11 @@ export function TicketReservationPage() {
   // 예매 정보(availability) 조회 실패 사유. 페이지 전체의 실패가 아니라 "사전예약을 못 하는
   // 이유"다 - 이 조회는 예매 창이 닫히면 R003으로 실패하는데, 그때도 현장예매는 열려 있을 수 있다.
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  // 행사 정보(이름·장소·운영기간) 조회 실패. 예매를 막지는 않고 안내만 띄운다 - 예전에는 이
+  // 실패를 통째로 삼켜서, 사용자는 왜 행사명 자리에 "행사 #11"만 보이는지 알 수 없었다.
+  // 사유 문자열을 담지 않고 불리언만 두는 이유: 이 조회의 에러 메시지("요청한 리소스를 찾을 수
+  // 없습니다" 등)를 정상 동작하는 예매 폼 위에 그대로 띄우면 오히려 오해를 만든다.
+  const [fairInfoFailed, setFairInfoFailed] = useState(false);
 
   const [type, setType] = useState<ReservationType>("ADVANCE");
   const [selectedVisitDate, setSelectedVisitDate] = useState<string | null>(null);
@@ -159,6 +164,9 @@ export function TicketReservationPage() {
         if (!alive) return;
         if (fairResult.status === "fulfilled") {
           setFair(fairResult.value);
+          setFairInfoFailed(false);
+        } else {
+          setFairInfoFailed(true);
         }
         if (availabilityResult.status === "fulfilled") {
           setAvailability(availabilityResult.value);
@@ -511,6 +519,12 @@ export function TicketReservationPage() {
       {/* 행사 정보 */}
       <Card className="mb-6 p-5">
         <h2 className="text-lg font-extrabold text-ink">{fairName}</h2>
+        {/* 예매를 막지 않는 안내. 이름·장소·기간이 비는 이유를 알려주되 흐름은 그대로 둔다. */}
+        {fairInfoFailed && (
+          <p className="mt-1.5 text-sm text-muted" role="status">
+            행사 정보를 불러오지 못했어요. 이름·장소·기간이 안 보일 수 있지만 예매는 계속할 수 있어요.
+          </p>
+        )}
         <div className="mt-2 flex flex-col gap-1.5 text-sm text-muted">
           {fair?.placeName && (
             <span className="flex items-center gap-2">

@@ -83,6 +83,23 @@ class OnsiteReservationServiceTest {
     }
 
     @Test
+    @DisplayName("관리자 계정도 개인 자격으로는 현장예매할 수 있다")
+    void create_adminAccount_createsOnsiteReservation() {
+        givenOpenContext(0);
+        ReservationUserSnapshot admin = activeUser();
+        admin.setRole("SUPER_ADMIN");
+        given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(admin);
+        given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, NOW.toLocalDate())).willReturn(false);
+        given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801ADMIN001");
+        assignGeneratedReservationId();
+
+        CreateOnsiteReservationResponse response = service.create(FAIR_ID, USER_ID, null);
+
+        assertThat(response.reservationStatus()).isEqualTo("CONFIRMED");
+        verify(reservationMapper).insertReservation(any());
+    }
+
+    @Test
     @DisplayName("현장예매도 동반 반려동물을 스냅샷으로 담는다")
     void create_onsiteReservation_attachesPets() {
         givenOpenContext(0);
