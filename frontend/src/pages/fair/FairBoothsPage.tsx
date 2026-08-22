@@ -26,7 +26,7 @@ export function FairBoothsPage() {
   if (!idValid) {
     return (
       <PageContainer className="py-10">
-        <EmptyState title="잘못된 행사 주소예요." description="행사 주소가 올바르지 않아요." actionTo="/businesses" actionLabel="행사별 참여 기업으로" />
+        <EmptyState title="잘못된 행사 주소예요." description="행사 주소가 올바르지 않아요." actionTo="/fairs/upcoming" actionLabel="행사 목록으로" />
       </PageContainer>
     );
   }
@@ -77,9 +77,9 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
 
   return (
     <PageContainer className="py-7 sm:py-10">
-      <Link to="/businesses" className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-muted hover:text-ink">
+      <Link to={`/fairs/${fairId}`} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-muted hover:text-ink">
         <ChevronLeft size={16} />
-        행사별 참여 기업
+        행사 상세로
       </Link>
 
       <div className="mt-4">

@@ -14,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,6 +33,7 @@ class NotificationServiceTest {
     @Mock NotificationDeliveryMapper notificationDeliveryMapper;
     @Mock EmailSenderService emailSenderService;
     @Mock AuthMapper authMapper;
+    @Mock PlatformTransactionManager transactionManager;
     @InjectMocks NotificationService notificationService;
 
     @Test
@@ -340,6 +343,41 @@ class NotificationServiceTest {
         notificationService.markAsRead(1L, 10L);
 
         verify(notificationDeliveryMapper, never()).updateReadAt(any(), any());
+    }
+
+    // ===== notifySuperAdmins =====
+
+    @Test
+    @DisplayName("SUPER_ADMIN 중 한 명 저장에 실패해도 나머지 관리자는 계속 저장된다")
+    void notifySuperAdmins_oneFailure_othersStillSaved() {
+        given(authMapper.selectSuperAdminUserIds()).willReturn(List.of(1L, 2L, 3L));
+        doAnswer(inv -> {
+            Notification n = inv.getArgument(0);
+            if (n.getUserId().equals(2L)) {
+                throw new RuntimeException("DB 오류");
+            }
+            n.setNotificationId(1L);
+            return null;
+        }).when(notificationMapper).insert(any());
+
+        notificationService.notifySuperAdmins(NotificationType.SETTLEMENT_COMPLETED, "제목", "내용");
+
+        verify(notificationMapper, times(3)).insert(any(Notification.class));
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN 저장은 REQUIRES_NEW로 별도 트랜잭션을 연다 (호출자 트랜잭션 롤백과 무관하게 커밋되도록)")
+    void notifySuperAdmins_usesRequiresNewPropagation() {
+        given(authMapper.selectSuperAdminUserIds()).willReturn(List.of(1L));
+        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
+                .when(notificationMapper).insert(any());
+
+        notificationService.notifySuperAdmins(NotificationType.SETTLEMENT_COMPLETED, "제목", "내용");
+
+        ArgumentCaptor<TransactionDefinition> captor = ArgumentCaptor.forClass(TransactionDefinition.class);
+        verify(transactionManager).getTransaction(captor.capture());
+        assertThat(captor.getValue().getPropagationBehavior())
+                .isEqualTo(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     // ===== markAllAsRead =====

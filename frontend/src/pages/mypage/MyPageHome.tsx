@@ -235,27 +235,29 @@ function NotificationCard() {
 
   return (
     <CardSection title="최근 알림" to="/notifications">
-      {loading ? (
-        <CardNote>불러오는 중이에요…</CardNote>
-      ) : error ? (
-        <CardNote>{error}</CardNote>
-      ) : items.length === 0 ? (
-        <CardNote>받은 알림이 없어요.</CardNote>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {items.map((item) => (
-            <li key={item.notificationId} className="flex items-start justify-between gap-3">
-              <span className="min-w-0 flex-1">
-                <span className={`block truncate text-sm ${item.isRead ? "text-muted" : "font-bold text-ink"}`}>
-                  {item.title}
+      <div className="min-h-[168px]">
+        {loading ? (
+          <CardNote>불러오는 중이에요…</CardNote>
+        ) : error ? (
+          <CardNote>{error}</CardNote>
+        ) : items.length === 0 ? (
+          <CardNote>받은 알림이 없어요.</CardNote>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {items.map((item) => (
+              <li key={item.notificationId} className="flex items-start justify-between gap-3">
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate text-sm ${item.isRead ? "text-muted" : "font-bold text-ink"}`}>
+                    {item.title}
+                  </span>
+                  <span className="mt-0.5 block truncate text-sm text-muted">{item.body}</span>
                 </span>
-                <span className="mt-0.5 block truncate text-sm text-muted">{item.body}</span>
-              </span>
-              <span className="shrink-0 text-xs text-muted">{formatNotifiedAt(item.createdAt)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+                <span className="shrink-0 text-xs text-muted">{formatNotifiedAt(item.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </CardSection>
   );
 }
