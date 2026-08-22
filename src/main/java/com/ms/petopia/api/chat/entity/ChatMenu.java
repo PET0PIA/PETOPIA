@@ -24,7 +24,6 @@ public class ChatMenu {
     private Integer displayOrder;
     private ChatAnswerType answerType;
     private String fixedAnswer;
-    private String aiContext;
     private Boolean isActive;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -20,6 +20,15 @@ public interface ChatBusinessHourMapper {
     boolean existsOpenSlot(@Param("dayOfWeek") int dayOfWeek,
                            @Param("time") LocalTime time);
 
+    /**
+     * 그 요일·시각을 포함하는 운영 구간의 종료 시각. 해당 구간이 없으면 null.
+     *
+     * <p>{@link #existsOpenSlot}과 조건이 같아야 한다 - 한쪽은 "열렸는가"를, 다른 쪽은 "언제
+     * 닫는가"를 답하는데 기준이 어긋나면 "상담 가능"이라면서 이미 지난 시각을 보여준다.
+     */
+    LocalTime selectOpenSlotEndTime(@Param("dayOfWeek") int dayOfWeek,
+                                    @Param("time") LocalTime time);
+
     boolean existsHoliday(@Param("date") LocalDate date);
 
     List<ChatBusinessHour> selectAll();

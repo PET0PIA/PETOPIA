@@ -85,6 +85,25 @@ public class ChatController {
                 ApiResponse.success(chatConversationService.bootstrap(userId, guestKey)));
     }
 
+    /**
+     * 고정형 버튼 클릭 집계.
+     *
+     * <p>답변은 bootstrap이 이미 실어 보냈으므로 이 호출은 화면과 무관하다. 그래서 본문 없이
+     * {@code 204}로 끝내고, 프론트도 결과를 기다리지 않는다.
+     *
+     * <p>게스트 키는 선택이다 - 위젯을 열고 버튼만 눌러본 사용자는 아직 키가 없다. 그 클릭도
+     * 수요이므로 소유자 없이 적재한다(집계 전용 테이블이라 소유자가 필요 없다).
+     */
+    @PostMapping("/menus/{menuCode}/clicks")
+    public ResponseEntity<Void> logMenuClick(
+            @AuthenticationPrincipal Long userId,
+            @RequestHeader(value = GUEST_KEY_HEADER, required = false) String guestKey,
+            @PathVariable String menuCode
+    ) {
+        chatConversationService.logMenuClick(menuCode, userId, guestKey);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/conversations")
     public ResponseEntity<ApiResponse<ChatConversationResponse>> start(
             @AuthenticationPrincipal Long userId,

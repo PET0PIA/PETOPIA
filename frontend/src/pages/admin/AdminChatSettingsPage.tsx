@@ -37,9 +37,12 @@ import { Button } from "../../components/ui/Button";
 /** 1=월 ... 7=일. 서버(java.time.DayOfWeek)와 같은 규칙이라 인덱스 변환을 하지 않는다. */
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
+/**
+ * AI는 없다. 버튼 유형이 아니라 상담원 연결 세션이 운영시간 밖일 때의 대체 응대이고,
+ * 참고 정보는 아래 "운영 문구"의 AI_CONTEXT에서 관리한다.
+ */
 const ANSWER_TYPE_LABELS: Record<ChatAnswerType, string> = {
-  FIXED: "고정 답변",
-  AI: "AI 답변(운영시간 외 1회)",
+  FIXED: "고정 답변(상담이 생기지 않아요)",
   AGENT: "상담사 연결",
 };
 
@@ -48,11 +51,29 @@ const EMPTY_MENU = {
   label: "",
   answerType: "FIXED" as ChatAnswerType,
   fixedAnswer: "",
-  aiContext: "",
 };
+
+/**
+ * 고정 답변 유형인데 답변이 비어 있는지.
+ *
+ * 그대로 저장하면 눌러도 빈 말풍선만 나오는 죽은 버튼이 된다. 고정형은 상담을 만들지
+ * 않으므로 상담사 쪽에 흔적조차 남지 않아, 운영자가 실수를 알아챌 경로가 클릭 지표뿐이다.
+ * 서버도 같은 규칙으로 거부하지만(CH015), 저장을 누르기 전에 알려주는 편이 낫다.
+ */
+function missingFixedAnswer(menu: { answerType: ChatAnswerType; fixedAnswer: string | null }): boolean {
+  return menu.answerType === "FIXED" && !menu.fixedAnswer?.trim();
+}
 
 /** 아직 DB에 행이 없는 요일의 초기값. 저장을 눌러야 실제로 생긴다. */
 const UNSET_HOUR = { startTime: "09:00:00", endTime: "18:00:00", isActive: false };
+
+/**
+ * 여러 줄이 들어가는 설정 키.
+ *
+ * AI_CONTEXT는 도메인 지식을 문단으로 적는 자리다. 두 줄 입력란에 넣어두면 운영자가 그 사실을
+ * 모르고 한 문장만 적고, 그러면 AI는 대부분의 질문을 상담사에게 넘긴다.
+ */
+const TALL_SETTING_KEYS = new Set(["AI_CONTEXT"]);
 
 /** 성공 문구가 계속 남아 있으면 다음 저장이 먹었는지 알 수 없다. 실패는 읽을 시간이 필요해 남긴다. */
 const OK_MESSAGE_MS = 3000;
@@ -79,7 +100,6 @@ function toPayload(menu: AdminChatMenu): AdminChatMenuPayload {
     label: menu.label,
     answerType: menu.answerType,
     fixedAnswer: menu.fixedAnswer,
-    aiContext: menu.aiContext,
     displayOrder: menu.displayOrder,
     isActive: menu.isActive,
   };
@@ -272,6 +292,15 @@ export function AdminChatSettingsPage() {
   const canSubmit = loaded && running === null;
 
   /**
+   * 활성 상담사 연결 버튼이 하나도 없는 상태.
+   *
+   * 위젯은 AGENT 유형이 없으면 연결 버튼과 고정 답변 화면의 CTA를 함께 숨긴다. 의도한
+   * 동작이지만, 운영자 입장에서는 버튼 하나를 내린 것이지 상담 창구를 닫은 줄은 모른다.
+   * 사람에게 문의할 길이 사라진 것이므로 눈에 보이게 알린다.
+   */
+  const noAgentMenu = loaded && !menus.some((menu) => menu.isActive && menu.answerType === "AGENT");
+
+  /**
    * 이 메뉴의 요청이 도는 중.
    *
    * 응답으로 메뉴를 통째로 교체하므로(saveMenu/restoreMenu) 그 사이 편집을 허용하면
@@ -304,12 +333,16 @@ export function AdminChatSettingsPage() {
 
       {/* 지표 */}
       <section>
-        <SectionHeader title="최근 30일 지표" description="문의 유형별 접수 건수와 첫 응답까지 걸린 평균 시간이에요." />
+        <SectionHeader
+          title="최근 30일 지표"
+          description="고정 답변은 상담을 만들지 않으니 수요가 '클릭'에만 나타나요. 접수는 상담사 연결로 만들어진 상담 수예요."
+        />
         <div className="surface overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-line text-left text-xs text-muted">
               <tr>
                 <th className="px-4 py-3">문의 유형</th>
+                <th className="px-4 py-3">클릭</th>
                 <th className="px-4 py-3">접수</th>
                 <th className="px-4 py-3">대기</th>
                 <th className="px-4 py-3">AI 답변</th>
@@ -317,9 +350,11 @@ export function AdminChatSettingsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {stats.map((stat) => (
-                <tr key={stat.menuLabel}>
+              {/* 버튼 문구는 유일하지 않다(같은 문구를 두 개 만들 수 있다). 순번을 섞어 키를 만든다. */}
+              {stats.map((stat, index) => (
+                <tr key={`${stat.menuLabel}-${index}`}>
                   <td className="px-4 py-3 font-bold text-ink">{stat.menuLabel}</td>
+                  <td className="px-4 py-3">{stat.clickCount}</td>
                   <td className="px-4 py-3">{stat.conversationCount}</td>
                   <td className="px-4 py-3">{stat.waitingCount}</td>
                   <td className="px-4 py-3">{stat.aiAnsweredCount}</td>
@@ -333,9 +368,21 @@ export function AdminChatSettingsPage() {
 
       {/* 버튼 */}
       <section>
+        {noAgentMenu && (
+          <div
+            role="alert"
+            className="surface mb-3 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong"
+          >
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p>
+              활성 상태인 <b>상담사 연결</b> 버튼이 없어요. 지금 위젯에는 사람에게 문의할 방법이
+              보이지 않고, 고정 답변 화면의 연결 버튼도 함께 숨겨져요.
+            </p>
+          </div>
+        )}
         <SectionHeader
           title="문의 유형 버튼"
-          description="위젯을 열었을 때 보이는 버튼이에요. AI 답변은 운영시간 외에 대화당 1회만 동작해요."
+          description="위젯을 열었을 때 보이는 버튼이에요. 고정 답변은 누르면 바로 답이 보이고 상담이 만들어지지 않아요."
         />
         <div className="space-y-3">
           {menus.map((menu) => (
@@ -388,30 +435,20 @@ export function AdminChatSettingsPage() {
                     onChange={(event) => patchMenu(menu.menuId, { fixedAnswer: event.target.value })}
                     className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm disabled:opacity-60"
                   />
-                </div>
-              )}
-
-              {menu.answerType === "AI" && (
-                <div className="mt-3">
-                  <label className="text-xs font-bold text-muted" htmlFor={`ai-${menu.menuId}`}>
-                    AI 참고 정보
-                  </label>
-                  <p className="mt-1 text-xs text-muted">
-                    AI는 여기 적힌 내용 안에서만 답해요. 비어 있으면 대부분 상담사에게 넘깁니다.
-                  </p>
-                  <textarea
-                    id={`ai-${menu.menuId}`}
-                    rows={4}
-                    value={menu.aiContext ?? ""}
-                    disabled={menuBusy(menu.menuId)}
-                    onChange={(event) => patchMenu(menu.menuId, { aiContext: event.target.value })}
-                    className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm disabled:opacity-60"
-                  />
+                  {missingFixedAnswer(menu) && (
+                    <p role="alert" className="mt-1 text-xs font-bold text-primary-strong">
+                      답변이 비어 있으면 눌러도 아무 내용이 보이지 않아요.
+                    </p>
+                  )}
                 </div>
               )}
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button onClick={() => saveMenu(menu)} disabled={!canSubmit} className="min-h-9 text-xs">
+                <Button
+                  onClick={() => saveMenu(menu)}
+                  disabled={!canSubmit || missingFixedAnswer(menu)}
+                  className="min-h-9 text-xs"
+                >
                   {running === `save:${menu.menuId}` ? "저장중…" : "저장"}
                 </Button>
                 {menu.isActive ? (
@@ -475,10 +512,34 @@ export function AdminChatSettingsPage() {
               ))}
             </select>
           </div>
+
+          {/*
+            고정 답변 입력이 여기 없으면 FIXED 버튼은 항상 빈 답변으로 만들어지고, 추가한
+            직후부터 눌러도 아무것도 안 보이는 버튼이 된다. 만든 자리에서 채우게 한다.
+          */}
+          {draft.answerType === "FIXED" && (
+            <div className="mt-3">
+              <label className="text-xs font-bold text-muted" htmlFor="draft-fixed-answer">
+                고정 답변
+              </label>
+              <textarea
+                id="draft-fixed-answer"
+                rows={3}
+                value={draft.fixedAnswer}
+                disabled={running === "create"}
+                onChange={(event) => setDraft({ ...draft, fixedAnswer: event.target.value })}
+                placeholder="버튼을 누르면 바로 보일 답변이에요."
+                className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm disabled:opacity-60"
+              />
+            </div>
+          )}
+
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               onClick={addMenu}
-              disabled={!canSubmit || !draft.code.trim() || !draft.label.trim()}
+              disabled={
+                !canSubmit || !draft.code.trim() || !draft.label.trim() || missingFixedAnswer(draft)
+              }
               className="min-h-9 text-xs"
             >
               {running === "create" ? "추가중…" : "추가"}
@@ -492,7 +553,7 @@ export function AdminChatSettingsPage() {
       <section>
         <SectionHeader
           title="상담 운영시간"
-          description="이 시간 밖에 들어온 AI 유형 문의는 AI가 먼저 1회 답변해요."
+          description="이 시간 밖에 상담사 연결로 들어온 문의는 AI가 대신 답변해요. 횟수 제한은 없어요."
         />
         <div className="surface p-4">
           <div className="space-y-2">
@@ -552,7 +613,7 @@ export function AdminChatSettingsPage() {
               </label>
               <textarea
                 id={`setting-${setting.settingKey}`}
-                rows={2}
+                rows={TALL_SETTING_KEYS.has(setting.settingKey) ? 8 : 2}
                 value={setting.settingValue}
                 disabled={running === "texts"}
                 onChange={(event) => patchSetting(setting.settingKey, event.target.value)}
