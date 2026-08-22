@@ -68,6 +68,7 @@ import { AdminAccountSettingsPage } from "../pages/mypage/AdminAccountSettingsPa
 import { PetFormPage } from "../pages/mypage/PetFormPage";
 import { PetDetailPage } from "../pages/mypage/PetDetailPage";
 import { MyReviewsPage } from "../pages/mypage/MyReviewsPage";
+import { MyRecommendationPage } from "../pages/mypage/MyRecommendationPage";
 import { FairStatsPage } from "../pages/fair-admin/FairStatsPage";
 import { ReviewDeletionPage } from "../pages/fair-admin/ReviewDeletionPage";
 import { BusinessRegisterPage } from "../pages/business/BusinessRegisterPage";
@@ -173,6 +174,7 @@ export function AppRouter() {
               <Route index element={<MyPageHome />} />
               <Route path="reservations" element={<MyReservationsPage />} />
               <Route path="booths/visited" element={<MyVisitedBoothsPage />} />
+              <Route path="recommendation" element={<MyRecommendationPage />} />
               <Route path="favorites" element={<BoothFavoritesPage />} />
               <Route path="reviews" element={<MyReviewsPage />} />
               <Route path="fair-applications" element={<MyFairApplicationsPage />} />

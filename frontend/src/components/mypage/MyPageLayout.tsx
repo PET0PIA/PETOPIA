@@ -1,4 +1,4 @@
-import { Building2, CalendarDays, FileText, Heart, Home, PawPrint, Settings, Star, Store, UserRound } from "lucide-react";
+import { Building2, CalendarDays, FileText, Heart, Home, PawPrint, Settings, Sparkles, Star, Store, UserRound } from "lucide-react";
 import { useEffect, useState, type ComponentType } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { getMyBusinesses } from "../../api/business";
@@ -28,6 +28,7 @@ const activityGroup: MyPageNavGroup = {
   label: "내 활동",
   items: [
     { label: "예약 내역", path: "/mypage/reservations", icon: CalendarDays },
+    { label: "AI 부스 추천", path: "/mypage/recommendation", icon: Sparkles },
     { label: "방문한 부스", path: "/mypage/booths/visited", icon: Store },
     { label: "즐겨찾기", path: "/mypage/favorites", icon: Heart },
     { label: "내 리뷰", path: "/mypage/reviews", icon: Star },
