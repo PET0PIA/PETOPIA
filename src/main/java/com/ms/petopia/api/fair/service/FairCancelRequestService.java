@@ -353,7 +353,7 @@ public class FairCancelRequestService {
         try {
             User user = authMapper.selectUserById(payerUserId);
             if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                mailService.sendFairCanceledEmail(user.getEmail(), totalAmount);
+                mailService.sendFairCanceledEmail(user.getEmail(), fairName, totalAmount);
             }
         } catch (Exception e) {
             log.error("행사 취소 이메일 발송 실패. payerUserId={}", payerUserId, e);

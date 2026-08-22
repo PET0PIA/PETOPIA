@@ -248,6 +248,7 @@ public class RefundService {
                     refund.getRefundId(), refund.getPaymentId(), e);
         }
         Long payerUserId = payment.getPayerUserId();
+        Long fairId = payment.getFairId();
         Long refundId = refund.getRefundId();
         Long paymentId = refund.getPaymentId();
         long refundAmount = refund.getRefundAmount();
@@ -257,7 +258,7 @@ public class RefundService {
                 try {
                     User user = authMapper.selectUserById(payerUserId);
                     if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                        mailService.sendRefundCompletedEmail(user.getEmail(), refundAmount);
+                        mailService.sendRefundCompletedEmail(user.getEmail(), resolveFairName(fairId), refundAmount);
                     }
                 } catch (Exception e) {
                     log.error("환불 완료 이메일 발송 실패. refundId={}, paymentId={}", refundId, paymentId, e);
@@ -265,6 +266,24 @@ public class RefundService {
             }
         });
         notifyRefundCompletedToAdmins(payment, refund);
+    }
+
+    /**
+     * 환불 완료 이메일에 어느 행사의 결제였는지 표시하기 위한 행사명 조회. 행사 도메인을
+     * 직접 자바로 참조하지 않고, 이미 주입된 PaymentMapper가 fairs를 조인해 온다
+     * (PaymentMapper.selectFairRevenueSummary와 동일 패턴). 조회 실패해도 이메일 자체는
+     * 이름 없이 보내는 편이 나아서 null로 흡수한다.
+     */
+    private String resolveFairName(Long fairId) {
+        if (fairId == null) {
+            return null;
+        }
+        try {
+            return paymentMapper.selectFairNameById(fairId);
+        } catch (Exception e) {
+            log.warn("환불 완료 이메일용 행사명 조회 실패. fairId={}", fairId, e);
+            return null;
+        }
     }
 
     /** 환불 발생을 행사 담당 EVENT_ADMIN에게 알린다. 실패해도 환불 처리에는 영향 없음. */

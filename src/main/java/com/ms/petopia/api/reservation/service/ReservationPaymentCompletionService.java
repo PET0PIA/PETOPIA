@@ -134,12 +134,22 @@ public class ReservationPaymentCompletionService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                // 알림 제목·이메일이 둘 다 행사명을 필요로 하므로 한 번만 조회해서 같이 쓴다.
+                ReservationListRow row = null;
+                try {
+                    row = reservationMapper.selectReservationForOwner(reservationId, notifyUserId);
+                } catch (Exception e) {
+                    log.warn("예약 확정 알림/이메일용 예약 정보 조회 실패. userId={}, reservationId={}",
+                            notifyUserId, reservationId, e);
+                }
+                String fairName = row == null ? null : row.getFairName();
                 try {
                     notificationService.save(new SaveNotificationDto.Request(
                             notifyUserId,
                             RecipientType.USER,
                             NotificationType.RESERVATION_CONFIRMED,
-                            "예약이 확정되었습니다",
+                            fairName == null || fairName.isBlank()
+                                    ? "예약이 확정되었습니다" : "'" + fairName + "' 예약이 확정되었습니다",
                             "결제가 완료되어 예약이 확정되었습니다.",
                             null,
                             List.of(DeliveryChannel.IN_APP),
@@ -149,7 +159,7 @@ public class ReservationPaymentCompletionService {
                     log.error("예약 확정 알림 저장 실패. userId={}, reservationId={}",
                             notifyUserId, reservationId, e);
                 }
-                sendConfirmationEmail(notifyUserId, reservationId, qrToken);
+                sendConfirmationEmail(notifyUserId, reservationId, qrToken, row);
             }
         });
 
@@ -161,15 +171,18 @@ public class ReservationPaymentCompletionService {
         );
     }
 
-    /** 예약확정 HTML 이메일(QR 이미지 포함)을 보낸다. 실패해도 예약 확정 처리에는 영향 없음. */
-    private void sendConfirmationEmail(Long userId, Long reservationId, String qrToken) {
+    /**
+     * 예약확정 HTML 이메일(QR 이미지 포함)을 보낸다. 실패해도 예약 확정 처리에는 영향 없음.
+     * row는 afterCommit 콜백이 알림 제목용으로 이미 조회해둔 것을 그대로 받는다(중복 조회 방지) -
+     * 그 조회 자체가 실패했으면 null로 넘어온다.
+     */
+    private void sendConfirmationEmail(Long userId, Long reservationId, String qrToken, ReservationListRow row) {
         try {
             User user = authMapper.selectUserById(userId);
             if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
                 log.warn("예약확정 이메일 발송 스킵 — 이메일 주소 없음. userId={}, reservationId={}", userId, reservationId);
                 return;
             }
-            ReservationListRow row = reservationMapper.selectReservationForOwner(reservationId, userId);
             if (row == null) {
                 log.warn("예약확정 이메일 발송 스킵 — 예약 조회 실패. userId={}, reservationId={}", userId, reservationId);
                 return;
