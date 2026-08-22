@@ -205,8 +205,17 @@ export function QrScanStation({ inputId, onScan, extraFields }: QrScanStationPro
       }
 
       // 해독기는 카메라를 켤 때만 받는다(일반 사용자 번들에서 빼기 위해 동적 import).
-      const { default: jsQR } = await import("jsqr");
+      // 배포 직후 낡은 페이지가 사라진 청크를 부르거나 네트워크가 끊기면 이 요청이 실패한다.
+      // 그냥 두면 카메라는 켜진 채 인식만 조용히 멈춰 담당자가 이유를 알 수 없으므로,
+      // 카메라를 끄고(정리 함수가 트랙까지 끊는다) 이유를 보여준다.
+      const decoder = await import("jsqr").catch(() => null);
       if (cancelled) return;
+      if (decoder === null) {
+        setCameraError("QR 인식 기능을 불러오지 못했어요. 새로고침하거나 리더기 입력을 사용해 주세요.");
+        setCameraOn(false);
+        return;
+      }
+      const jsQR = decoder.default;
 
       // 프레임을 옮겨 픽셀을 직접 읽을 캔버스. 화면에는 붙이지 않는다.
       const canvas = document.createElement("canvas");

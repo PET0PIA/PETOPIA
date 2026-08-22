@@ -223,7 +223,11 @@ export interface FairPublicSummary {
   longitude: number | null;
   operationStartDate: string | null;
   operationEndDate: string | null;
-  status: string;
+  /**
+   * 행사 생애주기 상태(서버 시계 기준). 목록의 {@link FairPublicListItem#status}와 같은 기준이다.
+   * 백엔드가 null로 내려줄 수 있으므로(fairs.status 미설정) 화면은 날짜 판정을 fallback으로 둔다.
+   */
+  status: FairStatus | null;
 }
 
 /**
