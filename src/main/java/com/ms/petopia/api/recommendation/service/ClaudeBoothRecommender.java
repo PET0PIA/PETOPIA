@@ -8,6 +8,7 @@ import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.StructuredMessageCreateParams;
 import com.fasterxml.jackson.annotation.JsonClassDescription;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+import com.ms.petopia.api.pet.dto.PetAllergyResponse;
 import com.ms.petopia.api.pet.dto.PetResponse;
 import com.ms.petopia.api.recommendation.domain.BoothCandidate;
 import com.ms.petopia.global.exception.CommonException;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 /*
@@ -43,6 +45,7 @@ public class ClaudeBoothRecommender {
             정말 하나도 없을 때만 빈 목록을 반환하세요.
             반려동물이 여러 마리면 reason에 어느 반려동물에게 맞는지 이름으로 언급하세요.
             reason은 한국어로 1~2문장으로 간결하게 작성하세요.
+            반려동물에게 알레르기가 있으면 해당 성분을 다루는 사료·간식 부스는 추천하지 않거나 reason에 주의를 함께 적으세요. 알레르기가 없다고 확인된 경우에는 제약 없이 추천하세요.
             """;
 
     private final AnthropicClient client;
@@ -95,6 +98,7 @@ public class ClaudeBoothRecommender {
             정말 하나도 없을 때만 빈 목록을 반환하세요.
             반려동물이 여러 마리면 reason에 어느 반려동물에게 맞는지 이름으로 언급하세요.
             reason은 한국어로 1~2문장으로 간결하게 작성하세요.
+            반려동물에게 알레르기가 있으면 해당 성분을 다루는 사료·간식 부스는 추천하지 않거나 reason에 주의를 함께 적으세요. 알레르기가 없다고 확인된 경우에는 제약 없이 추천하세요.
             """;
 
     //동선 추천용 Claude 호출. recommend()와 구조는 같고, 결과에 matched(맞춤/추가 구분)가 붙는 버전
@@ -133,15 +137,24 @@ public class ClaudeBoothRecommender {
         if (pets != null && !pets.isEmpty()) {
             sb.append("반려동물 정보:\n");
             for (PetResponse pet : pets) {
-                int age = Period.between(pet.birthDate(), LocalDate.now()).getYears();
                 sb.append("- ").append(pet.name()).append(": ")
-                        .append(pet.species()).append(", ")
-                        .append(pet.breed()).append(", ")
-                        .append(age).append("살, ")
-                        .append("MALE".equals(pet.gender()) ? "수컷" : "암컷");
+                        .append(pet.species());
+                if (pet.breed() != null && !pet.breed().isBlank()) {
+                    sb.append(", ").append(pet.breed());
+                }
+                if (pet.birthDate() != null) {
+                    int age = Period.between(pet.birthDate(), LocalDate.now()).getYears();
+                    sb.append(", ").append(age).append("살");
+                }
+                if ("MALE".equals(pet.gender())) {
+                    sb.append(", 수컷");
+                } else if ("FEMALE".equals(pet.gender())) {
+                    sb.append(", 암컷");
+                }
                 if (Boolean.TRUE.equals(pet.isNeutered())) {
                     sb.append(", 중성화 완료");
                 }
+                appendAllergyInfo(sb, pet);
                 sb.append("\n");
             }
         }
@@ -168,6 +181,30 @@ public class ClaudeBoothRecommender {
         }
 
         return sb.toString();
+    }
+
+    private void appendAllergyInfo(StringBuilder sb, PetResponse pet) {
+        if (Boolean.FALSE.equals(pet.hasAllergy())) {
+            sb.append(", 알레르기 없음");
+            return;
+        }
+        if (!Boolean.TRUE.equals(pet.hasAllergy()) || pet.allergies() == null || pet.allergies().isEmpty()) {
+            return;
+        }
+
+        StringJoiner allergyNames = new StringJoiner("·");
+        for (PetAllergyResponse allergy : pet.allergies()) {
+            if (allergy == null) {
+                continue;
+            }
+            String name = "OTHER".equals(allergy.code()) ? allergy.otherText() : allergy.label();
+            if (name != null && !name.isBlank()) {
+                allergyNames.add(name);
+            }
+        }
+        if (allergyNames.length() > 0) {
+            sb.append(", 알레르기: ").append(allergyNames);
+        }
     }
 
     @JsonClassDescription("부스 추천 결과")

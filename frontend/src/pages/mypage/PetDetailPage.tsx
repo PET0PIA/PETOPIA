@@ -185,13 +185,16 @@ export function PetDetailPage() {
           <div
             ref={cardRef}
             className="relative overflow-hidden rounded-2xl border-2 border-ink/15 bg-card shadow-sm"
-            style={{
-              backgroundImage: `url("${PAW_CORNER_URL}")`,
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "right -6px bottom -3px",
-            }}
           >
-            <div className="flex items-center justify-between bg-[#FAF7F2] px-6 py-3">
+            <div
+              className="pointer-events-none absolute bottom-[17px] right-[-6px] z-0 size-[120px] bg-contain bg-no-repeat"
+              style={{ backgroundImage: `url("${PAW_CORNER_URL}")` }}
+              aria-hidden="true"
+            />
+
+            <div className="pet-card-hologram" aria-hidden="true" />
+
+            <div className="relative z-10 flex items-center justify-between bg-[#FAF7F2] px-6 py-3">
               <div className="flex items-center gap-2">
                 <img src={petopiaHeaderLogo} alt="" className="h-6 w-auto" aria-hidden="true" />
                 <span className="text-base font-black tracking-tight text-ink">동물등록증</span>
@@ -199,7 +202,7 @@ export function PetDetailPage() {
               <span className="text-xs font-bold tracking-widest text-primary-strong">PETOPIA</span>
             </div>
 
-            <div className="flex gap-5 p-6">
+            <div className="relative z-10 flex gap-5 p-6">
               <div className="grid size-28 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-page">
                 {pet.imageUrl ? (
                   <img src={pet.imageUrl} alt={`${pet.name} 사진`} className="size-full object-cover" />
@@ -243,7 +246,7 @@ export function PetDetailPage() {
               </dl>
             </div>
 
-            <div className="flex items-center justify-between border-t border-dashed border-line px-6 py-3 text-xs text-muted">
+            <div className="relative z-10 flex items-center justify-between border-t border-dashed border-line px-6 py-3 text-xs text-muted">
               <span>보호자 {ownerName ?? "미확인"}</span>
               <span>등록일 {new Date(pet.createdAt).toLocaleDateString("ko-KR")}</span>
             </div>
@@ -251,7 +254,7 @@ export function PetDetailPage() {
             {/* 발급기관 직인을 흉내낸 도장 - 카드 우하단에 살짝 겹치게, 실제 관공서 직인/워터마크
                 문구는 쓰지 않고 우리 브랜드명만 넣어 실제 문서로 오인될 요소를 피한다. */}
             <div
-              className="pointer-events-none absolute bottom-11 right-5 flex size-16 rotate-[-14deg] flex-col items-center justify-center gap-0.5 rounded-full border-2 border-primary-strong/60 text-primary-strong/70"
+              className="pointer-events-none absolute bottom-11 right-5 z-20 flex size-16 rotate-[-14deg] flex-col items-center justify-center gap-0.5 rounded-full border-2 border-[#B36B8D]/55 text-[#B36B8D]/70"
               aria-hidden="true"
             >
               <PawPrint size={14} />
