@@ -12,7 +12,7 @@ import { useConfirm } from "../../components/ui/useConfirm";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
 import { PetCompanionPicker } from "../../components/reservation/PetCompanionPicker";
 import { ApiError } from "../../api/client";
-import { createReservationDepositPayment } from "../../api/payment";
+import { createReservationDepositPayment, getPayment, type PaymentDetail as PaymentRecord } from "../../api/payment";
 import {
   cancelReservation,
   changeVisitDate,
@@ -37,6 +37,15 @@ import {
   reservationStatusTones,
   reservationTypeLabels,
 } from "./reservationDisplay";
+import { refundReasonLabels } from "../payment/paymentDisplay";
+
+// paymentDisplay.ts의 refundStatusLabels(REQUESTED: "요청됨")와 다르게 여기는 "환불 상태"라는
+// 라벨을 이미 붙였으니 "대기중"이 더 자연스럽다(2026-08-22 사용자 확인) - 이 페이지 전용으로만 쓴다.
+const RESERVATION_REFUND_STATUS_LABELS: Record<string, string> = {
+  REQUESTED: "대기중",
+  COMPLETED: "완료",
+  REJECTED: "거절됨",
+};
 
 // ISO 일시(2026-08-01T14:00:00)를 "2026-08-01 14:00"으로 다듬는다.
 function formatDateTime(value: string | null) {
@@ -108,6 +117,13 @@ export function ReservationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ReservationDetail에는 환불 정보가 없어서(취소 시점 응답에만 있음, api/reservation.ts
+  // 참고), 이미 취소·환불된 예약을 나중에 다시 볼 때는 안 보였다(2026-08-22 발견) - 결제ID로
+  // 결제 상세(getPayment, 소유자 본인 조회 가능)를 한 번 더 불러와서 환불 상세를 채운다.
+  // 결제 자체에 필요한 필드만 뽑지 않고 통째로 들고 있는다 - 상태(대기중/거절됨/완료)에
+  // 따라 문구가 달라지고, 사유·요청도메인·처리시각까지 같이 보여줘야 해서다.
+  const [refund, setRefund] = useState<PaymentRecord | null>(null);
+
   // 결제 대기 예약을 이어서 결제하는 흐름(예매 화면의 결제 단계와 동일).
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
@@ -157,6 +173,22 @@ export function ReservationDetailPage() {
       alive = false;
     };
   }, [id, idValid]);
+
+  const paymentId = reservation?.paymentId ?? null;
+  useEffect(() => {
+    if (paymentId === null) return;
+    let alive = true;
+    getPayment(paymentId)
+      .then((res) => {
+        if (alive) setRefund(res.refundId !== null ? res : null);
+      })
+      .catch(() => {
+        // 환불 정보는 부가 정보라 실패해도 예약 상세 화면 자체는 그대로 보여준다.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [paymentId]);
 
   // 상세가 로드되고 QR 표시 가능 상태면 실제 토큰을 받아온다.
   const qrAvailable = reservation?.qrAvailable ?? false;
@@ -482,6 +514,30 @@ export function ReservationDetailPage() {
             <DetailRow label="결제수단" value={reservation.paymentMethod} />
           )}
         </dl>
+
+        {/* 환불 정보는 맨 밑에 별도 블록으로 - 환불이 있을 때만(refund !== null) 보여준다.
+            PaymentDetailPage.tsx(관리자용)의 "환불 정보" 블록과 같은 필드 구성. */}
+        {refund && (
+          <>
+            <h3 className="mt-6 border-t border-line pt-6 text-sm font-extrabold text-muted">환불 정보</h3>
+            <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+              <DetailRow
+                label="환불 상태"
+                value={RESERVATION_REFUND_STATUS_LABELS[refund.refundStatus ?? ""] ?? refund.refundStatus ?? "-"}
+              />
+              <DetailRow
+                label="환불 금액"
+                value={refund.refundAmount !== null ? `${refund.refundAmount.toLocaleString()}원` : "-"}
+              />
+              <DetailRow
+                label="환불 사유"
+                value={refundReasonLabels[refund.refundReason ?? ""] ?? refund.refundReason ?? "-"}
+              />
+              <DetailRow label="환불 요청시각" value={formatDateTime(refund.refundRequestedAt)} />
+              <DetailRow label="환불 처리완료시각" value={formatDateTime(refund.refundProcessedAt)} />
+            </dl>
+          </>
+        )}
       </Card>
 
       {/* 동반 반려동물. 없으면 카드 자체를 그리지 않는다 - 동반이 없는 예약에 빈 카드가 남으면
