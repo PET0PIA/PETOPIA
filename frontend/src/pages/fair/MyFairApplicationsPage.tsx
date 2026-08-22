@@ -8,8 +8,8 @@ import { Table } from "../../components/ui/Table";
 import { ApiError } from "../../api/client";
 import { getMyApplications, type FairApplicationSummary } from "../../api/fair";
 
-// AI_UI_RULES 색 규칙: 빨강(primary)=사용자가 이어서 해야 할 핵심 행동(개설비 결제),
-// 노랑(sun)=대기 중(심사 대기), 초록(leaf)=정상 진행, 회색(neutral)=종료·무효.
+// AI_UI_RULES 색 규칙: 검정(primary, 이 테마에서 빨강 아님)=반려·만료 같은 무효 처리,
+// 노랑(sun)=결제 대기(PAYMENT_PENDING), 초록(leaf)=정상 진행, 회색(neutral)=심사 대기·종료.
 const statusLabels: Record<string, string> = {
   RECEIVED: "심사 대기",
   REJECTED: "반려됨",

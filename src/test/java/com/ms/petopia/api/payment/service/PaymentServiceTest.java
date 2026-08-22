@@ -1,6 +1,7 @@
 package com.ms.petopia.api.payment.service;
 
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ms.petopia.api.application.service.ApplicationService;
 import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
@@ -1009,6 +1010,38 @@ class PaymentServiceTest {
         // 입금 전이니 결제완료 처리(markCompleted)도, 참가비 확정 통지도 아직 일어나면 안 된다
         verify(paymentMapper, never()).markCompleted(any(PaymentRow.class));
         verify(applicationService, never()).confirmVendorPayment(anyLong(), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("Toss 응답 JSON(오프셋 포함 dueDate)을 실제로 역직렬화해도 파싱 오류 없이 값이 맞다")
+    void tossPaymentResponse_dueDate_오프셋포함JSON_역직렬화() throws Exception {
+        // 위 가상계좌 테스트는 TossPaymentResponse를 직접 new로 만들어서 실제 Jackson 파싱은
+        // 거치지 않았다 - TossPaymentClient가 실제로 쓰는 것과 같은 방식(JavaTimeModule
+        // 자동 등록)의 ObjectMapper로, 토스가 실제로 내려주는 형태의 JSON 문자열을 직접
+        // 역직렬화해서 검증한다(2026-08-22 코드레빗 리뷰 반영, PR #230).
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+        String json = """
+                {
+                  "paymentKey": "paymentKey123",
+                  "orderId": "PAYMENT_1",
+                  "status": "WAITING_FOR_DEPOSIT",
+                  "totalAmount": 50000,
+                  "method": "가상계좌",
+                  "approvedAt": "2026-08-22T10:00:00+09:00",
+                  "virtualAccount": {
+                    "bankCode": "020",
+                    "accountNumber": "1234567890",
+                    "dueDate": "2026-09-01T23:59:00+09:00",
+                    "secret": "secret-abc"
+                  }
+                }
+                """;
+
+        TossPaymentResponse response = objectMapper.readValue(json, TossPaymentResponse.class);
+
+        assertThat(response.virtualAccount()).isNotNull();
+        assertThat(response.virtualAccount().dueDate())
+                .isEqualTo(OffsetDateTime.of(2026, 9, 1, 23, 59, 0, 0, ZoneOffset.of("+09:00")));
     }
 
     @Test

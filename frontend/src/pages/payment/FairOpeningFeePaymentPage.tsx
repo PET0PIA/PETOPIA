@@ -73,6 +73,9 @@ export function FairOpeningFeePaymentPage() {
       .finally(() => {
         if (alive) setLoading(false);
       });
+    // fairId가 바뀌는 사이(또는 재조회 실패 시) 이전 행사의 결제 이력이 화면에 남아있지
+    // 않도록 먼저 비운다(2026-08-22 코드레빗 리뷰 반영, PR #230).
+    setPayments([]);
     getPayments({ fairId: id, paymentType: "FAIR_OPENING_FEE", size: 50 })
       .then((res) => {
         if (alive) setPayments(res.content);
@@ -130,12 +133,12 @@ export function FairOpeningFeePaymentPage() {
     : summary.status === "PAYMENT_PENDING" && dueExpired
       ? "결제 기한이 지났어요. 곧 신청이 만료될 예정이니 관리자에게 문의해 주세요."
       : (STATUS_MESSAGE[summary.status] ?? "지금은 개설비를 결제할 수 없는 상태예요.");
-  // 실제 결제 시도 이력이 있으면 아래 결제ID 줄이 이미 뭔가 보여주고 있으니, 안내 문구
-  // 카드는 이력이 하나도 없을 때만 띄운다(둘 다 띄우면 같은 얘기를 중복해서 하게 됨).
-  const showNonPayableMessage = nonPayableMessage !== null && payments.length === 0;
   // 개설비 결제가 이미 끝난 행사(PREPARING/IN_PROGRESS)는 결제 기한이 더 이상 의미가
   // 없으니 카드 자체를 뺀다(2026-08-22).
   const paidCompleted = summary.status === "PREPARING" || summary.status === "IN_PROGRESS";
+  // 결제가 실제로 완료된 경우에만 안내 문구를 숨긴다 - 실패/만료 등 미완료 결제 시도가
+  // 있어도 결제 불가 안내는 그대로 보여줘야 한다(2026-08-22 코드레빗 리뷰 반영, PR #230).
+  const showNonPayableMessage = nonPayableMessage !== null && !paidCompleted;
 
   async function handlePay() {
     if (!payable || paying) return;
