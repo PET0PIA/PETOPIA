@@ -76,6 +76,7 @@ export interface VisitStats {
   ageGroupBreakdown: LabelCount[];
   petSpeciesBreakdown: LabelCount[];
   petBreedBreakdown: PetBreedStat[];
+  petAllergyBreakdown: LabelCount[];
   /** 데이터 없으면 null */
   avgPetAge: number | null;
   /** 방문자 1명당 평균 방문 부스 수, 데이터 없으면 null */

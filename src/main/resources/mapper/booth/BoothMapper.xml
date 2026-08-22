@@ -87,6 +87,8 @@
         SELECT bt.booth_id AS boothId,
             biz.name AS businessName,
             bt.image_url AS imageUrl,
+            bt.category AS category,
+            bt.target_animal AS targetAnimal,
             bs.slot_number AS slotNumber,
             bs.pos_x AS posX,
             bs.pos_y AS posY,

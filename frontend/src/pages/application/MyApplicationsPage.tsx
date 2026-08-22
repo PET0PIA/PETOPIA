@@ -8,8 +8,12 @@ import { Table } from "../../components/ui/Table";
 import { ApiError } from "../../api/client";
 import { getMyApplications, type ApplicationStatus, type ApplicationSummary } from "../../api/application";
 
-// AI_UI_RULES 색 규칙: 빨강(primary)=사용자가 이어서 해야 할 핵심 행동(참가비 결제),
-// 노랑(sun)=대기 중(심사 대기), 초록(leaf)=정상 진행(확정), 회색(neutral)=종료·무효.
+// 이 테마의 "primary"는 빨강이 아니라 검정(--color-primary: #000000, primary-soft는 거의
+// 흰색 회색)이라 PAYMENT_PENDING을 primary로 두면 neutral(회색)과 거의 구분이 안 갔다
+// (2026-08-22 수정) - 결제 관련 상태 색은 앱 전역에서 이미 쓰는 규칙(paymentDisplay.ts의
+// PaymentStatus 매핑: 대기=노랑/완료=초록/실패=검정/취소=회색)에 맞춰 통일한다.
+// 노랑(sun)=지금 사용자가 해야 할 행동이 있음(결제 대기), 초록(leaf)=정상 완료(확정),
+// 검정(primary)=거부·실패 같은 부정적 종결, 회색(neutral)=단순 대기·무효.
 const statusLabels: Record<ApplicationStatus, string> = {
   PENDING_REVIEW: "심사 대기",
   PAYMENT_PENDING: "참가비 결제 대기",
@@ -18,10 +22,10 @@ const statusLabels: Record<ApplicationStatus, string> = {
   CANCELED: "취소됨",
 };
 const statusTones: Record<ApplicationStatus, "primary" | "sun" | "leaf" | "neutral"> = {
-  PENDING_REVIEW: "sun",
-  PAYMENT_PENDING: "primary",
+  PENDING_REVIEW: "neutral",
+  PAYMENT_PENDING: "sun",
   CONFIRMED: "leaf",
-  REJECTED: "neutral",
+  REJECTED: "primary",
   CANCELED: "neutral",
 };
 

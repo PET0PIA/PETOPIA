@@ -37,10 +37,17 @@ export interface AdminChatConversationDetail {
 
 /**
  * 대기열 필터. 상태(status)가 아니라 **상담사가 하는 일** 기준이다.
- * 상담사에게 필요한 구분은 "내가 들고 있는 것(OPEN) / 끝난 것(CLOSED)" 둘뿐이라,
- * 상태별로 탭을 쪼개지 않는다. 급한 순서는 목록 정렬과 배지가 알려준다.
+ * 상담사에게 필요한 구분은 "내가 들고 있는 것(OPEN) / 자동 응대로 끝난 것(AI_HANDLED) /
+ * 끝난 것(CLOSED)"이다. 그 밖의 상태별로는 탭을 쪼개지 않는다 - 급한 순서는 목록 정렬과
+ * 배지가 알려준다.
  */
-export type AdminChatFilter = "OPEN" | "CLOSED" | "ALL";
+/**
+ * 상담사 대기열 필터. 서버 AdminChatFilter와 같은 값이어야 한다.
+ *
+ * AI_HANDLED는 OPEN에서 빠진 자동 응대 건을 보는 자리다 - 대기열에 섞으면 이미 답이 나간
+ * 대화를 미답변으로 읽고, 안 보이게 두면 자동 응대를 아무도 검수하지 않는다.
+ */
+export type AdminChatFilter = "OPEN" | "AI_HANDLED" | "CLOSED" | "ALL";
 
 export async function fetchAdminConversations(
   filter: AdminChatFilter = "OPEN",
@@ -51,6 +58,18 @@ export async function fetchAdminConversations(
   const response = await apiClient.get<ApiEnvelope<AdminChatConversationList>>(
     `/api/admin/chat/conversations?${params.toString()}`,
   );
+  return response.data;
+}
+
+/**
+ * 답변 대기 건수. 목록과 별개로 서버가 전체를 센다.
+ *
+ * 목록에서 세면 두 가지가 어긋난다. 페이지 크기(20)를 넘는 건수는 잘리고, `AI 응대`나 `종료`
+ * 탭을 보는 동안에는 그 탭에 대기 건이 없으니 항상 0이 된다 - 화면 맨 위의 "몇 건 있어요"가
+ * 보고 있는 탭에 따라 달라지면 그 숫자를 신뢰할 수 없다.
+ */
+export async function fetchUnansweredCount(): Promise<number> {
+  const response = await apiClient.get<ApiEnvelope<number>>("/api/admin/chat/unanswered-count");
   return response.data;
 }
 

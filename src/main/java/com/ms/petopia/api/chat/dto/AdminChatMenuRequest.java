@@ -8,8 +8,11 @@ import jakarta.validation.constraints.Size;
 /**
  * 문의 유형 버튼 등록·수정.
  *
- * @param code       불변 식별자. 대화가 이 값을 참조하므로 수정 시에는 무시된다.
- * @param aiContext  AI 유형일 때 프롬프트에 주입할 도메인 지식. 이 값의 품질이 곧 답변 품질이다.
+ * @param code        불변 식별자. 대화가 이 값을 참조하므로 수정 시에는 무시된다.
+ * @param answerType  {@code FIXED} 또는 {@code AGENT}. {@code "AI"}를 보내면 역직렬화 단계에서
+ *                    거부된다 - AI는 버튼 유형이 아니라 운영시간 외 대체 응대이고, 참고 지식은
+ *                    전역 설정({@code AI_CONTEXT})에 있다.
+ * @param fixedAnswer {@code FIXED}일 때 위젯이 즉시 렌더할 본문. {@code AGENT}면 무시된다.
  */
 public record AdminChatMenuRequest(
         @NotBlank(message = "코드를 입력해주세요.")
@@ -28,9 +31,6 @@ public record AdminChatMenuRequest(
 
         @Size(max = 5000)
         String fixedAnswer,
-
-        @Size(max = 5000)
-        String aiContext,
 
         Integer displayOrder,
 

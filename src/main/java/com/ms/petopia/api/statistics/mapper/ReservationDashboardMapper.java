@@ -45,4 +45,5 @@ public interface ReservationDashboardMapper {
     List<LabelCountDto> selectPetSpeciesBreakdown(@Param("fairId") Long fairId);
     List<PetBreedStatDto> selectPetBreedBreakdown(@Param("fairId") Long fairId);
     Double selectAvgPetAge(@Param("fairId") Long fairId);
+    List<LabelCountDto> selectPetAllergyBreakdown(@Param("fairId") Long fairId);
 }

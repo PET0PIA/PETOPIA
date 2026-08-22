@@ -28,6 +28,7 @@ import {
   type CommissionRateResponse,
   type CommissionRateScope,
 } from "../../api/commissionRate";
+import { getAuditLogs, type AuditLogRow } from "../../api/audit";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -405,8 +406,37 @@ export function SettlementPage() {
   // "상세" 클릭 시 확정 시각·확정한 관리자를 그 행 바로 아래에 펼쳐 보여준다(구 업체별
   // 정산 목록의 상세 토글과 동일한 상호작용, 2026-08-22 재구현).
   const [finalDetailExpanded, setFinalDetailExpanded] = useState(false);
+  // 수수료율 변경이력(재계산 시 요율이 실제로 바뀐 것만 감사로그에 남는다, SETTLEMENT_RATE_CHANGED
+  // 참고) - 상세를 펼칠 때만 조회한다(2026-08-22).
+  const [rateHistory, setRateHistory] = useState<AuditLogRow[] | null>(null);
+  const [rateHistoryLoading, setRateHistoryLoading] = useState(false);
 
   const finalFairVersionRef = useRef(0);
+
+  useEffect(() => {
+    if (!finalDetailExpanded || !fairSettlement) return;
+    let alive = true;
+    setRateHistoryLoading(true);
+    getAuditLogs({
+      targetType: "FAIR_SETTLEMENT",
+      targetId: fairSettlement.fairSettlementId,
+      actionType: "SETTLEMENT_RATE_CHANGED",
+      size: 20,
+    })
+      .then((res) => {
+        if (alive) setRateHistory(res.items);
+      })
+      .catch(() => {
+        if (alive) setRateHistory(null);
+      })
+      .finally(() => {
+        if (alive) setRateHistoryLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalDetailExpanded, fairSettlement?.fairSettlementId]);
 
   async function loadFairSettlement(fairId: number) {
     const version = ++finalFairVersionRef.current;
@@ -758,6 +788,33 @@ export function SettlementPage() {
                               <dd className="mt-1 text-sm text-ink">{fairSettlement.confirmedByUserId !== null ? `#${fairSettlement.confirmedByUserId}` : "-"}</dd>
                             </div>
                           </dl>
+                          <div className="mt-4 border-t border-line pt-3">
+                            <p className="text-xs font-bold text-muted">수수료율 변경이력</p>
+                            {rateHistoryLoading ? (
+                              <p className="mt-1 text-sm text-muted">불러오는 중...</p>
+                            ) : !rateHistory || rateHistory.length === 0 ? (
+                              <p className="mt-1 text-sm text-muted">변경 이력이 없어요.</p>
+                            ) : (
+                              <ul className="mt-1 space-y-1">
+                                {rateHistory.map((log) => {
+                                  let beforeRate: number | null = null;
+                                  let afterRate: number | null = null;
+                                  try {
+                                    beforeRate = log.beforeValue ? JSON.parse(log.beforeValue).commissionRate : null;
+                                    afterRate = log.afterValue ? JSON.parse(log.afterValue).commissionRate : null;
+                                  } catch {
+                                    // 파싱 실패 시 원문 없이 시각만 보여준다.
+                                  }
+                                  return (
+                                    <li key={log.auditId} className="text-sm text-ink">
+                                      {formatDateTime(log.occurredAt)} · {beforeRate !== null ? formatRatePercent(beforeRate) : "-"} →{" "}
+                                      {afterRate !== null ? formatRatePercent(afterRate) : "-"}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )}

@@ -1,5 +1,8 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.payment.service.PaymentService;
@@ -101,6 +104,8 @@ public class ReservationCancellationService {
     private final PaymentService paymentService;
     private final RefundService refundService;
     private final NotificationService notificationService;
+    private final AuthMapper authMapper;
+    private final MailService mailService;
 
     /** 결제 전 예약, 무료 사전예약, 결제까지 끝난 유료 사전예약(전액 환불)을 취소한다. */
     @Transactional
@@ -176,11 +181,20 @@ public class ReservationCancellationService {
                             "예약이 취소되었습니다",
                             "예약이 정상적으로 취소 처리되었습니다.",
                             null,
-                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            List.of(DeliveryChannel.IN_APP),
                             null
                     ));
                 } catch (Exception e) {
                     log.error("예약 취소 알림 저장 실패. userId={}, reservationId={}", notifyUserId, reservationId, e);
+                }
+                try {
+                    User user = authMapper.selectUserById(notifyUserId);
+                    if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+                        mailService.sendReservationCanceledEmail(user.getEmail(), reservation.getVisitDate(),
+                                reservation.getReservationAmount());
+                    }
+                } catch (Exception e) {
+                    log.error("예약 취소 이메일 발송 실패. userId={}, reservationId={}", notifyUserId, reservationId, e);
                 }
             }
         });

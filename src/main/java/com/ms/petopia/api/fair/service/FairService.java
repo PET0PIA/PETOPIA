@@ -5,6 +5,8 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.Fair;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairDateWithStats;
+import com.ms.petopia.api.fair.dto.FairInfoResponse;
 import com.ms.petopia.api.fair.dto.FairOpeningFeeSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
@@ -12,9 +14,13 @@ import com.ms.petopia.api.fair.dto.FairReviewDecision;
 import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
+import com.ms.petopia.api.fair.dto.ReservationPeriodResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
+import com.ms.petopia.api.fair.dto.UpdateFairInfoRequest;
+import com.ms.petopia.api.fair.dto.UpdateReservationPeriodRequest;
+import com.ms.petopia.api.fair.mapper.FairDateMapper;
 import com.ms.petopia.api.fair.mapper.FairMapper;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.auth.domain.User;
@@ -86,6 +92,7 @@ public class FairService {
     private static final Pattern MANAGER_PHONE_PATTERN = Pattern.compile("^01[0-9]-?\\d{3,4}-?\\d{4}$");
 
     private final FairMapper fairMapper;
+    private final FairDateMapper fairDateMapper;
     private final AuthMapper authMapper;
     private final FairTimeProvider timeProvider;
     private final StorageService storageService;
@@ -404,6 +411,141 @@ public class FairService {
     }
 
     /**
+     * "행사 정보 관리" 화면에서 현재 정보성 필드 값을 보여주기 위해 쓴다. {@link #publish}와
+     * 같은 접근 검증({@link FairAdminAccessGuard#checkAssigned})을 쓴다.
+     */
+    @Transactional(readOnly = true)
+    public FairInfoResponse getFairInfo(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
+        Fair fair = findFairOrThrow(fairId);
+        return toFairInfoResponse(fair);
+    }
+
+    /**
+     * 승인·공개된 뒤에도 이름/소개/카테고리/포스터/유의사항/장소/일정/담당자명·연락처 같은
+     * 정보성 필드를 EVENT_ADMIN이 직접 고칠 수 있게 한다. 신청서 수정({@link #updateApplication})은
+     * RECEIVED/REJECTED 상태에서만 가능해, 승인된 뒤에는 "일정 미정"·"장소 미정"처럼 신청 당시
+     * 비워둔 값이나 오타를 고칠 방법이 없었다(2026-08-22 사용자 피드백).
+     *
+     * <p>예약금·취소/변경 기한·모집/예약 기간처럼 이미 진행 중인 예약·모집에 영향을 주는 필드는
+     * 이 화면에서 다루지 않는다 - 실수로 건드리면 이미 결제·신청된 건과 어긋날 수 있어서 별도
+     * 협의 없이는 손대지 않는 게 안전하다. managerEmail도 로그인 계정과 묶여 있어 여기서
+     * 바꿀 수 없다({@link #updateApplication}과 동일한 이유).
+     *
+     * <p>{@link #updateApplication}과 달리 상태 제약이 없다 - 신청 당시처럼 "오늘 이후여야
+     * 한다"는 검증({@code validateNotInPast})도 적용하지 않는다. 이미 운영 중인 행사는 일정
+     * 시작일이 과거인 게 정상이라(예: 종료일만 늘리는 경우), 수정할 때마다 시작일을 오늘
+     * 이후로 바꾸도록 강제하면 오히려 불편하다.
+     *
+     * <p>운영 기간은 이번 요청에서 실제로 바뀌는 값만 요청 DTO에서 가져오고, 생략된 쪽은 DB에
+     * 남은 기존 값을 그대로 써서 최종 기간을 계산한 뒤 검증한다(PATCH라 시작일·종료일 중
+     * 하나만 보낼 수 있어서, 요청 DTO의 두 값만 보고 순서를 판단하면 나머지 한쪽과 조합했을 때
+     * 유효한지 알 수 없다). 그 최종 기간이 이미 등록된 운영일({@code fair_dates})을 하나라도
+     * 벗어나면 저장을 거부한다 - 운영일 자체는 이 화면에서 안 건드리지만, 운영 기간만 좁혀
+     * 놓으면 그 운영일들이 근거를 잃기 때문이다.
+     */
+    @Transactional
+    public FairInfoResponse updateFairInfo(
+            Long fairId, Long actorId, UpdateFairInfoRequest request, Set<String> presentFields
+    ) {
+        if (actorId == null || actorId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        Set<String> setFields = new HashSet<>(resolveUpdateSetFields(presentFields));
+        validateFairInfoRequest(request, setFields);
+
+        fairAdminAccessGuard.checkAssigned(fairId);
+        Fair fair = findFairOrThrow(fairId);
+        validateOperationPeriodAgainstExistingDates(fair, request, setFields);
+
+        Fair update = new Fair();
+        update.setFairId(fairId);
+        update.setName(request.name());
+        update.setDescription(request.description());
+        update.setCategory(request.category());
+        update.setPosterImageUrl(setFields.contains("posterImageUrl") ? resolveImageUrl(request.posterImageObjectKey()) : null);
+        update.setNoticeText(request.noticeText());
+        update.setPlaceName(request.placeName());
+        update.setAddress(request.address());
+        if (setFields.contains("address")) {
+            // updateApplication과 동일하게, 주소 값이 실제로 안 바뀌었으면 재지오코딩하지 않고
+            // 기존 좌표를 그대로 들고 간다(카카오 API 일시 실패로 멀쩡한 좌표가 지워지는 것 방지).
+            if (Objects.equals(fair.getAddress(), request.address())) {
+                update.setLatitude(fair.getLatitude());
+                update.setLongitude(fair.getLongitude());
+            } else {
+                applyGeocoding(update, request.address());
+            }
+        }
+        update.setIndoorOutdoor(request.indoorOutdoor());
+        update.setOperationStartDate(request.operationStartDate());
+        update.setOperationEndDate(request.operationEndDate());
+        update.setManagerName(request.managerName());
+        update.setManagerPhone(request.managerPhone());
+
+        fairMapper.updateFairInfo(update, setFields);
+
+        return toFairInfoResponse(findFairOrThrow(fairId));
+    }
+
+    private void validateFairInfoRequest(UpdateFairInfoRequest request, Set<String> setFields) {
+        if (request == null) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        if (isBlankIfPresent(request.name()) || isBlankIfPresent(request.managerName())) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        if ((setFields.contains("name") && request.name() == null)
+                || (setFields.contains("managerName") && request.managerName() == null)) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        validateManagerPhoneFormat(request.managerPhone());
+    }
+
+    /**
+     * setFields에 있는 값만 요청에서, 없는 값은 fair에 남은 기존 값을 써서 최종 운영 기간을
+     * 만들고, 순서(시작 ≤ 종료)와 기존 운영일 포함 여부를 함께 검증한다. 이번 요청이 운영
+     * 기간을 아예 건드리지 않았으면(둘 다 setFields에 없음) 검사하지 않는다.
+     */
+    private void validateOperationPeriodAgainstExistingDates(Fair fair, UpdateFairInfoRequest request, Set<String> setFields) {
+        if (!setFields.contains("operationStartDate") && !setFields.contains("operationEndDate")) {
+            return;
+        }
+        LocalDate mergedStart = setFields.contains("operationStartDate") ? request.operationStartDate() : fair.getOperationStartDate();
+        LocalDate mergedEnd = setFields.contains("operationEndDate") ? request.operationEndDate() : fair.getOperationEndDate();
+        validatePeriod(mergedStart, mergedEnd, ErrorCode.FAIR_INVALID_OPERATION_PERIOD);
+        if (mergedStart == null && mergedEnd == null) {
+            return;
+        }
+
+        boolean existingDateOutOfRange = fairDateMapper.selectByFairIdWithStats(fair.getFairId()).stream()
+                .map(FairDateWithStats::getOperationDate)
+                .anyMatch(operationDate -> (mergedStart != null && operationDate.isBefore(mergedStart))
+                        || (mergedEnd != null && operationDate.isAfter(mergedEnd)));
+        if (existingDateOutOfRange) {
+            throw new CommonException(ErrorCode.FAIR_OPERATION_PERIOD_EXCLUDES_EXISTING_DATES);
+        }
+    }
+
+    private FairInfoResponse toFairInfoResponse(Fair fair) {
+        return new FairInfoResponse(
+                fair.getFairId(),
+                fair.getName(),
+                fair.getDescription(),
+                fair.getCategory(),
+                fair.getPosterImageUrl(),
+                fair.getNoticeText(),
+                fair.getPlaceName(),
+                fair.getAddress(),
+                fair.getIndoorOutdoor(),
+                fair.getOperationStartDate(),
+                fair.getOperationEndDate(),
+                fair.getManagerName(),
+                fair.getManagerPhone()
+        );
+    }
+
+    /**
      * 요청 JSON에 실제로 있었던 필드명을 매퍼가 쓰는 엔티티/컬럼 지향 이름으로 바꾼다.
      * posterImageObjectKey만 posterImageUrl로 바뀌고, 나머지는 요청 필드명과 엔티티 필드명이
      * 1:1이라 그대로 통과시킨다.
@@ -591,6 +733,51 @@ public class FairService {
         fairAdminAccessGuard.checkAssigned(fairId);
         Fair fair = findFairOrThrow(fairId);
         return new PublishFairResponse(fairId, fair.getStatus().name(), fair.getPublishedAt());
+    }
+
+    /**
+     * 운영일·정원 관리 화면에서 현재 사전예약 기간을 보여주기 위해 쓴다. {@link #publish}와
+     * 같은 접근 검증({@link FairAdminAccessGuard#checkAssigned})을 쓴다.
+     */
+    @Transactional(readOnly = true)
+    public ReservationPeriodResponse getReservationPeriod(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
+        Fair fair = findFairOrThrow(fairId);
+        return new ReservationPeriodResponse(fairId, fair.getReservationStartDate(), fair.getReservationEndDate());
+    }
+
+    /**
+     * 사전예약 기간(reservation_start_date~reservation_end_date)을 수정한다. 승인·공개된 뒤에는
+     * 신청서 수정({@link #updateApplication})으로 못 바꾸므로, 운영일·정원 관리 화면에서 담당자가
+     * 직접 조정할 수 있게 별도로 뒀다. {@link #publish}와 같은 접근 검증을 쓴다.
+     *
+     * <p>신청서 작성 때 쓰는 {@code validateNotInPast}는 여기 적용하지 않는다 - 이미 운영 중인
+     * 행사는 사전예약 시작일이 과거인 게 정상이라(예: 종료일만 늘리는 경우), 수정할 때마다
+     * 시작일을 오늘 이후로 바꾸도록 강제하면 오히려 불편하다. 시작일이 종료일보다 늦으면 안
+     * 된다는 검증({@code validatePeriod})만 그대로 적용한다.
+     */
+    @Transactional
+    public ReservationPeriodResponse updateReservationPeriod(
+            Long fairId, Long actorId, UpdateReservationPeriodRequest request
+    ) {
+        if (actorId == null || actorId <= 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        if (request == null || request.reservationStartDate() == null || request.reservationEndDate() == null) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        validatePeriod(request.reservationStartDate(), request.reservationEndDate(), ErrorCode.FAIR_INVALID_RESERVATION_PERIOD);
+
+        fairAdminAccessGuard.checkAssigned(fairId);
+        findFairOrThrow(fairId);
+
+        Fair update = new Fair();
+        update.setFairId(fairId);
+        update.setReservationStartDate(request.reservationStartDate());
+        update.setReservationEndDate(request.reservationEndDate());
+        fairMapper.update(update);
+
+        return new ReservationPeriodResponse(fairId, request.reservationStartDate(), request.reservationEndDate());
     }
 
     private void validateReviewRequest(Long reviewerId, ReviewFairApplicationRequest request) {

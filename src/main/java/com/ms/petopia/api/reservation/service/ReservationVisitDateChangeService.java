@@ -1,5 +1,8 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -44,6 +47,8 @@ public class ReservationVisitDateChangeService {
     private final ReservationTimeProvider timeProvider;
     private final NotificationService notificationService;
     private final ReservationPetService reservationPetService;
+    private final AuthMapper authMapper;
+    private final MailService mailService;
 
     /** 확정된 사전예약의 방문 날짜와 발급된 QR 유효시간을 함께 변경한다. */
     @Transactional
@@ -162,6 +167,7 @@ public class ReservationVisitDateChangeService {
         );
         replacePetsIfRequested(reservationId, userId, reservation.getFairId(), request);
 
+        LocalDate previousVisitDate = reservation.getVisitDate();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -173,11 +179,20 @@ public class ReservationVisitDateChangeService {
                             "예약 날짜가 변경되었습니다",
                             "방문 날짜가 " + request.visitDate() + "(으)로 변경되었습니다.",
                             null,
-                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            List.of(DeliveryChannel.IN_APP),
                             null
                     ));
                 } catch (Exception e) {
                     log.error("예약 날짜 변경 알림 저장 실패. userId={}, reservationId={}", userId, reservationId, e);
+                }
+                try {
+                    User user = authMapper.selectUserById(userId);
+                    if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+                        mailService.sendReservationChangedEmail(user.getEmail(), previousVisitDate,
+                                request.visitDate(), targetDate.getEntryStartTime(), targetDate.getEntryEndTime());
+                    }
+                } catch (Exception e) {
+                    log.error("예약 날짜 변경 이메일 발송 실패. userId={}, reservationId={}", userId, reservationId, e);
                 }
             }
         });

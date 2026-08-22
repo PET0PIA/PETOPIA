@@ -231,11 +231,12 @@ function ApplicationEditContent({ id }: { id: number }) {
                   type="tel"
                   value={form.managerPhone}
                   onChange={(event) => update("managerPhone", event.target.value)}
-                  placeholder="010-0000-0000"
-                  pattern="\d{2,3}-\d{3,4}-\d{4}"
+                  placeholder="010-0000-0000 (- 없이 입력 가능)"
+                  pattern="\d{2,3}-?\d{3,4}-?\d{4}"
                   maxLength={20}
                   required
                 />
+                <p className="mt-1 text-xs text-muted">- 없이 숫자만 입력해도 돼요.</p>
               </div>
               <div>
                 {label("managerEmail", "담당자 이메일", true)}
