@@ -20,11 +20,14 @@ const statusLabels: Record<string, string> = {
   ENDED: "종료",
   CANCELED: "취소됨",
 };
+// FairOpeningFeeSelectPage.tsx의 OPENING_FEE_STATUS_TONES와 동일하게 맞춘 색 규칙
+// (2026-08-22) - 이 테마의 "primary"는 검정이라(빨강 아님) PAYMENT_PENDING을 primary로
+// 두면 neutral과 거의 안 구분됐었다.
 const statusTones: Record<string, "primary" | "sun" | "leaf" | "neutral"> = {
-  RECEIVED: "sun",
-  REJECTED: "neutral",
-  EXPIRED: "neutral",
-  PAYMENT_PENDING: "primary",
+  RECEIVED: "neutral",
+  REJECTED: "primary",
+  EXPIRED: "primary",
+  PAYMENT_PENDING: "sun",
   PREPARING: "leaf",
   IN_PROGRESS: "leaf",
   ENDED: "neutral",

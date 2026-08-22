@@ -7,7 +7,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { ApiError } from "../../api/client";
 import { getFairOpeningFeeSummary, type FairOpeningFeeSummary } from "../../api/fair";
-import { createFairOpeningPayment } from "../../api/payment";
+import { createFairOpeningPayment, getPayments, type PaymentDetail } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   ALL_PAYMENT_METHODS,
@@ -47,6 +47,11 @@ export function FairOpeningFeePaymentPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // 이 행사의 개설비(FAIR_OPENING_FEE) 결제 이력 - 결제ID만 짧게 보여주는 데 쓴다(2026-08-22,
+  // 결제 상세를 표로 다 보여주는 건 굳이 필요 없다고 판단해서 뺌). 못 불러와도 페이지 나머지는
+  // 그대로 쓸 수 있어야 하니 실패해도 loadError로 전체를 막지 않고 조용히 빈 배열로 둔다.
+  const [payments, setPayments] = useState<PaymentDetail[]>([]);
+
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
@@ -67,6 +72,14 @@ export function FairOpeningFeePaymentPage() {
       })
       .finally(() => {
         if (alive) setLoading(false);
+      });
+    getPayments({ fairId: id, paymentType: "FAIR_OPENING_FEE", size: 50 })
+      .then((res) => {
+        if (alive) setPayments(res.content);
+      })
+      .catch(() => {
+        // 결제 이력은 부가 정보라 실패해도 조용히 넘어간다 - 페이지 본 목적(결제/안내)은
+        // summary 로딩 성공 여부로만 판단한다.
       });
     return () => {
       alive = false;
@@ -117,6 +130,12 @@ export function FairOpeningFeePaymentPage() {
     : summary.status === "PAYMENT_PENDING" && dueExpired
       ? "결제 기한이 지났어요. 곧 신청이 만료될 예정이니 관리자에게 문의해 주세요."
       : (STATUS_MESSAGE[summary.status] ?? "지금은 개설비를 결제할 수 없는 상태예요.");
+  // 실제 결제 시도 이력이 있으면 아래 결제ID 줄이 이미 뭔가 보여주고 있으니, 안내 문구
+  // 카드는 이력이 하나도 없을 때만 띄운다(둘 다 띄우면 같은 얘기를 중복해서 하게 됨).
+  const showNonPayableMessage = nonPayableMessage !== null && payments.length === 0;
+  // 개설비 결제가 이미 끝난 행사(PREPARING/IN_PROGRESS)는 결제 기한이 더 이상 의미가
+  // 없으니 카드 자체를 뺀다(2026-08-22).
+  const paidCompleted = summary.status === "PREPARING" || summary.status === "IN_PROGRESS";
 
   async function handlePay() {
     if (!payable || paying) return;
@@ -152,25 +171,40 @@ export function FairOpeningFeePaymentPage() {
         description="행사를 개설하려면 개설비 결제를 마쳐야 해요."
       />
 
-      <Card className="mb-4 p-5">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted">개설비</span>
-          <span className="text-lg font-extrabold text-ink">
-            {summary.openingFeeAmount !== null ? `${summary.openingFeeAmount.toLocaleString()}원` : "미확정"}
-          </span>
-        </div>
-      </Card>
-
-      {summary.paymentDueAt && (
-        <Card className="mb-4 flex items-center gap-2 p-4 text-sm">
-          <CalendarClock size={16} className="shrink-0 text-muted" />
-          <span className="text-muted">
-            결제 기한 <b className="text-ink">{formatDueAt(summary.paymentDueAt)}</b>까지
-          </span>
+      {!paidCompleted && (
+        <Card className="mb-4 p-5">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">개설비</span>
+            <span className="text-lg font-extrabold text-ink">
+              {summary.openingFeeAmount !== null ? `${summary.openingFeeAmount.toLocaleString()}원` : "미확정"}
+            </span>
+          </div>
         </Card>
       )}
 
-      {nonPayableMessage && (
+      {/* 결제 기한 + 결제ID를 한 카드에 같이 보여준다(2026-08-22) - 결제 상세 표는 굳이
+          필요 없다고 판단해서 뺐고, 결제ID만 이 카드 오른쪽에 짧게 붙여둔다. payments[0]이
+          최신 시도(getPayments가 created_at DESC로 내려줌). 결제 완료 후엔 기한 표시가
+          없어지니(paidCompleted) 그땐 오른쪽 결제ID만 남는다. */}
+      {((summary.paymentDueAt && !paidCompleted) || payments.length > 0) && (
+        <Card className="mb-4 flex items-center justify-between gap-2 p-4 text-sm">
+          <span className="flex items-center gap-2 text-muted">
+            {summary.paymentDueAt && !paidCompleted && (
+              <>
+                <CalendarClock size={16} className="shrink-0" />
+                결제 기한 <b className="text-ink">{formatDueAt(summary.paymentDueAt)}</b>까지
+              </>
+            )}
+          </span>
+          {payments.length > 0 && (
+            <span className="shrink-0 text-muted">
+              결제 ID <span className="font-bold text-ink">#{payments[0].paymentId}</span>
+            </span>
+          )}
+        </Card>
+      )}
+
+      {showNonPayableMessage && (
         <Card className="mb-6 flex items-start gap-2 p-4 text-sm">
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-muted" />
           <span className="text-muted">{nonPayableMessage}</span>
@@ -214,7 +248,9 @@ export function FairOpeningFeePaymentPage() {
           홈으로
         </Link>
         {payable && (
-          <Button disabled={!tossReady || paying} onClick={handlePay}>
+          // paying 중엔 버튼이 disabled라 기본 커서(cursor-not-allowed, "금지" 아이콘)가
+          // 뜨는데, 방금 누른 버튼 위에 계속 그게 보이면 거슬리니 이 순간만 대기 커서로 바꾼다.
+          <Button disabled={!tossReady || paying} onClick={handlePay} className={paying ? "!cursor-wait" : undefined}>
             {paying ? "결제창을 여는 중…" : "결제하기"}
           </Button>
         )}

@@ -40,6 +40,7 @@ import org.springframework.web.client.HttpServerErrorException;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -982,7 +983,10 @@ class PaymentServiceTest {
         PaymentRow row = pendingRow();
         given(paymentMapper.selectById(1L)).willReturn(row);
         given(paymentMapper.markProcessing(eq(1L), any(LocalDateTime.class))).willReturn(1);
-        LocalDateTime dueDate = LocalDateTime.of(2026, 9, 1, 23, 59);
+        // 토스가 실제로 내려주는 형식(오프셋 포함, "...+09:00")을 그대로 재현한다 - 예전엔
+        // 오프셋 없는 LocalDateTime으로 잘못 가정해서 실결제 confirm이 500으로 깨졌었다
+        // (2026-08-22 실제 가상계좌 결제 테스트로 발견, TossPaymentResponse.VirtualAccount 참고).
+        OffsetDateTime dueDate = OffsetDateTime.of(2026, 9, 1, 23, 59, 0, 0, ZoneOffset.of("+09:00"));
         given(tossPaymentClient.confirmPayment(eq("paymentKey123"), eq("PAYMENT_1"), eq(50000L)))
                 .willReturn(new TossPaymentResponse(
                         "paymentKey123", "PAYMENT_1", "WAITING_FOR_DEPOSIT", 50000L, "가상계좌",
@@ -996,7 +1000,8 @@ class PaymentServiceTest {
         assertThat(result.status()).isEqualTo("WAITING_FOR_DEPOSIT");
         assertThat(result.virtualAccountBankCode()).isEqualTo("020");
         assertThat(result.virtualAccountNumber()).isEqualTo("1234567890");
-        assertThat(result.virtualAccountDueDate()).isEqualTo(dueDate);
+        // 저장 필드(PaymentRow.virtualAccountDueDate)는 여전히 LocalDateTime이라 오프셋을 뗀 값과 비교한다.
+        assertThat(result.virtualAccountDueDate()).isEqualTo(dueDate.toLocalDateTime());
         // secret이 저장되지 않으면 이후 입금 웹훅이 전부 무시된다 — 저장 인자까지 검증한다.
         verify(paymentMapper).markWaitingForDeposit(argThat(
                 saved -> "secret-abc".equals(saved.getVirtualAccountSecret())
@@ -1020,7 +1025,7 @@ class PaymentServiceTest {
                         "paymentKey123", "PAYMENT_2", "WAITING_FOR_DEPOSIT", 30000L, "가상계좌",
                         OffsetDateTime.now(), null,
                         new TossPaymentResponse.VirtualAccount(
-                                "020", "1234567890", LocalDateTime.of(2026, 9, 1, 23, 59), "secret-abc")
+                                "020", "1234567890", OffsetDateTime.of(2026, 9, 1, 23, 59, 0, 0, ZoneOffset.of("+09:00")), "secret-abc")
                 ));
 
         assertThatThrownBy(() -> paymentService.confirmPayment(2L, 90L, new ConfirmPaymentRequest("paymentKey123")))

@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronLeft, Paperclip, Pencil, XCircle } from "lucide-react";
+import { AlertCircle, ChevronLeft, CreditCard, Paperclip, Pencil, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useEffect } from "react";
@@ -28,11 +28,14 @@ const statusLabels: Record<ApplicationStatus, string> = {
   REJECTED: "반려됨",
   CANCELED: "취소됨",
 };
+// MyApplicationsPage.tsx와 동일하게 맞춘 색 규칙(2026-08-22) - 이 테마의 "primary"는
+// 검정이라(빨강 아님) PAYMENT_PENDING을 primary로 두면 neutral과 거의 안 구분됐었다.
+// 앱 전역 결제상태 색(paymentDisplay.ts)에 맞춰 노랑=결제대기/초록=확정/검정=반려/회색=대기·취소.
 const statusTones: Record<ApplicationStatus, "primary" | "sun" | "leaf" | "neutral"> = {
-  PENDING_REVIEW: "sun",
-  PAYMENT_PENDING: "primary",
+  PENDING_REVIEW: "neutral",
+  PAYMENT_PENDING: "sun",
   CONFIRMED: "leaf",
-  REJECTED: "neutral",
+  REJECTED: "primary",
   CANCELED: "neutral",
 };
 
@@ -242,7 +245,8 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
       <div className="space-y-6">
         <Card className="space-y-4 p-6">
-          <h3 className="text-sm font-extrabold text-muted">선택한 부스 슬롯</h3>
+          <h3 className="text-sm font-extrabold text-muted">참가비 결제</h3>
+          <div className="text-sm font-bold text-ink">선택한 부스 슬롯</div>
           <ul className="space-y-1 text-sm text-ink">
             {detail.slots.map((slot) => (
               <li key={slot.boothSlotsId} className="flex justify-between">
@@ -278,6 +282,10 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
           {detail.status === "PAYMENT_PENDING" && detail.cancelRequestStatus !== "REQUESTED" && (
             <div className="border-t border-line pt-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
+                <CreditCard size={16} />
+                결제 수단
+              </div>
               {tossReady ? (
                 <PaymentMethodPicker
                   value={paymentMethod}
