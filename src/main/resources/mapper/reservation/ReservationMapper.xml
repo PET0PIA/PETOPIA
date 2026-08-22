@@ -24,6 +24,11 @@
         지금은 fair_dates.reserved_count를 그대로 읽는다. 이 컬럼은 예약 상태를 바꾸는
         트랜잭션 안에서만 움직이므로 JOIN으로 세던 값과 항상 일치한다.
     -->
+    <!--
+        운영일 조건: 미래 운영일이거나, 오늘 운영일이면서 지금 시각이 그 날 입장 가능
+        시간(entry_start_time~entry_end_time) 안이면 사전예약 가능한 날로 본다(2026-08-22
+        정책 변경 - 예전에는 오늘은 항상 제외했다).
+    -->
     <select id="selectAvailabilityDates" resultType="ReservationAvailabilityDateRow">
         SELECT fd.operation_date AS visit_date
              , fd.entry_start_time
@@ -32,7 +37,10 @@
              , fd.reserved_count AS occupied_count
           FROM fair_dates fd
          WHERE fd.fair_id = #{fairId}
-           AND fd.operation_date > #{today}
+           AND (
+                 fd.operation_date > #{today}
+                 OR (fd.operation_date = #{today} AND TIME(#{now}) BETWEEN fd.entry_start_time AND fd.entry_end_time)
+               )
          ORDER BY fd.operation_date ASC
     </select>
 
@@ -142,6 +150,8 @@
              , fd.fair_date_id
              , fd.operation_date
              , fd.capacity
+             , fd.entry_start_time
+             , fd.entry_end_time
           FROM fairs f
           JOIN fair_dates fd
             ON fd.fair_id = f.fair_id

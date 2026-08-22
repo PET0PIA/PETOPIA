@@ -1236,6 +1236,8 @@ class FairServiceTest {
         assertThat(item.placeName()).isEqualTo("코엑스");
         assertThat(item.operationStartDate()).isEqualTo(FUTURE_START);
         assertThat(item.operationEndDate()).isEqualTo(FUTURE_END);
+        // 목록 카드가 "오픈 예정"과 "진행 중"을 가르는 값이라 이름 그대로 실려야 한다.
+        assertThat(item.status()).isEqualTo("PREPARING");
     }
 
     @Test

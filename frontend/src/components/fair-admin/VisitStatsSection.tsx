@@ -14,6 +14,7 @@ import {
 import { BoothVisitRanking } from "./BoothVisitRanking";
 import { DonutChart } from "./DonutChart";
 import { HourlyEntryTrendChart } from "./HourlyEntryTrendChart";
+import { PetAllergyBreakdown } from "./PetAllergyBreakdown";
 import { PetBreedBreakdown } from "./PetBreedBreakdown";
 import { VisitStatsOverview } from "./VisitStatsOverview";
 import { EmptyState } from "../common/EmptyState";
@@ -114,42 +115,42 @@ export function VisitStatsSection({ fairId }: VisitStatsSectionProps) {
         </Card>
       )}
 
-      <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card className="min-w-0 p-6">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-extrabold text-ink">시간대별 입장 추이</h2>
-              <p className="mt-1 text-sm text-muted">선택한 운영일에 실제로 입장(QR 체크인)한 시각 기준 시간대별 건수예요.</p>
-            </div>
-            {fairDates.length > 0 && (
-              <div className="w-48">
-                <Select aria-label="운영일 선택" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
-                  {fairDates.map((date) => <option key={date.fairDateId} value={date.operationDate}>{date.operationDate}</option>)}
-                </Select>
-              </div>
-            )}
+      <Card className="min-w-0 p-6">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-extrabold text-ink">시간대별 입장 추이</h2>
+            <p className="mt-1 text-sm text-muted">선택한 운영일에 실제로 입장(QR 체크인)한 시각 기준 시간대별 건수예요.</p>
           </div>
+          {fairDates.length > 0 && (
+            <div className="w-48">
+              <Select aria-label="운영일 선택" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
+                {fairDates.map((date) => <option key={date.fairDateId} value={date.operationDate}>{date.operationDate}</option>)}
+              </Select>
+            </div>
+          )}
+        </div>
 
-          {fairDates.length === 0 && (
-            <EmptyState title="등록된 운영일이 없어요." description="운영일이 먼저 등록돼야 입장 추이를 볼 수 있어요." />
-          )}
-          {fairDates.length > 0 && trendError && (
-            <p className="text-sm font-bold text-primary-strong">{trendError}</p>
-          )}
-          {fairDates.length > 0 && !trendError && trendLoading && (
-            <div className="grid min-h-40 place-items-center text-sm text-muted">불러오는 중이에요...</div>
-          )}
-          {fairDates.length > 0 && !trendError && !trendLoading && (
-            <>
-              <HourlyEntryTrendChart data={hourlyTrend} />
-              {hourlyTrend.length === 0 && (
-                <p className="mt-4 text-center text-sm text-muted">이 운영일에는 아직 입장 기록이 없어요.</p>
-              )}
-            </>
-          )}
-        </Card>
+        {fairDates.length === 0 && (
+          <EmptyState title="등록된 운영일이 없어요." description="운영일이 먼저 등록돼야 입장 추이를 볼 수 있어요." />
+        )}
+        {fairDates.length > 0 && trendError && (
+          <p className="text-sm font-bold text-primary-strong">{trendError}</p>
+        )}
+        {fairDates.length > 0 && !trendError && trendLoading && (
+          <div className="grid min-h-40 place-items-center text-sm text-muted">불러오는 중이에요...</div>
+        )}
+        {fairDates.length > 0 && !trendError && !trendLoading && (
+          <>
+            <HourlyEntryTrendChart data={hourlyTrend} />
+            {hourlyTrend.length === 0 && (
+              <p className="mt-4 text-center text-sm text-muted">이 운영일에는 아직 입장 기록이 없어요.</p>
+            )}
+          </>
+        )}
+      </Card>
 
-        {visitStats && (
+      {visitStats && (
+        <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
           <Card className="min-w-0 p-6">
             <div className="mb-5">
               <h2 className="text-lg font-extrabold text-ink">반려동물 품종 분포</h2>
@@ -157,8 +158,16 @@ export function VisitStatsSection({ fairId }: VisitStatsSectionProps) {
             </div>
             <PetBreedBreakdown data={visitStats.petBreedBreakdown} />
           </Card>
-        )}
-      </div>
+
+          <Card className="min-w-0 p-6">
+            <div className="mb-5">
+              <h2 className="text-lg font-extrabold text-ink">반려동물 알레르기 분포</h2>
+              <p className="mt-1 text-sm text-muted">알레르기가 있는 반려동물 기준, 건수가 많은 순으로 정렬돼요.</p>
+            </div>
+            <PetAllergyBreakdown data={visitStats.petAllergyBreakdown} />
+          </Card>
+        </div>
+      )}
 
       <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
         <Card className="min-w-0 p-6">

@@ -6,15 +6,19 @@ import com.ms.petopia.api.fair.dto.CreateFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.CreateFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationDetailResponse;
 import com.ms.petopia.api.fair.dto.FairApplicationSummaryResponse;
+import com.ms.petopia.api.fair.dto.FairInfoResponse;
 import com.ms.petopia.api.fair.dto.FairOpeningFeeSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairPublicListItemResponse;
 import com.ms.petopia.api.fair.dto.FairPublicSummaryResponse;
 import com.ms.petopia.api.fair.dto.FairStatus;
 import com.ms.petopia.api.fair.dto.PublicFairListFilter;
 import com.ms.petopia.api.fair.dto.PublishFairResponse;
+import com.ms.petopia.api.fair.dto.ReservationPeriodResponse;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationRequest;
 import com.ms.petopia.api.fair.dto.ReviewFairApplicationResponse;
 import com.ms.petopia.api.fair.dto.UpdateFairApplicationRequest;
+import com.ms.petopia.api.fair.dto.UpdateFairInfoRequest;
+import com.ms.petopia.api.fair.dto.UpdateReservationPeriodRequest;
 import com.ms.petopia.api.fair.service.FairService;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -201,6 +205,50 @@ public class FairController {
         return value == null ? null : ((Number) value).intValue();
     }
 
+    // 운영일·정원 관리 화면("행사 정보 관리" 탭)에서 승인·공개된 뒤에도 정보성 필드를
+    // 고칠 수 있게 한다. publish-status/reservation-period와 동일하게 SecurityConfig에서
+    // EVENT_ADMIN/SUPER_ADMIN role만 도달 가능, "그 행사 담당자인지"는 FairService가
+    // FairAdminAccessGuard로 한 번 더 확인).
+    @GetMapping("/{fairId}/fair-info")
+    public FairInfoResponse getFairInfo(@PathVariable Long fairId) {
+        return fairService.getFairInfo(fairId);
+    }
+
+    /**
+     * updateApplication과 같은 이유로 요청 본문을 {@code Map}으로 받는다 - PATCH의
+     * "생략(유지)"과 "명시적 null(지움)"을 구분하기 위해서다.
+     */
+    @PatchMapping("/{fairId}/fair-info")
+    public FairInfoResponse updateFairInfo(
+            @PathVariable Long fairId,
+            @AuthenticationPrincipal Long actorId,
+            @RequestBody Map<String, Object> rawBody
+    ) {
+        UpdateFairInfoRequest request = toUpdateFairInfoRequest(rawBody);
+        return fairService.updateFairInfo(fairId, actorId, request, rawBody.keySet());
+    }
+
+    private UpdateFairInfoRequest toUpdateFairInfoRequest(Map<String, Object> rawBody) {
+        try {
+            return new UpdateFairInfoRequest(
+                    asString(rawBody.get("name")),
+                    asString(rawBody.get("description")),
+                    asString(rawBody.get("category")),
+                    asString(rawBody.get("posterImageObjectKey")),
+                    asString(rawBody.get("noticeText")),
+                    asString(rawBody.get("placeName")),
+                    asString(rawBody.get("address")),
+                    asString(rawBody.get("indoorOutdoor")),
+                    asDate(rawBody.get("operationStartDate")),
+                    asDate(rawBody.get("operationEndDate")),
+                    asString(rawBody.get("managerName")),
+                    asString(rawBody.get("managerPhone"))
+            );
+        } catch (RuntimeException e) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+    }
+
     @PatchMapping("/{fairId}/review")
     public ReviewFairApplicationResponse reviewApplication(
             @PathVariable Long fairId,
@@ -226,5 +274,22 @@ public class FairController {
     @GetMapping("/{fairId}/publish-status")
     public PublishFairResponse getPublishStatus(@PathVariable Long fairId) {
         return fairService.getPublishStatus(fairId);
+    }
+
+    // 운영일·정원 관리 화면에서 사전예약 기간을 조회·수정하는 용도. publish-status와 동일하게
+    // SecurityConfig에서 EVENT_ADMIN/SUPER_ADMIN role만 도달 가능, "그 행사 담당자인지"는
+    // FairService가 FairAdminAccessGuard로 한 번 더 확인).
+    @GetMapping("/{fairId}/reservation-period")
+    public ReservationPeriodResponse getReservationPeriod(@PathVariable Long fairId) {
+        return fairService.getReservationPeriod(fairId);
+    }
+
+    @PatchMapping("/{fairId}/reservation-period")
+    public ReservationPeriodResponse updateReservationPeriod(
+            @PathVariable Long fairId,
+            @AuthenticationPrincipal Long actorId,
+            @RequestBody UpdateReservationPeriodRequest request
+    ) {
+        return fairService.updateReservationPeriod(fairId, actorId, request);
     }
 }

@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronLeft, Heart, ImageIcon, Settings } from "lucide-react";
+import { AlertCircle, ChevronLeft, Star, ImageIcon, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -182,7 +182,7 @@ function BoothDetailContent({ id }: { id: number }) {
             onClick={handleToggleFavorite}
             disabled={favoriteBusy}
           >
-            <Heart size={16} fill={favorited ? "currentColor" : "none"} />
+            <Star size={16} fill={favorited ? "currentColor" : "none"} />
             {favorited ? "즐겨찾기됨" : "즐겨찾기"}
           </Button>
         </div>

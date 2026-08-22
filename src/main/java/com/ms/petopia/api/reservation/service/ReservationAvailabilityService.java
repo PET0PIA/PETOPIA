@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -33,11 +34,12 @@ public class ReservationAvailabilityService {
             throw new CommonException(ErrorCode.RESERVATION_FAIR_NOT_FOUND);
         }
 
-        LocalDate today = timeProvider.today();
+        LocalDateTime now = timeProvider.now();
+        LocalDate today = now.toLocalDate();
         validateReservableFair(fair, today);
 
         List<ReservationAvailabilityDateResponse> dates = reservationMapper
-                .selectAvailabilityDates(fairId, today)
+                .selectAvailabilityDates(fairId, today, now)
                 .stream()
                 .map(this::toResponse)
                 .toList();

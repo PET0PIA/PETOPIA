@@ -63,6 +63,48 @@
 /* 공지 마퀴: 좌우로 끊김 없이 흐르는 띠 (콘텐츠 2벌 복제 후 -50% 이동) */
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
+@keyframes petCardHologram {
+  0% {
+    background-position: 0% 50%, 0% 0%;
+  }
+  50% {
+    background-position: 100% 50%, 100% 100%;
+  }
+  100% {
+    background-position: 0% 50%, 0% 0%;
+  }
+}
+
+.pet-card-hologram {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image:
+    linear-gradient(
+      115deg,
+      transparent 8%,
+      rgb(65 210 255 / 0.2) 25%,
+      rgb(110 150 255 / 0.32) 38%,
+      rgb(220 120 255 / 0.28) 50%,
+      rgb(80 220 255 / 0.3) 63%,
+      rgb(255 150 220 / 0.18) 76%,
+      transparent 92%
+    ),
+    radial-gradient(ellipse at 30% 20%, rgb(120 220 255 / 0.22), transparent 42%);
+  background-size: 220% 220%, 180% 180%;
+  mix-blend-mode: screen;
+  opacity: 0.42;
+  animation: petCardHologram 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-card-hologram {
+    animation: none;
+  }
+}
+
 /*
  * 공지 본문(에디터로 쓴 HTML)의 서식. 쓰는 화면(RichTextEditor)과 읽는 화면(RichTextView)이
  * 같은 클래스를 공유해서, 관리자가 본 모습과 방문자가 보는 모습이 어긋나지 않게 한다.
