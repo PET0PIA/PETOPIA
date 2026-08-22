@@ -22,9 +22,16 @@ import java.util.List;
 /**
  * fair_dates(운영일·정원) CRUD.
  *
- * <p>정원 축소·삭제가 기존 예약·현장예매 정책과 충돌할 수 있어도 여기서 막지 않는다 -
- * {@link FairDateResponse}의 reservedCount/onsiteSalesConfigured로 관리자 화면이 경고만
- * 보여주고, 계속 진행할지는 관리자 판단에 맡긴다.
+ * <p>예약자가 있는(reservedCount &gt; 0) 운영일은 삭제할 수 없고, 정원도 이미 예약된 인원보다
+ * 적게 줄일 수 없다(2026-08-22 사용자 피드백) - 삭제하거나 정원을 그 아래로 줄이면 이미 예약한
+ * 사람들의 예약이 근거를 잃기 때문이다. 그 외(정원 증가, 입장 시간 변경)는 계속 자유롭게
+ * 바꿀 수 있다. 현장예매 정책 충돌은 여전히 막지 않는다 - {@link FairDateResponse}의
+ * onsiteSalesConfigured로 관리자 화면이 경고만 보여주고, 계속 진행할지는 관리자 판단에 맡긴다.
+ *
+ * <p>이 검증은 미리 SELECT로 확인하지만, 그 이후 UPDATE/DELETE 사이에 새 예약이 들어와
+ * reserved_count가 바뀔 수 있어 그것만으로는 완전하지 않다. {@code FairDateMapper.xml}의
+ * update/deleteById가 WHERE절에 reserved_count 조건을 그대로 걸어 두 번째 방어선 역할을
+ * 하고, 그 조건에 걸려 영향받은 행이 0건이면 여기서 같은 예외를 다시 던진다.
  *
  * <p>취소됐거나(canceled_at) 종료된(ENDED) 행사는 운영일 자체를 더 관리할 이유가 없어
  * create/update/delete 모두에서 막는다. RECEIVED/PAYMENT_PENDING/PREPARING/IN_PROGRESS는
@@ -80,13 +87,23 @@ public class FairDateService {
         validateFairEditable(findFairOrThrow(fairId));
         validateUpdateRequest(request);
 
+        FairDateWithStats current = fairDateMapper.selectByIdWithStats(fairDateId);
+        if (current != null && request.capacity() < current.getReservedCount()) {
+            throw new CommonException(ErrorCode.FAIR_DATE_CAPACITY_BELOW_RESERVED);
+        }
+
         FairDate update = new FairDate();
         update.setFairDateId(fairDateId);
         update.setCapacity(request.capacity());
         update.setEntryStartTime(request.entryStartTime());
         update.setEntryEndTime(request.entryEndTime());
         update.setUpdatedAt(timeProvider.now());
-        fairDateMapper.update(update);
+        int affected = fairDateMapper.update(update);
+        if (affected == 0) {
+            // 위 SELECT 이후 그 사이 새 예약이 들어와 reserved_count가 올라간 경우
+            // UPDATE의 WHERE절(reserved_count <= capacity)이 막는다.
+            throw new CommonException(ErrorCode.FAIR_DATE_CAPACITY_BELOW_RESERVED);
+        }
 
         return toResponse(fairDateMapper.selectByIdWithStats(fairDateId));
     }
@@ -96,7 +113,17 @@ public class FairDateService {
         findFairDateInFair(fairId, fairDateId);
         fairAdminAccessGuard.checkAssigned(fairId);
         validateFairEditable(findFairOrThrow(fairId));
-        fairDateMapper.deleteById(fairDateId);
+
+        FairDateWithStats current = fairDateMapper.selectByIdWithStats(fairDateId);
+        if (current != null && current.getReservedCount() > 0) {
+            throw new CommonException(ErrorCode.FAIR_DATE_HAS_RESERVATIONS);
+        }
+
+        int affected = fairDateMapper.deleteById(fairDateId);
+        if (affected == 0) {
+            // 위 SELECT 이후 그 사이 새 예약이 들어온 경우 DELETE의 WHERE절(reserved_count = 0)이 막는다.
+            throw new CommonException(ErrorCode.FAIR_DATE_HAS_RESERVATIONS);
+        }
     }
 
     /**
