@@ -1,7 +1,7 @@
 import { apiClient } from "./client";
 
 export type ActorType = "USER" | "ADMIN" | "SYSTEM" | "PAYMENT";
-export type TargetType = "ACCOUNT" | "FAIR" | "RESERVATION" | "SETTLEMENT" | "COMMISSION_RATE";
+export type TargetType = "ACCOUNT" | "FAIR" | "RESERVATION" | "SETTLEMENT" | "FAIR_SETTLEMENT" | "COMMISSION_RATE";
 export type ActionType =
   | "LOGIN_FAIL"
   | "ROLE_CHANGE"
@@ -11,6 +11,8 @@ export type ActionType =
   | "FAIR_CANCEL_APPROVE"
   | "PAYMENT_COMPLETION_RECEIVED"
   | "SETTLEMENT_CONFIRM"
+  | "SETTLEMENT_REOPEN"
+  | "SETTLEMENT_RATE_CHANGED"
   | "COMMISSION_RATE_UPDATE";
 
 export interface AuditLogRow {

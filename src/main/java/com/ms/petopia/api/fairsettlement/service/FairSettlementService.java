@@ -111,13 +111,19 @@ public class FairSettlementService {
      * PENDING 정산을 현재 시점의 결제·환불 상태로 다시 집계한다. 재계산·확정은 SUPER_ADMIN
      * 전용 업무로 좁혔다(2026-08-22) - 그 행사 담당 EVENT_ADMIN이라도 호출할 수 없다.
      *
+     * <p>수수료율도 이 시점에 다시 조회해서 반영한다 - 기존 settlement 도메인(업체별 정산)은
+     * calculate() 때 스냅샷한 요율을 재계산에서도 그대로 재사용하지만("행사별로 요율을
+     * 바꿔도 재계산에 반영이 안 된다"는 지적, 2026-08-22), 여기는 재계산 = "지금 기준으로
+     * 다시 계산"이라는 의미를 요율까지 확장했다. 요율이 실제로 달라졌을 때만 감사로그
+     * (SETTLEMENT_RATE_CHANGED)를 남겨 "수수료율 변경이력"으로 조회할 수 있게 한다.
+     *
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_FOUND} 존재하지 않는 정산일 때
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} SUPER_ADMIN이 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_RECALCULABLE} PENDING이 아니거나,
      *         재계산 중 동시에 확정돼버린 경우
      */
     @Transactional
-    public FairSettlementResponse recalculate(Long fairSettlementId) {
+    public FairSettlementResponse recalculate(Long fairSettlementId, Long actingUserId) {
         FairSettlementRow row = fairSettlementMapper.selectById(fairSettlementId);
         if (row == null) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND);
@@ -127,12 +133,13 @@ public class FairSettlementService {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_RECALCULABLE);
         }
 
-        // commission_rate는 calculate() 때 스냅샷해둔 값을 그대로 재사용한다.
-        Aggregate aggregate = aggregate(row.getFairId(), row.getCommissionRate());
+        BigDecimal oldRate = row.getCommissionRate();
+        BigDecimal newRate = commissionRateService.resolveEffectiveRate(row.getFairId());
+        Aggregate aggregate = aggregate(row.getFairId(), newRate);
 
         LocalDateTime now = LocalDateTime.now();
         int updated = fairSettlementMapper.updateAggregates(fairSettlementId,
-                aggregate.grossAmount(), aggregate.refundAmount(),
+                aggregate.grossAmount(), aggregate.refundAmount(), newRate,
                 aggregate.commissionAmount(), aggregate.netAmount(), now);
         if (updated == 0) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_RECALCULABLE);
@@ -141,8 +148,22 @@ public class FairSettlementService {
         fairSettlementMapper.deleteItemsByFairSettlementId(fairSettlementId);
         insertItems(fairSettlementId, aggregate.items());
 
+        if (oldRate.compareTo(newRate) != 0) {
+            auditLogService.record(
+                    actingUserId,
+                    ActorType.ADMIN,
+                    "SUPER_ADMIN",
+                    ActionType.SETTLEMENT_RATE_CHANGED,
+                    TargetType.FAIR_SETTLEMENT,
+                    fairSettlementId,
+                    Map.of("commissionRate", oldRate),
+                    Map.of("commissionRate", newRate)
+            );
+        }
+
         row.setGrossAmount(aggregate.grossAmount());
         row.setRefundAmount(aggregate.refundAmount());
+        row.setCommissionRate(newRate);
         row.setCommissionAmount(aggregate.commissionAmount());
         row.setNetAmount(aggregate.netAmount());
         row.setUpdatedAt(now);
