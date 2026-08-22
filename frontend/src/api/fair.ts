@@ -251,6 +251,12 @@ export interface FairPublicListItem {
   reservable: boolean;
   /** 참가기업 부스 모집중 여부(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯). "참가기업 모집중" 배지에 쓴다. */
   recruiting: boolean;
+  /**
+   * 행사 생애주기 상태(서버 시계 기준). 카드 문구를 "오픈 예정"과 "진행 중"으로 가르는 데 쓴다 -
+   * reservable만 보면 둘을 구분할 수 없어 진행 중인 행사도 "오픈 예정"으로 보였다.
+   * 브라우저 시계로 판단하지 않는 이유이기도 하다(사용자 PC 날짜가 틀려도 서버 판정을 따른다).
+   */
+  status: FairStatus | null;
 }
 
 /**

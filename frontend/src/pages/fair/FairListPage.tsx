@@ -28,10 +28,21 @@ const EMPTY_BY_TAB: Record<TabKey, { title: string; description: string }> = {
   ENDED: { title: "종료된 행사가 없어요.", description: "지난 행사가 이곳에 쌓여요." },
 };
 
-// 목록 카드 하단 버튼: 예매 가능하면 예매로, 아직이면 오픈 예정(비활성), 종료면 종료(비활성).
+/*
+ * 목록 카드 하단 버튼: 예매 가능하면 예매로, 이미 열린 행사면 진행 중(비활성), 아직이면
+ * 오픈 예정(비활성), 종료면 종료(비활성).
+ *
+ * 예매 가능 판정을 진행 중보다 먼저 보는 이유: 여러 날 열리는 행사는 이미 시작했어도 남은
+ * 날짜를 예매할 수 있다(사전예약은 오늘 이후 운영일만 대상). 그땐 "진행 중"보다 "예매하기"가
+ * 사용자가 할 수 있는 행동을 알려준다.
+ *
+ * status를 따로 보는 이유: 예전엔 reservable이 false인 행사를 전부 "오픈 예정"으로 묶어서,
+ * 이미 진행 중인 행사(당일 예매는 막혀 있어 reservable=false)까지 "오픈 예정"으로 보였다.
+ */
 function reserveCta(fair: FairPublicListItem, ended: boolean): { to?: string; label: string } {
   if (ended) return { label: "종료" };
   if (fair.reservable) return { to: `/tickets/${fair.fairId}`, label: "예매하기" };
+  if (fair.status === "IN_PROGRESS") return { label: "진행 중" };
   return { label: "오픈 예정" };
 }
 
@@ -41,7 +52,8 @@ function filterByTab(entries: FairListEntry[], tab: TabKey): FairListEntry[] {
     case "RESERVABLE":
       return entries.filter((e) => !e.ended && e.fair.reservable);
     case "UPCOMING":
-      return entries.filter((e) => !e.ended && !e.fair.reservable);
+      // 진행 중인 행사는 "예정"이 아니므로 뺀다(예매가 막혀 있어도 마찬가지다). 전체 탭에는 그대로 남는다.
+      return entries.filter((e) => !e.ended && !e.fair.reservable && e.fair.status !== "IN_PROGRESS");
     case "ENDED":
       return entries.filter((e) => e.ended);
     default:

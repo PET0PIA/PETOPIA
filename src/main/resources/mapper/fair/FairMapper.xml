@@ -268,7 +268,7 @@
     -->
     <select id="selectPublicFairs" resultType="Fair">
         SELECT f.fair_id, f.name, f.category, f.poster_image_url, f.place_name,
-               f.operation_start_date, f.operation_end_date, f.pet_allowed,
+               f.operation_start_date, f.operation_end_date, f.pet_allowed, f.status,
                (
                  f.reservation_start_date IS NOT NULL
                  AND f.reservation_end_date IS NOT NULL
@@ -332,7 +332,7 @@
     -->
     <select id="selectRecruitingFairs" resultType="Fair">
         SELECT f.fair_id, f.name, f.category, f.poster_image_url, f.place_name,
-               f.operation_start_date, f.operation_end_date, f.pet_allowed,
+               f.operation_start_date, f.operation_end_date, f.pet_allowed, f.status,
                (
                  f.reservation_start_date IS NOT NULL
                  AND f.reservation_end_date IS NOT NULL
