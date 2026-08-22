@@ -169,7 +169,10 @@ export function FairCancelRequestPage() {
                       <td className="px-4 py-3">
                         <p className="text-ink">{request.reason}</p>
                         {request.rejectReason && (
-                          <p className="mt-1 text-xs text-primary-strong">반려 사유: {request.rejectReason}</p>
+                          <p className="mt-2 flex items-start gap-1.5 rounded-button bg-primary-soft px-2.5 py-1.5 text-sm font-bold text-primary-strong">
+                            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                            반려 사유: {request.rejectReason}
+                          </p>
                         )}
                       </td>
                       <td className="px-4 py-3">

@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, downloadFile } from "./client";
 import type { CompanionType, VisitPurpose } from "./fairReviewSubmission";
 
 /** "값별 개수" 집계 한 줄(동반유형·방문목적 분포). ratio는 0~1. */
@@ -39,6 +39,11 @@ export interface FairReviewStats {
 
 export function getFairReviewStats(fairId: number) {
   return apiClient.get<FairReviewStats>(`/api/fairs/${fairId}/reviews/stats`);
+}
+
+/** 리뷰 통계를 엑셀(.xlsx)로 내려받는다. */
+export function downloadReviewStatsExcel(fairId: number): Promise<void> {
+  return downloadFile(`/api/fairs/${fairId}/reviews/stats/export`, `review-stats-${fairId}.xlsx`);
 }
 
 // CompanionType/VisitPurpose는 fairReviewSubmission.ts의 타입을 그대로 재사용한다(중복 선언 방지).
