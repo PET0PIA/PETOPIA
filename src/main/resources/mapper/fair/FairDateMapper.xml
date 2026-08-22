@@ -72,7 +72,7 @@
                entry_end_time = #{entryEndTime},
                updated_at = #{updatedAt}
          WHERE fair_date_id = #{fairDateId}
-           AND reserved_count <= #{capacity}
+           AND reserved_count &lt;= #{capacity}
     </update>
 
     <!-- reserved_count = 0 조건: update와 동일한 이유로, SELECT와 DELETE 사이에 새 예약이

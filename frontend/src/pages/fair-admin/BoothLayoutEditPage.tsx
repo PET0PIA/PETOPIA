@@ -71,7 +71,9 @@ function validateDrafts(drafts: DraftSlot[]): string | null {
     if (slotNumber.length === 0) return "모든 부스 슬롯에 부스 번호를 입력해 주세요.";
     if (seenNumbers.has(slotNumber)) return `부스 번호가 중복돼요: ${slotNumber}`;
     seenNumbers.add(slotNumber);
-    if (!Number.isFinite(draft.price) || draft.price < 0) return `'${slotNumber}' 슬롯의 가격은 0 이상이어야 해요.`;
+    // 빈 입력은 draft.price를 0으로 들고 있어서(가격 입력 필드가 0을 빈 칸으로 보여줌), <= 0으로
+    // 막아야 "필수" 표시와 실제로 맞는다 - < 0만 막으면 빈 채로 저장해도 0원으로 조용히 통과했다.
+    if (!Number.isFinite(draft.price) || draft.price <= 0) return `'${slotNumber}' 슬롯의 가격을 입력해 주세요.`;
     for (const value of [draft.posX, draft.posY, draft.width, draft.height]) {
       if (value < 0 || value > 1) return `'${slotNumber}' 슬롯의 위치·크기가 배치 영역을 벗어났어요.`;
     }
