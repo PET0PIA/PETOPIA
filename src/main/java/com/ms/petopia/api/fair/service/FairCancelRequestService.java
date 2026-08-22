@@ -40,6 +40,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -306,7 +307,13 @@ public class FairCancelRequestService {
         });
     }
 
+    /**
+     * 같은 결제자가 이 결제유형으로 완료된 결제를 여러 건 가진 경우(예: 예약을 여러 건 신청해
+     * 예약금을 여러 번 낸 경우)에도 알림·이메일은 결제자당 한 번만 나가야 하므로, 페이지를
+     * 모두 순회해 결제자별 합계를 먼저 모은 뒤에 알린다.
+     */
     private void notifyAffectedPayersForType(Long fairId, String fairName, String paymentType, RecipientType recipientType) {
+        Map<Long, Long> totalAmountByPayer = new LinkedHashMap<>();
         int page = 0;
         int totalPages = 1;
         while (page < totalPages) {
@@ -319,16 +326,19 @@ public class FairCancelRequestService {
             }
             totalPages = response.totalPages();
             for (PaymentResponse payment : response.content()) {
-                notifyAffectedPayer(payment, fairName, recipientType);
+                totalAmountByPayer.merge(payment.payerUserId(), payment.amount(), Long::sum);
             }
             page++;
         }
+        for (Map.Entry<Long, Long> entry : totalAmountByPayer.entrySet()) {
+            notifyAffectedPayer(entry.getKey(), entry.getValue(), fairName, recipientType);
+        }
     }
 
-    private void notifyAffectedPayer(PaymentResponse payment, String fairName, RecipientType recipientType) {
+    private void notifyAffectedPayer(Long payerUserId, long totalAmount, String fairName, RecipientType recipientType) {
         try {
             notificationService.save(new SaveNotificationDto.Request(
-                    payment.payerUserId(),
+                    payerUserId,
                     recipientType,
                     NotificationType.FAIR_CANCELED,
                     "행사가 취소되었습니다",
@@ -338,15 +348,15 @@ public class FairCancelRequestService {
                     null
             ));
         } catch (Exception e) {
-            log.error("행사 취소 알림 저장 실패. paymentId={}, payerUserId={}", payment.paymentId(), payment.payerUserId(), e);
+            log.error("행사 취소 알림 저장 실패. payerUserId={}", payerUserId, e);
         }
         try {
-            User user = authMapper.selectUserById(payment.payerUserId());
+            User user = authMapper.selectUserById(payerUserId);
             if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                mailService.sendFairCanceledEmail(user.getEmail(), payment.amount());
+                mailService.sendFairCanceledEmail(user.getEmail(), totalAmount);
             }
         } catch (Exception e) {
-            log.error("행사 취소 이메일 발송 실패. paymentId={}, payerUserId={}", payment.paymentId(), payment.payerUserId(), e);
+            log.error("행사 취소 이메일 발송 실패. payerUserId={}", payerUserId, e);
         }
     }
 

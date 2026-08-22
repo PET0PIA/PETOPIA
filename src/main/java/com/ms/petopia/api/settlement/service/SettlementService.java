@@ -34,6 +34,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -285,7 +287,7 @@ public class SettlementService {
                 Map.of("status", "CONFIRMED")
         );
 
-        notifySettlementCompleted(row);
+        notifySettlementCompletedAfterCommit(row);
 
         return SettlementResponse.from(row);
     }
@@ -370,6 +372,15 @@ public class SettlementService {
         if (status.canceled()) {
             throw new CommonException(ErrorCode.SETTLEMENT_FAIR_CANCELED);
         }
+    }
+
+    private void notifySettlementCompletedAfterCommit(SettlementRow row) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                notifySettlementCompleted(row);
+            }
+        });
     }
 
     private void notifySettlementCompleted(SettlementRow row) {

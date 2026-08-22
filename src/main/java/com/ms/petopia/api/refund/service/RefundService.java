@@ -25,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -245,15 +247,23 @@ public class RefundService {
             log.error("환불 완료 알림 저장 실패. refundId={}, paymentId={}",
                     refund.getRefundId(), refund.getPaymentId(), e);
         }
-        try {
-            User user = authMapper.selectUserById(payment.getPayerUserId());
-            if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                mailService.sendRefundCompletedEmail(user.getEmail(), refund.getRefundAmount());
+        Long payerUserId = payment.getPayerUserId();
+        Long refundId = refund.getRefundId();
+        Long paymentId = refund.getPaymentId();
+        long refundAmount = refund.getRefundAmount();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    User user = authMapper.selectUserById(payerUserId);
+                    if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+                        mailService.sendRefundCompletedEmail(user.getEmail(), refundAmount);
+                    }
+                } catch (Exception e) {
+                    log.error("환불 완료 이메일 발송 실패. refundId={}, paymentId={}", refundId, paymentId, e);
+                }
             }
-        } catch (Exception e) {
-            log.error("환불 완료 이메일 발송 실패. refundId={}, paymentId={}",
-                    refund.getRefundId(), refund.getPaymentId(), e);
-        }
+        });
         notifyRefundCompletedToAdmins(payment, refund);
     }
 
