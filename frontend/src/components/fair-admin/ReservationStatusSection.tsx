@@ -10,6 +10,7 @@ import {
 } from "../../api/statistics";
 import { EmptyState } from "../common/EmptyState";
 import { Table } from "../ui/Table";
+import { ReservationListSection } from "./ReservationListSection";
 
 function formatTime(time: string) {
   return time.slice(0, 5);
@@ -173,6 +174,8 @@ export function ReservationStatusSection({ fairId }: ReservationStatusSectionPro
               )}
             </tbody>
           </Table>
+
+          <ReservationListSection fairId={fairId} operationDates={summary.map((row) => row.operationDate)} />
         </>
       )}
     </div>

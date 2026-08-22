@@ -2,7 +2,6 @@ package com.ms.petopia.api.payment.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
 /**
@@ -37,8 +36,11 @@ public record TossPaymentResponse(
     }
 
     /**
-     * 토스 문서 확인 결과 dueDate는 오프셋 없는 포맷("2024-01-01T12:00:00")으로 내려온다 —
-     * OffsetDateTime으로 받으면 Jackson 파싱이 실패해 가상계좌 confirm 자체가 깨진다.
+     * dueDate는 예전엔 오프셋 없는 포맷이라고 알려져 LocalDateTime으로 받았는데, 실제로는
+     * 오프셋이 붙은 "2026-08-23T16:39:16+09:00" 형태로 내려와서 Jackson 파싱이 터졌다(가상계좌
+     * confirm 500 에러, 2026-08-22 실결제 테스트로 확인) — OffsetDateTime으로 받고, 저장할 때
+     * PaymentService가 .toLocalDateTime()으로 변환한다(서버·DB가 전부 Asia/Seoul 고정이라 오프셋을
+     * 버려도 값이 어긋나지 않음, approvedAt과 같은 이유로 OffsetDateTime을 씀).
      *
      * @param secret 입금 웹훅(POST /webhooks/toss/deposit-callback) body의 secret과 대조해서
      *               위조를 방지하는 값. payment.virtual_account_secret에 저장하고, API 응답으론
@@ -48,7 +50,7 @@ public record TossPaymentResponse(
     public record VirtualAccount(
             String bankCode,
             String accountNumber,
-            LocalDateTime dueDate,
+            OffsetDateTime dueDate,
             String secret
     ) {
     }

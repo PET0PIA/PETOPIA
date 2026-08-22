@@ -578,7 +578,10 @@ public class PaymentService {
         row.setTossPaymentKey(tossResponse.paymentKey());
         row.setVirtualAccountBankCode(virtualAccount.bankCode());
         row.setVirtualAccountNumber(virtualAccount.accountNumber());
-        row.setVirtualAccountDueDate(virtualAccount.dueDate());
+        // dueDate는 토스가 오프셋 붙은 값으로 내려주므로(TossPaymentResponse.VirtualAccount
+        // 참고) OffsetDateTime으로 받았다가 여기서 LocalDateTime으로 변환해 저장한다 - 서버·DB가
+        // 전부 Asia/Seoul 고정이라 오프셋을 버려도 벽시계 시각은 그대로 맞다.
+        row.setVirtualAccountDueDate(virtualAccount.dueDate() != null ? virtualAccount.dueDate().toLocalDateTime() : null);
         row.setVirtualAccountSecret(virtualAccount.secret());
         row.setUpdatedAt(now);
 
@@ -738,7 +741,7 @@ public class PaymentService {
                         NotificationType.PAYMENT_COMPLETED,
                         "결제가 완료되었습니다",
                         row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
-                        null,
+                        paymentDetailLinkUrl(row),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -749,6 +752,17 @@ public class PaymentService {
             sendPaymentCompletedEmail(row);
         }
         notifyPaymentCompletedToAdmins(row);
+    }
+
+    /** 결제 유형별로 결제자가 확인해야 할 상세 화면을 가리킨다. 알 수 없는 유형이면 링크 없이 둔다. */
+    private String paymentDetailLinkUrl(PaymentRow row) {
+        if ("VENDOR_FEE".equals(row.getPaymentType()) && row.getApplicationId() != null) {
+            return "/participations/me/" + row.getApplicationId();
+        }
+        if ("FAIR_OPENING_FEE".equals(row.getPaymentType()) && row.getFairId() != null) {
+            return "/fair-applications/me/" + row.getFairId();
+        }
+        return null;
     }
 
     private void sendPaymentCompletedEmail(PaymentRow row) {
@@ -779,7 +793,7 @@ public class PaymentService {
                         NotificationType.PAYMENT_COMPLETED,
                         "결제가 접수되었습니다",
                         body,
-                        null,
+                        adminPaymentLinkUrl(row),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -788,6 +802,14 @@ public class PaymentService {
             log.error("결제 완료 EVENT_ADMIN 알림 저장 실패. paymentId={}, fairId={}",
                     row.getPaymentId(), row.getFairId(), e);
         }
+    }
+
+    /** 예약금 결제는 예약현황 화면으로, 그 외(참가비·개설비)는 결제현황 화면으로 관리자를 안내한다. */
+    private String adminPaymentLinkUrl(PaymentRow row) {
+        if ("RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
+            return "/fair-admin/reservations?fairId=" + row.getFairId();
+        }
+        return "/fair-admin/payments?fairId=" + row.getFairId();
     }
 
     private String resolvePayerNickname(Long payerUserId) {

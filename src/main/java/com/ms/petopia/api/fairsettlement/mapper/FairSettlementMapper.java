@@ -5,6 +5,7 @@ import com.ms.petopia.api.fairsettlement.dto.FairSettlementRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -58,11 +59,15 @@ public interface FairSettlementMapper {
 
     /**
      * 재계산된 금액을 PENDING 상태인 정산에만 원자적으로 반영한다(동시성 방어,
-     * status='PENDING' 조건으로 성공 여부 판단).
+     * status='PENDING' 조건으로 성공 여부 판단). commission_rate도 같이 갱신한다 - 기존
+     * settlement 도메인과 달리 여기는 재계산 시점에 요율을 다시 조회해서 최신 값으로
+     * 맞춘다(2026-08-22, "행사별로 수수료율을 바꿨는데 재계산해도 안 바뀐다"는 지적으로
+     * 변경 - 스냅샷을 영구히 고정하지 않기로 함).
      */
     int updateAggregates(@Param("fairSettlementId") Long fairSettlementId,
                           @Param("grossAmount") Long grossAmount,
                           @Param("refundAmount") Long refundAmount,
+                          @Param("commissionRate") BigDecimal commissionRate,
                           @Param("commissionAmount") Long commissionAmount,
                           @Param("netAmount") Long netAmount,
                           @Param("updatedAt") LocalDateTime updatedAt);
