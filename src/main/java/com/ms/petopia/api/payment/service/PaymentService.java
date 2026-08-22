@@ -741,7 +741,7 @@ public class PaymentService {
                         NotificationType.PAYMENT_COMPLETED,
                         "결제가 완료되었습니다",
                         row.getAmount() + "원 결제가 정상적으로 처리되었습니다.",
-                        null,
+                        paymentDetailLinkUrl(row),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -752,6 +752,17 @@ public class PaymentService {
             sendPaymentCompletedEmail(row);
         }
         notifyPaymentCompletedToAdmins(row);
+    }
+
+    /** 결제 유형별로 결제자가 확인해야 할 상세 화면을 가리킨다. 알 수 없는 유형이면 링크 없이 둔다. */
+    private String paymentDetailLinkUrl(PaymentRow row) {
+        if ("VENDOR_FEE".equals(row.getPaymentType()) && row.getApplicationId() != null) {
+            return "/participations/me/" + row.getApplicationId();
+        }
+        if ("FAIR_OPENING_FEE".equals(row.getPaymentType()) && row.getFairId() != null) {
+            return "/fair-applications/me/" + row.getFairId();
+        }
+        return null;
     }
 
     private void sendPaymentCompletedEmail(PaymentRow row) {
@@ -782,7 +793,7 @@ public class PaymentService {
                         NotificationType.PAYMENT_COMPLETED,
                         "결제가 접수되었습니다",
                         body,
-                        null,
+                        adminPaymentLinkUrl(row),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -791,6 +802,14 @@ public class PaymentService {
             log.error("결제 완료 EVENT_ADMIN 알림 저장 실패. paymentId={}, fairId={}",
                     row.getPaymentId(), row.getFairId(), e);
         }
+    }
+
+    /** 예약금 결제는 예약현황 화면으로, 그 외(참가비·개설비)는 결제현황 화면으로 관리자를 안내한다. */
+    private String adminPaymentLinkUrl(PaymentRow row) {
+        if ("RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
+            return "/fair-admin/reservations?fairId=" + row.getFairId();
+        }
+        return "/fair-admin/payments?fairId=" + row.getFairId();
     }
 
     private String resolvePayerNickname(Long payerUserId) {

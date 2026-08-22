@@ -1,5 +1,8 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
+import com.ms.petopia.api.reservation.dto.AdminReservationItemResponse;
+import com.ms.petopia.api.reservation.dto.AdminReservationListResponse;
 import com.ms.petopia.api.reservation.dto.ReservationDetailResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListItemResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListResponse;
@@ -12,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -25,10 +29,12 @@ public class ReservationQueryService {
     private static final String ADVANCE = "ADVANCE";
     private static final String PAYMENT_COMPLETED = "COMPLETED";
     private static final int MAX_PAGE_SIZE = 50;
+    private static final int ADMIN_MAX_PAGE_SIZE = 100;
 
     private final ReservationMapper reservationMapper;
     private final ReservationTimeProvider timeProvider;
     private final ReservationPetService reservationPetService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
 
     /** 현재 사용자의 예약 목록을 최신 생성 순으로 반환한다. */
     @Transactional(readOnly = true)
@@ -69,6 +75,31 @@ public class ReservationQueryService {
         }
         //동반 반려동물은 예약 1건에 딸린 부가 정보라 상세에서만 조회한다(목록에는 넣지 않는다).
         return toDetailResponse(row, timeProvider.now(), reservationPetService.getReservationPets(reservationId));
+    }
+
+    /**
+     * 담당 행사(EVENT_ADMIN) 또는 전체(SUPER_ADMIN)의 예약자별 상세 목록을 반환한다.
+     * 운영일·상태 필터는 선택값이라 null이면 걸지 않는다.
+     *
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
+     */
+    @Transactional(readOnly = true)
+    public AdminReservationListResponse getFairReservationsForAdmin(
+            Long fairId, LocalDate visitDate, String status, int page, int size
+    ) {
+        if (fairId == null || fairId <= 0 || page < 0 || size <= 0 || size > ADMIN_MAX_PAGE_SIZE) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        fairAdminAccessGuard.checkAssigned(fairId);
+
+        long totalElements = reservationMapper.countByFairForAdmin(fairId, visitDate, status);
+        int totalPages = size <= 0 ? 0 : (int) ((totalElements + size - 1) / size);
+        List<AdminReservationItemResponse> items = reservationMapper
+                .selectByFairForAdmin(fairId, visitDate, status, (long) page * size, size)
+                .stream()
+                .map(AdminReservationItemResponse::from)
+                .toList();
+        return new AdminReservationListResponse(items, page, size, totalElements, totalPages);
     }
 
     private ReservationListItemResponse toResponse(ReservationListRow row, LocalDateTime now) {

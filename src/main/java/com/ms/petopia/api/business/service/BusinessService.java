@@ -112,6 +112,19 @@ public class BusinessService {
 
         }
 
+        // businessRegistrar.save()가 이미 자체 트랜잭션으로 커밋을 마친 뒤라(별도 컴포넌트 프록시
+        // 경계), 여기선 afterCommit으로 미룰 필요 없이 바로 알려도 안전하다.
+        try {
+            notificationService.notifySuperAdmins(
+                    NotificationType.BUSINESS_REGISTRATION_SUBMITTED,
+                    "새 사업자 등록 신청이 접수되었습니다",
+                    "'" + saved.getName() + "' 사업자 등록 신청이 접수되어 심사를 기다리고 있습니다.",
+                    "/admin/businesses"
+            );
+        } catch (Exception e) {
+            log.error("사업자 등록 접수 알림 저장 실패. businessId={}", saved.getBusinessId(), e);
+        }
+
         return BusinessResponse.from(saved);
 
     }
@@ -206,7 +219,7 @@ public class BusinessService {
         }
 
         // 알림
-        notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_APPROVED,
+        notifyBusinessEventAfterCommit(business.getOwnerId(), business.getBusinessId(), NotificationType.BUSINESS_APPROVED,
                 "사업자 등록이 승인되었습니다",
                 "사업자 등록이 승인되어 참가 신청이 가능합니다.",
                 () -> withRecipientEmail(business.getOwnerId(),
@@ -245,7 +258,7 @@ public class BusinessService {
         }
 
         // 알림
-        notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_REJECTED,
+        notifyBusinessEventAfterCommit(business.getOwnerId(), business.getBusinessId(), NotificationType.BUSINESS_REJECTED,
                 "사업자 등록이 반려되었습니다",
                 "반려 사유: " + request.getRejectReason(),
                 () -> withRecipientEmail(business.getOwnerId(),
@@ -292,7 +305,7 @@ public class BusinessService {
         }
 
         // 알림
-        notifyBusinessEventAfterCommit(business.getOwnerId(), NotificationType.BUSINESS_REVOKED,
+        notifyBusinessEventAfterCommit(business.getOwnerId(), business.getBusinessId(), NotificationType.BUSINESS_REVOKED,
                 "사업자 등록이 취소되었습니다",
                 "취소 사유: " + request.getRevokeReason(),
                 () -> withRecipientEmail(business.getOwnerId(),
@@ -312,8 +325,8 @@ public class BusinessService {
      * 본 로직(승인/반려/취소 처리)은 이미 끝난 뒤이므로 예외를 던져 되돌리지 않는다
      * (ApplicationService.notifyApplicationEvent와 동일한 이유).
      */
-    private void notifyBusinessEvent(Long recipientUserId, NotificationType type, String title, String body,
-                                     Runnable emailAction) {
+    private void notifyBusinessEvent(Long recipientUserId, Long businessId, NotificationType type, String title,
+                                     String body, Runnable emailAction) {
 
         try {
 
@@ -323,7 +336,7 @@ public class BusinessService {
                     type,
                     title,
                     body,
-                    null,
+                    "/businesses/" + businessId,
                     List.of(DeliveryChannel.IN_APP),
                     null
             ));
@@ -342,13 +355,13 @@ public class BusinessService {
 
     }
 
-    private void notifyBusinessEventAfterCommit(Long recipientUserId, NotificationType type, String title,
-                                                 String body, Runnable emailAction) {
+    private void notifyBusinessEventAfterCommit(Long recipientUserId, Long businessId, NotificationType type,
+                                                 String title, String body, Runnable emailAction) {
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                notifyBusinessEvent(recipientUserId, type, title, body, emailAction);
+                notifyBusinessEvent(recipientUserId, businessId, type, title, body, emailAction);
             }
         });
 

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 import { getAssignedFairs, type AssignedFairSummary } from "../api/fair";
 import { getAdminDashboardFairs } from "../api/adminDashboard";
@@ -46,6 +47,7 @@ export function FairSelectorProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const isEventAdmin = user?.role === "EVENT_ADMIN";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectableFairs, setSelectableFairs] = useState<AssignedFairSummary[]>([]);
   const [fairId, setFairIdState] = useState<number | null>(null);
@@ -78,6 +80,20 @@ export function FairSelectorProvider({ children }: { children: ReactNode }) {
         if (ignore) return;
         setSelectableFairs(fairs);
         if (fairs.length === 0) return;
+
+        // 알림 등에서 특정 행사로 딥링크할 때 쓰는 ?fairId= 쿼리파라미터 - 목록에 있으면
+        // 저장된 선택보다 우선한다(그래야 다른 행사가 선택돼 있어도 알림이 가리키는 행사로 감).
+        // 반영한 뒤에는 URL에서 지워서 다음 페이지 이동에는 영향이 없게 한다.
+        const fromUrl = Number(searchParams.get("fairId"));
+        const urlFairId = Number.isFinite(fromUrl) && fairs.some((fair) => fair.fairId === fromUrl) ? fromUrl : null;
+        if (urlFairId !== null) {
+          setFairId(urlFairId);
+          const next = new URLSearchParams(searchParams);
+          next.delete("fairId");
+          setSearchParams(next, { replace: true });
+          return;
+        }
+
         // 저장된 선택이 지금 목록에 있으면 복원하고, 없으면(담당 해제 등) 첫 행사로 대체한다.
         const stored = readStoredFairId();
         const restored = stored !== null && fairs.some((fair) => fair.fairId === stored) ? stored : fairs[0].fairId;
@@ -88,6 +104,10 @@ export function FairSelectorProvider({ children }: { children: ReactNode }) {
     return () => {
       ignore = true;
     };
+    // searchParams/setSearchParams는 일부러 뺀다 - 안에서 setSearchParams를 부르면(딥링크로 들어온
+    // fairId를 지울 때) 그 자체가 searchParams를 바꿔서 재실행을 유발해, 방금 반영한 선택을
+    // 다시 초기화했다가 복원하는 불필요한 깜빡임/재조회가 생긴다. role·계정이 바뀔 때만 다시 돌면 된다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEventAdmin, isSuperAdmin, user?.userId]);
 
   return (

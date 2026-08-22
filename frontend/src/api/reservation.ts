@@ -354,6 +354,52 @@ export function cancelReservation(reservationId: number, reason?: string) {
   );
 }
 
+// ── 관리자용 예약자 목록(fair-admin 콘솔) ─────────────────────────────────────
+
+/** 관리자용 예약자 목록 한 건. 백엔드 AdminReservationItemResponse에 맞춘다. */
+export interface AdminReservationItem {
+  reservationId: number;
+  reservationNo: string;
+  reserverName: string;
+  /** YYYY-MM-DD */
+  visitDate: string;
+  /** HH:mm:ss */
+  entryStartTime: string;
+  entryEndTime: string;
+  reservationStatus: ReservationStatus;
+  amount: number;
+  /** 예약일시(ISO) */
+  reservedAt: string;
+}
+
+/** 관리자용 예약자 목록 응답(페이징). 백엔드 AdminReservationListResponse에 맞춘다. */
+export interface AdminReservationListResponse {
+  items: AdminReservationItem[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+/**
+ * 담당 행사(EVENT_ADMIN) 또는 전체(SUPER_ADMIN)의 예약자별 상세 목록을 조회한다.
+ * visitDate·status는 선택 필터(안 넘기면 전체).
+ */
+export function getFairReservationsForAdmin(
+  fairId: number,
+  params?: { visitDate?: string; status?: ReservationStatus; page?: number; size?: number },
+) {
+  const query = new URLSearchParams();
+  if (params?.visitDate) query.set("visitDate", params.visitDate);
+  if (params?.status) query.set("status", params.status);
+  query.set("page", String(params?.page ?? 0));
+  query.set("size", String(params?.size ?? 20));
+  return apiClient.get<AdminReservationListResponse>(
+    `/api/v1/fairs/${fairId}/reservations?${query.toString()}`,
+    { headers: authHeaders() },
+  );
+}
+
 // ── 현장예매 정책 관리(4단계, 관리자) ────────────────────────────────────────
 // /api/v1/admin/** 는 EVENT_ADMIN·SUPER_ADMIN 역할의 JWT가 필요하다(authHeaders 사용).
 

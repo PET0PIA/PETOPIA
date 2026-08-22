@@ -162,7 +162,7 @@ public class MailService {
             """.formatted(escape(fairName), escape(reservationNo), escape(reservationTypeLabel),
                 escape(visitDateLabel), escape(entryTimeLabel), escape(amountLabel), escape(reservedAtLabel));
 
-        sendHtmlEmailWithInlineQr(to, "[PETOPIA] 예약이 확정되었습니다",
+        sendHtmlEmailWithInlineQr(to, "[PETOPIA] " + fairNamePrefix(fairName) + "예약이 확정되었습니다",
                 "RESERVATION CONFIRMED", "예약 확정 안내", content, qrToken);
     }
 
@@ -185,41 +185,48 @@ public class MailService {
         sendHtmlEmail(to, "[PETOPIA] 결제가 완료되었습니다", "PAYMENT COMPLETED", "결제 완료 안내", content);
     }
 
-    /** 환불 완료 안내. */
-    public void sendRefundCompletedEmail(String to, long refundAmount) {
+    /** 환불 완료 안내. fairName은 어느 행사의 결제였는지 표시하는 용도 - 조회 실패 등으로 없으면 "-"로 표시한다. */
+    public void sendRefundCompletedEmail(String to, String fairName, long refundAmount) {
+        String safeFairName = fairName == null || fairName.isBlank() ? "-" : fairName;
         String content = """
             <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
               요청하신 환불이 정상적으로 처리되었습니다.<br>
               카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.
             </p>
             <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">행사명 <strong style="float:right;color:#111827;">%s</strong></div>
               <div style="color:#6b7280;font-size:13px;">환불 금액 <strong style="float:right;color:#111827;">%s</strong></div>
             </div>
-            """.formatted(escape(String.format("%,d원", refundAmount)));
+            """.formatted(escape(safeFairName), escape(String.format("%,d원", refundAmount)));
 
-        sendHtmlEmail(to, "[PETOPIA] 환불이 완료되었습니다", "REFUND COMPLETED", "환불 완료 안내", content);
+        sendHtmlEmail(to, "[PETOPIA] " + fairNamePrefix(fairName) + "환불이 완료되었습니다", "REFUND COMPLETED", "환불 완료 안내", content);
     }
 
-    /** 정산 확정 안내. settlementLabel은 "정산" 또는 "최종정산"처럼 SettlementService/FairSettlementService가 구분해서 넘긴다. */
-    public void sendSettlementCompletedEmail(String to, String settlementLabel, Long settlementId,
+    /**
+     * 정산 확정 안내. settlementLabel은 "정산" 또는 "최종정산"처럼 SettlementService/FairSettlementService가
+     * 구분해서 넘긴다. fairName은 조회 실패 등으로 없으면 "-"로 표시한다.
+     */
+    public void sendSettlementCompletedEmail(String to, String fairName, String settlementLabel, Long settlementId,
                                              long grossAmount, long refundAmount, long commissionAmount, long netAmount) {
+        String safeFairName = fairName == null || fairName.isBlank() ? "-" : fairName;
         String content = """
             <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
-              담당하시는 행사의 %s이(가) 확정 처리되었습니다.<br>
+              담당하시는 <strong style="color:#111827;">%s</strong> 행사의 %s이(가) 확정 처리되었습니다.<br>
               아래 정산 내역을 확인해 주세요.
             </p>
             <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">행사명 <strong style="float:right;color:#111827;">%s</strong></div>
               <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">정산 ID <strong style="float:right;color:#111827;">%s</strong></div>
               <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">총 결제액 <strong style="float:right;color:#111827;">%s</strong></div>
               <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">환불액 <strong style="float:right;color:#111827;">%s</strong></div>
               <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">수수료 <strong style="float:right;color:#111827;">%s</strong></div>
               <div style="color:#6b7280;font-size:13px;">정산액 <strong style="float:right;color:#111827;">%s</strong></div>
             </div>
-            """.formatted(escape(settlementLabel), escape(String.valueOf(settlementId)),
+            """.formatted(escape(safeFairName), escape(settlementLabel), escape(safeFairName), escape(String.valueOf(settlementId)),
                 escape(String.format("%,d원", grossAmount)), escape(String.format("%,d원", refundAmount)),
                 escape(String.format("%,d원", commissionAmount)), escape(String.format("%,d원", netAmount)));
 
-        sendHtmlEmail(to, "[PETOPIA] " + settlementLabel + "이 확정되었습니다",
+        sendHtmlEmail(to, "[PETOPIA] " + fairNamePrefix(fairName) + settlementLabel + "이 확정되었습니다",
                 "SETTLEMENT COMPLETED", settlementLabel + " 확정 안내", content);
     }
 
@@ -228,18 +235,20 @@ public class MailService {
      * 순차 처리되어 시간이 걸릴 수 있어서 "예정" 표현을 쓴다). 실제 환불이 끝나면
      * sendRefundCompletedEmail이 별도로 완료를 알린다.
      */
-    public void sendFairCanceledEmail(String to, long paidAmount) {
+    public void sendFairCanceledEmail(String to, String fairName, long paidAmount) {
+        String safeFairName = fairName == null || fairName.isBlank() ? "참가하신 행사" : fairName;
         String content = """
             <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
-              참가하셨던 행사가 부득이한 사정으로 취소되었습니다.<br>
+              <strong style="color:#111827;">%s</strong> 행사가 부득이한 사정으로 취소되었습니다.<br>
               결제하신 금액은 순차적으로 환불될 예정이며, 환불이 완료되면 별도로 다시 안내드립니다.
             </p>
             <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">행사명 <strong style="float:right;color:#111827;">%s</strong></div>
               <div style="color:#6b7280;font-size:13px;">환불 예정 금액 <strong style="float:right;color:#111827;">%s</strong></div>
             </div>
-            """.formatted(escape(String.format("%,d원", paidAmount)));
+            """.formatted(escape(safeFairName), escape(safeFairName), escape(String.format("%,d원", paidAmount)));
 
-        sendHtmlEmail(to, "[PETOPIA] 행사가 취소되었습니다", "FAIR CANCELED", "행사 취소 안내", content);
+        sendHtmlEmail(to, "[PETOPIA] " + fairNamePrefix(fairName) + "행사가 취소되었습니다", "FAIR CANCELED", "행사 취소 안내", content);
     }
 
     /** 예약 방문일 변경 안내. */
@@ -460,5 +469,10 @@ public class MailService {
 
     private String escape(String value) {
         return HtmlUtils.htmlEscape(value == null ? "" : value);
+    }
+
+    /** 이메일 제목에 "'행사명' " 접두어를 붙인다. 행사명을 모르면(조회 실패 등) 빈 문자열 - 접두어 없이 기존 제목 그대로 나간다. */
+    private String fairNamePrefix(String fairName) {
+        return fairName == null || fairName.isBlank() ? "" : "'" + fairName + "' ";
     }
 }

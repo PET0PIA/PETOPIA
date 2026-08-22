@@ -42,7 +42,6 @@ import { MyReservationsPage } from "../pages/reservation/MyReservationsPage";
 import { ReservationDetailPage } from "../pages/reservation/ReservationDetailPage";
 import { TicketReservationPage } from "../pages/reservation/TicketReservationPage";
 import { BoothVisitScanPage } from "../pages/vendor/BoothVisitScanPage";
-import { FairReservationsPage } from "../pages/fair-admin/FairReservationsPage";
 import { NotFoundPage, PlaceholderPage } from "../pages/PlaceholderPage";
 import { AboutPage } from "../pages/about/AboutPage";
 import { ContactPage } from "../pages/contact/ContactPage";
@@ -279,7 +278,8 @@ export function AppRouter() {
             <Route path="onsite-sales" element={<OnsiteSalesPolicyPage />} />
             <Route path="qr" element={<GateEntryScanPage />} />
             <Route path="reservations" element={<ReservationStatusPage />} />
-            <Route path="reservations/list" element={<FairReservationsPage />} />
+            {/* 예약자별 상세 목록은 통계 화면(위)에 합쳤다 - 옛 링크가 죽지 않도록 리다이렉트만 남긴다. */}
+            <Route path="reservations/list" element={<Navigate to="/fair-admin/reservations" replace />} />
             <Route path="payments" element={<FairPaymentSettlementPage />} />
             {/* 리뷰 통계는 방문 통계와 합쳐졌다 - 옛 북마크/링크가 죽지 않도록 리다이렉트만 남긴다. */}
             <Route path="reviews" element={<Navigate to="/fair-admin/statistics" replace />} />

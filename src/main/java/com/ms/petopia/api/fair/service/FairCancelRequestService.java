@@ -134,7 +134,29 @@ public class FairCancelRequestService {
         } catch (DuplicateKeyException e) {
             throw new CommonException(ErrorCode.FAIR_CANCEL_NOT_REQUESTABLE);
         }
+
+        notifyCancelRequestSubmittedAfterCommit(fairId, fair.getName());
+
         return toResponse(cancelRequest);
+    }
+
+    /** 새 취소 신청이 접수됐음을 SUPER_ADMIN 전원에게 즉시 알린다(심사 대기 큐 확인용). */
+    private void notifyCancelRequestSubmittedAfterCommit(Long fairId, String fairName) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.notifySuperAdmins(
+                            NotificationType.FAIR_CANCEL_REQUEST_SUBMITTED,
+                            "행사 취소 신청이 접수되었습니다",
+                            "'" + fairName + "' 행사의 취소 신청이 접수되어 심사를 기다리고 있습니다.",
+                            "/admin/cancellations"
+                    );
+                } catch (Exception e) {
+                    log.error("취소 신청 접수 알림 저장 실패. fairId={}", fairId, e);
+                }
+            }
+        });
     }
 
     /**
@@ -246,7 +268,7 @@ public class FairCancelRequestService {
         // 알림용 행사 이름은 여기서, 즉 심사가 실제로 통과한 뒤에만 조회한다 - 위 검증/동시성
         // 체크에서 이미 실패해 반환할 예외라면 이 조회 자체가 불필요하다.
         Fair fair = findFairOrThrow(fairId);
-        notifyCancelReviewAfterCommit(existing.getRequestedBy(), approved, fair.getName(), update.getRejectReason());
+        notifyCancelReviewAfterCommit(existing.getRequestedBy(), fairId, approved, fair.getName(), update.getRejectReason());
         if (approved) {
             notifyAffectedPayersAfterCommit(fairId, fair.getName());
         }
@@ -266,7 +288,8 @@ public class FairCancelRequestService {
      * {@code NotificationService.save}가 EMAIL 채널이 있으면 이메일 발송까지 함께 처리하므로
      * {@code FairService#review}와 달리 별도 MailService 템플릿을 만들 필요가 없다.
      */
-    private void notifyCancelReviewAfterCommit(Long requestedBy, boolean approved, String fairName, String rejectReason) {
+    private void notifyCancelReviewAfterCommit(Long requestedBy, Long fairId, boolean approved, String fairName,
+                                               String rejectReason) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -279,7 +302,7 @@ public class FairCancelRequestService {
                             approved
                                     ? "'" + fairName + "' 행사의 취소 신청이 승인되어 취소가 확정되었습니다."
                                     : "'" + fairName + "' 행사의 취소 신청이 반려되었습니다. 반려 사유: " + rejectReason,
-                            null,
+                            "/fair-admin/cancellation?fairId=" + fairId,
                             List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                             null
                     ));
@@ -343,7 +366,7 @@ public class FairCancelRequestService {
                     NotificationType.FAIR_CANCELED,
                     "행사가 취소되었습니다",
                     "'" + fairName + "' 행사가 취소되었습니다. 결제하신 금액은 순차적으로 환불될 예정입니다.",
-                    null,
+                    recipientType == RecipientType.VENDOR ? "/vendor/participations" : "/mypage/reservations",
                     List.of(DeliveryChannel.IN_APP),
                     null
             ));
@@ -353,7 +376,7 @@ public class FairCancelRequestService {
         try {
             User user = authMapper.selectUserById(payerUserId);
             if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                mailService.sendFairCanceledEmail(user.getEmail(), totalAmount);
+                mailService.sendFairCanceledEmail(user.getEmail(), fairName, totalAmount);
             }
         } catch (Exception e) {
             log.error("행사 취소 이메일 발송 실패. payerUserId={}", payerUserId, e);

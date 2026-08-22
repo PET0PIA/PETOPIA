@@ -239,7 +239,7 @@ public class RefundService {
                     "환불이 완료되었습니다",
                     "환불 금액 " + refund.getRefundAmount() + "원이 처리되었습니다. "
                             + "카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.",
-                    null,
+                    refundDetailLinkUrl(payment),
                     List.of(DeliveryChannel.IN_APP),
                     null
             ));
@@ -248,6 +248,7 @@ public class RefundService {
                     refund.getRefundId(), refund.getPaymentId(), e);
         }
         Long payerUserId = payment.getPayerUserId();
+        Long fairId = payment.getFairId();
         Long refundId = refund.getRefundId();
         Long paymentId = refund.getPaymentId();
         long refundAmount = refund.getRefundAmount();
@@ -257,7 +258,7 @@ public class RefundService {
                 try {
                     User user = authMapper.selectUserById(payerUserId);
                     if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                        mailService.sendRefundCompletedEmail(user.getEmail(), refundAmount);
+                        mailService.sendRefundCompletedEmail(user.getEmail(), resolveFairName(fairId), refundAmount);
                     }
                 } catch (Exception e) {
                     log.error("환불 완료 이메일 발송 실패. refundId={}, paymentId={}", refundId, paymentId, e);
@@ -265,6 +266,38 @@ public class RefundService {
             }
         });
         notifyRefundCompletedToAdmins(payment, refund);
+    }
+
+    /**
+     * 환불 완료 이메일에 어느 행사의 결제였는지 표시하기 위한 행사명 조회. 행사 도메인을
+     * 직접 자바로 참조하지 않고, 이미 주입된 PaymentMapper가 fairs를 조인해 온다
+     * (PaymentMapper.selectFairRevenueSummary와 동일 패턴). 조회 실패해도 이메일 자체는
+     * 이름 없이 보내는 편이 나아서 null로 흡수한다.
+     */
+    private String resolveFairName(Long fairId) {
+        if (fairId == null) {
+            return null;
+        }
+        try {
+            return paymentMapper.selectFairNameById(fairId);
+        } catch (Exception e) {
+            log.warn("환불 완료 이메일용 행사명 조회 실패. fairId={}", fairId, e);
+            return null;
+        }
+    }
+
+    /** 결제 유형별로 환불받은 결제자가 확인해야 할 상세 화면을 가리킨다. */
+    private String refundDetailLinkUrl(PaymentRow payment) {
+        if ("RESERVATION_DEPOSIT".equals(payment.getPaymentType()) && payment.getReservationId() != null) {
+            return "/reservations/me/" + payment.getReservationId();
+        }
+        if ("VENDOR_FEE".equals(payment.getPaymentType()) && payment.getApplicationId() != null) {
+            return "/participations/me/" + payment.getApplicationId();
+        }
+        if ("FAIR_OPENING_FEE".equals(payment.getPaymentType()) && payment.getFairId() != null) {
+            return "/fair-applications/me/" + payment.getFairId();
+        }
+        return null;
     }
 
     /** 환불 발생을 행사 담당 EVENT_ADMIN에게 알린다. 실패해도 환불 처리에는 영향 없음. */
@@ -282,7 +315,7 @@ public class RefundService {
                         NotificationType.REFUND_COMPLETED,
                         "환불이 접수되었습니다",
                         body,
-                        null,
+                        adminRefundLinkUrl(payment),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -291,6 +324,14 @@ public class RefundService {
             log.error("환불 완료 EVENT_ADMIN 알림 저장 실패. refundId={}, paymentId={}, fairId={}",
                     refund.getRefundId(), refund.getPaymentId(), payment.getFairId(), e);
         }
+    }
+
+    /** 예약금 환불은 예약현황 화면으로, 그 외(참가비)는 결제현황 화면으로 관리자를 안내한다. */
+    private String adminRefundLinkUrl(PaymentRow payment) {
+        if ("RESERVATION_DEPOSIT".equals(payment.getPaymentType())) {
+            return "/fair-admin/reservations?fairId=" + payment.getFairId();
+        }
+        return "/fair-admin/payments?fairId=" + payment.getFairId();
     }
 
     private String resolvePayerNickname(Long payerUserId) {
