@@ -95,8 +95,39 @@ public class ApplicationService {
         // 재조회 후 응답 조립
         Application saved = applicationMapper.selectById(application.getApplicationId());
 
+        notifyApplicationSubmittedAfterCommit(fairId, request.getBusinessId());
+
         return ApplicationResponse.from(saved, form, request.getBoothSlotIds());
 
+    }
+
+    /** 새 참가 신청이 접수됐음을 그 행사 담당 EVENT_ADMIN에게 즉시 알린다(심사 대기 큐 확인용). */
+    private void notifyApplicationSubmittedAfterCommit(Long fairId, Long businessId) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    Long adminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
+                    if (adminUserId == null) {
+                        return;
+                    }
+                    Business business = businessMapper.selectById(businessId);
+                    String businessName = business != null ? business.getName() : "업체";
+                    notificationService.save(new SaveNotificationDto.Request(
+                            adminUserId,
+                            RecipientType.EVENT_ADMIN,
+                            NotificationType.VENDOR_APPLICATION_SUBMITTED,
+                            "새 참가 신청이 접수되었습니다",
+                            "'" + businessName + "'에서 참가 신청을 접수했습니다.",
+                            null,
+                            List.of(DeliveryChannel.IN_APP),
+                            null
+                    ));
+                } catch (Exception e) {
+                    log.error("참가 신청 접수 알림 저장 실패. fairId={}, businessId={}", fairId, businessId, e);
+                }
+            }
+        });
     }
 
     /*
@@ -633,6 +664,35 @@ public class ApplicationService {
             throw new CommonException(ErrorCode.APPLICATION_CANCEL_REQUEST_DUPLICATE, e);
         }
 
+        notifyCancelRequestSubmittedAfterCommit(application.getFairId(), business.getName());
+
+    }
+
+    /** 새 참가 취소 요청이 접수됐음을 그 행사 담당 EVENT_ADMIN에게 즉시 알린다(심사 대기 큐 확인용). */
+    private void notifyCancelRequestSubmittedAfterCommit(Long fairId, String businessName) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    Long adminUserId = recruitNoticeMapper.selectAdminUserIdByFairId(fairId);
+                    if (adminUserId == null) {
+                        return;
+                    }
+                    notificationService.save(new SaveNotificationDto.Request(
+                            adminUserId,
+                            RecipientType.EVENT_ADMIN,
+                            NotificationType.VENDOR_APPLICATION_CANCEL_REQUESTED,
+                            "참가 취소 요청이 접수되었습니다",
+                            "'" + businessName + "'에서 참가 취소를 요청했습니다.",
+                            null,
+                            List.of(DeliveryChannel.IN_APP),
+                            null
+                    ));
+                } catch (Exception e) {
+                    log.error("참가 취소 요청 접수 알림 저장 실패. fairId={}, businessName={}", fairId, businessName, e);
+                }
+            }
+        });
     }
 
     // 참가 취소 요청 승인 (행사 담당자용) — application.status도 CANCELED로 함께 전환

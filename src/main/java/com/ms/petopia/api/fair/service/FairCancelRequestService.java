@@ -134,7 +134,28 @@ public class FairCancelRequestService {
         } catch (DuplicateKeyException e) {
             throw new CommonException(ErrorCode.FAIR_CANCEL_NOT_REQUESTABLE);
         }
+
+        notifyCancelRequestSubmittedAfterCommit(fairId, fair.getName());
+
         return toResponse(cancelRequest);
+    }
+
+    /** 새 취소 신청이 접수됐음을 SUPER_ADMIN 전원에게 즉시 알린다(심사 대기 큐 확인용). */
+    private void notifyCancelRequestSubmittedAfterCommit(Long fairId, String fairName) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.notifySuperAdmins(
+                            NotificationType.FAIR_CANCEL_REQUEST_SUBMITTED,
+                            "행사 취소 신청이 접수되었습니다",
+                            "'" + fairName + "' 행사의 취소 신청이 접수되어 심사를 기다리고 있습니다."
+                    );
+                } catch (Exception e) {
+                    log.error("취소 신청 접수 알림 저장 실패. fairId={}", fairId, e);
+                }
+            }
+        });
     }
 
     /**

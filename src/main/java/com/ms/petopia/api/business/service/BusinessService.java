@@ -112,6 +112,18 @@ public class BusinessService {
 
         }
 
+        // businessRegistrar.save()가 이미 자체 트랜잭션으로 커밋을 마친 뒤라(별도 컴포넌트 프록시
+        // 경계), 여기선 afterCommit으로 미룰 필요 없이 바로 알려도 안전하다.
+        try {
+            notificationService.notifySuperAdmins(
+                    NotificationType.BUSINESS_REGISTRATION_SUBMITTED,
+                    "새 사업자 등록 신청이 접수되었습니다",
+                    "'" + saved.getName() + "' 사업자 등록 신청이 접수되어 심사를 기다리고 있습니다."
+            );
+        } catch (Exception e) {
+            log.error("사업자 등록 접수 알림 저장 실패. businessId={}", saved.getBusinessId(), e);
+        }
+
         return BusinessResponse.from(saved);
 
     }

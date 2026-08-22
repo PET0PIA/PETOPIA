@@ -146,12 +146,32 @@ public class FairService {
 
         fairMapper.insert(fair);
 
+        notifyFairApplicationSubmittedAfterCommit(fair.getFairId(), fair.getName());
+
         return new CreateFairApplicationResponse(
                 fair.getFairId(),
                 fair.getName(),
                 FairStatus.RECEIVED.name(),
                 fair.getCreatedAt()
         );
+    }
+
+    /** 새 행사 신청이 접수됐음을 SUPER_ADMIN 전원에게 즉시 알린다(심사 대기 큐 확인용). */
+    private void notifyFairApplicationSubmittedAfterCommit(Long fairId, String fairName) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    notificationService.notifySuperAdmins(
+                            NotificationType.FAIR_APPLICATION_SUBMITTED,
+                            "새 행사 신청이 접수되었습니다",
+                            "'" + fairName + "' 행사 신청이 접수되어 심사를 기다리고 있습니다."
+                    );
+                } catch (Exception e) {
+                    log.error("행사 신청 접수 알림 저장 실패. fairId={}", fairId, e);
+                }
+            }
+        });
     }
 
     /**
