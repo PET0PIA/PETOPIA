@@ -63,6 +63,10 @@ dependencies {
     // 부스 추천 기능 - Claude API 공식 SDK
     implementation 'com.anthropic:anthropic-java:2.52.0'
 
+    // 예약확정 이메일에 입장 QR 이미지를 넣기 위한 서버측 QR 생성
+    implementation 'com.google.zxing:core:3.5.3'
+    implementation 'com.google.zxing:javase:3.5.3'
+
 }
 
 tasks.named('test') {

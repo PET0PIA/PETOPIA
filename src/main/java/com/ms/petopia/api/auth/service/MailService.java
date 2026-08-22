@@ -1,6 +1,15 @@
 package com.ms.petopia.api.auth.service;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.WriterException;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.MailPreparationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -11,9 +20,16 @@ import org.springframework.web.util.HtmlUtils;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MailService {
@@ -110,6 +126,79 @@ public class MailService {
 
         sendHtmlEmail(to, "[PETOPIA] 행사 신청이 반려되었습니다",
                 "FAIR APPLICATION REJECTED", "행사 신청 반려 안내", content);
+    }
+
+    /**
+     * 예약확정 안내를 입장 QR 이미지와 함께 발송한다. QR은 프론트엔드가 화면에 그리는 것과
+     * 동일한 토큰(reservationId를 결정적으로 서명한 값)을 그대로 이미지로 인코딩한 것이라
+     * 이메일 QR과 화면 QR은 완전히 같은 QR이다.
+     */
+    public void sendReservationConfirmedEmail(String to, String reservationNo, String fairName,
+                                               String reservationTypeLabel, LocalDate visitDate,
+                                               LocalTime entryStartTime, LocalTime entryEndTime,
+                                               long amount, LocalDateTime reservedAt, String qrToken) {
+        String amountLabel = amount <= 0 ? "무료" : String.format("%,d원", amount);
+        String visitDateLabel = visitDate.format(DateTimeFormatter.ofPattern("yyyy.M.d(E)", java.util.Locale.KOREAN));
+        String entryTimeLabel = entryStartTime + " ~ " + entryEndTime;
+        String reservedAtLabel = reservedAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+
+        String content = """
+            <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
+              결제가 완료되어 예약이 확정되었습니다.<br>
+              아래 QR코드를 현장 입장 스캐너에 보여주세요.
+            </p>
+            <div style="margin:22px 0;text-align:center;">
+              <img src="cid:entryQrImage" width="176" height="176" alt="입장 QR" style="display:inline-block;border:1px solid #eadfd4;border-radius:14px;padding:10px;background:#ffffff;">
+            </div>
+            <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">%s</div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">예약번호 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">예약 유형 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">방문일 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">입장 시간 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">결제 금액 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="color:#6b7280;font-size:13px;">예약 확정시각 <strong style="float:right;color:#111827;">%s</strong></div>
+            </div>
+            """.formatted(escape(fairName), escape(reservationNo), escape(reservationTypeLabel),
+                escape(visitDateLabel), escape(entryTimeLabel), escape(amountLabel), escape(reservedAtLabel));
+
+        sendHtmlEmailWithInlineQr(to, "[PETOPIA] 예약이 확정되었습니다",
+                "RESERVATION CONFIRMED", "예약 확정 안내", content, qrToken);
+    }
+
+    private void sendHtmlEmailWithInlineQr(String to, String subject, String eyebrow, String title,
+                                           String content, String qrToken) {
+        MimeMessage mimeMessage = javaMailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, StandardCharsets.UTF_8.name());
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(emailLayout(eyebrow, title, content), true);
+            helper.addInline("entryQrImage", new ByteArrayResource(generateQrPng(qrToken)), "image/png");
+            javaMailSender.send(mimeMessage);
+        } catch (MessagingException e) {
+            throw new MailPreparationException("PETOPIA HTML 메일 생성에 실패했습니다.", e);
+        }
+    }
+
+    private byte[] generateQrPng(String qrToken) {
+        try {
+            // 프론트(QrCanvas.tsx)가 쓰는 qrcode 라이브러리의 기본 옵션(errorCorrectionLevel: M,
+            // margin: 2모듈)과 맞춘다 — 인코딩되는 값은 어차피 동일한 토큰이라 스캔 결과는 같지만,
+            // 레벨이 다르면 QR 모듈 패턴 자체가 달라져 화면 QR과 이메일 QR이 다르게 보인다.
+            Map<EncodeHintType, Object> hints = Map.of(
+                    EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M,
+                    EncodeHintType.MARGIN, 2
+            );
+            BitMatrix matrix = new QRCodeWriter().encode(qrToken, BarcodeFormat.QR_CODE, 352, 352, hints);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            MatrixToImageWriter.writeToStream(matrix, "PNG", out);
+            return out.toByteArray();
+        } catch (WriterException | IOException e) {
+            log.error("입장 QR 이미지 생성 실패", e);
+            throw new MailPreparationException("입장 QR 이미지 생성에 실패했습니다.", e);
+        }
     }
 
     private void sendHtmlEmail(String to, String subject, String eyebrow, String title, String content) {
