@@ -35,6 +35,10 @@ const LIST_REFRESH_MS = 5000;
  */
 const FILTER_TABS: { label: string; value: AdminChatFilter }[] = [
   { label: "처리 중", value: "OPEN" },
+  // 자동 응대는 별도 탭이다. "처리 중"에 섞으면 아침에 출근한 상담사가 이미 답이 나간
+  // 대화를 미답변으로 읽고 다시 붙잡는다. 그렇다고 안 보이게 두면 자동 응대는 아무도
+  // 검수하지 않는 채널이 된다.
+  { label: "AI 응대", value: "AI_HANDLED" },
   { label: "종료", value: "CLOSED" },
   { label: "전체", value: "ALL" },
 ];
@@ -50,11 +54,12 @@ function formatWaiting(seconds: number): string {
 }
 
 const STATUS_BADGE: Record<ChatConversationStatus, { label: string; style: string }> = {
-  // 답을 기다리는 두 상태만 강조한다. 색을 여러 개 쓰면 정작 봐야 할 것이 묻힌다.
+  // 답을 기다리는 상태만 강조한다. 색을 여러 개 쓰면 정작 봐야 할 것이 묻힌다.
   WAITING_AGENT: { label: "답변 대기", style: "bg-sun-soft text-ink" },
-  AI_ANSWERED: { label: "AI 답변함 · 잠김", style: "bg-sun-soft text-ink" },
   IN_PROGRESS: { label: "진행 중", style: "bg-leaf-soft text-ink" },
-  BOT: { label: "봇 응대", style: "bg-surface-alt text-muted" },
+  // 강조하지 않는다. 사람이 답할 차례가 아니고, 입력도 열려 있어 고객은 막혀 있지 않다.
+  AI_HANDLED: { label: "AI 응대함", style: "bg-surface-alt text-muted" },
+  BOT: { label: "질문 없음", style: "bg-surface-alt text-muted" },
   CLOSED: { label: "종료", style: "bg-surface-alt text-muted" },
 };
 
@@ -67,6 +72,8 @@ const STATUS_BADGE: Record<ChatConversationStatus, { label: string; style: strin
  */
 const SENDER_LABEL: Record<Exclude<ChatSenderType, "SYSTEM">, string> = {
   USER: "고객",
+  // 고정 답변이 세션을 만들지 않게 된 뒤로 새로 쌓이지 않는 값이다. 지난 상담에는 남아 있어
+  // 표를 지우지 않는다 - 지우면 옛 대화를 열 때 라벨이 비어버린다.
   BOT: "자동 응답(고정 답변)",
   AI: "AI 자동 답변",
   AGENT: "상담사",
@@ -254,10 +261,9 @@ export function AdminChatPage() {
     }
   };
 
-  // AI가 답한 대화도 사람 답변을 기다리는 건 같다. 오히려 그쪽은 사용자 입력이 잠겨 있다.
-  const waitingCount = conversations.filter(
-    (item) => item.status === "WAITING_AGENT" || item.status === "AI_ANSWERED",
-  ).length;
+  // AI_HANDLED는 세지 않는다. 서버의 대기 배지(countWaiting)와 같은 정의여야, 같은 데이터를
+  // 두고 두 화면이 다른 숫자를 말하지 않는다.
+  const waitingCount = conversations.filter((item) => item.status === "WAITING_AGENT").length;
 
   return (
     <div className="space-y-6">

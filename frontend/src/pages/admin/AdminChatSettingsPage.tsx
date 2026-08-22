@@ -37,9 +37,12 @@ import { Button } from "../../components/ui/Button";
 /** 1=월 ... 7=일. 서버(java.time.DayOfWeek)와 같은 규칙이라 인덱스 변환을 하지 않는다. */
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
+/**
+ * AI는 없다. 버튼 유형이 아니라 상담원 연결 세션이 운영시간 밖일 때의 대체 응대이고,
+ * 참고 정보는 아래 "운영 문구"의 AI_CONTEXT에서 관리한다.
+ */
 const ANSWER_TYPE_LABELS: Record<ChatAnswerType, string> = {
-  FIXED: "고정 답변",
-  AI: "AI 답변(운영시간 외 1회)",
+  FIXED: "고정 답변(상담이 생기지 않아요)",
   AGENT: "상담사 연결",
 };
 
@@ -48,7 +51,6 @@ const EMPTY_MENU = {
   label: "",
   answerType: "FIXED" as ChatAnswerType,
   fixedAnswer: "",
-  aiContext: "",
 };
 
 /** 아직 DB에 행이 없는 요일의 초기값. 저장을 눌러야 실제로 생긴다. */
@@ -79,7 +81,6 @@ function toPayload(menu: AdminChatMenu): AdminChatMenuPayload {
     label: menu.label,
     answerType: menu.answerType,
     fixedAnswer: menu.fixedAnswer,
-    aiContext: menu.aiContext,
     displayOrder: menu.displayOrder,
     isActive: menu.isActive,
   };
@@ -304,12 +305,16 @@ export function AdminChatSettingsPage() {
 
       {/* 지표 */}
       <section>
-        <SectionHeader title="최근 30일 지표" description="문의 유형별 접수 건수와 첫 응답까지 걸린 평균 시간이에요." />
+        <SectionHeader
+          title="최근 30일 지표"
+          description="고정 답변은 상담을 만들지 않으니 수요가 '클릭'에만 나타나요. 접수는 상담사 연결로 만들어진 상담 수예요."
+        />
         <div className="surface overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-line text-left text-xs text-muted">
               <tr>
                 <th className="px-4 py-3">문의 유형</th>
+                <th className="px-4 py-3">클릭</th>
                 <th className="px-4 py-3">접수</th>
                 <th className="px-4 py-3">대기</th>
                 <th className="px-4 py-3">AI 답변</th>
@@ -320,6 +325,7 @@ export function AdminChatSettingsPage() {
               {stats.map((stat) => (
                 <tr key={stat.menuLabel}>
                   <td className="px-4 py-3 font-bold text-ink">{stat.menuLabel}</td>
+                  <td className="px-4 py-3">{stat.clickCount}</td>
                   <td className="px-4 py-3">{stat.conversationCount}</td>
                   <td className="px-4 py-3">{stat.waitingCount}</td>
                   <td className="px-4 py-3">{stat.aiAnsweredCount}</td>
@@ -386,25 +392,6 @@ export function AdminChatSettingsPage() {
                     value={menu.fixedAnswer ?? ""}
                     disabled={menuBusy(menu.menuId)}
                     onChange={(event) => patchMenu(menu.menuId, { fixedAnswer: event.target.value })}
-                    className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm disabled:opacity-60"
-                  />
-                </div>
-              )}
-
-              {menu.answerType === "AI" && (
-                <div className="mt-3">
-                  <label className="text-xs font-bold text-muted" htmlFor={`ai-${menu.menuId}`}>
-                    AI 참고 정보
-                  </label>
-                  <p className="mt-1 text-xs text-muted">
-                    AI는 여기 적힌 내용 안에서만 답해요. 비어 있으면 대부분 상담사에게 넘깁니다.
-                  </p>
-                  <textarea
-                    id={`ai-${menu.menuId}`}
-                    rows={4}
-                    value={menu.aiContext ?? ""}
-                    disabled={menuBusy(menu.menuId)}
-                    onChange={(event) => patchMenu(menu.menuId, { aiContext: event.target.value })}
                     className="mt-1 w-full rounded-button border border-line bg-card px-3 py-2 text-sm disabled:opacity-60"
                   />
                 </div>

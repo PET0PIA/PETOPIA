@@ -9,7 +9,6 @@ export interface AdminChatMenu {
   label: string;
   answerType: ChatAnswerType;
   fixedAnswer: string | null;
-  aiContext: string | null;
   displayOrder: number;
   isActive: boolean;
 }
@@ -19,7 +18,6 @@ export interface AdminChatMenuPayload {
   label: string;
   answerType: ChatAnswerType;
   fixedAnswer?: string | null;
-  aiContext?: string | null;
   displayOrder?: number;
   isActive?: boolean;
 }
@@ -40,7 +38,10 @@ export interface ChatSetting {
 
 export interface ChatMenuStat {
   menuLabel: string;
+  /** 이 유형으로 만들어진 상담 수. 고정형은 세션을 만들지 않으므로 항상 0이다. */
   conversationCount: number;
+  /** 버튼이 눌린 횟수. 고정형의 유일한 수요 지표다. */
+  clickCount: number;
   waitingCount: number;
   /** 아직 아무도 답하지 않은 유형은 null. 0으로 오지 않는다. */
   avgFirstResponseSeconds: number | null;

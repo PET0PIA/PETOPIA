@@ -40,7 +40,13 @@ export interface AdminChatConversationDetail {
  * 상담사에게 필요한 구분은 "내가 들고 있는 것(OPEN) / 끝난 것(CLOSED)" 둘뿐이라,
  * 상태별로 탭을 쪼개지 않는다. 급한 순서는 목록 정렬과 배지가 알려준다.
  */
-export type AdminChatFilter = "OPEN" | "CLOSED" | "ALL";
+/**
+ * 상담사 대기열 필터. 서버 AdminChatFilter와 같은 값이어야 한다.
+ *
+ * AI_HANDLED는 OPEN에서 빠진 자동 응대 건을 보는 자리다 - 대기열에 섞으면 이미 답이 나간
+ * 대화를 미답변으로 읽고, 안 보이게 두면 자동 응대를 아무도 검수하지 않는다.
+ */
+export type AdminChatFilter = "OPEN" | "AI_HANDLED" | "CLOSED" | "ALL";
 
 export async function fetchAdminConversations(
   filter: AdminChatFilter = "OPEN",
