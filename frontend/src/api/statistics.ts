@@ -1,4 +1,4 @@
-import { apiClient, ApiError, getAccessToken, refreshAccessTokenOnce, setAccessToken } from "./client";
+import { apiClient, ApiError, downloadFile, getAccessToken, refreshAccessTokenOnce, setAccessToken } from "./client";
 
 /**
  * ReservationDashboardController는 NotificationController와 마찬가지로 응답을
@@ -108,70 +108,9 @@ export function getVisitStats(fairId: number) {
   return unwrap(apiClient.get<ApiEnvelope<VisitStats>>(`/api/fairs/${fairId}/visit-stats`));
 }
 
-/** Content-Disposition 헤더의 filename="..."을 뽑아낸다. 없으면 null. */
-function parseFilename(contentDisposition: string | null): string | null {
-  if (!contentDisposition) return null;
-  const match = /filename="?([^";]+)"?/.exec(contentDisposition);
-  return match ? match[1] : null;
-}
-
-/**
- * 방문 통계를 엑셀(.xlsx)로 내려받는다. apiClient는 JSON 응답만 다루므로
- * 바이너리 응답을 직접 fetch해 Blob으로 받고 브라우저 다운로드를 트리거한다.
- * apiClient.request()와 동일하게 Authorization 헤더·쿠키를 직접 실어 보내야
- * EVENT_ADMIN/SUPER_ADMIN 인증을 통과한다 - 순정 fetch는 이걸 자동으로 안 붙여준다.
- */
-async function fetchVisitStatsExcel(fairId: number, isRetry = false): Promise<Response> {
-  const headers: Record<string, string> = {};
-  const accessToken = getAccessToken();
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
-  }
-
-  const response = await fetch(`/api/fairs/${fairId}/visit-stats/export`, {
-    headers,
-    credentials: "include",
-  });
-
-  // Access Token 만료(401)면 apiClient.request()와 동일하게 한 번만 재발급 후 재시도한다.
-  if (response.status === 401 && !isRetry) {
-    try {
-      const newToken = await refreshAccessTokenOnce();
-      setAccessToken(newToken);
-      return fetchVisitStatsExcel(fairId, true);
-    } catch {
-      setAccessToken(null);
-    }
-  }
-
-  return response;
-}
-
-export async function downloadVisitStatsExcel(fairId: number): Promise<void> {
-  const response = await fetchVisitStatsExcel(fairId);
-
-  if (!response.ok) {
-    let message = "엑셀 파일을 내려받지 못했어요.";
-    try {
-      const body = await response.json();
-      message = body?.message ?? message;
-    } catch {
-      // 에러 응답이 JSON이 아니면 기본 메시지를 사용한다.
-    }
-    throw new ApiError(message, response.status);
-  }
-
-  const blob = await response.blob();
-  const filename = parseFilename(response.headers.get("Content-Disposition")) ?? `visit-stats-${fairId}.xlsx`;
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+/** 방문 통계를 엑셀(.xlsx)로 내려받는다. */
+export function downloadVisitStatsExcel(fairId: number): Promise<void> {
+  return downloadFile(`/api/fairs/${fairId}/visit-stats/export`, `visit-stats-${fairId}.xlsx`);
 }
 
 /**
