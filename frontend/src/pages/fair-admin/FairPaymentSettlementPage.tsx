@@ -1,8 +1,8 @@
-import { AlertCircle, Download } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import { getPayments, type PaymentDetail, type PaymentListResult, type PaymentStatus } from "../../api/payment";
-import { downloadSettlementsExcel, getSettlementsByFair, type SettlementResponse, type SettlementStatus } from "../../api/settlement";
+import { getFairRevenueSummary, type FairRevenueSummaryResponse } from "../../api/settlement";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Select";
@@ -11,18 +11,6 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { EmptyState } from "../../components/common/EmptyState";
 import { useFairSelector } from "../../contexts/FairSelectorContext";
 import { formatAmount, formatDateTime, statusLabels, statusTone } from "../payment/paymentDisplay";
-
-const settlementStatusLabels: Record<SettlementStatus, string> = {
-  PENDING: "대기 중",
-  CONFIRMED: "확정됨",
-  PAID: "지급 완료",
-};
-
-const settlementStatusTones: Record<SettlementStatus, "sun" | "leaf" | "primary"> = {
-  PENDING: "sun",
-  CONFIRMED: "leaf",
-  PAID: "primary",
-};
 
 function formatRatePercent(rate: number) {
   return `${(rate * 100).toFixed(2)}%`;
@@ -99,8 +87,8 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
           <Table>
             <thead>
               <tr className="border-b border-line bg-page text-xs font-bold text-muted">
+                <th className="px-4 py-3">참가업체</th>
                 <th className="px-4 py-3">결제</th>
-                <th className="px-4 py-3">업체</th>
                 <th className="px-4 py-3">금액</th>
                 <th className="px-4 py-3">상태</th>
                 <th className="px-4 py-3">요청 시각</th>
@@ -109,8 +97,8 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
             <tbody>
               {result.content.map((row: PaymentDetail) => (
                 <tr key={row.paymentId} className="border-b border-line last:border-b-0">
-                  <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.paymentId}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-ink">{row.businessId !== null ? `#${row.businessId}` : "-"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.paymentId}</td>
                   <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatAmount(row.amount)}</td>
                   <td className="whitespace-nowrap px-4 py-3">
                     <Badge tone={statusTone[row.status]}>{statusLabels[row.status]}</Badge>
@@ -136,13 +124,12 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
   );
 }
 
-// 담당 행사의 참가업체별 정산 내역(조회 전용 — 계산·확정은 이 화면 스코프 밖).
-function SettlementSection({ fairId }: { fairId: number }) {
-  const [settlements, setSettlements] = useState<SettlementResponse[] | null>(null);
+// 담당 행사의 매출 요약(티켓예매+참가비 합산) - SUPER_ADMIN 정산·수수료율 화면(admin/SettlementPage.tsx)의
+// "행사별 매출 요약"과 같은 집계를 담당 행사 하나로 좁힌 버전(2026-08-22, 정산 내역 탭에 같이 보여준다).
+function RevenueSummarySection({ fairId }: { fairId: number }) {
+  const [summary, setSummary] = useState<FairRevenueSummaryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
 
   const requestIdRef = useRef(0);
 
@@ -150,98 +137,75 @@ function SettlementSection({ fairId }: { fairId: number }) {
     const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
-    getSettlementsByFair(fairId)
-      .then((data) => { if (requestIdRef.current === requestId) setSettlements(data); })
+    getFairRevenueSummary(fairId)
+      .then((data) => { if (requestIdRef.current === requestId) setSummary(data); })
       .catch((err) => {
         if (requestIdRef.current !== requestId) return;
-        setSettlements(null);
-        setError(errorMessage(err, "정산 내역을 불러오지 못했어요."));
+        setSummary(null);
+        setError(errorMessage(err, "매출 요약을 불러오지 못했어요."));
       })
       .finally(() => { if (requestIdRef.current === requestId) setLoading(false); });
   }, [fairId]);
 
-  async function handleExport() {
-    setExporting(true);
-    setExportError(null);
-    try {
-      await downloadSettlementsExcel(fairId);
-    } catch (err) {
-      setExportError(errorMessage(err, "엑셀 파일을 내려받지 못했어요."));
-    } finally {
-      setExporting(false);
-    }
+  if (loading) {
+    return <div className="surface mb-6 grid min-h-24 place-items-center text-sm text-muted">불러오는 중이에요...</div>;
   }
+  if (error) {
+    return (
+      <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
+        <AlertCircle size={18} className="mt-0.5 shrink-0" />
+        <p>{error}</p>
+      </div>
+    );
+  }
+  if (!summary) return null;
 
   return (
-    <section>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted">담당 행사의 참가업체별 정산 내역이에요.</p>
-        <Button variant="outline" onClick={handleExport} disabled={exporting || loading}>
-          <Download size={16} />
-          {exporting ? "내보내는 중..." : "엑셀로 내보내기"}
-        </Button>
-      </div>
-
-      {exportError && <p className="mb-4 text-sm text-primary-strong">{exportError}</p>}
-
-      {error && (
-        <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
-          <AlertCircle size={18} className="mt-0.5 shrink-0" />
-          <p>{error}</p>
-        </div>
-      )}
-
-      {loading && <div className="surface grid min-h-32 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
-
-      {!loading && !error && settlements && settlements.length === 0 && (
-        <EmptyState title="정산 내역이 없어요" description="아직 계산된 정산이 없어요." />
-      )}
-
-      {!loading && settlements && settlements.length > 0 && (
-        <Table>
-          <thead>
-            <tr className="border-b border-line bg-page text-xs font-bold text-muted">
-              <th className="px-4 py-3">업체</th>
-              <th className="px-4 py-3">총 참가비</th>
-              <th className="px-4 py-3">환불액</th>
-              <th className="px-4 py-3">수수료</th>
-              <th className="px-4 py-3">지급액</th>
-              <th className="px-4 py-3">상태</th>
-              <th className="px-4 py-3">확정 시각</th>
-            </tr>
-          </thead>
-          <tbody>
-            {settlements.map((row) => (
-              <tr key={row.settlementId} className="border-b border-line last:border-b-0">
-                <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.businessId}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-ink">{formatAmount(row.grossAmount)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-ink">{formatAmount(row.refundAmount)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-ink">
-                  {formatAmount(row.commissionAmount)} <span className="text-muted">({formatRatePercent(row.commissionRate)})</span>
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatAmount(row.netAmount)}</td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <Badge tone={settlementStatusTones[row.status]}>{settlementStatusLabels[row.status]}</Badge>
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-muted">{row.confirmedAt ? formatDateTime(row.confirmedAt) : "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      )}
-    </section>
+    <div className="mb-6">
+      <h3 className="mb-3 text-sm font-extrabold text-muted">행사 매출 요약</h3>
+      <Table>
+        <thead>
+          <tr className="border-b border-line bg-page text-xs font-bold text-muted">
+            <th className="px-4 py-3">행사</th>
+            <th className="px-4 py-3">티켓예매 총금액</th>
+            <th className="px-4 py-3">참가비용 총금액</th>
+            <th className="px-4 py-3">전체금액</th>
+            <th className="px-4 py-3">행사업체금액</th>
+            <th className="px-4 py-3">플랫폼금액</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-b border-line last:border-b-0">
+            <td className="whitespace-nowrap px-4 py-3 text-ink">{summary.fairName} <span className="text-muted">#{summary.fairId}</span></td>
+            <td className="whitespace-nowrap px-4 py-3 text-ink">{formatAmount(summary.ticketAmount)}</td>
+            <td className="whitespace-nowrap px-4 py-3 text-ink">{formatAmount(summary.vendorFeeAmount)}</td>
+            <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatAmount(summary.grossAmount)}</td>
+            <td className="whitespace-nowrap px-4 py-3 text-ink">
+              {formatAmount(summary.businessAmount)}
+              <span className="ml-1 text-xs text-muted">({formatRatePercent(1 - summary.commissionRate)})</span>
+            </td>
+            <td className="whitespace-nowrap px-4 py-3 text-ink">
+              {formatAmount(summary.platformAmount)}
+              <span className="ml-1 text-xs text-muted">({formatRatePercent(summary.commissionRate)})</span>
+            </td>
+          </tr>
+        </tbody>
+      </Table>
+    </div>
   );
 }
 
-// EVENT_ADMIN용 담당 행사 참가업체 결제·정산 조회 화면 (이슈 #131). 계산·확정 같은 쓰기 동작은
-// 스코프 밖 — 필요해지면 admin/SettlementPage.tsx의 해당 로직을 참고해 추가하면 된다.
+// EVENT_ADMIN용 담당 행사 참가업체 결제·정산 화면 (이슈 #131). 정산 내역 탭은 2026-08-22에
+// 행사별 매출요약(조회 전용)만 보여주는 걸로 재조정됨 - 재계산·확정은 "최고관리자 업무"로
+// 판단해 EVENT_ADMIN 화면에서 빼고, 백엔드도 같이 SUPER_ADMIN 전용으로 좁혔다(SecurityConfig +
+// FairSettlementService, admin/SettlementPage.tsx의 "행사비 조회·정산·확정"에서만 처리).
 export function FairPaymentSettlementPage() {
   const { fairId } = useFairSelector();
   const [tab, setTab] = useState<"payment" | "settlement">("payment");
 
   return (
     <div className="mx-auto max-w-5xl py-2">
-      <PageHeader eyebrow="박람회 관리자" title="참가업체 결제·정산" description="담당 행사의 참가비 결제 현황과 정산 내역을 확인해요." />
+      <PageHeader eyebrow="박람회 관리자" title="결제·정산" description="담당 행사의 참가비 결제 현황과 정산 내역을 확인해요." />
 
       {fairId === null ? (
         <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 결제·정산 현황이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />
@@ -251,7 +215,7 @@ export function FairPaymentSettlementPage() {
             <Button variant={tab === "payment" ? "primary" : "outline"} onClick={() => setTab("payment")}>참가비 결제 현황</Button>
             <Button variant={tab === "settlement" ? "primary" : "outline"} onClick={() => setTab("settlement")}>정산 내역</Button>
           </div>
-          {tab === "payment" ? <VendorPaymentSection fairId={fairId} /> : <SettlementSection fairId={fairId} />}
+          {tab === "payment" ? <VendorPaymentSection fairId={fairId} /> : <RevenueSummarySection fairId={fairId} />}
         </>
       )}
     </div>

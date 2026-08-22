@@ -11,6 +11,7 @@ import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.dto.FairRevenueSummaryRow;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
@@ -18,6 +19,7 @@ import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.mapper.RefundMapper;
 import com.ms.petopia.api.settlement.client.FairContractClient;
 import com.ms.petopia.api.settlement.dto.FairCancellationStatus;
+import com.ms.petopia.api.settlement.dto.FairRevenueSummaryResponse;
 import com.ms.petopia.api.settlement.dto.SettlementItemRow;
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import com.ms.petopia.api.settlement.dto.SettlementRow;
@@ -412,5 +414,80 @@ public class SettlementService {
         return settlementMapper.selectByFairId(fairId).stream()
                 .map(SettlementResponse::from)
                 .toList();
+    }
+
+    /**
+     * fairId·businessId 둘 다 선택적인 통합검색(SUPER_ADMIN 전용 정산 화면, 2026-08-21).
+     * 최소 하나는 채워야 한다 - 둘 다 비었으면 정산 테이블 전체를 반환하게 돼서 막는다.
+     * fairId가 있으면 그 행사 담당자인지 확인하고(SUPER_ADMIN은 항상 통과), fairId 없이
+     * businessId만으로 여러 행사에 걸친 결과를 묶어 보는 건 SUPER_ADMIN만 허용한다
+     * ({@link FairAdminAccessGuard#requireSuperAdmin} 그 용도로 이미 존재).
+     *
+     * @throws CommonException {@link ErrorCode#INVALID_INPUT_VALUE} fairId·businessId 둘 다 없을 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 접근 권한이 없을 때
+     */
+    public List<SettlementResponse> getByFilter(Long fairId, Long businessId) {
+        if (fairId == null && businessId == null) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        if (fairId != null) {
+            fairAdminAccessGuard.checkAssigned(fairId);
+        } else {
+            fairAdminAccessGuard.requireSuperAdmin();
+        }
+        return settlementMapper.selectByFilter(fairId, businessId).stream()
+                .map(SettlementResponse::from)
+                .toList();
+    }
+
+    /**
+     * 행사별 매출 요약(SUPER_ADMIN 정산·수수료 화면 전용, WBS 5.6). 기존 {@link #calculate}와
+     * 달리 저장하지 않는다 - 매번 결제/환불 데이터를 그대로 다시 집계해서 보여주는 조회 전용
+     * 화면이라, "확정" 개념도 재계산도 없다(단순 재조회가 곧 재계산). 모든 행사를 대상으로 하는
+     * 전체 현황판이라 개별 행사 담당자 확인(FairAdminAccessGuard)은 하지 않고, SUPER_ADMIN
+     * 전용 접근은 SecurityConfig가 URL 단위로 막는다.
+     */
+    public List<FairRevenueSummaryResponse> getFairRevenueSummaries() {
+        return paymentMapper.selectFairRevenueSummary().stream()
+                .map(this::toRevenueSummaryResponse)
+                .toList();
+    }
+
+    /**
+     * 행사 하나의 매출 요약(EVENT_ADMIN 담당 행사 정산 화면용, 2026-08-22). 위 전체 목록판과
+     * 달리 그 행사 담당자인지 확인한다(FairAdminAccessGuard) - 남의 행사 매출까지 보이면 안
+     * 되므로, SecurityConfig의 URL 단위 SUPER_ADMIN 전용 제한과는 별도 경로로 둔다.
+     *
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
+     * @throws CommonException {@link ErrorCode#FAIR_NOT_FOUND} 존재하지 않는 행사일 때
+     */
+    public FairRevenueSummaryResponse getFairRevenueSummary(Long fairId) {
+        fairAdminAccessGuard.checkAssigned(fairId);
+        FairRevenueSummaryRow row = paymentMapper.selectFairRevenueSummaryByFairId(fairId);
+        if (row == null) {
+            throw new CommonException(ErrorCode.FAIR_NOT_FOUND);
+        }
+        return toRevenueSummaryResponse(row);
+    }
+
+    private FairRevenueSummaryResponse toRevenueSummaryResponse(FairRevenueSummaryRow row) {
+        long grossAmount = row.getTicketAmount() + row.getVendorFeeAmount();
+        BigDecimal commissionRate = commissionRateService.resolveEffectiveRate(row.getFairId());
+        long platformAmount = commissionRate
+                .multiply(BigDecimal.valueOf(grossAmount))
+                .setScale(0, RoundingMode.HALF_UP)
+                .longValueExact();
+        long businessAmount = grossAmount - platformAmount;
+
+        return new FairRevenueSummaryResponse(
+                row.getFairId(),
+                row.getFairName(),
+                row.getTicketAmount(),
+                row.getVendorFeeAmount(),
+                grossAmount,
+                commissionRate,
+                platformAmount,
+                businessAmount
+        );
     }
 }

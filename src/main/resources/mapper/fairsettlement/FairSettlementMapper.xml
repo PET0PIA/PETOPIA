@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.ms.petopia.api.fairsettlement.mapper.FairSettlementMapper">
+
+    <sql id="fairSettlementColumns">
+        fair_settlement_id
+      , fair_id
+      , gross_amount
+      , refund_amount
+      , commission_rate
+      , commission_amount
+      , net_amount
+      , status
+      , needs_recalculation
+      , paid_at
+      , confirmed_at
+      , confirmed_by_user_id
+      , created_at
+      , updated_at
+    </sql>
+
+    <select id="selectById" resultType="FairSettlementRow">
+        SELECT <include refid="fairSettlementColumns"/>
+          FROM fair_settlement
+         WHERE fair_settlement_id = #{fairSettlementId}
+    </select>
+
+    <select id="selectByFairId" resultType="FairSettlementRow">
+        SELECT <include refid="fairSettlementColumns"/>
+          FROM fair_settlement
+         WHERE fair_id = #{fairId}
+    </select>
+
+    <select id="selectFairSettlementIdByPaymentId" resultType="long">
+        SELECT fair_settlement_id
+          FROM fair_settlement_item
+         WHERE payment_id = #{paymentId}
+    </select>
+
+    <update id="markNeedsRecalculation">
+        UPDATE fair_settlement
+        SET needs_recalculation = TRUE
+        WHERE fair_settlement_id = #{fairSettlementId}
+        AND status = 'PENDING'
+    </update>
+
+    <insert id="insert" parameterType="FairSettlementRow"
+            useGeneratedKeys="true" keyProperty="fairSettlementId">
+        INSERT INTO fair_settlement (
+            fair_id, gross_amount, refund_amount,
+            commission_rate, commission_amount, net_amount, status,
+            created_at, updated_at
+        ) VALUES (
+            #{fairId}, #{grossAmount}, #{refundAmount},
+            #{commissionRate}, #{commissionAmount}, #{netAmount}, #{status},
+            #{createdAt}, #{updatedAt}
+        )
+    </insert>
+
+    <insert id="insertItems" useGeneratedKeys="true" keyProperty="fairSettlementItemId">
+        INSERT INTO fair_settlement_item (fair_settlement_id, payment_id, refund_id, amount_included)
+        VALUES
+        <foreach collection="items" item="item" separator=",">
+            (#{item.fairSettlementId}, #{item.paymentId}, #{item.refundId}, #{item.amountIncluded})
+        </foreach>
+    </insert>
+
+    <delete id="deleteItemsByFairSettlementId">
+        DELETE FROM fair_settlement_item
+         WHERE fair_settlement_id = #{fairSettlementId}
+    </delete>
+
+    <update id="confirm">
+        UPDATE fair_settlement
+        SET status = 'CONFIRMED',
+        confirmed_by_user_id = #{confirmedByUserId},
+        confirmed_at = #{confirmedAt},
+        updated_at = #{updatedAt}
+        WHERE fair_settlement_id = #{fairSettlementId}
+        AND status = 'PENDING'
+        AND needs_recalculation = FALSE
+    </update>
+
+    <update id="updateAggregates">
+        UPDATE fair_settlement
+        SET gross_amount = #{grossAmount},
+        refund_amount = #{refundAmount},
+        commission_amount = #{commissionAmount},
+        net_amount = #{netAmount},
+        needs_recalculation = FALSE,
+        updated_at = #{updatedAt}
+        WHERE fair_settlement_id = #{fairSettlementId}
+        AND status = 'PENDING'
+    </update>
+
+    <update id="reopen">
+        UPDATE fair_settlement
+        SET status = 'PENDING',
+        needs_recalculation = TRUE,
+        confirmed_by_user_id = NULL,
+        confirmed_at = NULL,
+        updated_at = #{updatedAt}
+        WHERE fair_settlement_id = #{fairSettlementId}
+        AND status = 'CONFIRMED'
+    </update>
+
+</mapper>

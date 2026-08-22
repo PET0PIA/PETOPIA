@@ -12,6 +12,7 @@ import com.ms.petopia.api.refund.dto.RefundRequest;
 import com.ms.petopia.api.refund.dto.RefundResponse;
 import com.ms.petopia.api.refund.dto.RefundRow;
 import com.ms.petopia.api.refund.mapper.RefundMapper;
+import com.ms.petopia.api.fairsettlement.mapper.FairSettlementMapper;
 import com.ms.petopia.api.settlement.mapper.SettlementMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -60,6 +61,7 @@ public class RefundService {
     private final RefundMapper refundMapper;
     private final PaymentMapper paymentMapper;
     private final SettlementMapper settlementMapper;
+    private final FairSettlementMapper fairSettlementMapper;
     private final NotificationService notificationService;
     private final FairAdminAccessGuard fairAdminAccessGuard;
 
@@ -168,6 +170,13 @@ public class RefundService {
         // 넘어간 정산이면 이 UPDATE가 0행이라 환불을 거부한다.
         Long settlementId = settlementMapper.selectSettlementIdByPaymentId(paymentId);
         if (settlementId != null && settlementMapper.markNeedsRecalculation(settlementId) == 0) {
+            throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE,
+                    "이미 확정된 정산에 포함된 결제는 환불할 수 없습니다. 정산 담당자에게 문의해 주세요.");
+        }
+        // 행사별 최종정산(2026-08-22)도 같은 결제를 포함하고 있을 수 있어 똑같이 확인한다 -
+        // 위 업체별 정산과는 완전히 별개 테이블(fair_settlement_item)이라 둘 다 체크해야 한다.
+        Long fairSettlementId = fairSettlementMapper.selectFairSettlementIdByPaymentId(paymentId);
+        if (fairSettlementId != null && fairSettlementMapper.markNeedsRecalculation(fairSettlementId) == 0) {
             throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE,
                     "이미 확정된 정산에 포함된 결제는 환불할 수 없습니다. 정산 담당자에게 문의해 주세요.");
         }

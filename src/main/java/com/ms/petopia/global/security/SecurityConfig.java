@@ -195,6 +195,24 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/*/reopen").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // 행사별 최종정산(플랫폼↔행사, 업체 구분 없음, 2026-08-22) - 계산/조회는 그 행사
+                        // 담당 EVENT_ADMIN 또는 SUPER_ADMIN(FairSettlementService가 FairAdminAccessGuard로
+                        // 한 번 더 확인). 재계산·확정·되돌리기는 "최고관리자 업무"로 판단해 담당
+                        // EVENT_ADMIN도 제외하고 SUPER_ADMIN만 허용한다(2026-08-22 재조정).
+                        .requestMatchers(HttpMethod.POST, "/api/fairs/*/settlements/final").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/final").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/final/*/confirm", "/api/settlements/final/*/recalculate").hasRole("SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/final/*/reopen").hasRole("SUPER_ADMIN")
+                        // 행사별 매출 요약(티켓+참가비 합산, WBS 5.6) - 전체 행사를 한 번에 보여주는
+                        // 현황판이라 개별 행사 담당자가 아니라 SUPER_ADMIN 전용으로 좁힌다.
+                        .requestMatchers(HttpMethod.GET, "/api/settlements/revenue-summary", "/api/settlements/revenue-summary/export").hasRole("SUPER_ADMIN")
+                        // 위와 같은 매출 요약을 담당 행사 하나로 좁힌 버전(2026-08-22) - 담당 행사
+                        // 조회라 EVENT_ADMIN도 허용, 실제로 그 행사 담당자인지는 SettlementService가
+                        // FairAdminAccessGuard로 한 번 더 확인한다.
+                        .requestMatchers(HttpMethod.GET, "/api/fairs/*/revenue-summary").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // 정산 통합검색(fairId·businessId 선택적 조합, 2026-08-21) - 정산·수수료율
+                        // 화면(SettlementPage)이 SUPER_ADMIN 전용 라우트라 이것도 그에 맞춘다.
+                        .requestMatchers(HttpMethod.GET, "/api/settlements").hasRole("SUPER_ADMIN")
                         // CommissionRate 도메인 - 현재 요율 조회는 결제 화면 등에서 누구나 볼 수 있게
                         // permitAll, 설정 변경만 SUPER_ADMIN.
                         .requestMatchers(HttpMethod.GET, "/api/settlements/commission-rate").permitAll()

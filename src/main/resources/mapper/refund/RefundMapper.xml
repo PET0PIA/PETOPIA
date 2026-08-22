@@ -37,6 +37,21 @@
     </select>
 
     <!--
+        selectByPaymentId를 여러 건 한 번에 조회하는 배치 버전(2026-08-22) - 정산 집계처럼
+        결제 여러 건의 환불을 한꺼번에 확인해야 할 때 건당 쿼리를 날리지 않게 해준다
+        (CodeRabbit 리뷰 지적, PR #222 - FairSettlementService.aggregate의 N+1).
+    -->
+    <select id="selectByPaymentIds" resultType="RefundRow">
+        SELECT <include refid="refundColumnsWithReservation"/>
+          FROM refund r
+          JOIN payment p ON p.payment_id = r.payment_id
+         WHERE r.payment_id IN
+        <foreach collection="paymentIds" item="paymentId" open="(" separator="," close=")">
+            #{paymentId}
+        </foreach>
+    </select>
+
+    <!--
         "기존 환불 재사용 또는 신규 생성"을 원자적으로 판단하기 위한 잠금 조회.
 
         payment를 조인하지 않는다 — 조인한 상태로 FOR UPDATE를 걸면 어느 테이블이 잠기는지가

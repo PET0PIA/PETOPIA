@@ -116,14 +116,19 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
     );
   }
 
-  const ended = !!fair.operationEndDate && fair.operationEndDate < todayInSeoul();
+  // 생애주기(진행 중·종료)는 서버 status를 먼저 믿는다. 목록의 FairPublicListItem.status 주석과
+  // 같은 원칙으로, 사용자 PC 날짜가 틀려도 판정이 흔들리지 않게 한다. status가 비어 있을 때만
+  // (백엔드가 null로 줄 수 있다) 날짜로 판정한다 - 운영종료일이 없는 행사도 이 경우에 들어온다.
+  const endedByDate = !!fair.operationEndDate && fair.operationEndDate < todayInSeoul();
+  const ended = fair.status === "ENDED" ? true : fair.status === "IN_PROGRESS" ? false : endedByDate;
   const indoorOutdoor = fair.indoorOutdoor ? INDOOR_OUTDOOR_LABELS[fair.indoorOutdoor] ?? null : null;
   // 예매 가능 = 예매 창이 열려(availability 성공) 잔여석 있는 날짜가 하나라도 있음.
   const reservable = !ended && !!availability && availability.dates.some((date) => date.available);
   // 운영 중인 행사. 사전예약이 닫혔어도(reservable=false) 현장예매는 열려 있을 수 있으므로
   // 버튼을 비활성으로 막지 않고 예매 화면으로 보낸다 - 그 화면이 사전예약과 현장예매를 둘 다
   // 다루고, 판매 상태·입장 마감 같은 최종 판정은 백엔드가 한다.
-  const inProgress = !ended && fair.status === "IN_PROGRESS";
+  // 위 ended가 status를 먼저 보므로 IN_PROGRESS면 ended는 반드시 false다(!ended는 불필요).
+  const inProgress = fair.status === "IN_PROGRESS";
   const schedule = availability?.dates ?? [];
 
   return (

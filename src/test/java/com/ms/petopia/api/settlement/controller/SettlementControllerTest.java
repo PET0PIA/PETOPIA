@@ -1,5 +1,6 @@
 package com.ms.petopia.api.settlement.controller;
 
+import com.ms.petopia.api.settlement.dto.FairRevenueSummaryResponse;
 import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import com.ms.petopia.api.settlement.service.SettlementExportService;
 import com.ms.petopia.api.settlement.service.SettlementService;
@@ -269,6 +270,34 @@ class SettlementControllerTest {
     }
 
     @Test
+    void searchesSettlementsByFairIdOnly() throws Exception {
+        given(settlementService.getByFilter(10L, null)).willReturn(List.of(sampleResponse("PENDING")));
+
+        mockMvc.perform(get("/api/settlements").param("fairId", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void searchesSettlementsByBusinessIdOnly() throws Exception {
+        given(settlementService.getByFilter(null, 20L)).willReturn(List.of(sampleResponse("PENDING")));
+
+        mockMvc.perform(get("/api/settlements").param("businessId", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void returns400WhenSearchingSettlementsWithoutAnyFilter() throws Exception {
+        willThrow(new CommonException(ErrorCode.INVALID_INPUT_VALUE))
+                .given(settlementService).getByFilter(null, null);
+
+        mockMvc.perform(get("/api/settlements"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("C001"));
+    }
+
+    @Test
     void exportsSettlementsAsExcel() throws Exception {
         byte[] fakeExcelBytes = {1, 2, 3};
         given(settlementExportService.exportAsExcel(10L)).willReturn(fakeExcelBytes);
@@ -276,6 +305,32 @@ class SettlementControllerTest {
         mockMvc.perform(get("/api/fairs/10/settlements/export"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Content-Disposition", "attachment; filename=\"settlements-10.xlsx\""))
+                .andExpect(header().string("Content-Type",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+    }
+
+    @Test
+    void getsFairRevenueSummaries() throws Exception {
+        given(settlementService.getFairRevenueSummaries()).willReturn(List.of(
+                new FairRevenueSummaryResponse(10L, "댕댕펫", 70000L, 30000L, 100000L,
+                        new BigDecimal("0.1000"), 10000L, 90000L)
+        ));
+
+        mockMvc.perform(get("/api/settlements/revenue-summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].fairId").value(10))
+                .andExpect(jsonPath("$[0].grossAmount").value(100000));
+    }
+
+    @Test
+    void exportsFairRevenueSummariesAsExcel() throws Exception {
+        byte[] fakeExcelBytes = {1, 2, 3};
+        given(settlementExportService.exportRevenueSummaryAsExcel()).willReturn(fakeExcelBytes);
+
+        mockMvc.perform(get("/api/settlements/revenue-summary/export"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", "attachment; filename=\"settlement-revenue-summary.xlsx\""))
                 .andExpect(header().string("Content-Type",
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
     }
