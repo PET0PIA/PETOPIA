@@ -24,6 +24,8 @@ public record FairPublicSummaryResponse(
         String category,
         String posterImageUrl,
         String noticeText,
+        /** 반려동물 동반 가능 여부. 예약 화면이 반려동물 선택 UI를 띄울지 판단하는 기준이다. */
+        boolean petAllowed,
         String placeName,
         String address,
         String indoorOutdoor,

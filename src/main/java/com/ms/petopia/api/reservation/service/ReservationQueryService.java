@@ -4,6 +4,7 @@ import com.ms.petopia.api.reservation.dto.ReservationDetailResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListItemResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListRow;
+import com.ms.petopia.api.reservation.dto.ReservationPetResponse;
 import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -27,6 +28,7 @@ public class ReservationQueryService {
 
     private final ReservationMapper reservationMapper;
     private final ReservationTimeProvider timeProvider;
+    private final ReservationPetService reservationPetService;
 
     /** 현재 사용자의 예약 목록을 최신 생성 순으로 반환한다. */
     @Transactional(readOnly = true)
@@ -65,7 +67,8 @@ public class ReservationQueryService {
         if (row == null) {
             throw new CommonException(ErrorCode.RESERVATION_NOT_FOUND);
         }
-        return toDetailResponse(row, timeProvider.now());
+        //동반 반려동물은 예약 1건에 딸린 부가 정보라 상세에서만 조회한다(목록에는 넣지 않는다).
+        return toDetailResponse(row, timeProvider.now(), reservationPetService.getReservationPets(reservationId));
     }
 
     private ReservationListItemResponse toResponse(ReservationListRow row, LocalDateTime now) {
@@ -88,7 +91,11 @@ public class ReservationQueryService {
         );
     }
 
-    private ReservationDetailResponse toDetailResponse(ReservationListRow row, LocalDateTime now) {
+    private ReservationDetailResponse toDetailResponse(
+            ReservationListRow row,
+            LocalDateTime now,
+            List<ReservationPetResponse> pets
+    ) {
         String status = row.getReservationStatus();
         String type = row.getReservationType();
         boolean ended = isEnded(row, now);
@@ -120,7 +127,8 @@ public class ReservationQueryService {
                 canChangeVisitDate,
                 canCancel,
                 row.getPaymentId(),
-                paymentMethodLabel(row)
+                paymentMethodLabel(row),
+                pets
         );
     }
 

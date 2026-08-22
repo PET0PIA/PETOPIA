@@ -22,6 +22,9 @@ public class Pet {
     private LocalDate birthDate;
     private String gender;
     private Boolean isNeutered;
+    /** 알레르기 여부 3값. null=미입력 / false=없음 / true=있음 (is_neutered와 같은 패턴).
+     *  목록(pet_allergies)이 비었을 때 "없다고 답했다"와 "물어본 적 없다"를 구분하기 위해 따로 둔다. */
+    private Boolean hasAllergy;
     private String imageUrl;
     private LocalDateTime createdAt;
 }

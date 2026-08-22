@@ -31,6 +31,7 @@ import {
   type ReservationPaymentMethod,
 } from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
+import { PetCompanionPicker } from "../../components/reservation/PetCompanionPicker";
 import { formatEntryTime, formatVisitDateDow, reservationTypeLabels } from "./reservationDisplay";
 
 type ReservationType= "ADVANCE" | "ONSITE";
@@ -120,6 +121,8 @@ export function TicketReservationPage() {
   const [selectedVisitDate, setSelectedVisitDate] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false); // 사전예약 유료 약관
   const [onsiteAgreed, setOnsiteAgreed] = useState(false); // 현장예매 환불불가 약관
+  // 함께 갈 반려동물. 사전예약·현장예매가 같은 값을 쓴다(유형을 바꿀 때 초기화한다).
+  const [petIds, setPetIds] = useState<number[]>([]);
   const [phase, setPhase] = useState<Phase>("form");
 
   const [submitting, setSubmitting] = useState(false);
@@ -242,6 +245,7 @@ export function TicketReservationPage() {
     setType(next);
     setAgreed(false);
     setOnsiteAgreed(false);
+    setPetIds([]);
     setSubmitError(null);
   }
 
@@ -277,6 +281,8 @@ export function TicketReservationPage() {
       const created = await createAdvanceReservation(id, {
         visitDate: advanceVisitDate,
         ...(isPaid ? { reservationTermsAgreed: true, reservationTermsVersion: ADVANCE_TERMS_VERSION } : {}),
+        // 0마리도 유효한 예약이라(정책 P3) 빈 배열이면 필드를 빼고 보낸다.
+        ...(petIds.length > 0 ? { petIds } : {}),
       });
 
       if (created.paymentRequired) {
@@ -331,6 +337,7 @@ export function TicketReservationPage() {
       const created = await createOnsiteReservation(id, {
         reservationTermsAgreed: true,
         reservationTermsVersion: ONSITE_TERMS_VERSION,
+        ...(petIds.length > 0 ? { petIds } : {}),
       });
       if (created.paymentRequired) {
         // 현장예매는 이미 예약을 만들고 있었으므로 결제 단계로 넘길 값만 채운다.
@@ -581,6 +588,14 @@ export function TicketReservationPage() {
             </div>
           )}
 
+          {/* 동반 반려동물. 동반 금지 행사에서는 이 블록이 아예 그려지지 않는다(정책 P2). */}
+          <PetCompanionPicker
+            petAllowed={availability.petAllowed}
+            value={petIds}
+            onChange={setPetIds}
+            disabled={submitting}
+          />
+
           {/* 금액 */}
           <Card className="mb-6 p-5">
             <div className="flex items-center justify-between">
@@ -629,6 +644,13 @@ export function TicketReservationPage() {
             </p>
             <p className="mt-1 font-bold text-primary-strong">현장예매는 취소·환불이 불가능해요.</p>
           </Card>
+
+          <PetCompanionPicker
+            petAllowed={availability.petAllowed}
+            value={petIds}
+            onChange={setPetIds}
+            disabled={submitting}
+          />
 
           <label className="mb-6 flex cursor-pointer items-start gap-2.5 text-sm text-ink">
             <input

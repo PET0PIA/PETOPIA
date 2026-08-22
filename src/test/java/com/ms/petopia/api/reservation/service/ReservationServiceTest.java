@@ -23,6 +23,7 @@ import org.springframework.dao.DuplicateKeyException;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,6 +58,8 @@ class ReservationServiceTest {
 
     @Mock
     private EntryQrService entryQrService;
+    @Mock
+    private ReservationPetService reservationPetService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
@@ -101,6 +104,50 @@ class ReservationServiceTest {
         assertThat(inserted.getReservationTermsAgreedAt()).isNull();
         assertThat(inserted.getReservedAt()).isNotNull();
         verify(reservationMapper).insertCreatedHistory(RESERVATION_ID, USER_ID, "CONFIRMED");
+    }
+
+    @Test
+    @DisplayName("동반 반려동물을 함께 보내면 예약 행을 만든 뒤 스냅샷을 담는다")
+    void create_동반반려동물을_스냅샷으로담는다() {
+        givenDefaultCreationData(0);
+        given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260731ABC12345");
+        willAnswer(invocation -> {
+            ReservationInsertRow row = invocation.getArgument(0);
+            row.setReservationId(RESERVATION_ID);
+            return 1;
+        }).given(reservationMapper).insertReservation(any(ReservationInsertRow.class));
+
+        reservationService.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateReservationRequest(VISIT_DATE, null, null, List.of(7L, 9L))
+        );
+
+        verify(reservationPetService).attachPets(RESERVATION_ID, USER_ID, true, List.of(7L, 9L));
+        // 반려동물은 인원이 아니므로 정원은 1건만 점유한다(정책 P6).
+        verify(capacityMapper).occupy(FAIR_ID, VISIT_DATE);
+    }
+
+    @Test
+    @DisplayName("행사가 동반 금지면 그 사실을 그대로 넘겨 서버가 거절하게 한다")
+    void create_동반금지행사면_금지여부를_그대로넘긴다() {
+        ReservationCreationContext context = reservableContext(0);
+        context.setPetAllowed(false);
+        givenDefaultCreationData(context);
+        given(reservationNumberGenerator.generate(any(LocalDate.class))).willReturn("R20260731ABC12345");
+        willAnswer(invocation -> {
+            ReservationInsertRow row = invocation.getArgument(0);
+            row.setReservationId(RESERVATION_ID);
+            return 1;
+        }).given(reservationMapper).insertReservation(any(ReservationInsertRow.class));
+
+        reservationService.create(
+                FAIR_ID,
+                USER_ID,
+                new CreateReservationRequest(VISIT_DATE, null, null, List.of(7L))
+        );
+
+        verify(reservationPetService).attachPets(RESERVATION_ID, USER_ID, false, List.of(7L));
     }
 
     @Test
@@ -517,6 +564,7 @@ class ReservationServiceTest {
         context.setFairDateId(100L);
         context.setOperationDate(VISIT_DATE);
         context.setCapacity(100);
+        context.setPetAllowed(true);
         return context;
     }
 
