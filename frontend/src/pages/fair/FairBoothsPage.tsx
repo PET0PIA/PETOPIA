@@ -63,6 +63,9 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
   // 요청이 진행 중인 부스. 응답이 올 때까지 그 버튼을 잠가 add/remove 순서가 뒤집히지 않게 한다.
   const [pendingFavoriteIds, setPendingFavoriteIds] = useState<Set<number>>(new Set());
+  // 초기 즐겨찾기 목록 로딩이 끝났는지. 로딩 중에 별을 누르면 나중에 도착하는 초기 목록 응답이
+  // 그 사이의 낙관적 갱신을 통째로 덮어써버릴 수 있어(코드래빗 리뷰), 로딩이 끝나기 전까진 토글을 막는다.
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -84,7 +87,10 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
 
   // 내 즐겨찾기(로그인 시에만) → boothId Set으로 별표 상태 교차.
   useEffect(() => {
-    if (!loggedIn) return;
+    if (!loggedIn) {
+      setFavoritesLoaded(true); // 비로그인은 애초에 기다릴 목록이 없다
+      return;
+    }
     let alive = true;
     getMyFavoriteBooths()
       .then((favorites) => {
@@ -92,10 +98,14 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
       })
       .catch(() => {
         /* 별표만 안 채워질 뿐이라 무시 */
+      })
+      .finally(() => {
+        if (alive) setFavoritesLoaded(true);
       });
     return () => {
       alive = false;
       setFavoriteIds(new Set());
+      setFavoritesLoaded(false);
     };
   }, [fairId, loggedIn]);
 
@@ -104,6 +114,7 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
       navigate("/login");
       return;
     }
+    if (!favoritesLoaded) return; // 초기 목록 로딩 중엔 토글 자체를 막는다(버튼도 비활성화되지만 이중 방어)
     if (pendingFavoriteIds.has(boothId)) return;
     const wasFavorite = favoriteIds.has(boothId);
     // 낙관적 갱신: 먼저 UI를 바꾸고, 실패하면 되돌린다.
@@ -215,7 +226,7 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
                 <button
                   type="button"
                   onClick={() => toggleFavorite(group.boothId)}
-                  disabled={pending}
+                  disabled={pending || (loggedIn && !favoritesLoaded)}
                   aria-label={favorite ? `${group.businessName} 즐겨찾기 해제` : `${group.businessName} 즐겨찾기 추가`}
                   aria-pressed={favorite}
                   className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-full text-muted hover:bg-page disabled:cursor-not-allowed disabled:opacity-60"
