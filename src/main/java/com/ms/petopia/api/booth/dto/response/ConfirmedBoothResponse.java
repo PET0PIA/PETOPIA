@@ -15,6 +15,8 @@ public class ConfirmedBoothResponse {
     private Long boothId;
     private String businessName;
     private String imageUrl; // 부스 대표 이미지
+    private String category; // 취급 품목 카테고리 (사료/간식, 미용, 훈련, 굿즈 등)
+    private String targetAnimal; // 주 대상 동물 (DOG/CAT/ETC)
     private String slotNumber; // 슬롯 번호
     private BigDecimal posX; // 슬롯 좌표
     private BigDecimal posY; // 슬롯 좌표
