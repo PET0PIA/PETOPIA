@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, ImageOff, MapPin, PawPrint } from "lucide-react";
+import { CalendarDays, ChevronRight, ImageOff, MapPin, PawPrint, Store } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { KakaoMap } from "../../components/map/KakaoMap";
@@ -211,7 +211,16 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
               </p>
             )}
             <div>
-              <ReserveButton reservable={reservable} ended={ended} inProgress={inProgress} fairId={fair.fairId} size="lg" />
+              <div className="flex items-center gap-2">
+                <ReserveButton reservable={reservable} ended={ended} inProgress={inProgress} fairId={fair.fairId} size="lg" />
+                <Link
+                  to={`/fairs/${fair.fairId}/booths`}
+                  className="inline-flex min-h-12 items-center justify-center gap-1 rounded-button border border-line bg-card px-6 text-base font-bold text-ink transition hover:bg-page"
+                >
+                  <Store size={18} aria-hidden="true" />
+                  참가 부스 보기
+                </Link>
+              </div>
               {/* 사전예약 조회 실패 사유(R003 등)는 할 수 있는 행동이 없을 때만 띄운다 -
                   현장예매 버튼 아래에 "예약을 접수하지 않는 행사"라고 붙으면 서로 어긋난다. */}
               {!reservable && !ended && !inProgress && availabilityError && (
