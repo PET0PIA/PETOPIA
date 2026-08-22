@@ -29,6 +29,8 @@ class ReservationQueryServiceTest {
     private ReservationMapper reservationMapper;
     @Mock
     private ReservationTimeProvider timeProvider;
+    @Mock
+    private ReservationPetService reservationPetService;
     @InjectMocks
     private ReservationQueryService service;
 

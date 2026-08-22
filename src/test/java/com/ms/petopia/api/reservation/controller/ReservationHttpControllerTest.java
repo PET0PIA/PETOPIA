@@ -1,5 +1,6 @@
 package com.ms.petopia.api.reservation.controller;
 
+import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationRequest;
 import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationResponse;
 import com.ms.petopia.api.reservation.dto.CreateReservationRequest;
 import com.ms.petopia.api.reservation.dto.CreateReservationResponse;
@@ -12,6 +13,7 @@ import com.ms.petopia.api.reservation.dto.ReservationAvailabilityDateResponse;
 import com.ms.petopia.api.reservation.dto.ReservationAvailabilityResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListItemResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListResponse;
+import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateRequest;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateResponse;
 import com.ms.petopia.api.reservation.service.EntryQrService;
 import com.ms.petopia.api.reservation.service.GateEntryService;
@@ -146,7 +148,84 @@ class ReservationHttpControllerTest {
                 .andExpect(jsonPath("$.visitDate").value("2026-08-03"))
                 .andExpect(jsonPath("$.reservationStatus").value("CONFIRMED"));
 
-        verify(visitDateChangeService).changeVisitDate(eq(30L), eq(20L), any());
+        ArgumentCaptor<UpdateReservationVisitDateRequest> captor =
+                ArgumentCaptor.forClass(UpdateReservationVisitDateRequest.class);
+        verify(visitDateChangeService).changeVisitDate(eq(30L), eq(20L), captor.capture());
+        // petIds를 안 보내면 null이다 - 서비스가 "기존 동반 정보를 그대로 둔다"로 읽는다.
+        assertThat(captor.getValue().petIds()).isNull();
+    }
+
+    @Test
+    void changesVisitDateWithReplacedPets() throws Exception {
+        given(visitDateChangeService.changeVisitDate(any(), any(), any())).willReturn(
+                new UpdateReservationVisitDateResponse(
+                        30L,
+                        LocalDate.of(2026, 8, 2),
+                        LocalDate.of(2026, 8, 3),
+                        LocalTime.of(10, 0),
+                        LocalTime.of(18, 0),
+                        "CONFIRMED"
+                )
+        );
+
+        mockMvc.perform(patch("/api/v1/reservations/30/visit-date")
+                        .with(authenticatedAs(20L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"visitDate\":\"2026-08-03\",\"petIds\":[7]}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<UpdateReservationVisitDateRequest> captor =
+                ArgumentCaptor.forClass(UpdateReservationVisitDateRequest.class);
+        verify(visitDateChangeService).changeVisitDate(eq(30L), eq(20L), captor.capture());
+        assertThat(captor.getValue().petIds()).containsExactly(7L);
+    }
+
+    @Test
+    void changesVisitDateWithEmptyPetIdsToDropCompanions() throws Exception {
+        given(visitDateChangeService.changeVisitDate(any(), any(), any())).willReturn(
+                new UpdateReservationVisitDateResponse(
+                        30L,
+                        LocalDate.of(2026, 8, 2),
+                        LocalDate.of(2026, 8, 2),
+                        LocalTime.of(10, 0),
+                        LocalTime.of(18, 0),
+                        "CONFIRMED"
+                )
+        );
+
+        // 빈 배열은 "동반 해제"라는 뜻이라 생략(null)과 구분돼야 한다.
+        mockMvc.perform(patch("/api/v1/reservations/30/visit-date")
+                        .with(authenticatedAs(20L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"visitDate\":\"2026-08-02\",\"petIds\":[]}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<UpdateReservationVisitDateRequest> captor =
+                ArgumentCaptor.forClass(UpdateReservationVisitDateRequest.class);
+        verify(visitDateChangeService).changeVisitDate(eq(30L), eq(20L), captor.capture());
+        assertThat(captor.getValue().petIds()).isEmpty();
+    }
+
+    @Test
+    void createsOnsiteReservationWithPets() throws Exception {
+        given(onsiteReservationService.create(any(), any(), any())).willReturn(
+                new CreateOnsiteReservationResponse(
+                        30L, "R20260801ONSITE1", "ONSITE_DIRECT",
+                        LocalDate.of(2026, 8, 1), "CONFIRMED",
+                        0, false, null, "qr-token"
+                )
+        );
+
+        mockMvc.perform(post("/api/v1/fairs/10/onsite-reservations")
+                        .with(authenticatedAs(20L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"petIds\":[7,9]}"))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateOnsiteReservationRequest> captor =
+                ArgumentCaptor.forClass(CreateOnsiteReservationRequest.class);
+        verify(onsiteReservationService).create(eq(10L), eq(20L), captor.capture());
+        assertThat(captor.getValue().petIds()).containsExactly(7L, 9L);
     }
 
     @Test
@@ -194,6 +273,7 @@ class ReservationHttpControllerTest {
                 new ReservationAvailabilityResponse(
                         10L,
                         10_000,
+                        true,
                         List.of(new ReservationAvailabilityDateResponse(
                                 LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0), 35, true
                         ))
@@ -202,6 +282,7 @@ class ReservationHttpControllerTest {
 
         mockMvc.perform(get("/api/v1/fairs/10/reservation-availability"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.petAllowed").value(true))
                 .andExpect(jsonPath("$.reservationFee").value(10_000))
                 .andExpect(jsonPath("$.dates[0].remainingCapacity").value(35))
                 .andExpect(jsonPath("$.dates[0].available").value(true));
@@ -252,7 +333,8 @@ class ReservationHttpControllerTest {
                                 {
                                   "visitDate": "2026-08-02",
                                   "reservationTermsAgreed": true,
-                                  "reservationTermsVersion": "advance-v1"
+                                  "reservationTermsVersion": "advance-v1",
+                                  "petIds": [7, 9]
                                 }
                                 """))
                 .andExpect(status().isCreated())
@@ -266,6 +348,37 @@ class ReservationHttpControllerTest {
         assertThat(captured.visitDate()).isEqualTo(LocalDate.of(2026, 8, 2));
         assertThat(captured.reservationTermsAgreed()).isTrue();
         assertThat(captured.reservationTermsVersion()).isEqualTo("advance-v1");
+        // record에 호환 생성자를 하나 더 뒀는데도 Jackson이 정식(canonical) 생성자로 바인딩하는지 확인한다.
+        assertThat(captured.petIds()).containsExactly(7L, 9L);
+    }
+
+    @Test
+    void createsAdvanceReservationWithoutPetIdsWhenFieldIsAbsent() throws Exception {
+        LocalDateTime deadline = LocalDateTime.of(2026, 8, 1, 10, 10);
+        given(reservationService.create(any(), any(), any())).willReturn(
+                new CreateReservationResponse(
+                        30L, "R20260801ADVANCE1", "ADVANCE", "PENDING_PAYMENT",
+                        10_000, true, deadline, null
+                )
+        );
+
+        mockMvc.perform(post("/api/v1/fairs/10/reservations")
+                        .with(authenticatedAs(20L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "visitDate": "2026-08-02",
+                                  "reservationTermsAgreed": true,
+                                  "reservationTermsVersion": "advance-v1"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateReservationRequest> requestCaptor =
+                ArgumentCaptor.forClass(CreateReservationRequest.class);
+        verify(reservationService).create(eq(10L), eq(20L), requestCaptor.capture());
+        // 필드를 아예 안 보내면 null이다. 동반 없음과 같게 취급되고(P3), 서비스가 그렇게 처리한다.
+        assertThat(requestCaptor.getValue().petIds()).isNull();
     }
 
     @Test

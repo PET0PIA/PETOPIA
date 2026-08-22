@@ -24,6 +24,8 @@ interface FormState {
   name: string;
   description: string;
   category: "" | "DOG" | "CAT" | "ETC";
+  /** 반려동물 동반 가능 여부. 서버가 NOT NULL이라 "선택 안 함"이 없다 - 기본값은 동반 가능. */
+  petAllowed: "true" | "false";
   noticeText: string;
   placeName: string;
   address: string;
@@ -46,6 +48,7 @@ const initialForm: FormState = {
   name: "",
   description: "",
   category: "",
+  petAllowed: "true",
   noticeText: "",
   placeName: "",
   address: "",
@@ -129,6 +132,7 @@ function toRequest(form: FormState, posterImageObjectKey: string | null): Create
     category: form.category || undefined,
     posterImageObjectKey: posterImageObjectKey ?? undefined,
     noticeText: form.noticeText.trim() || undefined,
+    petAllowed: form.petAllowed === "true",
     placeName: form.placeName.trim() || undefined,
     address: form.address.trim() || undefined,
     indoorOutdoor: form.indoorOutdoor || undefined,
@@ -301,6 +305,14 @@ export function FairApplicationNewPage() {
                 <div>
                   {label("description", "행사 소개")}
                   <Textarea id="description" value={form.description} onChange={(event) => update("description", event.target.value)} placeholder="행사를 소개해 주세요." />
+                </div>
+                <div>
+                  {label("petAllowed", "반려동물 동반")}
+                  <Select id="petAllowed" value={form.petAllowed} onChange={(event) => update("petAllowed", event.target.value as FormState["petAllowed"])}>
+                    <option value="true">동반 가능</option>
+                    <option value="false">동반 금지</option>
+                  </Select>
+                  <p className="mt-1.5 text-xs text-muted">동반 금지로 두면 관람객이 예약할 때 반려동물을 선택할 수 없어요.</p>
                 </div>
                 <div>
                   {label("noticeText", "관람 안내사항")}

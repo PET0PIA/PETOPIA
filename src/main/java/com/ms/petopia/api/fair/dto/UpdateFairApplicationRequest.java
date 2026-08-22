@@ -25,6 +25,11 @@ public record UpdateFairApplicationRequest(
          */
         String posterImageObjectKey,
         String noticeText,
+        /**
+         * 반려동물 동반 가능 여부. 다른 필드와 같은 부분 수정 규칙을 따른다 - 요청에 이 필드가
+         * 없으면 기존 값을 유지한다. NOT NULL 컬럼이라 명시적 null로 지울 수는 없다.
+         */
+        Boolean petAllowed,
 
         String placeName,
         String address,

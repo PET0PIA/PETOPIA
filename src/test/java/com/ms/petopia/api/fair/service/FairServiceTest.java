@@ -196,7 +196,7 @@ class FairServiceTest {
         }).given(fairMapper).insert(any(Fair.class));
 
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
-                "2026 서울 펫페어", "설명", "DOG", "tmp/image/poster.jpg", null,
+                "2026 서울 펫페어", "설명", "DOG", "tmp/image/poster.jpg", null, null,
                 "코엑스", "서울", "INDOOR",
                 null, null, null, null, null, null,
                 0L, null, null,
@@ -264,10 +264,50 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("반려동물 동반 금지로 신청하면 그 값을 저장한다")
+    void createApplication_동반금지면_그값을_저장한다() {
+        willAnswer(invocation -> {
+            Fair fair = invocation.getArgument(0);
+            fair.setFairId(FAIR_ID);
+            return 1;
+        }).given(fairMapper).insert(any(Fair.class));
+
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", "설명", "DOG", null, null, false,
+                "코엑스", "서울", "INDOOR",
+                null, null, null, null, null, null,
+                0L, null, null,
+                "김담당", "010-0000-0000", "manager@petopia.example"
+        );
+
+        fairService.createApplication(USER_ID, request);
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).insert(captor.capture());
+        assertThat(captor.getValue().getPetAllowed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("동반 여부를 보내지 않으면 null로 저장을 맡겨 DB 기본값(동반 가능)이 적용된다")
+    void createApplication_동반여부를_안보내면_null로_맡긴다() {
+        willAnswer(invocation -> {
+            Fair fair = invocation.getArgument(0);
+            fair.setFairId(FAIR_ID);
+            return 1;
+        }).given(fairMapper).insert(any(Fair.class));
+
+        fairService.createApplication(USER_ID, validRequest());
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).insert(captor.capture());
+        assertThat(captor.getValue().getPetAllowed()).isNull();
+    }
+
+    @Test
     @DisplayName("예약금이 음수면 INVALID_INPUT_VALUE를 던진다")
     void createApplication_예약금음수면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
-                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
                 -1L, null, null,
                 "김담당", null, "manager@petopia.example"
@@ -280,7 +320,7 @@ class FairServiceTest {
     @DisplayName("참가업체 모집 종료일이 시작일보다 빠르면 FAIR_INVALID_VENDOR_RECRUIT_PERIOD를 던진다")
     void createApplication_모집기간이_거꾸로면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
-                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
                 FUTURE_END, FUTURE_START, null, null, null, null,
                 null, null, null,
                 "김담당", null, "manager@petopia.example"
@@ -292,7 +332,7 @@ class FairServiceTest {
     @DisplayName("사전예약 종료일이 시작일보다 빠르면 FAIR_INVALID_RESERVATION_PERIOD를 던진다")
     void createApplication_예약기간이_거꾸로면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
-                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
                 null, null, FUTURE_END, FUTURE_START, null, null,
                 null, null, null,
                 "김담당", null, "manager@petopia.example"
@@ -304,7 +344,7 @@ class FairServiceTest {
     @DisplayName("행사 운영 종료일이 시작일보다 빠르면 FAIR_INVALID_OPERATION_PERIOD를 던진다")
     void createApplication_운영기간이_거꾸로면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
-                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
                 null, null, null, null, FUTURE_END, FUTURE_START,
                 null, null, null,
                 "김담당", null, "manager@petopia.example"
@@ -332,7 +372,7 @@ class FairServiceTest {
     @DisplayName("참가업체 모집 시작일이 오늘보다 이전이면 FAIR_VENDOR_RECRUIT_START_IN_PAST를 던진다")
     void createApplication_모집시작일이_오늘보다이전이면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
-                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
                 NOW.toLocalDate().minusDays(1), FUTURE_END, null, null, null, null,
                 null, null, null,
                 "김담당", null, "manager@petopia.example"
@@ -344,7 +384,7 @@ class FairServiceTest {
     @DisplayName("예약 시작일이 오늘보다 이전이면 FAIR_RESERVATION_START_IN_PAST를 던진다")
     void createApplication_예약시작일이_오늘보다이전이면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
-                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
                 null, null, NOW.toLocalDate().minusDays(1), FUTURE_END, null, null,
                 null, null, null,
                 "김담당", null, "manager@petopia.example"
@@ -356,7 +396,7 @@ class FairServiceTest {
     @DisplayName("행사 운영 시작일이 오늘보다 이전이면 FAIR_OPERATION_START_IN_PAST를 던진다")
     void createApplication_운영시작일이_오늘보다이전이면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
-                "2026 서울 펫페어", null, null, null, null, null, null, null,
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
                 null, null, null, null, NOW.toLocalDate().minusDays(1), FUTURE_END,
                 null, null, null,
                 "김담당", null, "manager@petopia.example"
@@ -668,7 +708,7 @@ class FairServiceTest {
                 .willReturn(Optional.of(new GeoPoint(BigDecimal.valueOf(35.1), BigDecimal.valueOf(129.0))));
 
         UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
-                null, null, null, null, null,
+                null, null, null, null, null, null,
                 null, "부산", null,
                 null, null, null, null, null, null,
                 null, null, null,
@@ -690,7 +730,7 @@ class FairServiceTest {
         given(fairMapper.updateApplication(any(), any())).willReturn(1);
 
         UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
-                "이름만변경", null, null, null, null,
+                "이름만변경", null, null, null, null, null,
                 null, null, null,
                 null, null, null, null, null, null,
                 null, null, null,
@@ -801,7 +841,7 @@ class FairServiceTest {
         given(fairMapper.updateApplication(any(), any())).willReturn(1);
 
         UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
-                "이름", null, null, null, null,
+                "이름", null, null, null, null, null,
                 null, null, null,
                 null, null, null, null, null, null,
                 null, null, null,
@@ -819,10 +859,51 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("동반 여부를 수정하면 그 값과 필드명을 함께 넘긴다")
+    void updateApplication_동반여부를_수정하면_넘긴다() {
+        given(fairMapper.selectById(FAIR_ID)).willReturn(fairWithStatus(FairStatus.RECEIVED));
+        given(fairMapper.updateApplication(any(), any())).willReturn(1);
+
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                "이름", null, null, null, null, false,
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null,
+                "김담당", null, "manager@petopia.example"
+        );
+
+        fairService.updateApplication(FAIR_ID, USER_ID, request, Set.of("name", "petAllowed", "managerName"));
+
+        ArgumentCaptor<Fair> fairCaptor = ArgumentCaptor.forClass(Fair.class);
+        ArgumentCaptor<Set> setFieldsCaptor = ArgumentCaptor.forClass(Set.class);
+        verify(fairMapper).updateApplication(fairCaptor.capture(), setFieldsCaptor.capture());
+        assertThat(fairCaptor.getValue().getPetAllowed()).isFalse();
+        assertThat(setFieldsCaptor.getValue()).contains("petAllowed");
+    }
+
+    @Test
+    @DisplayName("동반 여부를 명시적으로 null로 지우려 하면 INVALID_INPUT_VALUE를 던진다(NOT NULL 컬럼)")
+    void updateApplication_동반여부를_null로_지우면_예외를_던진다() {
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                "이름", null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                null, null, null,
+                "김담당", null, "manager@petopia.example"
+        );
+
+        assertErrorCode(
+                () -> fairService.updateApplication(FAIR_ID, USER_ID, request, Set.of("name", "petAllowed", "managerName")),
+                ErrorCode.INVALID_INPUT_VALUE
+        );
+        verify(fairMapper, never()).updateApplication(any(), any());
+    }
+
+    @Test
     @DisplayName("수정 가능한 필수 필드(name/managerName)를 명시적으로 비우려 하면 INVALID_INPUT_VALUE를 던진다")
     void updateApplication_필수필드를_명시적으로_비우면_예외를_던진다() {
         UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
-                null, null, null, null, null,
+                null, null, null, null, null, null,
                 null, null, null,
                 null, null, null, null, null, null,
                 null, null, null,
@@ -843,7 +924,7 @@ class FairServiceTest {
         given(fairMapper.updateApplication(any(), any())).willReturn(1);
 
         UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
-                "이름", null, null, null, null,
+                "이름", null, null, null, null, null,
                 null, null, null,
                 null, null, null, null, null, null,
                 null, null, null,
@@ -1211,7 +1292,7 @@ class FairServiceTest {
 
     private CreateFairApplicationRequest requestWithName(String name) {
         return new CreateFairApplicationRequest(
-                name, "설명", "DOG", null, null,
+                name, "설명", "DOG", null, null, null,
                 "코엑스", "서울", "INDOOR",
                 null, null, null, null, null, null,
                 0L, null, null,
@@ -1221,7 +1302,7 @@ class FairServiceTest {
 
     private UpdateFairApplicationRequest updateRequest(String name) {
         return new UpdateFairApplicationRequest(
-                name, "설명", "DOG", null, null,
+                name, "설명", "DOG", null, null, null,
                 "코엑스", "서울", "INDOOR",
                 null, null, null, null, null, null,
                 0L, null, null,

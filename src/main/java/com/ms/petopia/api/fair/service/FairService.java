@@ -114,6 +114,8 @@ public class FairService {
         fair.setCategory(request.category());
         fair.setPosterImageUrl(resolveImageUrl(request.posterImageObjectKey()));
         fair.setNoticeText(request.noticeText());
+        // null이면 매퍼가 컬럼 자체를 빼고 INSERT하므로 DB 기본값(TRUE)이 들어간다(정책 P1).
+        fair.setPetAllowed(request.petAllowed());
         fair.setPlaceName(request.placeName());
         fair.setAddress(request.address());
         applyGeocoding(fair, request.address());
@@ -358,6 +360,7 @@ public class FairService {
         // 매퍼가 이 값을 무시하고 기존 URL을 그대로 둔다.
         update.setPosterImageUrl(setFields.contains("posterImageUrl") ? resolveImageUrl(request.posterImageObjectKey()) : null);
         update.setNoticeText(request.noticeText());
+        update.setPetAllowed(request.petAllowed());
         update.setPlaceName(request.placeName());
         update.setAddress(request.address());
         if (setFields.contains("address")) {
@@ -628,6 +631,9 @@ public class FairService {
                 fair.getCategory(),
                 fair.getPosterImageUrl(),
                 fair.getNoticeText(),
+                //NOT NULL 컬럼이지만 pet_allowed를 SELECT하지 않는 쿼리로 읽은 Fair면 null일 수
+                //있다 - 그때는 정책 기본값(동반 가능)으로 본다.
+                !Boolean.FALSE.equals(fair.getPetAllowed()),
                 fair.getPlaceName(),
                 fair.getAddress(),
                 fair.getIndoorOutdoor(),
@@ -662,6 +668,7 @@ public class FairService {
                 fair.getCategory(),
                 fair.getPosterImageUrl(),
                 fair.getNoticeText(),
+                !Boolean.FALSE.equals(fair.getPetAllowed()),
                 fair.getPlaceName(),
                 fair.getAddress(),
                 fair.getIndoorOutdoor(),
@@ -682,6 +689,7 @@ public class FairService {
                 fair.getPlaceName(),
                 fair.getOperationStartDate(),
                 fair.getOperationEndDate(),
+                !Boolean.FALSE.equals(fair.getPetAllowed()),
                 Boolean.TRUE.equals(fair.getReservable()),
                 Boolean.TRUE.equals(fair.getRecruiting())
         );
@@ -781,7 +789,9 @@ public class FairService {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if ((setFields.contains("name") && request.name() == null)
-                || (setFields.contains("managerName") && request.managerName() == null)) {
+                || (setFields.contains("managerName") && request.managerName() == null)
+                // pet_allowed는 NOT NULL 컬럼이다 - 명시적 null로 지우려 하면 UPDATE에서 터진다.
+                || (setFields.contains("petAllowed") && request.petAllowed() == null)) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
         if (request.reservationFee() != null && request.reservationFee() < 0) {
