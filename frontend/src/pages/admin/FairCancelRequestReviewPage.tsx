@@ -330,9 +330,10 @@ export function FairCancelRequestReviewPage() {
                 <td className="px-4 py-3 text-muted">{formatDateTime(request.reviewedAt)}</td>
                 <td className="px-4 py-3">
                   {request.status === "PENDING" && (
-                    <div className="flex justify-end gap-2">
+                    <div className="flex shrink-0 justify-end gap-2">
                       <Button
                         variant="outline"
+                        className="shrink-0 whitespace-nowrap"
                         onClick={() => {
                           setRejectTarget(request);
                           setRejectReason("");
@@ -342,7 +343,7 @@ export function FairCancelRequestReviewPage() {
                       >
                         <X size={16} />반려
                       </Button>
-                      <Button onClick={() => handleApprove(request)} disabled={reviewingId === request.fairCancelRequestId}>
+                      <Button className="shrink-0 whitespace-nowrap" onClick={() => handleApprove(request)} disabled={reviewingId === request.fairCancelRequestId}>
                         <Check size={16} />
                         {reviewingId === request.fairCancelRequestId ? "처리 중..." : "승인"}
                       </Button>
