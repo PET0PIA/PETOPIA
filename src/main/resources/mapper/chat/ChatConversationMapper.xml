@@ -56,16 +56,23 @@
       같은 대화에 사용자 메시지가 두 번 접수될 수 있다.
     -->
     <!--
-      WAITING_AGENT도 허용 목록에 있다. 이미 대기 중인 대화에 사용자가 말을 더 보태는 건
-      막을 이유가 없다 - 설명을 덧붙이거나 오타를 정정하는 정상적인 사용이다.
-      막아야 하는 건 AI가 답한 뒤(AI_ANSWERED)뿐이고, 그 값은 여기 없다.
+      CLOSED를 뺀 모든 상태가 허용 목록에 있다. ChatConversationStatus.acceptsUserMessage()와
+      같은 규칙이고, 둘 중 실제 판정 주체는 여기다 - enum만 고치고 이 목록을 놓치면 컴파일은
+      통과하고 런타임에서 조용히 막힌다.
+
+      AI_HANDLED가 특히 중요하다. 자동 응대가 끝난 대화에 사용자가 다시 묻는 것이 정상
+      경로이므로, 이 값이 빠지면 "AI가 답한 뒤 입력이 열려 있는데 전송은 거부되는" 화면이 된다.
+      WAITING_AGENT도 그대로 둔다 - 대기 중에 설명을 덧붙이거나 오타를 정정하는 정상적인 사용이다.
+
+      상태를 나열하지 않고 status != 'CLOSED'로 줄일 수 있지만 그러지 않는다. 나중에 잠기는
+      상태가 하나 더 생기면 이 statement가 조용히 그것까지 허용해버린다.
     -->
     <update id="markWaitingAgent">
         UPDATE chat_conversation
            SET status = 'WAITING_AGENT'
              , last_message_at = #{now}
          WHERE conversation_id = #{conversationId}
-           AND status IN ('BOT', 'WAITING_AGENT', 'IN_PROGRESS')
+           AND status IN ('BOT', 'WAITING_AGENT', 'AI_HANDLED', 'IN_PROGRESS')
     </update>
 
     <!--
@@ -80,40 +87,58 @@
     </select>
 
     <!--
-      AI가 답한 직후 잠근다. WAITING_AGENT일 때만 넘어가는 이유:
-      비동기로 답이 도착하는 사이 상담사가 먼저 답했거나(IN_PROGRESS) 사용자가 종료했을 수
-      있는데, 그때 뒤늦게 잠그면 이미 풀린 대화를 다시 잠그는 셈이 된다.
+      AI가 응대를 마쳤다고 표시한다. 잠그는 것이 아니다 - AI_HANDLED에서도 입력은 열려 있고,
+      바뀌는 것은 "상담사 대기열에 뜨는지"뿐이다.
+
+      WAITING_AGENT일 때만 넘어가는 조건은 잠금 장치가 아니라 경쟁 조건 가드다. 비동기로
+      답이 도착하는 사이 상담사가 먼저 답했거나(IN_PROGRESS) 사용자가 종료했을(CLOSED) 수
+      있는데, 그 대화를 뒤늦게 "자동 응대로 마무리됨"으로 되돌리면 사람이 답한 상담이
+      대기열에서 사라지거나 종료가 취소된다.
     -->
-    <update id="markAiAnswered">
+    <update id="markAiHandled">
         UPDATE chat_conversation
-           SET status = 'AI_ANSWERED'
+           SET status = 'AI_HANDLED'
              , last_message_at = #{now}
          WHERE conversation_id = #{conversationId}
            AND status = 'WAITING_AGENT'
     </update>
 
     <!--
-      AI 답변 슬롯 선점. 조건과 증가를 한 문장에 두어, 동시에 들어온 두 요청 중
-      하나만 통과하게 한다. 반영 행 수가 곧 "부를 수 있는가"의 답이다.
+      진행 중인 AI 호출 선점. 횟수 한도가 아니라 중복 제거다 - 답을 기다리다 같은 질문을
+      연달아 보내면 호출이 동시에 여러 건 돌고, 답변이 순서 없이 한 창에 쌓인다.
+
+      조건과 표시를 한 문장에 두어 동시에 들어온 두 요청 중 하나만 통과하게 한다.
+      반영 행 수가 곧 "지금 부를 수 있는가"의 답이다.
+
+      staleBefore보다 오래된 선점은 없는 것으로 본다. 프로세스가 죽어 반납되지 않은 행을
+      그냥 두면 그 대화의 자동 응대가 영구히 막히는데, 그건 한 번의 배포 사고가 남기기에
+      너무 긴 흔적이다.
     -->
-    <update id="claimAiAnswer">
+    <update id="claimAiCall">
+        UPDATE chat_conversation
+           SET ai_call_started_at = #{now}
+         WHERE conversation_id = #{conversationId}
+           AND status != 'CLOSED'
+           AND (ai_call_started_at IS NULL OR ai_call_started_at &lt; #{staleBefore})
+    </update>
+
+    <!--
+      선점 반납. 성공·이관·예외·큐 거부 네 경로 모두에서 불린다.
+      조건 없이 NULL로 되돌리는 이유: 이 값은 "누가 잡았는지"를 담지 않으므로 비교할 소유자가
+      없고, stale 판정으로 다른 호출이 이미 새로 잡았다면 그쪽도 곧 반납한다. 최악의 경우
+      한 번 더 호출될 수 있을 뿐이고, 잠금이 남는 쪽이 훨씬 나쁘다.
+    -->
+    <update id="releaseAiCall">
+        UPDATE chat_conversation
+           SET ai_call_started_at = NULL
+         WHERE conversation_id = #{conversationId}
+    </update>
+
+    <!-- 지표용 카운터. 한도 집행에서 빠졌으므로 조건 없이 올린다. -->
+    <update id="incrementAiAnswerCount">
         UPDATE chat_conversation
            SET ai_answer_count = ai_answer_count + 1
          WHERE conversation_id = #{conversationId}
-           AND ai_answer_count &lt; #{limit}
-           AND status != 'CLOSED'
-    </update>
-
-    <!-- 0 아래로 내려가지 않게 막는다. 반납이 두 번 불려도 음수가 되지 않아야 한다. -->
-    <select id="selectAiAnswerCount" resultType="int">
-        SELECT ai_answer_count FROM chat_conversation WHERE conversation_id = #{conversationId}
-    </select>
-
-    <update id="releaseAiAnswer">
-        UPDATE chat_conversation
-           SET ai_answer_count = ai_answer_count - 1
-         WHERE conversation_id = #{conversationId}
-           AND ai_answer_count &gt; 0
     </update>
 
     <!--

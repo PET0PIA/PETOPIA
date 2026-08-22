@@ -11,6 +11,7 @@ import com.ms.petopia.api.chat.entity.ChatConversation;
 import com.ms.petopia.api.chat.entity.ChatMenu;
 import com.ms.petopia.api.chat.entity.ChatMessage;
 import com.ms.petopia.api.chat.mapper.ChatConversationMapper;
+import com.ms.petopia.api.chat.mapper.ChatMenuClickMapper;
 import com.ms.petopia.api.chat.mapper.ChatMenuMapper;
 import com.ms.petopia.api.chat.mapper.ChatMessageMapper;
 import com.ms.petopia.api.chat.mapper.ChatSettingMapper;
@@ -22,6 +23,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -48,22 +50,24 @@ public class ChatConversationService {
     private static final int HISTORY_PAGE_SIZE = 50;
 
     /**
-     * 대화당 AI 답변 허용 횟수.
+     * 진행 중이라고 볼 AI 호출의 최대 나이.
      *
-     * <p>마지막 한 번을 답한 뒤 자동 답변을 닫고 입력을 잠근다. 그 전까지는 잠그지 않으므로
-     * 사용자는 이어서 물어볼 수 있다.
+     * <p>이보다 오래된 선점은 없는 것으로 보고 다시 선점한다. 프로세스가 죽어 반납되지 않은
+     * 행을 그냥 두면 그 대화의 자동 응대가 영구히 막히는데, 한 번의 배포 사고가 남기기에
+     * 너무 긴 흔적이다.
      *
-     * <p><b>이 한도만으로는 상한이 되지 못한다.</b> 카운터가 대화 행에 있어서 상담을 종료하고
-     * 새로 시작하면 0부터 다시 센다. 실제 상한은 {@link ChatAiRateLimiter}의 시간창이 만든다 -
-     * 이 값을 바꾸면 거기 {@code HOURLY_LIMIT}도 같이 맞춰야 한다.
+     * <p>3분은 큐 대기(core 2 / max 4 / queue 50)와 Claude 호출을 합쳐 넉넉히 잡은 값이다.
+     * 이보다 오래 걸린 호출은 중복을 감수하는 편이 낫다 - 그 시점의 사용자는 이미 답을
+     * 포기했을 가능성이 높고, 그렇다면 새 질문에 답하는 쪽이 맞다.
      */
-    private static final int AI_ANSWER_LIMIT = 3;
+    private static final Duration AI_CALL_STALE_AFTER = Duration.ofMinutes(3);
 
     private static final String SETTING_GREETING = "GREETING";
     private static final String SETTING_AGENT_RECEIVED = "AGENT_RECEIVED";
     private static final String SETTING_OFFLINE_NOTICE = "OFFLINE_NOTICE";
 
     private final ChatMenuMapper menuMapper;
+    private final ChatMenuClickMapper menuClickMapper;
     private final ChatConversationMapper conversationMapper;
     private final ChatMessageMapper messageMapper;
     private final ChatSettingMapper settingMapper;
@@ -71,7 +75,6 @@ public class ChatConversationService {
     private final ChatTimeProvider timeProvider;
     private final ChatMessageWriter messageWriter;
     private final ClaudeSupportResponder responder;
-    private final ChatAiRateLimiter rateLimiter;
     private final ApplicationEventPublisher eventPublisher;
 
     /**
@@ -82,6 +85,9 @@ public class ChatConversationService {
      */
     @Transactional(readOnly = true)
     public ChatBootstrapResponse bootstrap(Long userId, String guestKey) {
+        // 고정 답변을 여기서 함께 내린다. 클릭 시 추가 요청이 없어야 "누르면 바로 답변"이
+        // 성립한다. 공개 안내문이라 미리 내려도 노출 위험이 없고, 버튼 4~5개 × 200자 내외라
+        // 응답 크기도 무시할 수준이다. 버튼이 수십 개로 늘면 클릭 시 조회로 되돌린다.
         List<ChatMenuResponse> menus = menuMapper.selectActiveMenus().stream()
                 .map(ChatMenuResponse::from)
                 .toList();
@@ -100,24 +106,26 @@ public class ChatConversationService {
                     messageMapper.selectRecentByRequester(userId, guestKey, HISTORY_PAGE_SIZE));
         }
 
+        // hasHistory를 따로 내리는 이유: 프론트가 history.length로 재현하면 나중에 이력
+        // 페이지네이션이 붙는 순간(첫 페이지가 비어 있을 수 있다) 판정이 어긋난다.
         return new ChatBootstrapResponse(
                 setting(SETTING_GREETING),
                 menus,
                 businessHourService.isWithinBusinessHours(timeProvider.now()),
                 history,
+                !history.isEmpty(),
                 ongoing);
     }
 
     /**
-     * 문의 유형 버튼을 눌러 대화를 시작한다.
+     * 상담원 연결을 눌러 대화를 시작한다.
      *
-     * <p>유형에 따라 시작 상태가 다르다.
-     * <ul>
-     *   <li>{@code FIXED} - 저장된 답변을 바로 붙이고 {@code BOT}으로 둔다. 사용자는 이어서
-     *       자유롭게 질문할 수 있다.</li>
-     *   <li>{@code AI}/{@code AGENT} - 접수 안내만 남기고 {@code BOT}으로 둔다. 아직 질문을
-     *       받지 않았으므로 여기서 잠그면 안 된다 - 잠그는 시점은 사용자가 질문을 보낸 뒤다.</li>
-     * </ul>
+     * <p><b>{@code AGENT} 유형만 받는다.</b> 고정형은 세션을 만들지 않고 위젯이 답변을 즉시
+     * 렌더한다. 프론트가 고정형에 이 API를 부르지 않는 것과 별개로 여기서 막는 이유는, 요청을
+     * 직접 만들면 그 규칙이 그대로 뚫리기 때문이다 - 유형 판정의 단일 주체는 서버여야 한다.
+     *
+     * <p>접수 안내만 남기고 {@code BOT}으로 둔다. 아직 질문을 받지 않았으므로 대기열에 올리면
+     * 안 된다 - 올리는 시점은 사용자가 질문을 보낸 뒤다.
      *
      * @param guestKey 클라이언트가 이미 갖고 있으면 그대로 쓰고, 없으면 새로 발급한다.
      */
@@ -126,6 +134,9 @@ public class ChatConversationService {
         ChatMenu menu = menuMapper.selectActiveByCode(menuCode);
         if (menu == null) {
             throw new CommonException(ErrorCode.CHAT_MENU_NOT_FOUND);
+        }
+        if (menu.getAnswerType() != ChatAnswerType.AGENT) {
+            throw new CommonException(ErrorCode.CHAT_MENU_NOT_CONNECTABLE);
         }
 
         // 로그인 사용자에게도 게스트 키를 발급해 둔다. 상담 도중 로그아웃하거나 세션이
@@ -149,14 +160,8 @@ public class ChatConversationService {
         return toResponse(reloaded, issuedGuestKey);
     }
 
-    /** 유형별 첫 메시지. 고정 답변이면 답변을, 상담사 연결이면 접수 안내를 남긴다. */
+    /** 접수 안내. 상담원 연결만 세션을 만들므로 유형 분기가 없다. */
     private void appendOpeningMessages(ChatConversation conversation, ChatMenu menu) {
-        if (menu.getAnswerType() == ChatAnswerType.FIXED) {
-            messageWriter.append(conversation.getConversationId(), ChatSenderType.BOT, null,
-                    menu.getMenuId(), menu.getFixedAnswer());
-            return;
-        }
-
         messageWriter.append(conversation.getConversationId(), ChatSenderType.SYSTEM, null,
                 menu.getMenuId(), setting(SETTING_AGENT_RECEIVED));
 
@@ -184,19 +189,17 @@ public class ChatConversationService {
 
         LocalDateTime now = timeProvider.now();
         if (conversationMapper.markWaitingAgent(conversationId, now) != 1) {
-            // 여기 걸리는 경우는 둘뿐이다(AI_ANSWERED, CLOSED). 둘 다 "지금은 못 보낸다"지만
-            // 하나는 상담사 답변을 기다리면 풀리고 다른 하나는 영영 풀리지 않아,
-            // 사용자가 할 행동이 다르다.
-            throw new CommonException(conversation.getStatus() == ChatConversationStatus.CLOSED
-                    ? ErrorCode.CHAT_ALREADY_CLOSED
-                    : ErrorCode.CHAT_AWAITING_AGENT);
+            // 이제 여기 걸리는 경우는 종료된 대화 하나뿐이다. 상태를 다시 읽어 분기하지 않고
+            // 바로 그 오류를 던진다 - 조건부 UPDATE가 실패했다는 사실 자체가 그 판정이다.
+            throw new CommonException(ErrorCode.CHAT_ALREADY_CLOSED);
         }
 
         messageWriter.append(conversationId, ChatSenderType.USER, userId, null, content);
-        // 사용자가 다른 탭·기기에서도 같은 대화를 열어둘 수 있다. 잠금은 그 화면에도 즉시 걸려야 한다.
+        // 사용자가 다른 탭·기기에서도 같은 대화를 열어둘 수 있다. 상태 변화는 그 화면에도
+        // 즉시 반영돼야 한다.
         messageWriter.publishStatus(conversationId, ChatConversationStatus.WAITING_AGENT);
 
-        requestAiAnswerIfEligible(conversation, userId, guestKey);
+        requestAiAnswerIfEligible(conversation, now);
 
         // 게스트로 시작한 대화에 로그인 상태로 메시지를 보냈다면 이 시점에 승계한다.
         if (userId != null && conversation.getUserId() == null) {
@@ -210,52 +213,63 @@ public class ChatConversationService {
     /**
      * 조건이 맞으면 AI 답변을 예약한다.
      *
-     * <p>조건은 넷이고, 하나라도 어긋나면 그냥 상담사 대기로 둔다.
+     * <p>조건은 셋이고, 하나라도 어긋나면 그냥 상담사 대기로 둔다.
      * <ol>
-     *   <li>문의 유형이 {@code AI}일 것 - 고정 답변·단순 연결 유형은 AI를 쓰지 않는다.</li>
+     *   <li>응답기가 켜져 있을 것(API 키가 있을 것).</li>
      *   <li><b>상담사가 아직 개입하지 않았을 것</b> - 사람이 답을 시작한 대화에 AI가 다시
      *       끼어들면 두 목소리가 생기고, 최악의 경우 상담사가 한 말을 자동 답변이 뒤집는다.
      *       배정된 상담사가 있다는 건 이미 답변이 나갔다는 뜻이다.</li>
      *   <li>운영시간 밖일 것 - 상담사가 곧 답할 상황에 AI를 끼우면 대화만 중복된다.</li>
-     *   <li>요청자의 하루 한도가 남아 있을 것.</li>
-     *   <li>대화당 한도를 선점할 수 있을 것 - 이 선점이 한도의 실제 집행 지점이다.</li>
      * </ol>
+     *
+     * <p><b>문의 유형 조건은 없다.</b> 이제 세션을 만드는 유형이 상담원 연결 하나뿐이라,
+     * 유형을 다시 확인하는 것은 같은 판정을 두 번 하는 일이다.
+     *
+     * <p><b>횟수 한도도 없다.</b> 사람이 답할 수 없는 시간에 답을 아낄 이유가 없다. 남은
+     * 제약은 진행 중 호출 1건이고, 그건 한도가 아니라 중복 제거다 - 답을 기다리다 같은 질문을
+     * 연달아 보내면 호출이 동시에 여러 건 돌고 답변이 순서 없이 쌓인다. 막혔더라도 사용자에게
+     * 아무 안내도 하지 않는다. 이미 같은 대화의 답변이 오는 중이므로 기다리면 도착한다.
      *
      * <p>선점까지 성공하면 이벤트만 남기고 끝낸다. 실제 호출은 커밋 뒤 다른 스레드에서 일어난다.
      */
-    private void requestAiAnswerIfEligible(ChatConversation conversation, Long userId, String guestKey) {
-        if (conversation.getMenuId() == null || !responder.isEnabled()) {
+    private void requestAiAnswerIfEligible(ChatConversation conversation, LocalDateTime now) {
+        if (!responder.isEnabled()) {
             return;
         }
         if (conversation.getAssignedAdminId() != null) {
             return;
         }
-
-        ChatMenu menu = menuMapper.selectById(conversation.getMenuId());
-        if (menu == null || menu.getAnswerType() != ChatAnswerType.AI) {
-            return;
-        }
-        if (businessHourService.isWithinBusinessHours(timeProvider.now())) {
-            return;
-        }
-
-        String requesterKey = userId != null ? "u:" + userId : "g:" + guestKey;
-        if (!rateLimiter.tryConsume(requesterKey)) {
+        if (businessHourService.isWithinBusinessHours(now)) {
             return;
         }
 
         Long conversationId = conversation.getConversationId();
-        if (conversationMapper.claimAiAnswer(conversationId, AI_ANSWER_LIMIT) != 1) {
+        if (conversationMapper.claimAiCall(conversationId, now, now.minus(AI_CALL_STALE_AFTER)) != 1) {
             return;
         }
 
-        // 선점 직후 값을 읽어 이번이 마지막 답변인지 판단한다. 같은 트랜잭션 안이라
-        // 방금 올린 값이 그대로 보인다.
-        Integer used = conversationMapper.selectAiAnswerCount(conversationId);
-        boolean lastAnswer = used != null && used >= AI_ANSWER_LIMIT;
+        eventPublisher.publishEvent(new ChatAiAnswerRequestedEvent(conversationId));
+    }
 
-        eventPublisher.publishEvent(
-                new ChatAiAnswerRequestedEvent(conversationId, menu.getAiContext(), lastAnswer));
+    /**
+     * 고정형 버튼 클릭을 집계에 남긴다. <b>세션도 메시지도 만들지 않는다.</b>
+     *
+     * <p>답변은 위젯이 이미 갖고 있으므로(bootstrap이 실어 보냈다) 이 호출은 화면과 무관하다.
+     * 그래서 프론트는 결과를 기다리지 않고, 실패해도 사용자에게 알리지 않는다.
+     *
+     * <p>활성 메뉴인지는 확인한다. 지표에 없는 버튼의 클릭이 쌓이면 그 표를 읽는 사람이
+     * 설명할 수 없는 행을 보게 되고, FK 위반으로 500이 나가는 것보다는 404가 낫다.
+     *
+     * <p>유형을 {@code FIXED}로 좁히지 않는다. 상담원 연결 버튼도 얼마나 눌리는지가 지표로
+     * 의미 있고, 그쪽은 세션까지 생기므로 두 숫자를 비교하면 "누르고 그만둔 비율"이 보인다.
+     */
+    @Transactional
+    public void logMenuClick(String menuCode, Long userId, String guestKey) {
+        ChatMenu menu = menuMapper.selectActiveByCode(menuCode);
+        if (menu == null) {
+            throw new CommonException(ErrorCode.CHAT_MENU_NOT_FOUND);
+        }
+        menuClickMapper.insert(menu.getMenuId(), userId, guestKey);
     }
 
     /** 폴링용 조회. {@code afterMessageId} 이후의 메시지만 준다. */

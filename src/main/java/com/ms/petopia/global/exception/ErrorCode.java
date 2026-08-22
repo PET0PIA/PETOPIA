@@ -220,10 +220,13 @@ public enum ErrorCode {
     CHAT_MENU_NOT_FOUND(HttpStatus.NOT_FOUND, "CH003", "사용할 수 없는 문의 유형입니다."),
     // 423 LOCKED: 요청 자체는 올바른데 리소스가 잠겨 있어 거부한다는 뜻이라 이 상황에 맞다.
     // 400/409로 내리면 프론트가 "입력이 잘못됐다"와 구분하기 어렵다.
-    CHAT_AWAITING_AGENT(HttpStatus.LOCKED, "CH010", "자동 답변을 드렸어요. 상담사가 이어서 답변드릴 때까지 기다려주세요."),
+    // CH010(CHAT_AWAITING_AGENT)은 뺐다. AI 답변 뒤 입력을 잠그던 상태가 없어져 도달할 수
+    // 없는 코드가 됐다. 번호는 재사용하지 않는다 - 옛 클라이언트 로그에 남은 CH010이 다른
+    // 뜻으로 읽히면 장애를 되짚을 때 오해를 만든다.
     CHAT_ALREADY_CLOSED(HttpStatus.CONFLICT, "CH011", "이미 종료된 상담입니다."),
     CHAT_MENU_CODE_DUPLICATED(HttpStatus.CONFLICT, "CH012", "이미 사용 중인 문의 유형 코드입니다."),
     CHAT_BUSINESS_HOUR_INVALID(HttpStatus.BAD_REQUEST, "CH013", "운영시간 설정이 올바르지 않습니다."),
+    CHAT_MENU_NOT_CONNECTABLE(HttpStatus.BAD_REQUEST, "CH014", "상담사 연결용 문의 유형이 아닙니다."),
     ;
 
     private final HttpStatus httpStatus;

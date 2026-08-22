@@ -11,7 +11,10 @@
     <sql id="statusFilter">
         <choose>
             <when test="filter == @com.ms.petopia.api.chat.dto.AdminChatFilter@OPEN">
-                AND c.status IN ('WAITING_AGENT', 'AI_ANSWERED', 'IN_PROGRESS')
+                AND c.status IN ('WAITING_AGENT', 'IN_PROGRESS')
+            </when>
+            <when test="filter == @com.ms.petopia.api.chat.dto.AdminChatFilter@AI_HANDLED">
+                AND c.status = 'AI_HANDLED'
             </when>
             <when test="filter == @com.ms.petopia.api.chat.dto.AdminChatFilter@CLOSED">
                 AND c.status = 'CLOSED'
@@ -43,11 +46,11 @@
          WHERE 1 = 1
         <include refid="statusFilter"/>
         <!--
-          답해야 할 대화를 위로 올리고, 그 안에서는 오래 기다린 순이다. AI_ANSWERED도 함께
-          올린다 - AI가 한 번 답했을 뿐 사람의 답변이 필요한 건 같고, 오히려 그쪽 사용자는
-          입력이 잠긴 채 기다리는 중이다.
+          답해야 할 대화를 위로 올리고, 그 안에서는 오래 기다린 순이다.
+          AI_HANDLED는 올리지 않는다 - 자동 응대로 마무리돼 상담사를 기다리는 중이 아니다.
+          ALL 필터에서 이 둘이 섞여 보일 때 급한 것이 위에 오게 하는 것이 이 정렬의 목적이다.
         -->
-         ORDER BY (c.status IN ('WAITING_AGENT', 'AI_ANSWERED')) DESC, c.last_message_at ASC
+         ORDER BY (c.status = 'WAITING_AGENT') DESC, c.last_message_at ASC
          LIMIT #{limit} OFFSET #{offset}
     </select>
 
@@ -58,27 +61,39 @@
         <include refid="statusFilter"/>
     </select>
 
-    <!-- 상담사가 답해야 할 대화 수. 잠긴 대화(AI_ANSWERED)도 사람 답변을 기다리는 건 같다. -->
+    <!--
+      상담사가 답해야 할 대화 수(배지). AI_HANDLED는 넣지 않는다 - 자동 응대로 끝난 건을
+      배지에 세면 아침 출근 시 "밤새 쌓인 미답변"으로 읽히고, 실제 업무량과 어긋난다.
+      ChatConversationStatus.needsAgentReply()와 같은 규칙이다.
+    -->
     <select id="countWaiting" resultType="long">
-        SELECT COUNT(*) FROM chat_conversation WHERE status IN ('WAITING_AGENT', 'AI_ANSWERED')
+        SELECT COUNT(*) FROM chat_conversation WHERE status = 'WAITING_AGENT'
     </select>
 
     <!--
       문의 유형별 지표(최근 30일).
 
-      대기 건수는 countWaiting과 같은 정의를 쓴다(WAITING_AGENT + AI_ANSWERED). 한쪽만
-      WAITING_AGENT로 세면 배지 총계와 이 표가 같은 데이터를 두고 다른 숫자를 말하게 되고,
-      잠긴 채 기다리는 대화가 지표에서 빠진다.
+      대기 건수는 countWaiting과 같은 정의를 쓴다(WAITING_AGENT만). 한쪽에 AI_HANDLED를
+      섞으면 배지 총계와 이 표가 같은 데이터를 두고 다른 숫자를 말한다.
+
+      클릭 수는 파생 테이블로 미리 접어서 붙인다. chat_menu_click을 그냥 LEFT JOIN하면
+      대화 조인과 곱해져 conversation_count가 클릭 수만큼 부풀고, COUNT(DISTINCT)로 덧대는
+      방식은 이 쿼리의 집계 다섯 개를 모두 다시 검산하게 만든다.
+
+      고정형 유형은 이제 세션을 만들지 않으므로 conversation_count가 0이다. 그래서 정렬
+      기준을 클릭 수와 대화 수의 합으로 바꾼다 - 대화 수만으로 정렬하면 실제로 가장 많이
+      눌리는 유형이 표 맨 아래로 내려간다.
 
       평균 첫 응답 시간은 "대화 생성 → 첫 상담사 메시지"로 잰다. 첫 사용자 질문 시각을
-      기준으로 삼는 편이 더 정확해 보이지만, 고정 답변 유형은 질문 없이 끝나는 대화가 많아
-      비교 가능한 기준이 되지 못한다. 아직 아무도 답하지 않은 유형은 AVG가 NULL로 남는데,
+      기준으로 삼는 편이 더 정확해 보이지만, 연결만 하고 질문하지 않은 대화가 섞여 비교
+      가능한 기준이 되지 못한다. 아직 아무도 답하지 않은 유형은 AVG가 NULL로 남는데,
       0으로 바꾸지 않는다 - 0은 "즉시 답한다"로 읽혀 정반대의 인상을 준다.
     -->
     <select id="selectMenuStats" resultType="ChatMenuStat">
         SELECT m.label AS menu_label
              , COUNT(c.conversation_id) AS conversation_count
-             , SUM(c.status IN ('WAITING_AGENT', 'AI_ANSWERED')) AS waiting_count
+             , COALESCE(clicks.click_count, 0) AS click_count
+             , SUM(c.status = 'WAITING_AGENT') AS waiting_count
              , SUM(c.ai_answer_count > 0) AS ai_answered_count
              , AVG(TIMESTAMPDIFF(SECOND, c.created_at, first_agent.replied_at))
                    AS avg_first_response_seconds
@@ -86,6 +101,12 @@
           LEFT JOIN chat_conversation c
                  ON c.menu_id = m.menu_id
                 AND c.created_at >= #{since}
+          LEFT JOIN (
+                SELECT menu_id, COUNT(*) AS click_count
+                  FROM chat_menu_click
+                 WHERE clicked_at >= #{since}
+                 GROUP BY menu_id
+          ) clicks ON clicks.menu_id = m.menu_id
           <!--
             대화별 첫 상담사 응답 시각을 파생 테이블에서 미리 구한 뒤 평균을 낸다.
             상관 서브쿼리를 AVG() 안에 직접 넣어도 MySQL 8.0에서 동작하지만, 집계 안에
@@ -99,8 +120,8 @@
                  WHERE sender_type = 'AGENT'
                  GROUP BY conversation_id
           ) first_agent ON first_agent.conversation_id = c.conversation_id
-         GROUP BY m.menu_id, m.label
-         ORDER BY conversation_count DESC, m.display_order
+         GROUP BY m.menu_id, m.label, clicks.click_count
+         ORDER BY (COALESCE(clicks.click_count, 0) + COUNT(c.conversation_id)) DESC, m.display_order
     </select>
 
     <select id="selectMenuLabel" resultType="string">

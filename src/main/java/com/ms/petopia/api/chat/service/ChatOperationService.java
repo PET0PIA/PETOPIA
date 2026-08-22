@@ -52,7 +52,6 @@ public class ChatOperationService {
                 .label(request.label())
                 .answerType(request.answerType())
                 .fixedAnswer(request.fixedAnswer())
-                .aiContext(request.aiContext())
                 // 순서를 안 주면 맨 뒤에 붙인다. 0으로 두면 새 버튼이 맨 위로 올라가는데,
                 // 운영자가 기대하는 동작이 아니다(추가했더니 1번 버튼이 바뀌어 있다).
                 .displayOrder(request.displayOrder() != null
@@ -80,7 +79,6 @@ public class ChatOperationService {
         existing.setLabel(request.label());
         existing.setAnswerType(request.answerType());
         existing.setFixedAnswer(request.fixedAnswer());
-        existing.setAiContext(request.aiContext());
         existing.setDisplayOrder(request.displayOrder() != null ? request.displayOrder() : existing.getDisplayOrder());
         existing.setIsActive(request.isActive() == null || request.isActive());
         menuMapper.update(existing);
