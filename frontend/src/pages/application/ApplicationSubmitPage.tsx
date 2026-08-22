@@ -14,6 +14,7 @@ import { AttachmentUploadField } from "../../components/ui/AttachmentUploadField
 import { HallBoothMap } from "../../components/booth-map/HallBoothMap";
 import { ApiError } from "../../api/client";
 import { getMyBusinesses, type Business } from "../../api/business";
+import { getRecruitNotice } from "../../api/recruitNotice";
 import {
   getBoothSlots,
   submitApplication,
@@ -121,31 +122,41 @@ export function ApplicationSubmitPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<ApplicationResponse | null>(null);
+  const [recruitClosed, setRecruitClosed] = useState(false);
 
   const errorsRef = useRef<HTMLDivElement>(null);
 
   // 에러가 새로 생기면(신청하기 눌렀는데 검증 실패) 에러 박스로 스크롤해서
   // 사용자가 폼 하단(제출 버튼 근처)에 있어도 에러를 놓치지 않게 한다.
   useEffect(() => {
-    if (errors.length > 0) {
-      errorsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [errors]);
-
-  useEffect(() => {
     if (!fairId) return;
     let ignore = false;
 
     setLoading(true);
     setLoadError(null);
-    Promise.all([getBoothSlots(Number(fairId)), getMyBusinesses()])
-      .then(([slots, myBusinesses]) => {
+
+    getRecruitNotice(Number(fairId))
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 404) return null; // 공고 없음 = 마감 아님
+        throw error;
+      })
+      .then((notice) => {
         if (ignore) return;
-        setBoothSlots(slots);
-        setHasAnyBusiness(myBusinesses.length > 0);
-        setHasPendingReview(myBusinesses.some((business) => business.approvalStatus === "PENDING_REVIEW"));
-        // 승인된 사업자만 신청 가능 - 심사대기/반려/취소된 사업자는 목록/셀렉트에서 제외
-        setBusinesses(myBusinesses.filter((business) => business.approvalStatus === "APPROVED"));
+        if (notice?.closed) {
+          setRecruitClosed(true);
+          setLoading(false);
+          return;
+        }
+        setRecruitClosed(false);
+
+        return Promise.all([getBoothSlots(Number(fairId)), getMyBusinesses()]).then(([slots, myBusinesses]) => {
+          if (ignore) return;
+          setBoothSlots(slots);
+          setHasAnyBusiness(myBusinesses.length > 0);
+          setHasPendingReview(myBusinesses.some((business) => business.approvalStatus === "PENDING_REVIEW"));
+          // 승인된 사업자만 신청 가능 - 심사대기/반려/취소된 사업자는 목록/셀렉트에서 제외
+          setBusinesses(myBusinesses.filter((business) => business.approvalStatus === "APPROVED"));
+        });
       })
       .catch((error) => {
         if (ignore) return;
@@ -212,6 +223,21 @@ export function ApplicationSubmitPage() {
         ) : (
           <EmptyState title="신청 정보를 불러오지 못했어요" description={loadError} />
         )}
+      </PageContainer>
+    );
+  }
+
+  // 모집공고가 마감됐으면 사업자 등록 유무와 상관없이 여기서 바로 막는다 - 사업자 없는
+  // 사용자가 등록까지 마치고 돌아왔더니 이미 마감이었다는 걸 뒤늦게 알게 되는 걸 방지.
+  if (recruitClosed) {
+    return (
+      <PageContainer className="py-10">
+        <EmptyState
+          title="모집이 마감됐어요"
+          description="이 행사의 참가업체 모집이 이미 마감돼 신청할 수 없어요."
+          actionTo={`/fairs/${fairId}/recruit-notice`}
+          actionLabel="모집 공고 확인하기"
+        />
       </PageContainer>
     );
   }

@@ -1,4 +1,4 @@
-import { Heart, ImageIcon } from "lucide-react";
+import { Star, ImageIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
@@ -113,10 +113,10 @@ export function BoothFavoritesPage() {
               <button
                 type="button"
                 onClick={() => handleRemove(favorite.boothId)}
-                className="grid size-11 shrink-0 place-items-center rounded-full text-primary-strong hover:bg-page"
+                className="grid size-11 shrink-0 place-items-center rounded-full text-sun hover:bg-page"
                 aria-label="즐겨찾기 해제"
               >
-                <Heart size={18} fill="currentColor" />
+                <Star size={18} fill="currentColor" />
               </button>
             </div>
           ))}
