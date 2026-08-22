@@ -2,6 +2,7 @@ package com.ms.petopia.api.chat.service;
 
 import com.ms.petopia.api.chat.dto.ChatConversationStatus;
 import com.ms.petopia.api.chat.dto.ChatSenderType;
+import com.ms.petopia.api.chat.entity.ChatConversation;
 import com.ms.petopia.api.chat.entity.ChatMessage;
 import com.ms.petopia.api.chat.event.ChatAiAnswerRequestedEvent;
 import com.ms.petopia.api.chat.mapper.ChatConversationMapper;
@@ -158,10 +159,21 @@ public class ChatAiAnswerService {
      * <p>확인 전에 대화 행을 잠그는 이유는 {@link ChatConversationMapper#lockById}에 적었다.
      * 요약하면 같은 대화의 AI 작업이 둘 동시에 돌 수 있어(stale 창을 넘긴 재선점), 잠그지
      * 않으면 둘 다 "없다"로 읽고 둘 다 붙인다.
+     *
+     * <p><b>여전히 상담사를 기다리는 대화에만 붙인다.</b> 이 문장은 "상담사가 확인 후
+     * 답변드릴게요"라고 약속하는데, 그 사이 상담사가 이미 답했거나(IN_PROGRESS) 사용자가
+     * 종료했으면(CLOSED) 사실이 아닌 말이 남는다. 답변 경로와 같은 규칙이다 - 쓰기 전에
+     * 상태를 확인한다.
      */
     private void appendEscalateNotice(Long conversationId) {
         String notice = setting(SETTING_AI_ESCALATE_NOTICE, DEFAULT_AI_ESCALATE_NOTICE);
         conversationMapper.lockById(conversationId);
+
+        ChatConversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null || !conversation.getStatus().needsAgentReply()) {
+            return;
+        }
+
         if (!messageMapper.existsSystemMessage(conversationId, notice)) {
             messageWriter.append(conversationId, ChatSenderType.SYSTEM, null, null, notice);
         }

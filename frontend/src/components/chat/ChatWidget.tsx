@@ -62,6 +62,15 @@ export function ChatWidget() {
    */
   const [transcript, setTranscript] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  /**
+   * 종료 요청이 도는 중인지. `busy`와 나눠 갖는다.
+   *
+   * 하나로 합치면 전송 중에 종료 버튼이 잠기는 것과 종료 중에 입력창이 잠기는 것을 구분할 수
+   * 없다. 두 동작은 서로를 막아야 하지만(아래 handleClose·handleSend) 같은 표시를 쓰면
+   * 안 된다 - 종료를 누른 순간 입력창이 "전송 중"으로 보이면 사용자는 자기 메시지가 나간
+   * 줄 안다.
+   */
+  const [closing, setClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -238,6 +247,18 @@ export function ChatWidget() {
     setError(null);
   };
 
+  /**
+   * 이력 화면으로.
+   *
+   * 오류 문구는 화면끼리 공유한다. 그래서 화면을 넘길 때 지우지 않으면 연결에 실패한 뒤
+   * `문의 내역`을 누른 사용자가 이력 화면에서 "문의를 시작하지 못했어요"를 읽는다 - 방금
+   * 열린 화면과 아무 관계 없는 문장이다.
+   */
+  const goThread = () => {
+    setError(null);
+    setScreen("THREAD");
+  };
+
   const handleSelectFixed = (menu: ChatMenu) => {
     // 집계는 결과를 기다리지 않는다. 답변은 이미 손에 있으므로 화면은 즉시 넘어가야 한다.
     logMenuClick(menu.code);
@@ -258,8 +279,7 @@ export function ChatWidget() {
     if (!agentMenu || busy) return;
 
     if (activeConversation) {
-      setError(null);
-      setScreen("THREAD");
+      goThread();
       return;
     }
 
@@ -281,7 +301,9 @@ export function ChatWidget() {
   };
 
   const handleSend = async (content: string) => {
-    if (!conversation) return;
+    // 종료 요청이 도는 중에는 보내지 않는다. 두 요청이 겹치면 서버가 종료를 먼저 처리해
+    // 메시지가 CHAT_ALREADY_CLOSED로 튕기고, 사용자는 자기가 쓴 글을 잃는다.
+    if (!conversation || closing) return;
     setBusy(true);
     setError(null);
     try {
@@ -302,12 +324,22 @@ export function ChatWidget() {
     }
   };
 
+  /**
+   * 사용자가 상담을 끝낸다.
+   *
+   * 전송 중에는 시작하지 않는다(`busy`). 보내는 중에 종료가 끼어들면 서버가 종료를 먼저
+   * 처리할 수 있어, 방금 쓴 메시지가 저장되지 않은 채 대화가 닫힌다. 버튼도 함께 잠그지만
+   * 판정은 여기서 한다 - 연달아 눌리는 경로(엔터, 더블클릭)가 화면 상태보다 빠르다.
+   */
   const handleClose = async () => {
-    if (!conversation) return;
+    if (!conversation || busy || closing) return;
+    setClosing(true);
     try {
       await closeConversation(conversation.conversationId);
     } catch {
       // 종료 실패는 사용자가 할 수 있는 게 없다. 아래 재조회로 실제 상태를 다시 맞춘다.
+    } finally {
+      setClosing(false);
     }
     // 이력은 지우지 않는다. bootstrap을 다시 불러 종료된 상태와 지난 내용을 함께 받는다.
     setBootstrap(null);
@@ -356,9 +388,12 @@ export function ChatWidget() {
         {screen !== "MENU" && (
           <button
             type="button"
+            // 연결 요청이 도는 중에는 막는다. 먼저 MENU로 돌아가도 요청이 성공하면 화면이
+            // THREAD로 끌려가, 사용자가 방금 한 조작이 되돌려진다.
+            disabled={busy}
             onClick={goMenu}
             aria-label="문의 유형으로 돌아가기"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-button text-muted transition hover:text-ink"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-button text-muted transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ArrowLeft size={18} aria-hidden />
           </button>
@@ -378,8 +413,9 @@ export function ChatWidget() {
           {screen === "THREAD" && activeConversation && (
             <button
               type="button"
+              disabled={busy || closing}
               onClick={handleClose}
-              className="rounded-button px-2 py-1 text-xs font-bold text-muted transition hover:text-ink"
+              className="rounded-button px-2 py-1 text-xs font-bold text-muted transition hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
             >
               상담 종료
             </button>
@@ -419,7 +455,9 @@ export function ChatWidget() {
             <ChatComposer
               locked={conversation?.inputLocked ?? false}
               lockReason={conversation?.lockReason ?? null}
-              sending={busy}
+              // 종료 중에도 전송 버튼을 잠근다. handleSend가 어차피 거르지만, 그것만으로는
+              // 눌러도 아무 일이 없는 버튼이 된다 - 실패한 것도 아니고 나간 것도 아닌 상태다.
+              sending={busy || closing}
               onSend={handleSend}
             />
           ) : (
@@ -452,7 +490,7 @@ export function ChatWidget() {
             disabled={busy}
             onSelectFixed={handleSelectFixed}
             onConnectAgent={handleConnectAgent}
-            onOpenHistory={hasThread ? () => setScreen("THREAD") : null}
+            onOpenHistory={hasThread ? goThread : null}
           />
         </>
       )}

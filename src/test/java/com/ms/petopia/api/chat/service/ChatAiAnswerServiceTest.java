@@ -2,6 +2,7 @@ package com.ms.petopia.api.chat.service;
 
 import com.ms.petopia.api.chat.dto.ChatConversationStatus;
 import com.ms.petopia.api.chat.dto.ChatSenderType;
+import com.ms.petopia.api.chat.entity.ChatConversation;
 import com.ms.petopia.api.chat.event.ChatAiAnswerRequestedEvent;
 import com.ms.petopia.api.chat.mapper.ChatConversationMapper;
 import com.ms.petopia.api.chat.mapper.ChatMessageMapper;
@@ -69,14 +70,18 @@ class ChatAiAnswerServiceTest {
      *
      * <p>AI_CONTEXT까지 준비한다. 이관 판정도 프롬프트 조립을 거치므로 서비스가 그 값을
      * 읽는데, 준비하지 않으면 STRICT_STUBS가 "다른 인자로 호출됐다"로 먼저 실패한다.
+     *
+     * @param status 안내를 붙일지 가르는 값. 이관 안내는 여전히 상담사를 기다리는 대화에만 붙는다.
      */
-    private void givenEscalation() {
+    private void givenEscalation(ChatConversationStatus status) {
         given(messageMapper.selectRecentByConversation(eq(CONVERSATION_ID), anyInt()))
                 .willReturn(List.of());
         given(settingMapper.selectValue("AI_CONTEXT")).willReturn("참고 정보");
         given(settingMapper.selectValue("AI_ESCALATE_NOTICE")).willReturn(ESCALATE_NOTE);
         given(responder.answer(eq(CONVERSATION_ID), any(), eq("참고 정보")))
                 .willReturn(Optional.empty());
+        given(conversationMapper.selectById(CONVERSATION_ID)).willReturn(
+                ChatConversation.builder().conversationId(CONVERSATION_ID).status(status).build());
     }
 
     @Test
@@ -128,7 +133,7 @@ class ChatAiAnswerServiceTest {
     @Test
     @DisplayName("답하지 못하면 이관 안내를 남긴다 - 조용히 끝내면 '입력창은 열려 있는데 답이 없는' 화면이 된다")
     void tryAnswer_이관하면_안내를_남긴다() {
-        givenEscalation();
+        givenEscalation(ChatConversationStatus.WAITING_AGENT);
         given(messageMapper.existsSystemMessage(CONVERSATION_ID, ESCALATE_NOTE)).willReturn(false);
 
         boolean answered = service.tryAnswer(event);
@@ -142,13 +147,26 @@ class ChatAiAnswerServiceTest {
     @Test
     @DisplayName("같은 이관 안내가 이미 있으면 다시 붙이지 않는다 - 같은 주제를 다시 물으면 같은 판정이 나온다")
     void tryAnswer_이관안내는_중복되지_않는다() {
-        givenEscalation();
+        givenEscalation(ChatConversationStatus.WAITING_AGENT);
         given(messageMapper.existsSystemMessage(CONVERSATION_ID, ESCALATE_NOTE)).willReturn(true);
 
         service.tryAnswer(event);
 
         verify(conversationMapper).lockById(CONVERSATION_ID);
         verify(messageWriter, never()).append(anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("종료된 대화에는 이관 안내를 붙이지 않는다 - '상담사가 확인 후 답변드릴게요'가 거짓이 된다")
+    void tryAnswer_종료된_대화에는_이관안내를_붙이지_않는다() {
+        givenEscalation(ChatConversationStatus.CLOSED);
+
+        boolean answered = service.tryAnswer(event);
+
+        assertThat(answered).isFalse();
+        verify(messageWriter, never()).append(anyLong(), any(), any(), any(), any());
+        // 중복 확인까지 갈 필요가 없다. 상태에서 이미 갈렸다.
+        verify(messageMapper, never()).existsSystemMessage(anyLong(), any());
     }
 
     @Test

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { MessageSquare, Send } from "lucide-react";
 import {
@@ -142,8 +142,26 @@ export function AdminChatPage() {
    * 그 숫자를 신뢰할 수 없다. 필터와 무관해야 하는 값이므로 조회도 분리한다.
    */
   const [waitingCount, setWaitingCount] = useState<number | null>(null);
+  /**
+   * 건수 조회가 실패했는지. `waitingCount`의 null과 나눠 갖는다.
+   *
+   * null 하나로 "아직 못 받았다"와 "받아오지 못했다"를 겸하면, 첫 조회가 실패한 순간 머리말이
+   * "상담 목록을 불러오고 있어요"로 굳는다 - 목록은 이미 떠 있는데 화면 맨 위만 계속 로딩이라고
+   * 말하는 상태가 된다. 건수 실패를 조용히 넘기는 것과, 그것을 로딩으로 위장하는 것은 다르다.
+   */
+  const [waitingCountFailed, setWaitingCountFailed] = useState(false);
 
   const { onTyping, stopTyping } = useTypingSignal(selectedId);
+
+  /**
+   * 갱신 세대. 늦게 도착한 옛 응답이 새 상태를 덮지 않게 한다.
+   *
+   * 폴링(5초)과 답변·종료 직후 갱신은 겹칠 수 있고, 응답이 보낸 순서대로 온다는 보장도 없다.
+   * 특히 답변 직후 탭을 바꾸면 이전 필터의 목록이 새 탭 화면에 실릴 수 있다 - 그쪽 호출은
+   * 이펙트 밖이라 취소 플래그가 없다. 겹쳤을 때 이기는 쪽을 "가장 마지막에 시작한 갱신"으로
+   * 못박는다.
+   */
+  const refreshGeneration = useRef(0);
 
   /**
    * 목록과 미답변 건수를 갱신한다. 폴링과 답변·종료 직후가 같은 함수를 쓴다.
@@ -157,21 +175,28 @@ export function AdminChatPage() {
    */
   const refresh = useCallback(
     (current: AdminChatFilter, isCanceled: () => boolean = () => false) => {
+      const generation = ++refreshGeneration.current;
+      const stale = () => isCanceled() || generation !== refreshGeneration.current;
+
       const list = fetchAdminConversations(current)
         .then((data) => {
-          if (!isCanceled()) setConversations(data.items);
+          if (!stale()) setConversations(data.items);
         })
         .catch(() => {
-          if (!isCanceled()) setError("상담 목록을 불러오지 못했어요.");
+          if (!stale()) setError("상담 목록을 불러오지 못했어요.");
         });
 
       const count = fetchUnansweredCount()
         .then((unanswered) => {
-          if (!isCanceled()) setWaitingCount(unanswered);
+          if (stale()) return;
+          setWaitingCount(unanswered);
+          setWaitingCountFailed(false);
         })
         .catch(() => {
-          // 배지 숫자 하나가 이번 주기에 뒤처지는 것은 목록이 멈추는 것보다 가볍다.
-          // 배너까지 띄우면 목록은 멀쩡한데 화면 전체가 실패한 것처럼 읽힌다.
+          // 배너는 띄우지 않는다 - 배지 숫자 하나가 이번 주기에 뒤처지는 것은 목록이 멈추는
+          // 것보다 가볍고, 목록은 멀쩡한데 화면 전체가 실패한 것처럼 읽히면 더 나쁘다.
+          // 다만 로딩으로 위장하지도 않는다(머리말이 이 값을 갈라 쓴다).
+          if (!stale()) setWaitingCountFailed(true);
         });
 
       return Promise.all([list, count]);
@@ -294,9 +319,11 @@ export function AdminChatPage() {
       <PageHeader
         title="상담 문의"
         description={
-          waitingCount == null
-            ? "상담 목록을 불러오고 있어요."
-            : `답변을 기다리는 상담이 ${waitingCount}건 있어요.`
+          waitingCount != null
+            ? `답변을 기다리는 상담이 ${waitingCount}건 있어요.`
+            : waitingCountFailed
+              ? "답변 대기 건수를 불러오지 못했어요. 잠시 후 다시 표시돼요."
+              : "상담 목록을 불러오고 있어요."
         }
         action={
           <Link
