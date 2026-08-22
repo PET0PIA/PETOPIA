@@ -312,7 +312,7 @@ public class RefundService {
                         NotificationType.REFUND_COMPLETED,
                         "환불이 접수되었습니다",
                         body,
-                        "/fair-admin/payments?fairId=" + payment.getFairId(),
+                        adminRefundLinkUrl(payment),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -321,6 +321,14 @@ public class RefundService {
             log.error("환불 완료 EVENT_ADMIN 알림 저장 실패. refundId={}, paymentId={}, fairId={}",
                     refund.getRefundId(), refund.getPaymentId(), payment.getFairId(), e);
         }
+    }
+
+    /** 예약금 환불은 예약현황 화면으로, 그 외(참가비)는 결제현황 화면으로 관리자를 안내한다. */
+    private String adminRefundLinkUrl(PaymentRow payment) {
+        if ("RESERVATION_DEPOSIT".equals(payment.getPaymentType())) {
+            return "/fair-admin/reservations?fairId=" + payment.getFairId();
+        }
+        return "/fair-admin/payments?fairId=" + payment.getFairId();
     }
 
     private String resolvePayerNickname(Long payerUserId) {

@@ -790,7 +790,7 @@ public class PaymentService {
                         NotificationType.PAYMENT_COMPLETED,
                         "결제가 접수되었습니다",
                         body,
-                        "/fair-admin/payments?fairId=" + row.getFairId(),
+                        adminPaymentLinkUrl(row),
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -799,6 +799,14 @@ public class PaymentService {
             log.error("결제 완료 EVENT_ADMIN 알림 저장 실패. paymentId={}, fairId={}",
                     row.getPaymentId(), row.getFairId(), e);
         }
+    }
+
+    /** 예약금 결제는 예약현황 화면으로, 그 외(참가비·개설비)는 결제현황 화면으로 관리자를 안내한다. */
+    private String adminPaymentLinkUrl(PaymentRow row) {
+        if ("RESERVATION_DEPOSIT".equals(row.getPaymentType())) {
+            return "/fair-admin/reservations?fairId=" + row.getFairId();
+        }
+        return "/fair-admin/payments?fairId=" + row.getFairId();
     }
 
     private String resolvePayerNickname(Long payerUserId) {
