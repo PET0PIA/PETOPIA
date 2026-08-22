@@ -362,7 +362,10 @@ class NotificationServiceTest {
 
         notificationService.notifySuperAdmins(NotificationType.SETTLEMENT_COMPLETED, "제목", "내용", "/admin/settlements");
 
-        verify(notificationMapper, times(3)).insert(any(Notification.class));
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationMapper, times(3)).insert(captor.capture());
+        assertThat(captor.getAllValues())
+                .allMatch(n -> "/admin/settlements".equals(n.getLinkUrl()));
     }
 
     @Test

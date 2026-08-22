@@ -259,8 +259,7 @@ function NotificationCard() {
                 <button
                   type="button"
                   onClick={() => handleItemClick(item)}
-                  disabled={!item.linkUrl}
-                  className="flex w-full items-start justify-between gap-3 rounded-button text-left disabled:cursor-default"
+                  className="flex w-full items-start justify-between gap-3 rounded-button text-left"
                 >
                   <span className="min-w-0 flex-1">
                     <span className={`block truncate text-sm ${item.isRead ? "text-muted" : "font-bold text-ink"}`}>

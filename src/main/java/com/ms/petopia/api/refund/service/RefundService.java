@@ -294,6 +294,9 @@ public class RefundService {
         if ("VENDOR_FEE".equals(payment.getPaymentType()) && payment.getApplicationId() != null) {
             return "/participations/me/" + payment.getApplicationId();
         }
+        if ("FAIR_OPENING_FEE".equals(payment.getPaymentType()) && payment.getFairId() != null) {
+            return "/fair-applications/me/" + payment.getFairId();
+        }
         return null;
     }
 
