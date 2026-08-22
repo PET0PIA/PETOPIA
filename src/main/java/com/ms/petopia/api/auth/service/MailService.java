@@ -223,17 +223,21 @@ public class MailService {
                 "SETTLEMENT COMPLETED", settlementLabel + " 확정 안내", content);
     }
 
-    /** 행사 취소로 인한 환불 안내. */
-    public void sendFairCanceledEmail(String to, long refundAmount) {
+    /**
+     * 행사 취소 안내 — 취소 승인 직후, 아직 환불이 처리되기 전에 보낸다(환불 자체는 배치로
+     * 순차 처리되어 시간이 걸릴 수 있어서 "예정" 표현을 쓴다). 실제 환불이 끝나면
+     * sendRefundCompletedEmail이 별도로 완료를 알린다.
+     */
+    public void sendFairCanceledEmail(String to, long paidAmount) {
         String content = """
             <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
-              참가하셨던 행사가 부득이한 사정으로 취소되어 결제하신 금액이 환불 처리되었습니다.<br>
-              카드사에 따라 영업일 기준 3~5일 이내 반영됩니다.
+              참가하셨던 행사가 부득이한 사정으로 취소되었습니다.<br>
+              결제하신 금액은 순차적으로 환불될 예정이며, 환불이 완료되면 별도로 다시 안내드립니다.
             </p>
             <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
-              <div style="color:#6b7280;font-size:13px;">환불 금액 <strong style="float:right;color:#111827;">%s</strong></div>
+              <div style="color:#6b7280;font-size:13px;">환불 예정 금액 <strong style="float:right;color:#111827;">%s</strong></div>
             </div>
-            """.formatted(escape(String.format("%,d원", refundAmount)));
+            """.formatted(escape(String.format("%,d원", paidAmount)));
 
         sendHtmlEmail(to, "[PETOPIA] 행사가 취소되었습니다", "FAIR CANCELED", "행사 취소 안내", content);
     }

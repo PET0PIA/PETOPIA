@@ -1,15 +1,7 @@
 package com.ms.petopia.api.fair.service;
 
-import com.ms.petopia.api.auth.domain.User;
-import com.ms.petopia.api.auth.mapper.AuthMapper;
-import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.fair.dto.FairCancelRefundTarget;
 import com.ms.petopia.api.fair.mapper.FairCancelRefundTargetMapper;
-import com.ms.petopia.api.notification.dto.DeliveryChannel;
-import com.ms.petopia.api.notification.dto.NotificationType;
-import com.ms.petopia.api.notification.dto.RecipientType;
-import com.ms.petopia.api.notification.dto.SaveNotificationDto;
-import com.ms.petopia.api.notification.service.NotificationService;
 import com.ms.petopia.api.payment.dto.PaymentListResponse;
 import com.ms.petopia.api.payment.dto.PaymentResponse;
 import com.ms.petopia.api.payment.service.PaymentService;
@@ -78,10 +70,7 @@ public class FairCancelRefundOrchestrationService {
     private final FairCancelRefundTargetMapper targetMapper;
     private final PaymentService paymentService;
     private final RefundService refundService;
-    private final NotificationService notificationService;
     private final FairTimeProvider timeProvider;
-    private final AuthMapper authMapper;
-    private final MailService mailService;
 
     /**
      * 취소됐지만 아직 발견 단계를 끝까지 완료하지 않은 행사를 찾아, COMPLETED 예약금·참가비
@@ -181,11 +170,11 @@ public class FairCancelRefundOrchestrationService {
         try {
             refundService.refund(target.getPaymentId(), SYSTEM_ACTOR_USER_ID,
                     new RefundRequest(reason, RequestedByDomain.FAIR));
-            boolean completed = targetMapper.markCompleted(targetId, now) == 1;
-            if (completed) {
-                notifyFairCanceled(target);
-            }
-            return completed;
+            // 환불 자체는 RefundService.refund()가 REFUND_COMPLETED 알림을 이미 보낸다.
+            // "행사가 취소됐다"는 사실은 FairCancelRequestService.review()가 취소 승인 시점에
+            // 결제자 전원에게 즉시 안내하므로(환불 완료보다 먼저 도착해야 순서가 맞다), 여기서
+            // 환불 건마다 또 보내면 같은 내용이 중복된다 - 여기선 더 이상 알림을 보내지 않는다.
+            return targetMapper.markCompleted(targetId, now) == 1;
         } catch (CommonException e) {
             if (TERMINAL_ERROR_CODES.contains(e.getErrorCode())) {
                 targetMapper.markFailed(targetId, truncate(e.getMessage()), now);
@@ -200,47 +189,6 @@ public class FairCancelRefundOrchestrationService {
                     targetId, target.getFairId(), target.getPaymentId(), e);
             targetMapper.markRetryOrGiveUp(targetId, truncate(e.getMessage()), MAX_ATTEMPTS, now);
             return false;
-        }
-    }
-
-    // 환불 성공 건마다 해당 결제자에게 행사 취소 알림을 보낸다.
-    // 결제 타입으로 수신자 역할을 구분한다(관람객=USER, 확정 업체=VENDOR).
-    private void notifyFairCanceled(FairCancelRefundTarget target) {
-        PaymentResponse payment;
-        try {
-            payment = paymentService.getPayment(target.getPaymentId());
-        } catch (Exception e) {
-            log.error("행사 취소 알림용 결제 조회 실패. paymentId={}, fairId={}",
-                    target.getPaymentId(), target.getFairId(), e);
-            return;
-        }
-
-        try {
-            RecipientType recipientType = "VENDOR_FEE".equals(target.getPaymentType())
-                    ? RecipientType.VENDOR
-                    : RecipientType.USER;
-            notificationService.save(new SaveNotificationDto.Request(
-                    payment.payerUserId(),
-                    recipientType,
-                    NotificationType.FAIR_CANCELED,
-                    "행사가 취소되었습니다",
-                    "참가하셨던 행사가 취소되어 환불이 처리되었습니다.",
-                    null,
-                    List.of(DeliveryChannel.IN_APP),
-                    null
-            ));
-        } catch (Exception e) {
-            log.error("행사 취소 알림 저장 실패. paymentId={}, fairId={}",
-                    target.getPaymentId(), target.getFairId(), e);
-        }
-        try {
-            User user = authMapper.selectUserById(payment.payerUserId());
-            if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                mailService.sendFairCanceledEmail(user.getEmail(), payment.amount());
-            }
-        } catch (Exception e) {
-            log.error("행사 취소 이메일 발송 실패. paymentId={}, fairId={}",
-                    target.getPaymentId(), target.getFairId(), e);
         }
     }
 
