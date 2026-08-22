@@ -27,7 +27,7 @@ public class FairSettlementController {
                 .body(fairSettlementService.calculate(fairId));
     }
 
-    // 정산 확정(EVENT_ADMIN/SUPER_ADMIN).
+    // 정산 확정(SUPER_ADMIN 전용, 2026-08-22 재조정 - 담당 EVENT_ADMIN도 불가).
     @PutMapping("/settlements/final/{fairSettlementId}/confirm")
     public FairSettlementResponse confirm(
             @PathVariable Long fairSettlementId,
@@ -36,7 +36,7 @@ public class FairSettlementController {
         return fairSettlementService.confirm(fairSettlementId, userId);
     }
 
-    // 정산 재계산(EVENT_ADMIN/SUPER_ADMIN).
+    // 정산 재계산(SUPER_ADMIN 전용, 2026-08-22 재조정 - 담당 EVENT_ADMIN도 불가).
     @PutMapping("/settlements/final/{fairSettlementId}/recalculate")
     public FairSettlementResponse recalculate(@PathVariable Long fairSettlementId) {
         return fairSettlementService.recalculate(fairSettlementId);

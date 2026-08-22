@@ -107,16 +107,22 @@ class SettlementExportServiceTest {
             assertThat(header.getCell(2).getStringCellValue()).isEqualTo("티켓예매 총금액");
             assertThat(header.getCell(3).getStringCellValue()).isEqualTo("참가비용 총금액");
             assertThat(header.getCell(4).getStringCellValue()).isEqualTo("전체금액");
+            assertThat(header.getCell(5).getStringCellValue()).isEqualTo("수수료율");
             assertThat(header.getCell(6).getStringCellValue()).isEqualTo("행사업체금액");
             assertThat(header.getCell(7).getStringCellValue()).isEqualTo("플랫폼금액");
 
+            // 금액·ID·수수료율은 이제 숫자 셀로 쓴다(CodeRabbit 리뷰 지적, PR #222 - 전엔 전부
+            // 문자열이라 엑셀에서 숫자 정렬·서식이 깨졌음). 공용 ExcelSheetHelper/ExcelStyles로
+            // 통일한 위 exportsSettlementsAsExcel 테스트와 동일한 검증 방식.
             Row row = sheet.getRow(1);
+            assertThat(row.getCell(0).getNumericCellValue()).isEqualTo(10.0);
             assertThat(row.getCell(1).getStringCellValue()).isEqualTo("댕댕펫");
-            assertThat(row.getCell(2).getStringCellValue()).isEqualTo("70000");
-            assertThat(row.getCell(3).getStringCellValue()).isEqualTo("30000");
-            assertThat(row.getCell(4).getStringCellValue()).isEqualTo("100000");
-            assertThat(row.getCell(6).getStringCellValue()).isEqualTo("90000");
-            assertThat(row.getCell(7).getStringCellValue()).isEqualTo("10000");
+            assertThat(row.getCell(2).getNumericCellValue()).isEqualTo(70000.0);
+            assertThat(row.getCell(3).getNumericCellValue()).isEqualTo(30000.0);
+            assertThat(row.getCell(4).getNumericCellValue()).isEqualTo(100000.0);
+            assertThat(row.getCell(5).getNumericCellValue()).isEqualTo(10.0); // 수수료율 0.1000 -> 10.0%
+            assertThat(row.getCell(6).getNumericCellValue()).isEqualTo(90000.0);
+            assertThat(row.getCell(7).getNumericCellValue()).isEqualTo(10000.0);
 
             assertThat(sheet.getLastRowNum()).isEqualTo(1);
         }

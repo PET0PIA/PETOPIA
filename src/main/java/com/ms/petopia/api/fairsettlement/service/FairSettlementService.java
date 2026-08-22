@@ -36,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 행사별 최종정산(플랫폼 ↔ 행사) 계산·확정·조회 서비스(2026-08-22).
@@ -107,10 +108,11 @@ public class FairSettlementService {
     }
 
     /**
-     * PENDING 정산을 현재 시점의 결제·환불 상태로 다시 집계한다.
+     * PENDING 정산을 현재 시점의 결제·환불 상태로 다시 집계한다. 재계산·확정은 SUPER_ADMIN
+     * 전용 업무로 좁혔다(2026-08-22) - 그 행사 담당 EVENT_ADMIN이라도 호출할 수 없다.
      *
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_FOUND} 존재하지 않는 정산일 때
-     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} SUPER_ADMIN이 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_RECALCULABLE} PENDING이 아니거나,
      *         재계산 중 동시에 확정돼버린 경우
      */
@@ -120,7 +122,7 @@ public class FairSettlementService {
         if (row == null) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND);
         }
-        fairAdminAccessGuard.checkAssigned(row.getFairId());
+        fairAdminAccessGuard.requireSuperAdmin();
         if (!PENDING.equals(row.getStatus())) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_RECALCULABLE);
         }
@@ -161,9 +163,19 @@ public class FairSettlementService {
      * 정산대상은 "결제완료된 참가비"만이고, 그 중 환불완료된 금액은 차감한다. 기존
      * SettlementService.aggregate()와 달리 businessId 필터 없이 그 행사의 모든 참가업체
      * 결제를 합산한다.
+     *
+     * <p>환불 조회는 결제 건마다 하나씩 부르지 않고 paymentId 목록으로 한 번에 배치 조회한다
+     * (CodeRabbit 리뷰 지적, PR #222 - N+1은 selectCompletedVendorFeePaymentsByFair가 이미
+     * 잡아둔 FOR UPDATE 락 유지 시간도 같이 늘렸다).
      */
     private Aggregate aggregate(Long fairId, BigDecimal commissionRate) {
         List<PaymentRow> payments = paymentMapper.selectCompletedVendorFeePaymentsByFair(fairId);
+
+        List<Long> paymentIds = payments.stream().map(PaymentRow::getPaymentId).toList();
+        Map<Long, RefundRow> refundsByPaymentId = paymentIds.isEmpty()
+                ? Map.of()
+                : refundMapper.selectByPaymentIds(paymentIds).stream()
+                        .collect(Collectors.toMap(RefundRow::getPaymentId, row -> row));
 
         long grossAmount = 0L;
         long refundAmount = 0L;
@@ -171,7 +183,7 @@ public class FairSettlementService {
         for (PaymentRow payment : payments) {
             grossAmount += payment.getAmount();
 
-            RefundRow refund = refundMapper.selectByPaymentId(payment.getPaymentId());
+            RefundRow refund = refundsByPaymentId.get(payment.getPaymentId());
             long refunded = (refund != null && COMPLETED.equals(refund.getStatus()))
                     ? refund.getRefundAmount() : 0L;
             refundAmount += refunded;
@@ -198,11 +210,11 @@ public class FairSettlementService {
     }
 
     /**
-     * 정산을 확정한다(EVENT_ADMIN/SUPER_ADMIN). 확정 이후 금액은 불변 - 정정하려면
-     * {@link #reopen}으로 PENDING까지 되돌린 뒤 다시 거쳐야 한다.
+     * 정산을 확정한다(SUPER_ADMIN 전용, 2026-08-22 — 담당 EVENT_ADMIN도 호출 불가하도록 좁힘).
+     * 확정 이후 금액은 불변 - 정정하려면 {@link #reopen}으로 PENDING까지 되돌린 뒤 다시 거쳐야 한다.
      *
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_FOUND} 존재하지 않는 정산일 때
-     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} SUPER_ADMIN이 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_FAIR_CANCELED} 그 사이 행사가 취소됐을 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_NOT_CONFIRMABLE} PENDING이 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_RECALCULATION_REQUIRED} 재계산이 필요한 상태일 때
@@ -213,7 +225,7 @@ public class FairSettlementService {
         if (row == null) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_FOUND);
         }
-        fairAdminAccessGuard.checkAssigned(row.getFairId());
+        fairAdminAccessGuard.requireSuperAdmin();
         assertFairNotCanceled(row.getFairId());
         if (!PENDING.equals(row.getStatus())) {
             throw new CommonException(ErrorCode.SETTLEMENT_NOT_CONFIRMABLE);

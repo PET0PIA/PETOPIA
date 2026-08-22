@@ -195,13 +195,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/*/reopen").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        // 행사별 최종정산(플랫폼↔행사, 업체 구분 없음, 2026-08-22) - 계산/확정/재계산/조회
-                        // 전부 그 행사 담당 EVENT_ADMIN 또는 SUPER_ADMIN만(FairSettlementService가
-                        // FairAdminAccessGuard로 한 번 더 확인). 되돌리기는 기존 settlement 도메인과
-                        // 동일하게 SUPER_ADMIN만 더 신중하게 허용한다.
+                        // 행사별 최종정산(플랫폼↔행사, 업체 구분 없음, 2026-08-22) - 계산/조회는 그 행사
+                        // 담당 EVENT_ADMIN 또는 SUPER_ADMIN(FairSettlementService가 FairAdminAccessGuard로
+                        // 한 번 더 확인). 재계산·확정·되돌리기는 "최고관리자 업무"로 판단해 담당
+                        // EVENT_ADMIN도 제외하고 SUPER_ADMIN만 허용한다(2026-08-22 재조정).
                         .requestMatchers(HttpMethod.POST, "/api/fairs/*/settlements/final").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/final").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/settlements/final/*/confirm", "/api/settlements/final/*/recalculate").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/settlements/final/*/confirm", "/api/settlements/final/*/recalculate").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/final/*/reopen").hasRole("SUPER_ADMIN")
                         // 행사별 매출 요약(티켓+참가비 합산, WBS 5.6) - 전체 행사를 한 번에 보여주는
                         // 현황판이라 개별 행사 담당자가 아니라 SUPER_ADMIN 전용으로 좁힌다.

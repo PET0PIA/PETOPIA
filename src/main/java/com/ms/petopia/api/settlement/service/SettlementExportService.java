@@ -5,14 +5,8 @@ import com.ms.petopia.api.settlement.dto.SettlementResponse;
 import com.ms.petopia.global.excel.ExcelSheetHelper;
 import com.ms.petopia.global.excel.ExcelStyles;
 import lombok.RequiredArgsConstructor;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.FillPatternType;
-import org.apache.poi.ss.usermodel.Font;
-import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
@@ -88,55 +82,47 @@ public class SettlementExportService {
             "행사ID", "행사명", "티켓예매 총금액", "참가비용 총금액", "전체금액", "수수료율", "행사업체금액", "플랫폼금액"
     };
 
-    /** 행사별 매출 요약(SUPER_ADMIN 정산·수수료 화면) 엑셀 export. 위 정산내역 export와 같은 패턴. */
+    /**
+     * 행사별 매출 요약(SUPER_ADMIN 정산·수수료 화면) 엑셀 export. 위 정산내역 export와 같은
+     * 패턴 - 원래는 자체 String 전용 setCell로 따로 짜여있었는데, 금액·수수료율까지 문자열로
+     * 써서 엑셀에서 숫자 정렬·서식이 깨졌다(CodeRabbit 리뷰 지적, PR #222). 공용
+     * ExcelSheetHelper/ExcelStyles로 통일해서 위 exportAsExcel과 동일하게 숫자 셀로 쓴다.
+     */
     public byte[] exportRevenueSummaryAsExcel() throws IOException {
         List<FairRevenueSummaryResponse> summaries = settlementService.getFairRevenueSummaries();
 
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            ExcelStyles styles = new ExcelStyles(wb);
             Sheet sheet = wb.createSheet("행사별 매출 요약");
-            CellStyle headerStyle = buildHeaderStyle(wb);
-
-            Row header = sheet.createRow(0);
-            for (int col = 0; col < REVENUE_SUMMARY_HEADERS.length; col++) {
-                setCell(header, col, REVENUE_SUMMARY_HEADERS[col], headerStyle);
-            }
+            ExcelSheetHelper.writeHeader(sheet, styles, REVENUE_SUMMARY_HEADERS);
 
             for (int i = 0; i < summaries.size(); i++) {
                 FairRevenueSummaryResponse s = summaries.get(i);
                 Row row = sheet.createRow(i + 1);
-                setCell(row, 0, String.valueOf(s.fairId()), null);
-                setCell(row, 1, s.fairName(), null);
-                setCell(row, 2, String.valueOf(s.ticketAmount()), null);
-                setCell(row, 3, String.valueOf(s.vendorFeeAmount()), null);
-                setCell(row, 4, String.valueOf(s.grossAmount()), null);
-                setCell(row, 5, s.commissionRate() != null ? s.commissionRate().toString() : "-", null);
-                setCell(row, 6, String.valueOf(s.businessAmount()), null);
-                setCell(row, 7, String.valueOf(s.platformAmount()), null);
+                boolean band = i % 2 == 1;
+
+                ExcelSheetHelper.setCell(row, 0, s.fairId(), styles.count(band));
+                ExcelSheetHelper.setCell(row, 1, s.fairName(), styles.label(band));
+                ExcelSheetHelper.setCell(row, 2, s.ticketAmount(), styles.count(band));
+                ExcelSheetHelper.setCell(row, 3, s.vendorFeeAmount(), styles.count(band));
+                ExcelSheetHelper.setCell(row, 4, s.grossAmount(), styles.count(band));
+                if (s.commissionRate() != null) {
+                    ExcelSheetHelper.setCell(row, 5, s.commissionRate().doubleValue() * 100, styles.percent(band));
+                } else {
+                    ExcelSheetHelper.setCell(row, 5, "-", styles.label(band));
+                }
+                ExcelSheetHelper.setCell(row, 6, s.businessAmount(), styles.count(band));
+                ExcelSheetHelper.setCell(row, 7, s.platformAmount(), styles.count(band));
             }
 
             for (int col = 0; col < REVENUE_SUMMARY_HEADERS.length; col++) {
-                sheet.autoSizeColumn(col);
+                sheet.setColumnWidth(col, 14 * 256);
             }
+            ExcelSheetHelper.finalizeSheet(sheet, REVENUE_SUMMARY_HEADERS.length - 1, summaries.size());
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             wb.write(out);
             return out.toByteArray();
         }
-    }
-
-    private CellStyle buildHeaderStyle(Workbook wb) {
-        CellStyle style = wb.createCellStyle();
-        Font font = wb.createFont();
-        font.setBold(true);
-        style.setFont(font);
-        style.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
-        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        return style;
-    }
-
-    private void setCell(Row row, int col, String value, CellStyle style) {
-        Cell cell = row.createCell(col);
-        cell.setCellValue(value);
-        if (style != null) cell.setCellStyle(style);
     }
 }
