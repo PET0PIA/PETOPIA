@@ -218,6 +218,19 @@ export function ChatWidget() {
   const activeConversation =
     conversation && conversation.status !== "CLOSED" ? conversation : null;
 
+  /*
+   * `문의 내역` 버튼을 띄울지.
+   *
+   * bootstrap.hasHistory만 보면 안 된다. 그 값은 패널을 열 때 받은 스냅샷이라, 이 세션에서
+   * 상담을 시작한 경우 여전히 거짓이다. 그러면 상담을 만든 뒤 뒤로 나온 사용자에게 자기
+   * 상담으로 돌아갈 길이 사라진다 - `상담원 연결`이 진행 중 상담으로 데려가긴 하지만,
+   * 그 라벨은 "돌아가기"로 읽히지 않아 사용자는 새 문의가 시작될 거라고 생각한다.
+   *
+   * transcript를 함께 보는 이유는 그것이 "이 창에 보여줄 내용이 있는가"의 정확한 답이기
+   * 때문이다. THREAD 화면이 그리는 것이 곧 transcript다.
+   */
+  const hasThread = (bootstrap?.hasHistory ?? false) || transcript.length > 0;
+
   const goMenu = () => {
     setScreen("MENU");
     setAnswerMenu(null);
@@ -415,7 +428,7 @@ export function ChatWidget() {
             disabled={busy}
             onSelectFixed={handleSelectFixed}
             onConnectAgent={handleConnectAgent}
-            onOpenHistory={bootstrap?.hasHistory ? () => setScreen("THREAD") : null}
+            onOpenHistory={hasThread ? () => setScreen("THREAD") : null}
           />
         </>
       )}

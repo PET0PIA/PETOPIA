@@ -93,8 +93,14 @@
         SELECT m.label AS menu_label
              , COUNT(c.conversation_id) AS conversation_count
              , COALESCE(clicks.click_count, 0) AS click_count
-             , SUM(c.status = 'WAITING_AGENT') AS waiting_count
-             , SUM(c.ai_answer_count > 0) AS ai_answered_count
+             <!--
+               COALESCE로 감싼다. 고정형은 이제 대화가 0건이라 SUM()의 입력 행이 없고,
+               그때 SUM은 0이 아니라 NULL을 준다. DTO 쪽은 long(non-null)이라 매핑이
+               0으로 흘러가긴 하지만, "행이 없으면 0"을 SQL이 말하게 두는 편이 낫다 -
+               나중에 이 값을 다른 표현식에 넣으면 NULL이 전체를 NULL로 만든다.
+             -->
+             , COALESCE(SUM(c.status = 'WAITING_AGENT'), 0) AS waiting_count
+             , COALESCE(SUM(c.ai_answer_count > 0), 0) AS ai_answered_count
              , AVG(TIMESTAMPDIFF(SECOND, c.created_at, first_agent.replied_at))
                    AS avg_first_response_seconds
           FROM chat_menu m
