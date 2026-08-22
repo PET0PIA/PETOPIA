@@ -16,8 +16,11 @@ import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -32,6 +35,7 @@ public class NotificationService {
     private final NotificationDeliveryMapper notificationDeliveryMapper;
     private final EmailSenderService emailSenderService;
     private final AuthMapper authMapper;
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SaveNotificationDto.Response save(SaveNotificationDto.Request request) {
@@ -140,9 +144,15 @@ public class NotificationService {
      * 한 명 저장에 실패해도 나머지 관리자 발송은 계속 진행한다.
      */
     public void notifySuperAdmins(NotificationType type, String title, String body) {
+        // save()는 @Transactional(REQUIRES_NEW)이지만 여기서는 같은 인스턴스를 통해 직접 호출(self-invocation)하므로
+        // 프록시를 거치지 않아 그 어노테이션이 적용되지 않는다. TransactionTemplate으로 트랜잭션 경계를 직접 만들어
+        // 호출자(정산 확정 등)의 트랜잭션과 무관하게 관리자별로 독립적으로 커밋되도록 한다.
+        TransactionTemplate txTemplate = new TransactionTemplate(transactionManager);
+        txTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
         for (Long adminUserId : authMapper.selectSuperAdminUserIds()) {
             try {
-                save(new SaveNotificationDto.Request(
+                txTemplate.executeWithoutResult(status -> save(new SaveNotificationDto.Request(
                         adminUserId,
                         RecipientType.SUPER_ADMIN,
                         type,
@@ -151,7 +161,7 @@ public class NotificationService {
                         null,
                         List.of(DeliveryChannel.IN_APP),
                         null
-                ));
+                )));
             } catch (Exception e) {
                 log.error("SUPER_ADMIN 알림 저장 실패. adminUserId={}, type={}", adminUserId, type, e);
             }

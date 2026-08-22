@@ -761,7 +761,7 @@ public class PaymentService {
                         adminUserId,
                         RecipientType.EVENT_ADMIN,
                         NotificationType.PAYMENT_COMPLETED,
-                        "참가비/예약금 결제가 접수되었습니다",
+                        "결제가 접수되었습니다",
                         body,
                         null,
                         List.of(DeliveryChannel.IN_APP),
