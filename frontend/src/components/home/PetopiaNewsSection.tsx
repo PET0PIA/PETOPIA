@@ -2,6 +2,7 @@ import { Pin } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { SectionHeader } from "../common/SectionHeader";
+import { HomeBand } from "./HomeBand";
 import { NOTICE_CATEGORY_LABELS, getNotices, type NoticeCategory, type NoticeListItem } from "../../api/notice";
 import { formatShortDate } from "../../utils/date";
 
@@ -38,52 +39,56 @@ export function PetopiaNewsSection() {
   if (notices !== null && notices.length === 0) return null;
 
   return (
-    <section>
-      <SectionHeader title="PETOPIA 소식" description="공지와 이벤트를 확인하세요" centered />
-      <div className="mb-5 flex flex-wrap justify-center gap-2">
-        {FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            type="button"
-            onClick={() => setActive(filter.value)}
-            aria-pressed={active === filter.value}
-            className={`rounded-pill px-3 py-1.5 text-sm font-medium transition ${
-              active === filter.value ? "bg-primary text-white" : "bg-surface-alt text-muted hover:bg-line"
-            }`}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
-
-      {notices === null ? (
-        <div className="grid min-h-40 place-items-center rounded-card text-sm text-muted ring-1 ring-line">불러오는 중이에요...</div>
-      ) : items.length === 0 ? (
-        <div className="grid min-h-40 place-items-center rounded-card text-sm text-muted ring-1 ring-line">이 분류에는 아직 소식이 없어요.</div>
-      ) : (
-        <ul className="overflow-hidden rounded-card ring-1 ring-line">
-          {items.map((item) => (
-            <li key={`${item.category}-${item.id}`} className="border-b border-line last:border-b-0">
-              <Link to={item.linkPath} className="flex items-center gap-3 px-5 py-4 transition hover:bg-primary-soft">
-                <span className="shrink-0 rounded-pill bg-surface-alt px-2.5 py-1 text-xs font-bold text-ink">
-                  {NOTICE_CATEGORY_LABELS[item.category]}
-                </span>
-                <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  {item.pinned && <Pin size={13} className="shrink-0 text-ink" aria-label="상단 고정" />}
-                  <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{item.title}</span>
-                </span>
-                <span className="shrink-0 text-xs text-muted">{formatShortDate(item.createdAt)}</span>
-              </Link>
-            </li>
+    <HomeBand tone="alt">
+      <section>
+        <SectionHeader title="PETOPIA 소식" description="공지와 이벤트를 확인하세요" centered />
+        <div className="mb-5 flex flex-wrap justify-center gap-2">
+          {FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              onClick={() => setActive(filter.value)}
+              aria-pressed={active === filter.value}
+              className={`rounded-pill border px-3 py-1.5 text-sm font-medium transition ${
+                active === filter.value
+                  ? "border-primary bg-primary text-white"
+                  : "border-line bg-card text-muted hover:text-ink"
+              }`}
+            >
+              {filter.label}
+            </button>
           ))}
-        </ul>
-      )}
+        </div>
 
-      <div className="mt-5 text-center">
-        <Link to="/news" className="inline-flex min-h-11 items-center rounded-button border border-line bg-card px-5 text-sm font-bold text-ink transition hover:bg-page">
-          소식 전체 보기
-        </Link>
-      </div>
-    </section>
+        {notices === null ? (
+          <div className="grid min-h-40 place-items-center rounded-card bg-card text-sm text-muted ring-1 ring-line">불러오는 중이에요...</div>
+        ) : items.length === 0 ? (
+          <div className="grid min-h-40 place-items-center rounded-card bg-card text-sm text-muted ring-1 ring-line">이 분류에는 아직 소식이 없어요.</div>
+        ) : (
+          <ul className="overflow-hidden rounded-card bg-card ring-1 ring-line">
+            {items.map((item) => (
+              <li key={`${item.category}-${item.id}`} className="border-b border-line last:border-b-0">
+                <Link to={item.linkPath} className="flex items-center gap-3 px-5 py-4 transition hover:bg-primary-soft">
+                  <span className="shrink-0 rounded-pill bg-surface-alt px-2.5 py-1 text-xs font-bold text-ink">
+                    {NOTICE_CATEGORY_LABELS[item.category]}
+                  </span>
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    {item.pinned && <Pin size={13} className="shrink-0 text-ink" aria-label="상단 고정" />}
+                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{item.title}</span>
+                  </span>
+                  <span className="shrink-0 text-xs text-muted">{formatShortDate(item.createdAt)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-5 text-center">
+          <Link to="/news" className="inline-flex min-h-11 items-center rounded-button border border-line bg-card px-5 text-sm font-bold text-ink transition hover:bg-page">
+            소식 전체 보기
+          </Link>
+        </div>
+      </section>
+    </HomeBand>
   );
 }

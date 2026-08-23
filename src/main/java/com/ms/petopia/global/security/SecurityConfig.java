@@ -54,6 +54,11 @@ public class SecurityConfig {
                                 // 미인증으로 통과시키면 토큰 하나로 여러 계정이 게이트를 넘을 수 있다.
                                 "/api/v1/fairs/*/waiting-room/**"
                         ).authenticated()
+                        // 홈 화면 상단 숫자(전체 방문자·동반 반려동물 합계). 합계만 나가고
+                        // 개인정보가 없어 비로그인도 봐야 한다. 지금은 anyRequest().permitAll()에
+                        // 이미 걸리지만, 기본값이 나중에 authenticated()로 바뀌면 홈 상단이
+                        // 조용히 비어버리므로 chat 규칙과 같은 이유로 명시해 둔다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/entry-stats/public").permitAll()
                         .requestMatchers("/api/v1/admin/fairs/**")
                         .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // 관리자 로그인 자체는 인증 전 상태에서 호출돼야 하므로 아래 /api/admin/** 규칙보다
