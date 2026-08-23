@@ -84,7 +84,7 @@ class BoothVisitServiceTest {
         verify(boothVisitMapper).insertBoothVisit(
                 FAIR_ID, BOOTH_ID, BUSINESS_ID, USER_ID, RESERVATION_ID, NOW);
 
-        // 최초 방문이면 QR 주인(방문객) 본인에게 체크인 알림이 가야 하는데, 그건 afterCommit
+        // 최초 방문이면 QR 주인(관람객) 본인에게 체크인 알림이 가야 하는데, 그건 afterCommit
         // 콜백이라 트랜잭션이 실제로 커밋되기 전까지는 호출되지 않는다.
         verifyNoInteractions(notificationService);
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);

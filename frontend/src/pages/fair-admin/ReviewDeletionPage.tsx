@@ -26,7 +26,7 @@ const visitPurposeLabels: Record<VisitPurpose, string> = {
 };
 
 /**
- * 박람회 관리자 콘솔 - 리뷰 관리(삭제 전용). 방문·리뷰 통계(FairStatsPage, "/fair-admin/statistics")와
+ * 행사 관리자 콘솔 - 리뷰 관리(삭제 전용). 방문·리뷰 통계(FairStatsPage, "/fair-admin/statistics")와
  * 역할을 분리했다 - 통계 화면은 집계만 보여주고, 여기서는 부적절한 리뷰 1건을 골라 삭제한다.
  * 목록 조회는 공개 목록 API(GET /reviews)를 그대로 재사용한다 - 닉네임·태그·작성일까지
  * 이미 다 내려주고 있어 관리자 전용 조회 API를 새로 만들지 않았다(petopia-review-feature-plan
@@ -117,7 +117,7 @@ export function ReviewDeletionPage() {
   return (
     <div className="mx-auto max-w-4xl py-2">
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title="리뷰 관리"
         description="부적절한 리뷰를 확인하고 삭제할 수 있어요. 집계된 통계는 '리뷰 통계' 메뉴에서 볼 수 있어요."
       />
@@ -144,7 +144,7 @@ export function ReviewDeletionPage() {
       )}
 
       {fairId !== null && !loading && !loadError && items.length === 0 && (
-        <EmptyState title="아직 등록된 리뷰가 없어요." description="방문객이 리뷰를 남기면 이곳에서 확인하고 관리할 수 있어요." />
+        <EmptyState title="아직 등록된 리뷰가 없어요." description="관람객이 리뷰를 남기면 이곳에서 확인하고 관리할 수 있어요." />
       )}
 
       {fairId !== null && !loading && !loadError && items.length > 0 && (

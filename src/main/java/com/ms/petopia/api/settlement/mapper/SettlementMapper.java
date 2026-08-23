@@ -18,10 +18,10 @@ public interface SettlementMapper {
 
     SettlementRow selectById(@Param("settlementId") Long settlementId);
 
-    /** UK_SETTLEMENT_FAIR_BUSINESS 덕분에 행사·업체 조합당 정산은 최대 1건. */
+    /** UK_SETTLEMENT_FAIR_BUSINESS 덕분에 행사·사업자 조합당 정산은 최대 1건. */
     SettlementRow selectByFairAndBusiness(@Param("fairId") Long fairId, @Param("businessId") Long businessId);
 
-    /** 행사 하나에 속한 정산 전체(박람회관리자 조회용). */
+    /** 행사 하나에 속한 정산 전체(행사 관리자 조회용). */
     List<SettlementRow> selectByFairId(@Param("fairId") Long fairId);
 
     /**
@@ -49,7 +49,7 @@ public interface SettlementMapper {
     int markNeedsRecalculation(@Param("settlementId") Long settlementId);
 
     /**
-     * 정산 한 건을 생성한다(PENDING). 같은 행사·업체로 이미 계산된 정산이 있으면
+     * 정산 한 건을 생성한다(PENDING). 같은 행사·사업자로 이미 계산된 정산이 있으면
      * UK_SETTLEMENT_FAIR_BUSINESS 위반으로 DuplicateKeyException — 서비스 계층에서
      * SETTLEMENT_ALREADY_EXISTS로 변환한다.
      */

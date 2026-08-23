@@ -10,7 +10,7 @@ import petopiaLogoOriginal from "../../assets/logo/petopiaLOGO.png";
 interface ConsoleChromeProps {
   /** 왼쪽 사이드바에 펼칠 콘솔 네비게이션(그룹 = 섹션, path만 있는 항목 = 단일 링크). */
   navigation: NavigationItem[];
-  /** 로고 옆 배지로 보여줄 콘솔 이름. 예: "최고 관리자", "박람회 관리자", "부스 관리자". */
+  /** 로고 옆 배지로 보여줄 콘솔 이름. 예: "최고 관리자", "행사 관리자", "부스 관리자". */
   consoleLabel: string;
   children: ReactNode;
 }

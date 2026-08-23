@@ -25,7 +25,7 @@ import java.util.List;
 public class SettlementExportService {
 
     private static final String[] HEADERS = {
-            "정산ID", "업체ID", "총참가비", "환불액", "수수료율", "수수료액", "정산액", "상태", "확정일시", "확정자ID"
+            "정산ID", "사업자ID", "총참가비", "환불액", "수수료율", "수수료액", "정산액", "상태", "확정일시", "확정자ID"
     };
 
     private final SettlementService settlementService;
@@ -79,7 +79,7 @@ public class SettlementExportService {
     }
 
     private static final String[] REVENUE_SUMMARY_HEADERS = {
-            "행사ID", "행사명", "티켓예매 총금액", "참가비용 총금액", "전체금액", "수수료율", "행사업체금액", "플랫폼금액"
+            "행사ID", "행사명", "예약금 총금액", "참가비 총금액", "전체금액", "수수료율", "주최측금액", "플랫폼금액"
     };
 
     /**

@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 
 /**
- * 행사관리자 통계 - 리뷰(태그) 데이터 기반 부분만 담당한다. 예약·입장 데이터 기반 부분은
+ * 행사 관리자 통계 - 리뷰(태그) 데이터 기반 부분만 담당한다. 예약·입장 데이터 기반 부분은
  * com.ms.petopia.api.statistics 도메인(meltingujin)의 기존 API를 그대로 쓴다 - 프론트
  * (Phase 6)가 두 API를 함께 호출해서 한 화면에 합친다.
  */

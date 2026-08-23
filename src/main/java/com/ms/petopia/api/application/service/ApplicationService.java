@@ -114,7 +114,7 @@ public class ApplicationService {
                         return;
                     }
                     Business business = businessMapper.selectById(businessId);
-                    String businessName = business != null ? business.getName() : "업체";
+                    String businessName = business != null ? business.getName() : "참가업체";
                     notificationService.save(new SaveNotificationDto.Request(
                             adminUserId,
                             RecipientType.EVENT_ADMIN,
@@ -522,7 +522,7 @@ public class ApplicationService {
             notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId, NotificationType.VENDOR_APPLICATION_APPROVED,
                     "참가 신청이 승인되었습니다",
                     "참가비 " + finalPrice + "원을 " + paymentDueAt.toLocalDate() + "까지 결제해주세요.",
-                    () -> withRecipientEmail(business.getOwnerId(), email ->
+                    () -> withRecipientEmail(applicationId, business.getOwnerId(), email ->
                             mailService.sendVendorApplicationApprovedEmail(email,
                                     paymentMapper.selectFairNameById(application.getFairId()), finalPrice,
                                     paymentDueAt.toLocalDate(), frontendUrl + "/vendor/participations")));
@@ -584,7 +584,7 @@ public class ApplicationService {
             notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId, NotificationType.VENDOR_APPLICATION_REJECTED,
                     "참가 신청이 반려되었습니다",
                     "반려 사유: " + request.getRejectReason(),
-                    () -> withRecipientEmail(business.getOwnerId(), email ->
+                    () -> withRecipientEmail(applicationId, business.getOwnerId(), email ->
                             mailService.sendVendorApplicationRejectedEmail(email,
                                     paymentMapper.selectFairNameById(application.getFairId()), request.getRejectReason())));
         }
@@ -765,7 +765,7 @@ public class ApplicationService {
             notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId, NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
                     "참가 취소 요청이 승인되었습니다",
                     "신청이 취소 처리되었습니다.",
-                    () -> withRecipientEmail(business.getOwnerId(),
+                    () -> withRecipientEmail(applicationId, business.getOwnerId(),
                             email -> mailService.sendVendorApplicationCancelApprovedEmail(email,
                                     paymentMapper.selectFairNameById(application.getFairId()))));
         }
@@ -865,7 +865,7 @@ public class ApplicationService {
             notifyApplicationEventAfterCommit(business.getOwnerId(), applicationId, NotificationType.VENDOR_APPLICATION_CANCEL_REJECTED,
                     "참가 취소 요청이 반려되었습니다",
                     "취소 요청이 반려되었습니다.",
-                    () -> withRecipientEmail(business.getOwnerId(),
+                    () -> withRecipientEmail(applicationId, business.getOwnerId(),
                             email -> mailService.sendVendorApplicationCancelRejectedEmail(email,
                                     paymentMapper.selectFairNameById(application.getFairId()))));
         }
@@ -1005,9 +1005,18 @@ public class ApplicationService {
 
     }
 
-    /** 이메일 액션 안에서 공통으로 쓰는 수신자 이메일 조회 — 없으면 조용히 건너뛴다. */
-    private void withRecipientEmail(Long userId, java.util.function.Consumer<String> action) {
-        User user = authMapper.selectUserById(userId);
+    /**
+     * 이메일 액션 안에서 공통으로 쓰는 수신자 이메일 조회.
+     * 신청서에 담당자 이메일(application_form.manager_email)이 입력돼 있으면 그걸 우선 쓰고,
+     * 없으면 사업자 계정(회원가입) 이메일로 폴백한다 — 둘 다 없으면 조용히 건너뛴다.
+     */
+    private void withRecipientEmail(Long applicationId, Long ownerId, java.util.function.Consumer<String> action) {
+        String managerEmail = applicationMapper.selectManagerEmailByApplicationId(applicationId);
+        if (managerEmail != null && !managerEmail.isBlank()) {
+            action.accept(managerEmail);
+            return;
+        }
+        User user = authMapper.selectUserById(ownerId);
         if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
             action.accept(user.getEmail());
         }
@@ -1072,7 +1081,7 @@ public class ApplicationService {
                         NotificationType.VENDOR_APPLICATION_CANCEL_APPROVED,
                         "사업자 승인 취소로 참가 신청이 취소되었습니다",
                         "관리자가 사업자를 취소 처리하여 신청이 취소되었습니다.",
-                        () -> withRecipientEmail(business.getOwnerId(),
+                        () -> withRecipientEmail(applicationId, business.getOwnerId(),
                                 email -> mailService.sendVendorApplicationCancelApprovedEmail(email,
                                         paymentMapper.selectFairNameById(application.getFairId()))));
 

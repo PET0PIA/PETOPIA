@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * 행사 공개 요약 조회 응답. 로그인 여부와 무관하게 누구나 볼 수 있는 화면(티켓 예매 화면 등)
+ * 행사 공개 요약 조회 응답. 로그인 여부와 무관하게 누구나 볼 수 있는 화면(티켓 예약 화면 등)
  * 전용이다 - {@link FairApplicationDetailResponse}와 달리 managerName/managerPhone/
  * managerEmail(PII), reviewedAt/rejectReason/paymentDueAt(내부 심사 정보), applicantUserId를
  * 전부 뺐다.

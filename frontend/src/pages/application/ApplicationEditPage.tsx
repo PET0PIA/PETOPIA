@@ -241,6 +241,7 @@ function ApplicationEditContent({ id }: { id: number }) {
               <div>
                 {label("managerEmail", "담당자 이메일", true)}
                 <Input id="managerEmail" type="email" value={form.managerEmail} onChange={(event) => update("managerEmail", event.target.value)} maxLength={100} required />
+                <p className="mt-1 text-xs text-muted">참가 신청 승인·반려 등 알림 메일이 이 주소로 발송돼요.</p>
               </div>
             </div>
           </Card>

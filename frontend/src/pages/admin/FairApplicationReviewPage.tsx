@@ -291,7 +291,7 @@ export function FairApplicationReviewPage() {
     if (!detail) return;
     const proceed = await confirm({
       title: "행사를 공개할까요?",
-      description: "공개하면 즉시 티켓 예매 화면에 노출되고 관람객 예약을 받을 수 있어요.",
+      description: "공개하면 즉시 티켓 예약 화면에 노출되고 관람객 예약을 받을 수 있어요.",
       confirmLabel: "공개",
     });
     if (!proceed) return;
@@ -397,7 +397,7 @@ export function FairApplicationReviewPage() {
               {detail.publishedAt ? (
                 <p className="mt-2 flex items-center gap-1.5 text-sm font-bold text-ink">
                   <Globe size={14} />
-                  {formatDateTime(detail.publishedAt)}에 공개됨 (티켓 예매 화면에 노출 중)
+                  {formatDateTime(detail.publishedAt)}에 공개됨 (티켓 예약 화면에 노출 중)
                 </p>
               ) : detail.canceledAt ? (
                 <p className="mt-2 text-sm text-muted">취소된 행사라 공개할 수 없어요.</p>

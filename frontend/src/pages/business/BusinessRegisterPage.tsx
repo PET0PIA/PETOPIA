@@ -138,7 +138,7 @@ export function BusinessRegisterPage() {
   return (
     <PageContainer className="py-10">
       <PageHeader
-        eyebrow="PETOPIA 참여 업체"
+        eyebrow="PETOPIA 참가업체"
         title="사업자 등록을 신청해요"
         description="국세청 진위확인 후 사업자등록증을 첨부해 신청하면, 관리자 심사 후 승인돼요. *는 필수 입력이에요."
       />

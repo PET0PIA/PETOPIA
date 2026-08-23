@@ -9,7 +9,7 @@ import { FairPublicCard } from "../fair/FairPublicCard";
 
 type ViewMode = "grid" | "list";
 
-/** 참여 부스 신청 진입점. 지금 참가기업 모집중인 행사만 골라 보여주고, 클릭하면 신청서 작성으로 바로 이동한다. */
+/** 부스 참가 신청 진입점. 지금 참가업체 모집중인 행사만 골라 보여주고, 클릭하면 신청서 작성으로 바로 이동한다. */
 export function ParticipationNewPage() {
   const [fairs, setFairs] = useState<FairPublicListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,8 +64,8 @@ export function ParticipationNewPage() {
   return (
     <PageContainer className="py-7 sm:py-10">
       <PageHeader
-        eyebrow="참여 부스 신청"
-        title="참가기업 모집중인 행사"
+        eyebrow="부스 참가 신청"
+        title="참가업체 모집중인 행사"
         description="행사를 선택하면 참가 신청서 작성으로 이동해요."
         action={hasFairs ? viewToggle : undefined}
       />

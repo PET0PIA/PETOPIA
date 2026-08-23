@@ -143,7 +143,7 @@ export function ReservationDetailPage() {
   // 따라 문구가 달라지고, 사유·요청도메인·처리시각까지 같이 보여줘야 해서다.
   const [refund, setRefund] = useState<PaymentRecord | null>(null);
 
-  // 결제 대기 예약을 이어서 결제하는 흐름(예매 화면의 결제 단계와 동일).
+  // 결제 대기 예약을 이어서 결제하는 흐름(예약 화면의 결제 단계와 동일).
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   // 예약금은 가상계좌를 쓸 수 없어서 타입부터 좁혀 둔다(ReservationPaymentMethod 주석 참고).
@@ -314,7 +314,7 @@ export function ReservationDetailPage() {
   const target = reservation; // 아래 콜백에서 non-null로 쓰기 위한 지역 별칭
 
   /**
-   * 결제 대기 예약을 이어서 결제한다. 예매 화면(TicketReservationPage)의 결제 단계와 같은 흐름 —
+   * 결제 대기 예약을 이어서 결제한다. 예약 화면(TicketReservationPage)의 결제 단계와 같은 흐름 —
    * 결제를 생성한 뒤 토스 결제창을 띄운다. 정상 흐름이면 /payments/success로 리다이렉트되므로
    * 이 함수가 끝까지 진행되면 페이지는 곧 사라진다(그래서 성공 시 paying을 되돌리지 않는다).
    */
@@ -362,7 +362,7 @@ export function ReservationDetailPage() {
     setChangePetIds(target.pets.map((pet) => pet.petId));
     setChangePetAllowed(false);
     setDateDialogOpen(true);
-    // 예매 화면과 같은 방식으로 이 행사의 예약 가능 운영일·잔여석을 불러온다.
+    // 예약 화면과 같은 방식으로 이 행사의 예약 가능 운영일·잔여석을 불러온다.
     setAvailLoading(true);
     getReservationAvailability(target.fairId)
       .then((res) => {

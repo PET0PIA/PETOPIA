@@ -109,7 +109,7 @@ class OnsiteSalesPolicyServiceTest {
                 10L, 20L, 30L, new UpdateOnsiteSalesPolicyRequest(10_000L, 50, "OPEN", 1));
 
         assertThat(response.capacity()).isEqualTo(50);
-        // 판매된 수는 관리자 저장이 건드리지 않는다 - 예매·취소만 움직이는 값이다.
+        // 판매된 수는 관리자 저장이 건드리지 않는다 - 예약·취소만 움직이는 값이다.
         assertThat(response.reservedCount()).isEqualTo(7);
     }
 

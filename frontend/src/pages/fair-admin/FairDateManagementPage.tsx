@@ -313,7 +313,7 @@ export function FairDateManagementPage() {
     if (fairId === null) return;
     const proceed = await confirm({
       title: "행사를 공개할까요?",
-      description: "공개하면 즉시 티켓 예매 화면에 노출되고 관람객 예약을 받을 수 있어요.",
+      description: "공개하면 즉시 티켓 예약 화면에 노출되고 관람객 예약을 받을 수 있어요.",
       confirmLabel: "공개",
     });
     if (!proceed) return;
@@ -412,7 +412,7 @@ export function FairDateManagementPage() {
   return (
     <div className="mx-auto max-w-6xl py-2">
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title="운영일·정원 관리"
         description="행사가 실제로 열리는 날짜별로 예약 정원과 입장 가능 시간을 관리해요."
         action={fairId !== null ? <Button onClick={openCreateDialog}><Plus size={16} />운영일 추가</Button> : undefined}
@@ -434,7 +434,7 @@ export function FairDateManagementPage() {
               <p className="text-xs text-muted">
                 {publishedAt
                   ? `공개됨 (${new Date(publishedAt).toLocaleString("ko-KR")})`
-                  : "공개하면 관람객이 티켓 예매 화면에서 이 행사를 보고 예약할 수 있어요. 개설비 결제가 끝난 뒤에만 공개할 수 있어요."}
+                  : "공개하면 관람객이 티켓 예약 화면에서 이 행사를 보고 예약할 수 있어요. 개설비 결제가 끝난 뒤에만 공개할 수 있어요."}
               </p>
               {publishError && <p className="mt-1 text-xs font-bold text-primary-strong">{publishError}</p>}
             </div>
@@ -613,7 +613,7 @@ export function FairDateManagementPage() {
                 </div>
                 <div>
                   <label htmlFor="infoNoticeText" className="mb-1.5 block text-sm font-bold text-ink">관람 안내사항</label>
-                  <Textarea id="infoNoticeText" value={fairInfo.noticeText} onChange={(event) => updateFairInfoField("noticeText", event.target.value)} placeholder="방문객이 꼭 알아야 할 관람 안내사항을 입력해 주세요." />
+                  <Textarea id="infoNoticeText" value={fairInfo.noticeText} onChange={(event) => updateFairInfoField("noticeText", event.target.value)} placeholder="관람객이 꼭 알아야 할 관람 안내사항을 입력해 주세요." />
                 </div>
               </div>
             </div>

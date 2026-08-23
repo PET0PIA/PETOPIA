@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
  * @param refundAmount      그 참가비 중 환불된 합계
  * @param commissionRate    정산 시점 요율 스냅샷(MVP는 상수 고정값)
  * @param commissionAmount  (grossAmount - refundAmount) x commissionRate
- * @param netAmount         업체 지급액 = (grossAmount - refundAmount) - commissionAmount
+ * @param netAmount         사업자 지급액 = (grossAmount - refundAmount) - commissionAmount
  * @param status            PENDING(계산됨) / CONFIRMED(확정) / PAID(2차 범위)
  */
 public record SettlementResponse(

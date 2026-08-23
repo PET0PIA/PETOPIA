@@ -10,7 +10,7 @@ import { ApiError } from "../../api/client";
 import { downloadVisitStatsExcel } from "../../api/statistics";
 
 /**
- * 박람회 관리자 콘솔 - 방문·리뷰 통계. 예전엔 "방문 통계"(VisitStatisticsPage)와
+ * 행사 관리자 콘솔 - 방문·리뷰 통계. 예전엔 "방문 통계"(VisitStatisticsPage)와
  * "리뷰 통계"(ReviewManagementPage)가 별도 페이지였고, 리뷰 페이지가 방문 통계 위젯 일부를
  * 그대로 베껴 중복 표시했다. 방문 통계 부분은 VisitStatsSection, 리뷰 통계 부분은
  * ReviewStatsSection으로 뽑아 재사용하고, 한 화면으로 합쳐 페이지를 오가지 않고도 방문·리뷰
@@ -39,7 +39,7 @@ export function FairStatsPage() {
   return (
     <div className="mx-auto max-w-[1600px] py-2">
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title="방문·리뷰 통계"
         description="방문 통계와 태그 기반 리뷰 통계를 한 화면에서 확인해요."
         action={

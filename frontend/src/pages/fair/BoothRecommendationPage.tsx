@@ -42,7 +42,7 @@ export function BoothRecommendationPage() {
   if (!idValid) {
     return (
       <PageContainer className="py-10">
-        <EmptyState title="잘못된 행사 주소예요." description="행사 주소가 올바르지 않아요." actionTo="/businesses" actionLabel="행사별 참여 기업으로" />
+        <EmptyState title="잘못된 행사 주소예요." description="행사 주소가 올바르지 않아요." actionTo="/businesses" actionLabel="행사별 참가업체으로" />
       </PageContainer>
     );
   }

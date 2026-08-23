@@ -73,12 +73,12 @@ type IdFilterKind = "fairId" | "businessId" | "reservationId";
 
 const idFilterLabels: Record<IdFilterKind, string> = {
   fairId: "행사ID",
-  businessId: "업체ID",
+  businessId: "사업자ID",
   reservationId: "예약ID",
 };
 
 // 조건별 결제 목록(관리자용). fairId/businessId/reservationId/paymentType/status 전부 선택적
-// 필터로 AND 조합된다. 행사ID·업체ID·예약ID는 결제당 의미가 겹치지 않는 배타적 조건이라(한
+// 필터로 AND 조합된다. 행사ID·사업자ID·예약ID는 결제당 의미가 겹치지 않는 배타적 조건이라(한
 // 결제는 셋 중 하나만 채워짐) 별도 칸으로 나누지 않고 "ID유형" 드롭다운 + 값 입력 한 쌍으로
 // 합쳤다(2026-08-21, 결제유형 드롭다운과 같은 패턴).
 function AdminListSection() {
@@ -136,7 +136,7 @@ function AdminListSection() {
           <label htmlFor="al-type" className="mb-1.5 block text-sm font-bold text-ink">결제 유형</label>
           <Select id="al-type" value={paymentType} onChange={(event) => setPaymentType(event.target.value as PaymentType | "")}>
             <option value="">전체</option>
-            <option value="RESERVATION_DEPOSIT">예약 예약금</option>
+            <option value="RESERVATION_DEPOSIT">관람객 예약금</option>
             <option value="VENDOR_FEE">참가업체 참가비</option>
             <option value="FAIR_OPENING_FEE">행사 개설비</option>
           </Select>

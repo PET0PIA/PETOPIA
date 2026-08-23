@@ -73,7 +73,23 @@
          ORDER BY ft.sort_order
     </select>
 
-    <!-- ===== 행사관리자 통계(Phase 6) ===== -->
+    <!-- ===== 내 리뷰 목록(마이페이지) ===== -->
+
+    <select id="countByUserId" resultType="long">
+        SELECT COUNT(*) FROM fair_reviews WHERE user_id = #{userId}
+    </select>
+
+    <select id="selectListByUserId" resultType="MyReviewListRow">
+        SELECT fr.review_id, fr.fair_id, f.name AS fair_name, f.poster_image_url,
+               fr.companion_type, fr.visit_purpose, fr.would_revisit, fr.created_at
+          FROM fair_reviews fr
+          JOIN fairs f ON f.fair_id = fr.fair_id
+         WHERE fr.user_id = #{userId}
+         ORDER BY fr.created_at DESC, fr.review_id DESC
+         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- ===== 행사 관리자 통계(Phase 6) ===== -->
 
     <select id="countByFairId" resultType="long">
         SELECT COUNT(*)

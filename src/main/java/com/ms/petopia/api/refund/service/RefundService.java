@@ -183,7 +183,7 @@ public class RefundService {
                     "이미 확정된 정산에 포함된 결제는 환불할 수 없습니다. 정산 담당자에게 문의해 주세요.");
         }
         // 행사별 최종정산(2026-08-22)도 같은 결제를 포함하고 있을 수 있어 똑같이 확인한다 -
-        // 위 업체별 정산과는 완전히 별개 테이블(fair_settlement_item)이라 둘 다 체크해야 한다.
+        // 위 사업자별 정산과는 완전히 별개 테이블(fair_settlement_item)이라 둘 다 체크해야 한다.
         Long fairSettlementId = fairSettlementMapper.selectFairSettlementIdByPaymentId(paymentId);
         if (fairSettlementId != null && fairSettlementMapper.markNeedsRecalculation(fairSettlementId) == 0) {
             throw new CommonException(ErrorCode.REFUND_TARGET_NOT_REFUNDABLE,
