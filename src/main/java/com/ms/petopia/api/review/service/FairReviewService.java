@@ -17,6 +17,9 @@ import com.ms.petopia.api.review.dto.FairReviewListRow;
 import com.ms.petopia.api.review.dto.FairReviewResponse;
 import com.ms.petopia.api.review.dto.FairReviewSummaryResponse;
 import com.ms.petopia.api.review.dto.FeedbackTag;
+import com.ms.petopia.api.review.dto.MyReviewListItemResponse;
+import com.ms.petopia.api.review.dto.MyReviewListResponse;
+import com.ms.petopia.api.review.dto.MyReviewListRow;
 import com.ms.petopia.api.review.dto.MyReviewStatusResponse;
 import com.ms.petopia.api.review.dto.ReviewTagLabelRow;
 import com.ms.petopia.api.review.dto.SubmitFairReviewRequest;
@@ -162,6 +165,44 @@ public class FairReviewService {
                 .toList();
 
         return new FairReviewListResponse(items, page, size, totalElements, totalPages, page + 1 < totalPages);
+    }
+
+    /**
+     * 내 리뷰 목록(마이페이지, 최신순 페이지네이션). listPublic과 같은 구조(목록 1쿼리 + 태그
+     * 라벨 배치 1쿼리)를 쓰되, 여러 행사에 걸친 리뷰를 보여줘야 해서 fairs를 조인해 행사명·
+     * 포스터 이미지를 함께 내려준다.
+     */
+    @Transactional(readOnly = true)
+    public MyReviewListResponse listMine(Long userId, int page, int size) {
+        if (page < 0 || size <= 0 || size > MAX_PAGE_SIZE) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        long totalElements = fairReviewMapper.countByUserId(userId);
+        int totalPages = (int) ((totalElements + size - 1) / size);
+        List<MyReviewListRow> rows = fairReviewMapper.selectListByUserId(userId, (long) page * size, size);
+
+        List<Long> reviewIds = rows.stream().map(MyReviewListRow::getReviewId).toList();
+        Map<Long, List<String>> labelsByReviewId = reviewIds.isEmpty()
+                ? Map.of()
+                : fairReviewMapper.selectFairTagLabelsByReviewIds(reviewIds).stream()
+                        .collect(Collectors.groupingBy(ReviewTagLabelRow::getReviewId,
+                                Collectors.mapping(ReviewTagLabelRow::getLabel, Collectors.toList())));
+
+        List<MyReviewListItemResponse> items = rows.stream()
+                .map(row -> new MyReviewListItemResponse(
+                        row.getReviewId(),
+                        row.getFairId(),
+                        row.getFairName(),
+                        row.getPosterImageUrl(),
+                        row.getCompanionType(),
+                        row.getVisitPurpose(),
+                        row.isWouldRevisit(),
+                        labelsByReviewId.getOrDefault(row.getReviewId(), List.of()),
+                        row.getCreatedAt()
+                ))
+                .toList();
+
+        return new MyReviewListResponse(items, page, size, totalElements, totalPages, page + 1 < totalPages);
     }
 
     /** 공개 리뷰 요약. 별점 평균 자리를 재방문 의향 비율이 대신한다. */
