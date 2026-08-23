@@ -7,6 +7,11 @@ import com.ms.petopia.api.reservation.dto.PaymentConfirmationReservationRow;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletedCommand;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentCompletionResponse;
 import com.ms.petopia.api.reservation.dto.ReservationPaymentReceiptRow;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
+import com.ms.petopia.api.reservation.dto.ReservationListRow;
+import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationPaymentConfirmationMapper;
 import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -24,7 +29,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,6 +48,9 @@ class ReservationPaymentCompletionServiceTest {
     private static final Long USER_ID = 42L;
     private static final LocalDateTime PAID_AT = LocalDateTime.of(2026, 8, 1, 10, 5);
     private static final LocalDateTime RECEIVED_AT = LocalDateTime.of(2026, 8, 1, 10, 5, 1);
+    private static final LocalDate VISIT_DATE = LocalDate.of(2026, 9, 12);
+    private static final LocalTime ENTRY_START = LocalTime.of(10, 0);
+    private static final LocalTime ENTRY_END = LocalTime.of(18, 0);
     private static final ReservationPaymentCompletedCommand COMMAND =
             new ReservationPaymentCompletedCommand("event-1", 20L, 10L, 15_000L, PAID_AT);
 
@@ -56,6 +66,12 @@ class ReservationPaymentCompletionServiceTest {
     private NotificationService notificationService;
     @Mock
     private ThreadPoolTaskExecutor mailExecutor;
+    @Mock
+    private ReservationMapper reservationMapper;
+    @Mock
+    private AuthMapper authMapper;
+    @Mock
+    private MailService mailService;
     @InjectMocks
     private ReservationPaymentCompletionService service;
 
@@ -75,6 +91,8 @@ class ReservationPaymentCompletionServiceTest {
         given(timeProvider.now()).willReturn(RECEIVED_AT);
         given(mapper.confirmPendingReservation(10L, PAID_AT, RECEIVED_AT)).willReturn(1);
         given(entryQrService.issueForPaymentCompletion(10L)).willReturn("qr-token");
+        given(authMapper.selectUserById(USER_ID)).willReturn(userWithEmail());
+        given(reservationMapper.selectReservationForOwner(10L, USER_ID)).willReturn(confirmedRow());
 
         ReservationPaymentCompletionResponse response = service.complete(COMMAND);
 
@@ -91,8 +109,48 @@ class ReservationPaymentCompletionServiceTest {
         verify(notificationService).save(notifCaptor.capture());
         assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.RESERVATION_CONFIRMED);
+
         // 메일은 요청 스레드에서 직접 나가지 않고 전용 풀로 넘어가야 한다.
-        verify(mailExecutor).execute(any(Runnable.class));
+        // 제출만 확인하면 정작 발송 본문이 한 번도 실행되지 않으므로, 넘긴 작업을 꺼내 돌린다.
+        ArgumentCaptor<Runnable> taskCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(mailExecutor).execute(taskCaptor.capture());
+        taskCaptor.getValue().run();
+
+        verify(mailService).sendReservationConfirmedEmail(
+                "buyer@petopia.test", "R-0001", "2026 서울 펫페어", "사전예약",
+                VISIT_DATE, ENTRY_START, ENTRY_END, 15_000L, RECEIVED_AT, "qr-token");
+    }
+
+    /**
+     * afterCommit의 예약 조회가 일시적으로 실패해도 워커에서 다시 조회해 메일을 살린다.
+     *
+     * 조회 한 번 실패로 입장 QR이 담긴 메일이 영구 유실되면 손해가 크다 - 재시도 장치가 없기
+     * 때문이다. 재조회가 워커에서 일어나므로 응답 시간에는 영향이 없다.
+     */
+    @Test
+    void retriesReservationLookupInWorkerWhenFirstLookupFails() {
+        given(mapper.selectReservationForUpdate(10L)).willReturn(pendingReservation(15_000));
+        given(timeProvider.now()).willReturn(RECEIVED_AT);
+        given(mapper.confirmPendingReservation(10L, PAID_AT, RECEIVED_AT)).willReturn(1);
+        given(entryQrService.issueForPaymentCompletion(10L)).willReturn("qr-token");
+        given(authMapper.selectUserById(USER_ID)).willReturn(userWithEmail());
+        // 첫 조회(afterCommit)는 실패, 두 번째 조회(워커의 재시도)는 성공.
+        given(reservationMapper.selectReservationForOwner(10L, USER_ID))
+                .willThrow(new RuntimeException("일시적 DB 오류"))
+                .willReturn(confirmedRow());
+
+        service.complete(COMMAND);
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+
+        ArgumentCaptor<Runnable> taskCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(mailExecutor).execute(taskCaptor.capture());
+        taskCaptor.getValue().run();
+
+        // 재조회로 살아난 정보로 메일이 나갔다.
+        verify(mailService).sendReservationConfirmedEmail(
+                "buyer@petopia.test", "R-0001", "2026 서울 펫페어", "사전예약",
+                VISIT_DATE, ENTRY_START, ENTRY_END, 15_000L, RECEIVED_AT, "qr-token");
     }
 
     @Test
@@ -166,6 +224,24 @@ class ReservationPaymentCompletionServiceTest {
         given(mapper.selectReservationForUpdate(10L)).willReturn(row);
 
         assertError(() -> service.complete(COMMAND), ErrorCode.RESERVATION_PAYMENT_EXPIRED);
+    }
+
+    private User userWithEmail() {
+        return User.builder().email("buyer@petopia.test").build();
+    }
+
+    private ReservationListRow confirmedRow() {
+        ReservationListRow row = new ReservationListRow();
+        row.setReservationId(10L);
+        row.setReservationNo("R-0001");
+        row.setFairName("2026 서울 펫페어");
+        row.setReservationType("ADVANCE");
+        row.setVisitDate(VISIT_DATE);
+        row.setEntryStartTime(ENTRY_START);
+        row.setEntryEndTime(ENTRY_END);
+        row.setAmount(15_000L);
+        row.setReservedAt(RECEIVED_AT);
+        return row;
     }
 
     private PaymentConfirmationReservationRow pendingReservation(long amount) {

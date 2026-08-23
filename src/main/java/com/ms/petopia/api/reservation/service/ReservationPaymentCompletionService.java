@@ -233,7 +233,7 @@ public class ReservationPaymentCompletionService {
     /**
      * 예약확정 HTML 이메일(QR 이미지 포함)을 보낸다. 실패해도 예약 확정 처리에는 영향 없음.
      * row는 afterCommit 콜백이 알림 제목용으로 이미 조회해둔 것을 그대로 받는다(중복 조회 방지) -
-     * 그 조회 자체가 실패했으면 null로 넘어온다.
+     * 그 조회 자체가 실패했으면 null로 넘어오고, 그때는 아래에서 한 번 다시 조회한다.
      */
     private void sendConfirmationEmail(Long userId, Long reservationId, String qrToken, ReservationListRow row) {
         try {
@@ -242,21 +242,38 @@ public class ReservationPaymentCompletionService {
                 log.warn("예약확정 이메일 발송 스킵 — 이메일 주소 없음. userId={}, reservationId={}", userId, reservationId);
                 return;
             }
-            if (row == null) {
+            // 호출부의 조회가 일시적 DB 오류로 실패했으면 여기서 한 번 더 시도한다. 이 메일에는
+            // 입장 QR이 들어 있고 재시도 장치가 없어서, 한 번의 조회 실패로 영구 유실되면 손해가
+            // 크다. 재조회를 여기서 하는 건 워커 스레드라 응답 시간에 영향이 없기 때문이다 -
+            // 발송을 비동기로 옮긴 덕에 생긴 여유다.
+            //
+            // 다만 이건 일시적 실패만 건진다. DB가 오래 죽어 있으면 여전히 유실되며, 그걸 막으려면
+            // 발송 대기를 DB에 남기고 배치가 재시도하는 구조가 필요하다(이번 범위 밖).
+            ReservationListRow reservationRow = row;
+            if (reservationRow == null) {
+                try {
+                    reservationRow = reservationMapper.selectReservationForOwner(reservationId, userId);
+                } catch (Exception e) {
+                    log.warn("예약확정 이메일용 예약 정보 재조회 실패. userId={}, reservationId={}",
+                            userId, reservationId, e);
+                }
+            }
+            if (reservationRow == null) {
                 log.warn("예약확정 이메일 발송 스킵 — 예약 조회 실패. userId={}, reservationId={}", userId, reservationId);
                 return;
             }
-            String typeLabel = RESERVATION_TYPE_LABELS.getOrDefault(row.getReservationType(), row.getReservationType());
+            String typeLabel = RESERVATION_TYPE_LABELS.getOrDefault(
+                    reservationRow.getReservationType(), reservationRow.getReservationType());
             mailService.sendReservationConfirmedEmail(
                     user.getEmail(),
-                    row.getReservationNo(),
-                    row.getFairName(),
+                    reservationRow.getReservationNo(),
+                    reservationRow.getFairName(),
                     typeLabel,
-                    row.getVisitDate(),
-                    row.getEntryStartTime(),
-                    row.getEntryEndTime(),
-                    row.getAmount(),
-                    row.getReservedAt(),
+                    reservationRow.getVisitDate(),
+                    reservationRow.getEntryStartTime(),
+                    reservationRow.getEntryEndTime(),
+                    reservationRow.getAmount(),
+                    reservationRow.getReservedAt(),
                     qrToken
             );
         } catch (Exception e) {
