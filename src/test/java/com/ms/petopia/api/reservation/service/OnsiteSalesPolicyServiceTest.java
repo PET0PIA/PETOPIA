@@ -59,6 +59,9 @@ class OnsiteSalesPolicyServiceTest {
         assertThat(response.status()).isEqualTo("CLOSED");
         assertThat(response.version()).isZero();
         assertThat(response.updatedAt()).isNull();
+        // 정원을 설정한 적 없는 운영일은 "제한 없음"이다 - 기존 행사가 갑자기 매진되면 안 된다.
+        assertThat(response.capacity()).isNull();
+        assertThat(response.reservedCount()).isZero();
     }
 
     @Test
@@ -70,11 +73,11 @@ class OnsiteSalesPolicyServiceTest {
         given(mapper.selectPolicy(20L)).willReturn(null, saved);
 
         OnsiteSalesPolicyResponse response = service.save(
-                10L, 20L, 30L, new UpdateOnsiteSalesPolicyRequest(0L, "CLOSED", null));
+                10L, 20L, 30L, new UpdateOnsiteSalesPolicyRequest(0L, null, "CLOSED", null));
 
         assertThat(response.status()).isEqualTo("CLOSED");
         assertThat(response.version()).isZero();
-        verify(mapper).insertPolicy(20L, 0, "CLOSED", 30L, NOW);
+        verify(mapper).insertPolicy(20L, 0, null, "CLOSED", 30L, NOW);
     }
 
     @Test
@@ -82,13 +85,41 @@ class OnsiteSalesPolicyServiceTest {
         given(mapper.selectFairDateForUpdate(10L, 20L)).willReturn(fairDate());
         given(timeProvider.now()).willReturn(NOW);
         given(mapper.selectPolicy(20L)).willReturn(policy(10_000, "OPEN", 2));
-        given(mapper.updatePolicy(20L, 12_000, "PAUSED", 30L, 1, NOW)).willReturn(0);
+        given(mapper.updatePolicy(20L, 12_000, null, "PAUSED", 30L, 1, NOW)).willReturn(0);
 
         assertThatThrownBy(() -> service.save(
-                10L, 20L, 30L, new UpdateOnsiteSalesPolicyRequest(12_000L, "PAUSED", 1)))
+                10L, 20L, 30L, new UpdateOnsiteSalesPolicyRequest(12_000L, null, "PAUSED", 1)))
                 .isInstanceOf(CommonException.class)
                 .extracting(exception -> ((CommonException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.ONSITE_SALES_POLICY_CONFLICT);
+    }
+
+    @Test
+    void savesOnsiteCapacityAndKeepsSoldCount() {
+        OnsiteSalesPolicyRow current = policy(10_000, "OPEN", 1);
+        OnsiteSalesPolicyRow saved = policy(10_000, "OPEN", 2);
+        saved.setCapacity(50);
+        saved.setReservedCount(7);
+        given(mapper.selectFairDateForUpdate(10L, 20L)).willReturn(fairDate());
+        given(timeProvider.now()).willReturn(NOW);
+        given(mapper.selectPolicy(20L)).willReturn(current, saved);
+        given(mapper.updatePolicy(20L, 10_000, 50, "OPEN", 30L, 1, NOW)).willReturn(1);
+
+        OnsiteSalesPolicyResponse response = service.save(
+                10L, 20L, 30L, new UpdateOnsiteSalesPolicyRequest(10_000L, 50, "OPEN", 1));
+
+        assertThat(response.capacity()).isEqualTo(50);
+        // 판매된 수는 관리자 저장이 건드리지 않는다 - 예매·취소만 움직이는 값이다.
+        assertThat(response.reservedCount()).isEqualTo(7);
+    }
+
+    @Test
+    void rejectsNegativeOnsiteCapacity() {
+        assertThatThrownBy(() -> service.save(
+                10L, 20L, 30L, new UpdateOnsiteSalesPolicyRequest(10_000L, -1, "OPEN", 1)))
+                .isInstanceOf(CommonException.class)
+                .extracting(exception -> ((CommonException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
     }
 
     private FairDateSnapshot fairDate() {

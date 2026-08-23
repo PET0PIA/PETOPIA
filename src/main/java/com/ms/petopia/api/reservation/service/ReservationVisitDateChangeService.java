@@ -15,10 +15,12 @@ import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateResponse;
 import com.ms.petopia.api.reservation.mapper.EntryMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationChangeMapper;
+import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -35,9 +37,11 @@ public class ReservationVisitDateChangeService {
 
     private static final String CONFIRMED = "CONFIRMED";
     private static final String ADVANCE = "ADVANCE";
-    private static final long CHANGE_DEADLINE_HOURS = 12;
 
     private final ReservationChangeMapper changeMapper;
+    // 중복 예약 판정(existsActiveReservation)을 예약 생성 경로와 공유하려고 함께 주입한다.
+    // 상태 집합을 여기서 다시 적으면 한쪽만 바뀌었을 때 조용히 어긋난다.
+    private final ReservationMapper reservationMapper;
     private final ReservationCapacityMapper capacityMapper;
     private final EntryMapper entryMapper;
     private final ReservationTimeProvider timeProvider;
@@ -78,10 +82,20 @@ public class ReservationVisitDateChangeService {
         }
 
         LocalDateTime now = timeProvider.now();
+        // 마감은 행사가 정한다(fairs.reservation_change_deadline_hours). 설정이 없으면 기본 12시간.
+        // 여기서 12를 고정하면 행사 신청서에 입력한 "변경 가능 기한"이 조용히 무시된다 -
+        // 취소(ReservationCancellationService.validateCancelable)와 같은 규칙으로 맞춘다.
+        Integer configuredDeadlineHours = changeMapper.selectChangeDeadlineHours(reservation.getFairId());
+        int deadlineHours = configuredDeadlineHours == null
+                ? ReservationDeadlinePolicy.DEFAULT_CHANGE_DEADLINE_HOURS
+                : configuredDeadlineHours;
+        if (deadlineHours < 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
         LocalDateTime deadline = LocalDateTime.of(
                 currentDate.getOperationDate(),
                 currentDate.getEntryStartTime()
-        ).minusHours(CHANGE_DEADLINE_HOURS);
+        ).minusHours(deadlineHours);
         if (now.isAfter(deadline)) {
             throw new CommonException(ErrorCode.RESERVATION_CHANGE_DEADLINE_EXCEEDED);
         }
@@ -99,6 +113,17 @@ public class ReservationVisitDateChangeService {
                 || targetDate.getEntryEndTime().isBefore(targetDate.getEntryStartTime())) {
             throw new CommonException(ErrorCode.RESERVATION_DATE_NOT_AVAILABLE);
         }
+        // 옮겨갈 날짜에 내 활성 예약이 이미 있으면 여기서 거절한다.
+        //
+        // reservations에는 (사용자·행사·방문일) 활성 예약을 하나로 강제하는 유니크 제약
+        // (UK_RESERVATION_ACTIVE_USER_FAIR_DATE)이 걸려 있다. 이 검사가 없으면 아래 UPDATE가
+        // 그 제약에 걸려 DuplicateKeyException이 그대로 올라가고, 사용자에게는 500 서버 오류로
+        // 보인다 - 실제로는 "그 날짜엔 이미 예약이 있다"는 평범한 거절이다.
+        // 정원 점유 전에 검사한다. 점유부터 하면 실패했을 때 매진(R004)으로 잘못 보일 수 있다.
+        if (reservationMapper.existsActiveReservation(reservation.getFairId(), userId, request.visitDate())) {
+            throw new CommonException(ErrorCode.DUPLICATED_RESERVATION);
+        }
+
         // 옮겨갈 날짜의 정원을 먼저 점유하고, 성공했을 때만 원래 날짜를 반납한다.
         // 순서를 뒤집으면 반납은 됐는데 점유에 실패하는 창이 생겨, 그 사이 원래 좌석을
         // 다른 사람이 채워버리면 되돌아갈 자리가 없어진다.
@@ -111,7 +136,18 @@ public class ReservationVisitDateChangeService {
             throw new CommonException(ErrorCode.RESERVATION_SOLD_OUT);
         }
 
-        int updated = changeMapper.updateVisitDate(reservationId, request.visitDate(), now);
+        // 위 사전 검사와 이 UPDATE 사이에 같은 사용자가 그 날짜를 새로 예약할 수 있다.
+        // 최종 판정은 DB 제약이 하고, 여기서는 그 위반을 500이 아닌 R005로 번역만 한다
+        // (예약 생성 경로 ReservationService.create와 같은 처리다).
+        int updated;
+        try {
+            updated = changeMapper.updateVisitDate(reservationId, request.visitDate(), now);
+        } catch (DuplicateKeyException e) {
+            if (ReservationConstraintViolations.isActiveReservationDuplicate(e)) {
+                throw new CommonException(ErrorCode.DUPLICATED_RESERVATION, e);
+            }
+            throw e;
+        }
         if (updated != 1) {
             throw new CommonException(ErrorCode.RESERVATION_STATUS_CONFLICT);
         }

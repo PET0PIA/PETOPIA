@@ -371,6 +371,24 @@ class ReservationCancellationServiceTest {
         verifyNoInteractions(refundService, paymentMapper, paymentService);
     }
 
+    @Test
+    void releasesOnsiteCapacityWhenPendingOnsiteReservationIsCanceled() {
+        // 결제 전 현장예매는 사용자가 직접 취소할 수 있다("취소하고 나가기").
+        // 이때 자리는 현장 정원(onsite_sales_policies)으로 돌아가야 한다.
+        ReservationCancellationContext context = context("PENDING_PAYMENT", "ONSITE_DIRECT", 10_000);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+        given(timeProvider.now()).willReturn(NOW);
+        given(paymentMapper.selectByReservationId(RESERVATION_ID)).willReturn(null);
+        given(cancellationMapper.cancelReservation(
+                RESERVATION_ID, "PENDING_PAYMENT", null, USER_ID, NOW
+        )).willReturn(1);
+
+        service.cancel(RESERVATION_ID, USER_ID, null);
+
+        verify(capacityMapper).releaseOnsite(FAIR_ID, LocalDate.of(2026, 8, 5));
+        verify(capacityMapper, never()).release(FAIR_ID, LocalDate.of(2026, 8, 5));
+    }
+
     private ReservationCancellationContext context(String status, String reservationType, long amount) {
         ReservationCancellationContext context = new ReservationCancellationContext();
         context.setReservationId(RESERVATION_ID);

@@ -33,4 +33,37 @@
            AND reserved_count &gt; 0
     </update>
 
+    <!--
+        현장예매 전용 정원(V49). 사전예약과 같은 원칙으로 판정과 증가를 한 문장에 둔다.
+        capacity IS NULL 은 "제한 없음"이라 항상 통과한다 - 정원을 걸지 않은 기존 행사가
+        이 기능 추가만으로 매진되면 안 된다.
+
+        updated_at 은 일부러 건드리지 않는다. 이 컬럼은 관리자 화면에서 "정책을 마지막으로
+        고친 시각"으로 읽히는데, 예매가 한 건 팔릴 때마다 갱신되면 아무도 안 고친 정책이
+        방금 바뀐 것처럼 보인다.
+    -->
+    <update id="occupyOnsite">
+        UPDATE onsite_sales_policies osp
+          JOIN fair_dates fd
+            ON fd.fair_date_id = osp.fair_date_id
+           SET osp.reserved_count = osp.reserved_count + 1
+         WHERE fd.fair_id = #{fairId}
+           AND fd.operation_date = #{visitDate}
+           AND (osp.capacity IS NULL OR osp.reserved_count &lt; osp.capacity)
+    </update>
+
+    <!--
+        release와 같은 이유로 멱등하지 않다. 중복 반납은 호출부의 상태 전이(조건부 UPDATE)가
+        막아야 하고, reserved_count > 0 은 CK_ONSITE_SALES_RESERVED_COUNT 위반만 막는다.
+    -->
+    <update id="releaseOnsite">
+        UPDATE onsite_sales_policies osp
+          JOIN fair_dates fd
+            ON fd.fair_date_id = osp.fair_date_id
+           SET osp.reserved_count = osp.reserved_count - 1
+         WHERE fd.fair_id = #{fairId}
+           AND fd.operation_date = #{visitDate}
+           AND osp.reserved_count &gt; 0
+    </update>
+
 </mapper>
