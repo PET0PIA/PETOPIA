@@ -1,4 +1,4 @@
-import { Users } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -153,24 +153,43 @@ export function WaitingRoomPanel({ fairId, fairName, onAdmitted, onCancel }: Pro
       />
 
       <Card className="grid place-items-center p-8 text-center">
-        <div className="mb-4 grid size-14 place-items-center rounded-full bg-leaf-soft text-ink">
-          <Users size={28} />
+        {/*
+          아이콘 원을 감싸는 회전 링. 순번은 몇 분에 한 칸씩 움직여서 화면이 멈춘 것처럼
+          보이는데, 이게 돌고 있으면 아직 진행 중이라는 신호가 된다.
+        */}
+        <div className="relative mb-4 grid size-14 place-items-center">
+          <span
+            aria-hidden
+            className="absolute inset-0 animate-spin rounded-full border-2 border-leaf-soft border-t-ink"
+          />
+          <span className="grid size-11 place-items-center rounded-full bg-leaf-soft text-ink">
+            <Users size={24} />
+          </span>
         </div>
         <p className="text-sm text-muted">{fairName}</p>
 
         {ticket === null ? (
-          <p className="mt-6 text-sm text-muted">대기 순번을 받는 중이에요…</p>
+          <p className="mt-6 flex items-center gap-2 text-sm text-muted">
+            <Loader2 aria-hidden size={16} className="animate-spin" />
+            대기 순번을 받는 중이에요…
+          </p>
         ) : (
-          <>
+          // 스피너는 계속 돌지만 읽어줄 내용은 순번이다. 애니메이션이 아니라 이 블록을 읽게 한다.
+          <div role="status">
             <p className="mt-4 text-4xl font-extrabold tabular-nums text-ink">
               {ahead.toLocaleString()}
               <span className="ml-1 text-base font-bold text-muted">명 앞에 있어요</span>
             </p>
             <p className="mt-2 text-sm text-muted">예상 대기 시간 {formatWait(shownWait)}</p>
-          </>
+          </div>
         )}
 
-        {error && <p className="mt-4 text-sm text-primary-strong">{error}</p>}
+        {error && (
+          <p className="mt-4 flex items-center gap-2 text-sm text-primary-strong">
+            <Loader2 aria-hidden size={14} className="animate-spin" />
+            {error}
+          </p>
+        )}
 
         <p className="mt-6 text-xs leading-5 text-muted">
           새로고침해도 순번은 그대로예요.

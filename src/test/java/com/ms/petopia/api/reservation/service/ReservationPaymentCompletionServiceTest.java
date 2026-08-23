@@ -22,11 +22,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
@@ -52,6 +54,8 @@ class ReservationPaymentCompletionServiceTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private ThreadPoolTaskExecutor mailExecutor;
     @InjectMocks
     private ReservationPaymentCompletionService service;
 
@@ -87,6 +91,8 @@ class ReservationPaymentCompletionServiceTest {
         verify(notificationService).save(notifCaptor.capture());
         assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.RESERVATION_CONFIRMED);
+        // 메일은 요청 스레드에서 직접 나가지 않고 전용 풀로 넘어가야 한다.
+        verify(mailExecutor).execute(any(Runnable.class));
     }
 
     @Test
