@@ -34,7 +34,7 @@ const TABS: { key: TabKey; label: string }[] = [
 // 탭별 빈 목록 안내 문구.
 const EMPTY_BY_TAB: Record<TabKey, { title: string; description: string }> = {
   ALL: { title: "등록된 행사가 아직 없어요.", description: "새 행사가 공개되면 이곳에서 확인할 수 있어요." },
-  RESERVABLE: { title: "지금 사전예약 중인 행사가 없어요.", description: "예매가 열리면 여기에 표시돼요." },
+  RESERVABLE: { title: "지금 사전예약 중인 행사가 없어요.", description: "예약이 열리면 여기에 표시돼요." },
   IN_PROGRESS: { title: "지금 진행 중인 행사가 없어요.", description: "행사가 시작되면 이곳에 표시돼요." },
   UPCOMING: { title: "오픈 예정인 행사가 없어요.", description: "새 행사가 공개되면 이곳에서 확인할 수 있어요." },
   ENDED: { title: "종료된 행사가 없어요.", description: "지난 행사가 이곳에 쌓여요." },
@@ -52,8 +52,8 @@ function inProgress(fair: FairPublicListItem): boolean {
  * 행사가 양쪽에 함께 나올 수 있다 - 여러 날 행사는 운영 중에도 남은 날짜 사전예약이 열려
  * 있기 때문이다. 배타적으로 나누면 그 행사를 어느 한쪽에서 잃는다.
  *
- * 여기서 "오픈"은 행사 개막이 아니라 **예매 오픈**을 뜻한다(카드 버튼의 "오픈 예정"과 같은
- * 기준). 그래서 예매가 열렸거나 이미 진행 중인 행사는 이 탭에서 빠진다.
+ * 여기서 "오픈"은 행사 개막이 아니라 **예약 오픈**을 뜻한다(카드 버튼의 "오픈 예정"과 같은
+ * 기준). 그래서 예약이 열렸거나 이미 진행 중인 행사는 이 탭에서 빠진다.
  */
 function filterByTab(entries: FairListEntry[], tab: TabKey): FairListEntry[] {
   switch (tab) {

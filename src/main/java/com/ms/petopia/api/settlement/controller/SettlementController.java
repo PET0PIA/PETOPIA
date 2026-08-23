@@ -74,7 +74,7 @@ public class SettlementController {
         return settlementService.getByFairAndBusiness(fairId, businessId);
     }
 
-    // 박람회관리자의 행사 전체 정산 목록 조회(EVENT_ADMIN/SUPER_ADMIN). 그 행사 담당자인지는
+    // 행사 관리자의 행사 전체 정산 목록 조회(EVENT_ADMIN/SUPER_ADMIN). 그 행사 담당자인지는
     // SettlementService.getByFair가 FairAdminAccessGuard로 확인한다.
     @GetMapping("/fairs/{fairId}/settlements")
     public List<SettlementResponse> getSettlementsByFair(@PathVariable Long fairId) {
@@ -104,7 +104,7 @@ public class SettlementController {
     }
 
     // 행사별 매출 요약 목록(SUPER_ADMIN 전용, WBS 5.6) - 위 정산(참가비 전용, 저장됨)과 별개로
-    // 티켓예매+참가비를 합친 행사 전체 매출을 요율로 나눠서 보여주는 조회 전용 화면.
+    // 예약금+참가비를 합친 행사 전체 매출을 요율로 나눠서 보여주는 조회 전용 화면.
     @GetMapping("/settlements/revenue-summary")
     public List<FairRevenueSummaryResponse> getFairRevenueSummaries() {
         return settlementService.getFairRevenueSummaries();

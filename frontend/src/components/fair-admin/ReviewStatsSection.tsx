@@ -100,7 +100,7 @@ export function ReviewStatsSection({ fairId }: ReviewStatsSectionProps) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-ink">리뷰 통계</h2>
-          <p className="mt-1 text-sm text-muted">방문객이 태그로 남긴 만족도·특성 통계예요.</p>
+          <p className="mt-1 text-sm text-muted">관람객이 태그로 남긴 만족도·특성 통계예요.</p>
         </div>
         {reviewStats && reviewStats.reviewCount > 0 && (
           <Button type="button" variant="outline" onClick={handleExportReview} disabled={exportingReview}>
@@ -141,14 +141,14 @@ export function ReviewStatsSection({ fairId }: ReviewStatsSectionProps) {
           </div>
 
           {reviewStats.reviewCount === 0 ? (
-            <EmptyState title="아직 리뷰가 없어요." description="방문객이 리뷰를 남기면 이곳에서 만족도 통계를 확인할 수 있어요." />
+            <EmptyState title="아직 리뷰가 없어요." description="관람객이 리뷰를 남기면 이곳에서 만족도 통계를 확인할 수 있어요." />
           ) : (
             <>
               <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
                 <Card className="min-w-0 p-6">
                   <div className="mb-5">
-                    <h3 className="text-lg font-extrabold text-ink">방문객 특성</h3>
-                    <p className="mt-1 text-sm text-muted">리뷰를 남긴 방문객의 동반유형·방문목적 분포예요.</p>
+                    <h3 className="text-lg font-extrabold text-ink">관람객 특성</h3>
+                    <p className="mt-1 text-sm text-muted">리뷰를 남긴 관람객의 동반유형·방문목적 분포예요.</p>
                   </div>
                   <div className="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
                     <div className="min-w-0">

@@ -176,7 +176,7 @@ export function AppRouter() {
               옛 "지난 행사" 경로(북마크·외부 링크)로 들어와도 같은 목록으로 넘긴다. */}
           <Route path="/fairs/upcoming" element={<FairListPage />} />
           <Route path="/fairs/past" element={<Navigate to="/fairs/upcoming" replace />} />
-          {/* 행사 상세(공개). 목록 카드가 여기로 오고, '예매하기'는 /tickets/:fairId로 넘긴다.
+          {/* 행사 상세(공개). 목록 카드가 여기로 오고, '예약하기'는 /tickets/:fairId로 넘긴다.
               정적 경로(/fairs/upcoming 등)가 :fairId보다 우선 매칭되므로 충돌 없다. */}
           <Route path="/fairs/:fairId" element={<FairDetailPage />} />
           {/* 비즈니스 ▾ "부스 참가 신청" 입구. 실제 목록·신청 흐름은 /participations/new에 있어,
@@ -188,7 +188,7 @@ export function AppRouter() {
               기존 /fairs/:fairId/recruit-notice 화면으로 간다(서버가 linkPath로 정해준다). */}
           <Route path="/news" element={<NewsListPage />} />
           <Route path="/news/:noticeId" element={<NewsDetailPage />} />
-          {/* 예매는 로그인 필수. 미로그인으로 화면을 열면 날짜·유형을 다 고르고 마지막
+          {/* 예약은 로그인 필수. 미로그인으로 화면을 열면 날짜·유형을 다 고르고 마지막
               예약 API에서 401로 막히므로, 들어오는 순간 /login으로 보냈다가 복귀시킨다. */}
           <Route element={<ProtectedRoute />}>
             <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
@@ -236,14 +236,14 @@ export function AppRouter() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
-        {/* 박람회 관리자 콘솔 - EVENT_ADMIN(+ 상위 SUPER_ADMIN) 전용. URL 직접 진입도 role로 가드한다. */}
+        {/* 행사 관리자 콘솔 - EVENT_ADMIN(+ 상위 SUPER_ADMIN) 전용. URL 직접 진입도 role로 가드한다. */}
         <Route element={<ProtectedRoute roles={["EVENT_ADMIN", "SUPER_ADMIN"]} />}>
           <Route path="fair-admin" element={<FairAdminLayout />}>
             <Route
               index
               element={
                 <ConsoleHome
-                  consoleLabel="박람회 관리자"
+                  consoleLabel="행사 관리자"
                   description="담당 행사의 운영·예약·정산을 여기서 관리해요. 상단 '관리 행사'에서 행사를 먼저 골라 주세요."
                   navigation={fairAdminNavigation}
                 />
@@ -309,7 +309,7 @@ export function AppRouter() {
             <Route path="*" element={<AdminFallback kind="super" />} />
           </Route>
         </Route>
-        {/* 부스(참여기업) 콘솔 - VENDOR 전용. 흩어져 있던 참가업체 기능을 한 콘솔로 모은다. */}
+        {/* 부스(참가업체) 콘솔 - VENDOR 전용. 흩어져 있던 참가업체 기능을 한 콘솔로 모은다. */}
         <Route element={<ProtectedRoute roles={["VENDOR"]} />}>
           <Route path="vendor" element={<VendorLayout />}>
             <Route

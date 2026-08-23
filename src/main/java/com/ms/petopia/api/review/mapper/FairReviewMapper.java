@@ -55,7 +55,7 @@ public interface FairReviewMapper {
     /** 최신순 페이지네이션. fairs를 조인해 행사명·포스터 이미지까지 한 번에 가져온다. */
     List<MyReviewListRow> selectListByUserId(@Param("userId") Long userId, @Param("offset") long offset, @Param("limit") int limit);
 
-    // ===== 행사관리자 통계(Phase 6) =====
+    // ===== 행사 관리자 통계(Phase 6) =====
 
     long countByFairId(@Param("fairId") Long fairId);
 

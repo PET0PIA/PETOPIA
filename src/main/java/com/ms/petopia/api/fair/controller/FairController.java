@@ -96,7 +96,7 @@ public class FairController {
 
     @GetMapping("/{fairId}/public")
     public FairPublicSummaryResponse getPublicSummary(@PathVariable Long fairId) {
-        // SecurityConfig에서 이 경로는 인증 없이 permitAll이다 - 티켓 예매 화면처럼 로그인
+        // SecurityConfig에서 이 경로는 인증 없이 permitAll이다 - 티켓 예약 화면처럼 로그인
         // 여부와 무관하게 볼 수 있어야 하는 화면 전용(PII·심사 정보는 응답에 없음).
         return fairService.getPublicSummary(fairId);
     }

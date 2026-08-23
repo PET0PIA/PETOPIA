@@ -114,7 +114,7 @@ public class ApplicationService {
                         return;
                     }
                     Business business = businessMapper.selectById(businessId);
-                    String businessName = business != null ? business.getName() : "업체";
+                    String businessName = business != null ? business.getName() : "참가업체";
                     notificationService.save(new SaveNotificationDto.Request(
                             adminUserId,
                             RecipientType.EVENT_ADMIN,

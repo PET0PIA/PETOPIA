@@ -20,7 +20,7 @@ export function TermsContent() {
     <div className="space-y-5 text-sm leading-6 text-muted">
       <section>
         <h3 className="font-extrabold text-ink">제1조 목적</h3>
-        <p className="mt-1">본 약관은 PETOPIA가 제공하는 펫페어 정보, 예약, 참가 신청 및 관련 서비스의 이용 조건과 회원과 서비스 간의 권리·의무를 정하는 것을 목적으로 합니다.</p>
+        <p className="mt-1">본 약관은 PETOPIA가 제공하는 행사 정보, 예약, 참가 신청 및 관련 서비스의 이용 조건과 회원과 서비스 간의 권리·의무를 정하는 것을 목적으로 합니다.</p>
       </section>
       <section>
         <h3 className="font-extrabold text-ink">제2조 회원가입과 계정 관리</h3>
@@ -32,7 +32,7 @@ export function TermsContent() {
       </section>
       <section>
         <h3 className="font-extrabold text-ink">제3조 서비스 이용</h3>
-        <p className="mt-1">회원은 박람회 조회·예약, 참가 신청, 반려동물 정보 관리 등 제공되는 기능을 서비스 안내와 관련 법령에 따라 이용해야 합니다. 행사 일정, 참가 조건 및 현장 운영 방식은 행사별 안내에 따라 달라질 수 있습니다.</p>
+        <p className="mt-1">회원은 행사 조회·예약, 참가 신청, 반려동물 정보 관리 등 제공되는 기능을 서비스 안내와 관련 법령에 따라 이용해야 합니다. 행사 일정, 참가 조건 및 현장 운영 방식은 행사별 안내에 따라 달라질 수 있습니다.</p>
       </section>
       <section>
         <h3 className="font-extrabold text-ink">제4조 예약·결제·취소</h3>
@@ -76,7 +76,7 @@ export function PrivacyContent() {
         <h3 className="font-extrabold text-ink">2. 수집·이용 목적</h3>
         <ul className="mt-1 list-disc space-y-1 pl-5">
           <li>회원 식별, 가입 의사 확인 및 계정 관리</li>
-          <li>박람회 예약·참가 신청·결제·환불 등 서비스 제공</li>
+          <li>행사 예약·참가 신청·결제·환불 등 서비스 제공</li>
           <li>공지 전달, 문의 대응 및 부정 이용 방지</li>
           <li>반려동물 정보 관리와 예약 과정에서의 정보 활용</li>
         </ul>

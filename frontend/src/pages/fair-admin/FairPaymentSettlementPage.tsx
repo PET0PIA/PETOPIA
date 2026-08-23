@@ -124,7 +124,7 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
   );
 }
 
-// 담당 행사의 매출 요약(티켓예매+참가비 합산) - SUPER_ADMIN 정산·수수료율 화면(admin/SettlementPage.tsx)의
+// 담당 행사의 매출 요약(예약금+참가비 합산) - SUPER_ADMIN 정산·수수료율 화면(admin/SettlementPage.tsx)의
 // "행사별 매출 요약"과 같은 집계를 담당 행사 하나로 좁힌 버전(2026-08-22, 정산 내역 탭에 같이 보여준다).
 function RevenueSummarySection({ fairId }: { fairId: number }) {
   const [summary, setSummary] = useState<FairRevenueSummaryResponse | null>(null);
@@ -167,10 +167,10 @@ function RevenueSummarySection({ fairId }: { fairId: number }) {
         <thead>
           <tr className="border-b border-line bg-page text-xs font-bold text-muted">
             <th className="px-4 py-3">행사</th>
-            <th className="px-4 py-3">티켓예매 총금액</th>
-            <th className="px-4 py-3">참가비용 총금액</th>
+            <th className="px-4 py-3">예약금 총금액</th>
+            <th className="px-4 py-3">참가비 총금액</th>
             <th className="px-4 py-3">전체금액</th>
-            <th className="px-4 py-3">행사업체금액</th>
+            <th className="px-4 py-3">주최측금액</th>
             <th className="px-4 py-3">플랫폼금액</th>
           </tr>
         </thead>
@@ -205,7 +205,7 @@ export function FairPaymentSettlementPage() {
 
   return (
     <div className="mx-auto max-w-5xl py-2">
-      <PageHeader eyebrow="박람회 관리자" title="결제·정산" description="담당 행사의 참가비 결제 현황과 정산 내역을 확인해요." />
+      <PageHeader eyebrow="행사 관리자" title="결제·정산" description="담당 행사의 참가비 결제 현황과 정산 내역을 확인해요." />
 
       {fairId === null ? (
         <EmptyState title="관리할 행사가 없어요." description="상단 바에서 행사를 선택하면 결제·정산 현황이 표시돼요. 배정된 행사가 없다면 관리자에게 문의해 주세요." />

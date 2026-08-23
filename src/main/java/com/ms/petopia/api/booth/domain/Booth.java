@@ -16,7 +16,7 @@ public class Booth {
     private Long applicationId; // 1:1, 결제완료된 신청서
     private Long businessId; // business.business_id
     private String name;
-    private String imageUrl; // 업체 로고·부스 배너
+    private String imageUrl; // 참가업체 로고·부스 배너
     private String intro;
     private String category; // 사료/간식, 미용, 훈련, 굿즈 등 (자유 텍스트)
     private TargetAnimal targetAnimal; // DOG / CAT / ETC

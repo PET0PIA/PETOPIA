@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 public interface BoothVisitMapper {
 
     /**
-     * 주어진 부스가 이 VENDOR(활성) 소유일 때만 부스·업체·행사 식별자를 반환한다.
+     * 주어진 부스가 이 VENDOR(활성) 소유일 때만 부스·사업자·행사 식별자를 반환한다.
      * 소유가 아니거나 계정이 유효하지 않으면 null.
      */
     BoothScanContext selectBoothForVendor(

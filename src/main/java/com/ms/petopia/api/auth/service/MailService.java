@@ -527,7 +527,7 @@ public class MailService {
                       <tr><td style="padding:34px 32px 30px;">
                         <div style="margin-bottom:8px;color:#d94848;font-size:12px;font-weight:800;letter-spacing:1px;">%s</div>
                         <h1 style="margin:0 0 14px;color:#111827;font-size:24px;line-height:1.4;">%s</h1>
-                        <p style="margin:0 0 22px;color:#374151;font-size:15px;font-weight:700;line-height:1.7;">안녕하십니까? 펫페어 관리 사이트 PETOPIA입니다.<br>저희 PETOPIA를 이용해 주셔서 대단히 감사드립니다.</p>
+                        <p style="margin:0 0 22px;color:#374151;font-size:15px;font-weight:700;line-height:1.7;">안녕하십니까? 행사 관리 사이트 PETOPIA입니다.<br>저희 PETOPIA를 이용해 주셔서 대단히 감사드립니다.</p>
                         %s
                       </td></tr>
                       <tr><td style="padding:20px 32px;border-top:1px solid #f0f0f0;background:#fafafa;text-align:center;color:#9ca3af;font-size:11px;line-height:1.6;">

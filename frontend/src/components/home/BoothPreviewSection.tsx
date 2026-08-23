@@ -8,7 +8,7 @@ import { HomeBand } from "./HomeBand";
 
 /**
  * 한 부스가 슬롯을 여러 개 쓰면 API가 슬롯마다 한 행씩 내려주므로, boothId로 묶어서
- * 슬롯 번호를 모은다(묶지 않으면 같은 업체가 홈에 두 번 세 번 나온다).
+ * 슬롯 번호를 모은다(묶지 않으면 같은 참가업체가 홈에 두 번 세 번 나온다).
  * 행사 부스 목록 화면(FairBoothsPage)이 같은 이유로 같은 처리를 한다.
  */
 interface BoothGroup {
@@ -86,7 +86,7 @@ function BoothRow({ booths, hidden = false }: { booths: BoothGroup[]; hidden?: b
 }
 
 /**
- * 홈의 "이번 행사의 참여 부스". 부스는 행사별로만 조회할 수 있어서(전체 부스 목록 API가 없다)
+ * 홈의 "이번 행사의 참가 부스". 부스는 행사별로만 조회할 수 있어서(전체 부스 목록 API가 없다)
  * 홈에서 대표 행사 하나를 골라 그 행사의 확정 부스를 보여준다. 어떤 행사를 고를지는
  * HomePage가 정해서 넘겨준다.
  *
@@ -116,10 +116,10 @@ export function BoothPreviewSection({ fair }: { fair: FairPublicListItem | null 
     <HomeBand>
       <section>
         <SectionHeader
-          title="이번 행사의 참여 부스"
+          title="이번 행사의 참가 부스"
           description={fair.name}
           linkTo={`/fairs/${fair.fairId}/booths`}
-          linkLabel="참여 부스 전체 보기"
+          linkLabel="참가 부스 전체 보기"
           centered
         />
         {booths.length >= MIN_FOR_MARQUEE ? (

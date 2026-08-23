@@ -7,7 +7,7 @@ import { Card } from "../ui/Card";
 import { PageHeader } from "../common/PageHeader";
 
 interface ConsoleHomeProps {
-  /** 콘솔 이름. eyebrow로 노출한다. 예: "박람회 관리자". */
+  /** 콘솔 이름. eyebrow로 노출한다. 예: "행사 관리자". */
   consoleLabel: string;
   /** 홈 상단 안내 문구. */
   description: string;

@@ -274,7 +274,7 @@ public class FairService {
     }
 
     /**
-     * 공개된 행사의 요약 정보를 인증 없이 조회한다(티켓 예매 화면 등). {@link #getApplication}·
+     * 공개된 행사의 요약 정보를 인증 없이 조회한다(티켓 예약 화면 등). {@link #getApplication}·
      * {@link #getMyApplicationDetail}과 달리 managerName/managerPhone/managerEmail 같은 PII와
      * 심사 관련 필드(reviewedAt/rejectReason/paymentDueAt)를 아예 응답에 담지 않는다
      * ({@link FairPublicSummaryResponse} 참고) - 그래서 요청자 신원 검증 자체가 필요 없다.
@@ -301,7 +301,7 @@ public class FairService {
     }
 
     /**
-     * 공개된 행사 목록을 인증 없이 조회한다(지난 행사/예정 행사/티켓 예매 가능한 행사 화면).
+     * 공개된 행사 목록을 인증 없이 조회한다(지난 행사/예정 행사/티켓 예약 가능한 행사 화면).
      * {@link #getPublicSummary}와 같은 기준(published_at IS NOT NULL, canceled_at IS NULL)으로
      * 걸러진 행사만 반환하고, PII·심사 필드는 목록 단계부터 아예 담지 않는다
      * ({@link FairPublicListItemResponse} 참고).
@@ -322,7 +322,7 @@ public class FairService {
     }
 
     /**
-     * 부스 모집중인 행사 목록을 인증 없이 조회한다(참여 부스 신청 진입점 전용).
+     * 부스 모집중인 행사 목록을 인증 없이 조회한다(부스 참가 신청 진입점 전용).
      * {@link #listPublicFairs}와 달리 published_at을 요구하지 않는다 - "전체공개"는 일반
      * 소비자 노출·사전예약·리뷰 작성 가능 여부만 통제하고, 참가업체 모집 노출은 그와 별개로
      * 모집공고+부스슬롯만 준비되면(= recruiting 계산식) 시작된 것으로 본다.

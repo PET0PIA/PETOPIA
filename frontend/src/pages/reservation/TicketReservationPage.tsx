@@ -100,7 +100,7 @@ function dateBlockedReason(date: ReservationAvailabilityDate): "SOLD_OUT" | "MIN
  * 오늘 날짜는 브라우저 시간대가 아니라 Asia/Seoul 기준으로 구한다(해외 기기에서 자정
  * 근처에 하루 밀려 현장예매가 잘못 열리거나 닫히는 것을 막는다).
  * 운영기간을 모르면(행사 정보 로드 실패) 현장예매를 막지 않으려 true로 폴백한다 —
- * 현장에서 실제 예매하려는 사람을 실수로 차단하지 않기 위함이다(최종 판정은 백엔드).
+ * 현장에서 실제 예약하려는 사람을 실수로 차단하지 않기 위함이다(최종 판정은 백엔드).
  */
 function isOperatingToday(start: string | null, end: string | null): boolean {
   if (!start || !end) return true;
@@ -122,13 +122,13 @@ export function TicketReservationPage() {
   const [availability, setAvailability] = useState<ReservationAvailability | null>(null);
   const [fair, setFair] = useState<FairPublicSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  // 예매 정보(availability) 조회 실패 사유. 페이지 전체의 실패가 아니라 "사전예약을 못 하는
-  // 이유"다 - 이 조회는 예매 창이 닫히면 R003으로 실패하는데, 그때도 현장예매는 열려 있을 수 있다.
+  // 예약 정보(availability) 조회 실패 사유. 페이지 전체의 실패가 아니라 "사전예약을 못 하는
+  // 이유"다 - 이 조회는 예약 창이 닫히면 R003으로 실패하는데, 그때도 현장예매는 열려 있을 수 있다.
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
-  // 행사 정보(이름·장소·운영기간) 조회 실패. 예매를 막지는 않고 안내만 띄운다 - 예전에는 이
+  // 행사 정보(이름·장소·운영기간) 조회 실패. 예약을 막지는 않고 안내만 띄운다 - 예전에는 이
   // 실패를 통째로 삼켜서, 사용자는 왜 행사명 자리에 "행사 #11"만 보이는지 알 수 없었다.
   // 사유 문자열을 담지 않고 불리언만 두는 이유: 이 조회의 에러 메시지("요청한 리소스를 찾을 수
-  // 없습니다" 등)를 정상 동작하는 예매 폼 위에 그대로 띄우면 오히려 오해를 만든다.
+  // 없습니다" 등)를 정상 동작하는 예약 폼 위에 그대로 띄우면 오히려 오해를 만든다.
   const [fairInfoFailed, setFairInfoFailed] = useState(false);
 
   const [type, setType] = useState<ReservationType>("ADVANCE");
@@ -170,7 +170,7 @@ export function TicketReservationPage() {
     if (!idValid) return; // 잘못된 경로 파라미터면 요청하지 않는다
     let alive = true;
     // 행사 이름·장소·운영기간은 fair 도메인, 예약금·날짜는 예약 도메인에서 각각 가져온다.
-    // 어느 쪽도 단독으로 치명적이지 않다 - 행사 정보가 없으면 이름만 못 보여주고, 예매 정보가
+    // 어느 쪽도 단독으로 치명적이지 않다 - 행사 정보가 없으면 이름만 못 보여주고, 예약 정보가
     // 없으면 사전예약만 막힌다(현장예매는 운영기간으로 판단하므로 계속 가능하다). 그래서 둘 다
     // 기다렸다가 한 번에 반영한다 - 한쪽만 먼저 도착한 순간에 "둘 다 실패" 판정이 나면 안 된다.
     Promise.allSettled([getFairPublicSummary(id), getReservationAvailability(id)]).then(
@@ -187,7 +187,7 @@ export function TicketReservationPage() {
           setAvailabilityError(null);
         } else {
           const reason = availabilityResult.reason;
-          setAvailabilityError(reason instanceof ApiError ? reason.message : "예매 정보를 불러오지 못했어요.");
+          setAvailabilityError(reason instanceof ApiError ? reason.message : "예약 정보를 불러오지 못했어요.");
         }
         setLoading(false);
       },
@@ -201,10 +201,10 @@ export function TicketReservationPage() {
     return (
       <div className="mx-auto max-w-3xl py-2">
         <EmptyState
-          title="잘못된 예매 주소예요."
-          description="행사 주소가 올바르지 않아요. 예매 가능한 행사에서 다시 선택해 주세요."
+          title="잘못된 예약 주소예요."
+          description="행사 주소가 올바르지 않아요. 예약 가능한 행사에서 다시 선택해 주세요."
           actionTo="/fairs/upcoming"
-          actionLabel="예매 가능한 행사 보기"
+          actionLabel="예약 가능한 행사 보기"
         />
       </div>
     );
@@ -213,22 +213,22 @@ export function TicketReservationPage() {
   if (loading) {
     return (
       <div className="mx-auto max-w-3xl py-2">
-        <p className="py-16 text-center text-sm text-muted">예매 정보를 불러오는 중이에요…</p>
+        <p className="py-16 text-center text-sm text-muted">예약 정보를 불러오는 중이에요…</p>
       </div>
     );
   }
 
-  // 예매 정보 실패만으로 페이지를 닫으면 안 된다 - 사전예약 기간이 끝난 운영 중 행사에서
+  // 예약 정보 실패만으로 페이지를 닫으면 안 된다 - 사전예약 기간이 끝난 운영 중 행사에서
   // 현장예매까지 함께 막히기 때문이다(현장예매 입구가 이 화면뿐이다). 행사 정보까지 못 받아
   // 이 행사에 대해 아는 게 하나도 없을 때만 안내로 끝낸다.
   if (!availability && !fair) {
     return (
       <div className="mx-auto max-w-3xl py-2">
         <EmptyState
-          title="지금은 예매할 수 없어요."
-          description={availabilityError ?? "예매 정보를 불러오지 못했어요."}
+          title="지금은 예약할 수 없어요."
+          description={availabilityError ?? "예약 정보를 불러오지 못했어요."}
           actionTo="/fairs/upcoming"
-          actionLabel="예매 가능한 행사 보기"
+          actionLabel="예약 가능한 행사 보기"
         />
       </div>
     );
@@ -240,10 +240,10 @@ export function TicketReservationPage() {
   const selectedDate = availability?.dates.find((date) => date.visitDate === selectedVisitDate) ?? null;
 
   // 동반 반려동물 허용 여부. 두 API가 같은 fairs.pet_allowed(NOT NULL)를 읽으므로 값이 어긋나지
-  // 않는다 - 예매 정보를 못 받았을 때 행사 정보로 대신 판단해도 안전하다.
+  // 않는다 - 예약 정보를 못 받았을 때 행사 정보로 대신 판단해도 안전하다.
   const petAllowed = availability?.petAllowed ?? fair?.petAllowed ?? false;
 
-  const price = availability?.reservationFee ?? 0; // 사전예약금(예매 정보가 없으면 사전예약 자체를 안 그린다)
+  const price = availability?.reservationFee ?? 0; // 사전예약금(예약 정보가 없으면 사전예약 자체를 안 그린다)
   const isPaid = price > 0;
   const advanceVisitDate = selectedDate?.visitDate ?? null;
 
@@ -266,7 +266,7 @@ export function TicketReservationPage() {
   //   제외한다). 날짜는 내려오지만 전부 매진이면 진행할 수 없는 폼을 띄우게 되므로 제외한다.
   // - 현장예매: 오늘이 행사 운영기간 안일 때만 노출(현장예매는 운영 당일에만 생성 가능).
   // 여러 날 행사에선 운영 중에도 남은 날짜 사전예약이 열려 있어 둘 다 뜰 수 있다.
-  // 예매 정보를 못 받았으면(예매 창이 닫힘 등) 사전예약은 불가하고, 현장예매만 남는다.
+  // 예약 정보를 못 받았으면(예약 창이 닫힘 등) 사전예약은 불가하고, 현장예매만 남는다.
   const advanceAvailable = !!availability && availability.dates.some(isReservableDate);
   const onsiteAvailable = isOperatingToday(fair?.operationStartDate ?? null, fair?.operationEndDate ?? null);
   const bothTypes = advanceAvailable && onsiteAvailable;
@@ -293,7 +293,7 @@ export function TicketReservationPage() {
     setSubmitErrorLink(null);
   }
 
-  /** 예매 정보를 다시 읽어 날짜 카드를 최신 상태로 맞춘다(중복 예약으로 막힌 직후 등). */
+  /** 예약 정보를 다시 읽어 날짜 카드를 최신 상태로 맞춘다(중복 예약으로 막힌 직후 등). */
   async function refreshAvailability() {
     try {
       setAvailability(await getReservationAvailability(id));
@@ -303,7 +303,7 @@ export function TicketReservationPage() {
   }
 
   /**
-   * 예약/예매 실패를 화면 문구로 바꾼다.
+   * 예약 실패를 화면 문구로 바꾼다.
    *
    * R005(중복 예약)는 서버 메시지("이미 활성 예약이 존재합니다.")만 띄우면 사용자가 무엇을
    * 해야 할지 알 수 없다 - 대부분 결제를 안 끝낸 자기 예약이 남아 있는 경우라, 그 예약으로
@@ -471,7 +471,7 @@ export function TicketReservationPage() {
   }
 
   /**
-   * 결제 팝업을 닫으려 할 때(X·배경 클릭·ESC) 부른다. 예매는 결제까지 마쳐야 완료되므로 그냥
+   * 결제 팝업을 닫으려 할 때(X·배경 클릭·ESC) 부른다. 예약은 결제까지 마쳐야 완료되므로 그냥
    * 닫지 않고 "아직 완료되지 않았다"고 확인한다. 나가기를 택하면 예약은 PENDING_PAYMENT로 남아
    * 내 예약 목록에서 제한시간(약 10분) 안에 결제할 수 있고, 안 하면 자동으로 만료된다.
    */
@@ -496,7 +496,7 @@ export function TicketReservationPage() {
   }
 
   /**
-   * 예약을 지금 취소하고 예매 화면으로 돌아간다.
+   * 예약을 지금 취소하고 예약 화면으로 돌아간다.
    *
    * 그냥 나가면 결제 대기 예약이 최대 10분간 남아 같은 날짜를 다시 고를 수 없다(R005).
    * "마음이 바뀐" 사용자가 자동 만료를 기다리지 않아도 되게 즉시 정리할 길을 열어둔다.
@@ -590,14 +590,14 @@ export function TicketReservationPage() {
     return (
       <div className="mx-auto max-w-3xl py-2">
         <EmptyState
-          title={allSoldOut ? "예매 가능한 방문일이 없어요." : "지금은 예매할 수 없어요."}
+          title={allSoldOut ? "예약 가능한 방문일이 없어요." : "지금은 예약할 수 없어요."}
           description={
             allSoldOut
-              ? "모든 방문일이 마감됐어요. 예매 가능한 다른 행사를 확인해 주세요."
-              : (availabilityError ?? "예매 접수가 마감되었거나 아직 시작되지 않았어요. 예매 가능한 다른 행사를 확인해 주세요.")
+              ? "모든 방문일이 마감됐어요. 예약 가능한 다른 행사를 확인해 주세요."
+              : (availabilityError ?? "예약 접수가 마감되었거나 아직 시작되지 않았어요. 예약 가능한 다른 행사를 확인해 주세요.")
           }
           actionTo="/fairs/upcoming"
-          actionLabel="예매 가능한 행사 보기"
+          actionLabel="예약 가능한 행사 보기"
         />
       </div>
     );
@@ -606,15 +606,15 @@ export function TicketReservationPage() {
   // 폼 (기본)
   return (
     <div className="mx-auto max-w-3xl py-2">
-      <PageHeader eyebrow="티켓 예매" title="예매하기" description="예약 유형과 방문일을 고르고 예약을 진행해요." />
+      <PageHeader eyebrow="티켓 예약" title="예약하기" description="예약 유형과 방문일을 고르고 예약을 진행해요." />
 
       {/* 행사 정보 */}
       <Card className="mb-6 p-5">
         <h2 className="text-lg font-extrabold text-ink">{fairName}</h2>
-        {/* 예매를 막지 않는 안내. 이름·장소·기간이 비는 이유를 알려주되 흐름은 그대로 둔다. */}
+        {/* 예약을 막지 않는 안내. 이름·장소·기간이 비는 이유를 알려주되 흐름은 그대로 둔다. */}
         {fairInfoFailed && (
           <p className="mt-1.5 text-sm text-muted" role="status">
-            행사 정보를 불러오지 못했어요. 이름·장소·기간이 안 보일 수 있지만 예매는 계속할 수 있어요.
+            행사 정보를 불러오지 못했어요. 이름·장소·기간이 안 보일 수 있지만 예약은 계속할 수 있어요.
           </p>
         )}
         <div className="mt-2 flex flex-col gap-1.5 text-sm text-muted">
@@ -671,7 +671,7 @@ export function TicketReservationPage() {
           {/* 사전예약을 그리는 시점엔 예약 가능한 날짜가 반드시 하나는 있다(advanceAvailable).
               아래 빈 목록 분기는 판정이 바뀌었을 때를 대비한 안전망으로만 남겨둔다. */}
           {(availability?.dates.length ?? 0) === 0 ? (
-            <Card className="mb-6 p-4 text-sm text-muted">지금 예매할 수 있는 방문일이 없어요.</Card>
+            <Card className="mb-6 p-4 text-sm text-muted">지금 예약할 수 있는 방문일이 없어요.</Card>
           ) : (
             <div className={`grid gap-3 sm:grid-cols-3 ${myReservedDates.length > 0 ? "mb-3" : "mb-6"}`}>
               {(availability?.dates ?? []).map((date) => {
@@ -797,8 +797,8 @@ export function TicketReservationPage() {
           <Card className="mb-6 p-5 text-sm leading-6 text-muted">
             <p className="font-bold text-ink">오늘 방문 · 현장에서 바로 입장</p>
             <p className="mt-1">
-              현장예매는 오늘 방문만 가능하고, 예매 후 바로 입장할 수 있어요. 판매 상태·가격은 행사마다
-              달라서 예매를 시도하면 확인돼요.
+              현장예매는 오늘 방문만 가능하고, 예약 후 바로 입장할 수 있어요. 판매 상태·가격은 행사마다
+              달라서 예약을 시도하면 확인돼요.
             </p>
             <p className="mt-1 font-bold text-primary-strong">현장예매는 취소·환불이 불가능해요.</p>
           </Card>
@@ -842,7 +842,7 @@ export function TicketReservationPage() {
         </>
       )}
 
-      {/* 예약금 결제 팝업. 예매는 결제까지 마쳐야 완료된다. 닫으려 하면 완료 안 됨을 경고한다. */}
+      {/* 예약금 결제 팝업. 예약은 결제까지 마쳐야 완료된다. 닫으려 하면 완료 안 됨을 경고한다. */}
       {paymentInfo && (
         <Dialog open={paymentOpen} onClose={attemptClosePayment} title="예약금 결제">
           <div className="space-y-4">
@@ -862,7 +862,7 @@ export function TicketReservationPage() {
                 <Clock size={16} className="shrink-0 text-muted" />
                 {expired ? (
                   <span className="font-bold text-primary-strong">
-                    결제 제한시각이 지났어요. 이 예약은 곧 만료되니 다시 예매해 주세요.
+                    결제 제한시각이 지났어요. 이 예약은 곧 만료되니 다시 예약해 주세요.
                   </span>
                 ) : (
                   <span className="text-muted">

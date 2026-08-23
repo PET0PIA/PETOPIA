@@ -2,7 +2,7 @@ import type { BadgeTone } from "../../components/ui/Badge";
 import type { ReservationStatus, ReservationType } from "../../api/reservation";
 
 /**
- * 예약 화면(목록·상세·예매)이 공유하는 표시 규칙.
+ * 예약 화면(목록·상세·예약)이 공유하는 표시 규칙.
  * 상태 라벨·색·유형 라벨·시간/날짜 포맷을 한곳에 모아, 화면마다 값이 어긋나지 않게 한다.
  */
 
@@ -90,7 +90,7 @@ export function parseServerDateTime(value: string | null): number | null {
 /**
  * 결제 제한시각까지 남은 시간을 "m:ss"로 만든다. 이미 지났거나 값이 없으면 null.
  *
- * 예매·목록·상세가 같은 문구를 쓰도록 여기 모았다 - 예전에는 예매 화면에만 있어서,
+ * 예약·목록·상세가 같은 문구를 쓰도록 여기 모았다 - 예전에는 예약 화면에만 있어서,
  * 목록·상세에서는 "결제 대기"라는 배지만 보이고 언제까지 결제해야 하는지 알 수 없었다.
  *
  * null은 "결제할 수 없다"와 같은 뜻이다 - 호출하는 화면은 이 값이 null이면 결제 버튼을

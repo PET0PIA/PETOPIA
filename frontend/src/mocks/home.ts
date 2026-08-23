@@ -47,7 +47,7 @@ export const boothPreviews: BoothPreview[] = [
   { id: "cat-grass", name: "캣그라스", category: "반려식물", fairName: "2026 서울 펫페어", boothNumber: "A-09", imageUrl: booth10, initials: "CG", accent: "primary" },
 ];
 
-// 박람회 리뷰(ocreo 페어스토리 대응): 다녀온 반려인 후기 카드. image는 카드 상단 대표 사진.
+// 행사 리뷰(ocreo 페어스토리 대응): 다녀온 반려인 후기 카드. image는 카드 상단 대표 사진.
 interface FairReview {
   id: string;
   author: string;
@@ -65,7 +65,7 @@ export const fairReviews: FairReview[] = [
 ];
 
 export const personalActivities: ActivityItem[] = [
-  { label: "예매한 티켓", value: "2건", description: "서울 펫페어 외 1건", tone: "primary" },
+  { label: "예약한 티켓", value: "2건", description: "서울 펫페어 외 1건", tone: "primary" },
   { label: "다음 방문 일정", value: "9월 18일", description: "2026 서울 펫페어", tone: "sun" },
   { label: "읽지 않은 알림", value: "3건", description: "새 소식이 도착했어요", tone: "leaf" },
 ];

@@ -3,9 +3,9 @@ import { Link } from "react-router-dom";
 import { HomeBand } from "./HomeBand";
 
 const menus = [
-  { title: "예정 행사", description: "다음 펫페어를 찾아보세요", path: "/fairs/upcoming", icon: CalendarDays },
-  { title: "티켓 예매", description: "빠르고 간편하게 예매해요", path: "/fairs/upcoming", icon: Ticket },
-  { title: "참여 부스 신청", description: "우리 브랜드를 소개해요", path: "/participations/new", icon: Store },
+  { title: "예정 행사", description: "다음 행사를 찾아보세요", path: "/fairs/upcoming", icon: CalendarDays },
+  { title: "티켓 예약", description: "빠르고 간편하게 예약해요", path: "/fairs/upcoming", icon: Ticket },
+  { title: "부스 참가 신청", description: "우리 브랜드를 소개해요", path: "/participations/new", icon: Store },
   { title: "행사 개최 신청", description: "새로운 행사를 시작해요", path: "/fair-applications/new", icon: FilePlus2 },
 ] as const;
 

@@ -181,7 +181,7 @@ export function getEntryQr(reservationId: number) {
   );
 }
 
-// ── 사전예약(2단계): 예매 가능 날짜 조회 + 생성 ─────────────────────────────
+// ── 사전예약(2단계): 예약 가능 날짜 조회 + 생성 ─────────────────────────────
 
 /**
  * 유료 사전예약의 약관 버전.
@@ -192,7 +192,7 @@ export function getEntryQr(reservationId: number) {
  */
 export const ADVANCE_TERMS_VERSION = "advance-paid-v1";
 
-/** 예매 가능 운영일 한 건. 백엔드 ReservationAvailabilityDateResponse에 맞춘다. */
+/** 예약 가능 운영일 한 건. 백엔드 ReservationAvailabilityDateResponse에 맞춘다. */
 export interface ReservationAvailabilityDate {
   /** YYYY-MM-DD */
   visitDate: string;
@@ -201,7 +201,7 @@ export interface ReservationAvailabilityDate {
   entryEndTime: string;
   remainingCapacity: number;
   /**
-   * 잔여석 기준 예매 가능 여부(마감이면 false).
+   * 잔여석 기준 예약 가능 여부(마감이면 false).
    * "내가 이미 예약한 날"인지는 여기 섞여 있지 않다 - 아래 myReservationId로 따로 판단한다.
    */
   available: boolean;
@@ -484,7 +484,7 @@ export interface OnsiteSalesPolicy {
   price: number;
   /** 현장예매 전용 정원. null이면 제한 없음(사전예약 정원과는 별개다). */
   capacity: number | null;
-  /** 그 정원을 점유 중인 현장예매 수. 읽기 전용 — 예매·취소가 움직인다. */
+  /** 그 정원을 점유 중인 현장예매 수. 읽기 전용 — 예약·취소가 움직인다. */
   reservedCount: number;
   status: OnsiteSalesStatus;
   /** 낙관적 락 버전. 미설정이면 0. */

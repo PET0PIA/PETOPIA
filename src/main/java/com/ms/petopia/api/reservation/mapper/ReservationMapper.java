@@ -28,7 +28,7 @@ public interface ReservationMapper {
 
     /**
      * 한 행사에서 내가 이미 잡아둔(중복 판정에 걸리는) 예약을 방문일별로 가져온다.
-     * 예매 화면 날짜 카드에 "이미 예약함"을 미리 표시하는 용도다.
+     * 예약 화면 날짜 카드에 "이미 예약함"을 미리 표시하는 용도다.
      */
     List<ReservationMyActiveDateRow> selectMyActiveReservationDates(
             @Param("fairId") Long fairId,

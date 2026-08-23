@@ -114,7 +114,7 @@ export function HallManagementPage() {
   return (
     <div className="mx-auto max-w-6xl py-2">
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title="홀 관리"
         description="행사장의 홀을 등록·관리해요. 부스 배치는 홀 등록 이후 단계에서 진행돼요."
         action={fairId !== null ? <Button onClick={openCreateDialog}><Plus size={16} />홀 추가</Button> : undefined}

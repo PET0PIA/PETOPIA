@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * FAIR_SETTLEMENT / FAIR_SETTLEMENT_ITEM 테이블 조회용 매퍼(2026-08-22, 행사별 최종정산).
- * 기존 SettlementMapper(업체별 정산)와 같은 패턴을 따르되 businessId 없이 fairId 하나로만
+ * 기존 SettlementMapper(사업자별 정산)와 같은 패턴을 따르되 businessId 없이 fairId 하나로만
  * 다룬다. XML은 {@code mapper/fairsettlement/FairSettlementMapper.xml}에 있다.
  */
 @Mapper

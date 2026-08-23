@@ -89,7 +89,7 @@
          LIMIT #{limit} OFFSET #{offset}
     </select>
 
-    <!-- ===== 행사관리자 통계(Phase 6) ===== -->
+    <!-- ===== 행사 관리자 통계(Phase 6) ===== -->
 
     <select id="countByFairId" resultType="long">
         SELECT COUNT(*)

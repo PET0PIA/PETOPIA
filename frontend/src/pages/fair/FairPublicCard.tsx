@@ -24,7 +24,7 @@ interface FairPublicCardProps {
   ended?: boolean;
   /** 포스터·이름 클릭 시 이동 경로(행사 상세 등). 없으면 클릭 불가. 페이지마다 목적지가 달라 밖에서 정한다. */
   to?: string;
-  /** 하단 CTA 버튼(예매하기·신청하기·부스 보기). 없으면 버튼을 그리지 않는다. */
+  /** 하단 CTA 버튼(예약하기·신청하기·부스 보기). 없으면 버튼을 그리지 않는다. */
   action?: FairCardAction;
   /** 표시 형태. "card"(기본)=세로 포스터 카드, "list"=가로 리스트 행. */
   layout?: "card" | "list";
@@ -36,7 +36,7 @@ interface FairPublicCardProps {
   posterBadge?: ReactNode;
 }
 
-/** 공개 행사 카드(세로 포스터 + 이름·기간·장소 + 하단 CTA). 목록·참가신청·업체목록에서 공유한다. */
+/** 공개 행사 카드(세로 포스터 + 이름·기간·장소 + 하단 CTA). 목록·참가신청·참가업체 목록에서 공유한다. */
 export function FairPublicCard({ fair, ended = false, to, action, layout = "card", posterBadge }: FairPublicCardProps) {
   const poster = fair.posterImageUrl ? (
     <img

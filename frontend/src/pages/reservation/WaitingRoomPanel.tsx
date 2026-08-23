@@ -148,7 +148,7 @@ export function WaitingRoomPanel({ fairId, fairName, onAdmitted, onCancel }: Pro
     <div className="mx-auto max-w-3xl py-2">
       <PageHeader
         eyebrow="대기열"
-        title="예매 대기 중이에요"
+        title="예약 대기 중이에요"
         description="지금 접속이 몰려 순서대로 입장하고 있어요. 이 화면을 닫지 마세요."
       />
 

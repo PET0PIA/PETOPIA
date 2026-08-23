@@ -19,7 +19,7 @@ export function FairReviewWizardPage() {
 
   return (
     <PageContainer className="max-w-2xl py-10">
-      <PageHeader eyebrow="리뷰 작성" title="방문 후기를 남겨주세요" description="선택한 항목은 담당자 통계와 다른 방문객들에게 참고 자료로 쓰여요." />
+      <PageHeader eyebrow="리뷰 작성" title="방문 후기를 남겨주세요" description="선택한 항목은 담당자 통계와 다른 관람객들에게 참고 자료로 쓰여요." />
       <FairReviewWizard fairId={numericFairId} onComplete={() => navigate(`/fairs/${numericFairId}`)} />
     </PageContainer>
   );

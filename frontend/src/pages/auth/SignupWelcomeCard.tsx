@@ -23,7 +23,7 @@ export function SignupWelcomeCard({
       <h1 className="text-xl font-extrabold">PETOPIA 가입을 환영해요!</h1>
       <p className="mt-3 text-sm leading-6 text-muted">
         반려동물 정보를 등록하면 마이페이지에서 편리하게 관리하고,
-        <br className="hidden sm:block" /> 박람회 예약 시 반려동물 정보를 활용할 수 있어요.
+        <br className="hidden sm:block" /> 행사 예약 시 반려동물 정보를 활용할 수 있어요.
       </p>
       <p className="mt-3 text-sm font-bold text-ink">지금 등록하시겠어요?</p>
       <div className="mt-6 space-y-2">
