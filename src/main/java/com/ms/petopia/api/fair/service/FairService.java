@@ -661,14 +661,14 @@ public class FairService {
                     "행사 신청이 승인되었습니다",
                     "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.",
                     paymentPath,
-                    () -> mailService.sendFairApprovalEmail(applicantEmail,
+                    () -> mailService.sendFairApprovalEmail(applicantEmail, fair.getName(),
                             update.getOpeningFeeAmount(), update.getPaymentDueAt(), frontendUrl + paymentPath));
         } else {
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_REJECTED,
                     "행사 신청이 반려되었습니다",
                     "반려 사유: " + update.getRejectReason(),
                     "/fair-applications/me/" + fairId,
-                    () -> mailService.sendFairRejectionEmail(applicantEmail, update.getRejectReason()));
+                    () -> mailService.sendFairRejectionEmail(applicantEmail, fair.getName(), update.getRejectReason()));
         }
 
         return new ReviewFairApplicationResponse(

@@ -8,6 +8,7 @@ import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.reservation.dto.ReservationChangeFairDateRow;
 import com.ms.petopia.api.reservation.dto.ReservationChangeReservationRow;
 import com.ms.petopia.api.reservation.dto.UpdateReservationVisitDateRequest;
@@ -49,6 +50,7 @@ public class ReservationVisitDateChangeService {
     private final ReservationPetService reservationPetService;
     private final AuthMapper authMapper;
     private final MailService mailService;
+    private final PaymentMapper paymentMapper;
 
     /** 확정된 사전예약의 방문 날짜와 발급된 QR 유효시간을 함께 변경한다. */
     @Transactional
@@ -188,7 +190,8 @@ public class ReservationVisitDateChangeService {
                 try {
                     User user = authMapper.selectUserById(userId);
                     if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                        mailService.sendReservationChangedEmail(user.getEmail(), previousVisitDate,
+                        String fairName = paymentMapper.selectFairNameById(reservation.getFairId());
+                        mailService.sendReservationChangedEmail(user.getEmail(), fairName, previousVisitDate,
                                 request.visitDate(), targetDate.getEntryStartTime(), targetDate.getEntryEndTime());
                     }
                 } catch (Exception e) {

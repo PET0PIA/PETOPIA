@@ -18,6 +18,7 @@ import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
@@ -62,6 +63,7 @@ public class ApplicationService {
     private final FairAdminAccessGuard fairAdminAccessGuard;
     private final AuthMapper authMapper;
     private final MailService mailService;
+    private final PaymentMapper paymentMapper;
 
     @Value("${app.frontend-url}")
     private String frontendUrl;
@@ -521,7 +523,8 @@ public class ApplicationService {
                     "참가 신청이 승인되었습니다",
                     "참가비 " + finalPrice + "원을 " + paymentDueAt.toLocalDate() + "까지 결제해주세요.",
                     () -> withRecipientEmail(business.getOwnerId(), email ->
-                            mailService.sendVendorApplicationApprovedEmail(email, finalPrice,
+                            mailService.sendVendorApplicationApprovedEmail(email,
+                                    paymentMapper.selectFairNameById(application.getFairId()), finalPrice,
                                     paymentDueAt.toLocalDate(), frontendUrl + "/vendor/participations")));
         }
 
@@ -582,7 +585,8 @@ public class ApplicationService {
                     "참가 신청이 반려되었습니다",
                     "반려 사유: " + request.getRejectReason(),
                     () -> withRecipientEmail(business.getOwnerId(), email ->
-                            mailService.sendVendorApplicationRejectedEmail(email, request.getRejectReason())));
+                            mailService.sendVendorApplicationRejectedEmail(email,
+                                    paymentMapper.selectFairNameById(application.getFairId()), request.getRejectReason())));
         }
 
         return ApplicationReviewResultResponse.builder()
@@ -762,7 +766,8 @@ public class ApplicationService {
                     "참가 취소 요청이 승인되었습니다",
                     "신청이 취소 처리되었습니다.",
                     () -> withRecipientEmail(business.getOwnerId(),
-                            email -> mailService.sendVendorApplicationCancelApprovedEmail(email)));
+                            email -> mailService.sendVendorApplicationCancelApprovedEmail(email,
+                                    paymentMapper.selectFairNameById(application.getFairId()))));
         }
 
         return ApplicationCancelRequestResultResponse.builder()
@@ -861,7 +866,8 @@ public class ApplicationService {
                     "참가 취소 요청이 반려되었습니다",
                     "취소 요청이 반려되었습니다.",
                     () -> withRecipientEmail(business.getOwnerId(),
-                            email -> mailService.sendVendorApplicationCancelRejectedEmail(email)));
+                            email -> mailService.sendVendorApplicationCancelRejectedEmail(email,
+                                    paymentMapper.selectFairNameById(application.getFairId()))));
         }
 
         return ApplicationCancelRequestResultResponse.builder()
@@ -1067,7 +1073,8 @@ public class ApplicationService {
                         "사업자 승인 취소로 참가 신청이 취소되었습니다",
                         "관리자가 사업자를 취소 처리하여 신청이 취소되었습니다.",
                         () -> withRecipientEmail(business.getOwnerId(),
-                                email -> mailService.sendVendorApplicationCancelApprovedEmail(email)));
+                                email -> mailService.sendVendorApplicationCancelApprovedEmail(email,
+                                        paymentMapper.selectFairNameById(application.getFairId()))));
 
             }
 

@@ -1059,6 +1059,7 @@ class FairServiceTest {
                 .isEqualTo("개설비를 2026-08-08까지 결제해 주세요.");
         verify(mailService).sendFairApprovalEmail(
                 "user@petopia.example",
+                "2026 서울 펫페어",
                 500_000L,
                 NOW.plusDays(7),
                 "https://petopia-kappa.vercel.app/payments/fair-opening-fee/" + FAIR_ID
@@ -1088,7 +1089,7 @@ class FairServiceTest {
         assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_APPLICATION_REJECTED);
         assertThat(notifCaptor.getValue().channels()).containsExactly(DeliveryChannel.IN_APP);
-        verify(mailService).sendFairRejectionEmail("user@petopia.example", "서류 미비");
+        verify(mailService).sendFairRejectionEmail("user@petopia.example", "2026 서울 펫페어", "서류 미비");
     }
 
     @Test

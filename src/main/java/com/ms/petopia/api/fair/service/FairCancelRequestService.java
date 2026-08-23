@@ -285,8 +285,9 @@ public class FairCancelRequestService {
 
     /**
      * 취소 신청을 넣은 EVENT_ADMIN에게 심사 결과를 인앱 알림+이메일로 알린다.
-     * {@code NotificationService.save}가 EMAIL 채널이 있으면 이메일 발송까지 함께 처리하므로
-     * {@code FairService#review}와 달리 별도 MailService 템플릿을 만들 필요가 없다.
+     * {@code FairService#review}와 동일하게, 인앱 알림은 {@code NotificationService.save}(IN_APP만)로
+     * 남기고 이메일은 PETOPIA HTML 템플릿({@code MailService})으로 별도 발송한다 - notification
+     * 도메인의 EMAIL 채널(EmailSenderService)은 일반 텍스트 메일이라 여기서는 쓰지 않는다.
      */
     private void notifyCancelReviewAfterCommit(Long requestedBy, Long fairId, boolean approved, String fairName,
                                                String rejectReason) {
@@ -303,11 +304,23 @@ public class FairCancelRequestService {
                                     ? "'" + fairName + "' 행사의 취소 신청이 승인되어 취소가 확정되었습니다."
                                     : "'" + fairName + "' 행사의 취소 신청이 반려되었습니다. 반려 사유: " + rejectReason,
                             "/fair-admin/cancellation?fairId=" + fairId,
-                            List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                            List.of(DeliveryChannel.IN_APP),
                             null
                     ));
                 } catch (Exception e) {
                     log.error("취소 신청 심사 알림 저장 실패. requestedBy={}, approved={}", requestedBy, approved, e);
+                }
+                try {
+                    User user = authMapper.selectUserById(requestedBy);
+                    if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
+                        if (approved) {
+                            mailService.sendFairCancelRequestApprovedEmail(user.getEmail(), fairName);
+                        } else {
+                            mailService.sendFairCancelRequestRejectedEmail(user.getEmail(), fairName, rejectReason);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("취소 신청 심사 이메일 발송 실패. requestedBy={}, approved={}", requestedBy, approved, e);
                 }
             }
         });
