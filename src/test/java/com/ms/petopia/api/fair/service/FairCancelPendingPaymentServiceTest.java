@@ -166,7 +166,7 @@ class FairCancelPendingPaymentServiceTest {
                 paymentId, "PAYMENT_" + paymentId, paymentType, 10_000L, "PENDING",
                 "MOCK", null, NOW.minusMinutes(5), FAIR_ID, null, 1L, null, null,
                 null, null, null, null,
-                null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
         );
     }
 

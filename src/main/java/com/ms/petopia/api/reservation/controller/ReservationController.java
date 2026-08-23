@@ -48,9 +48,16 @@ public class ReservationController {
     private final ReservationVisitDateChangeService visitDateChangeService;
     private final ReservationCancellationService cancellationService;
 
+    /**
+     * 예약 화면용 날짜·잔여석 조회. 비로그인도 볼 수 있는 공개 API라 인증을 요구하지 않는다.
+     * 다만 로그인 상태로 부르면 userId가 채워져, 내가 이미 예약한 날짜까지 표시해 준다.
+     */
     @GetMapping("/fairs/{fairId}/reservation-availability")
-    public ReservationAvailabilityResponse getReservationAvailability(@PathVariable Long fairId) {
-        return reservationAvailabilityService.getAvailability(fairId);
+    public ReservationAvailabilityResponse getReservationAvailability(
+            @PathVariable Long fairId,
+            @AuthenticationPrincipal Long userId
+    ) {
+        return reservationAvailabilityService.getAvailability(fairId, userId);
     }
 
     @GetMapping("/reservations/me")

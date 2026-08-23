@@ -18,6 +18,8 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
+import java.util.Optional;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -111,6 +113,43 @@ public class S3StorageService implements StorageService {
             throw new CommonException(ErrorCode.STORAGE_UNAVAILABLE);
         }
         return stripTrailingSlash(baseUrl) + "/" + stripLeadingSlash(objectKey);
+    }
+
+    /**
+     * {@link #toPublicUrl}의 역연산. 판단이 서지 않으면 빈 값을 준다 - 정리 작업이 이 값을
+     * 그대로 받아 객체를 지우므로, 애매한 주소를 억지로 키로 바꾸는 쪽이 훨씬 위험하다.
+     */
+    @Override
+    public Optional<String> toObjectKey(String publicUrl) {
+        if (publicUrl == null || publicUrl.isBlank()) {
+            return Optional.empty();
+        }
+        String baseUrl = properties.publicBaseUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return Optional.empty();
+        }
+
+        // 지금 설정된 공개 base URL로 만든 주소만 해석한다. 다른 환경(다른 CDN 도메인)에서
+        // 만들어진 주소나 외부 URL은 우리 버킷의 어느 키인지 알 수 없다.
+        String urlPrefix = stripTrailingSlash(baseUrl) + "/";
+        if (!publicUrl.startsWith(urlPrefix)) {
+            return Optional.empty();
+        }
+        String objectKey = publicUrl.substring(urlPrefix.length());
+
+        // 확정 객체(uploads/)만 정리 대상이다. tmp/는 업로드 중일 수 있고, 그 밖의 경로는
+        // ObjectKeyGenerator가 만든 키가 아니다.
+        String confirmedPrefix = properties.confirmedPrefix();
+        if (confirmedPrefix == null || confirmedPrefix.isBlank()) {
+            return Optional.empty();
+        }
+        if (!confirmedPrefix.endsWith("/")) {
+            confirmedPrefix = confirmedPrefix + "/";
+        }
+        if (!objectKey.startsWith(confirmedPrefix) || objectKey.contains("..")) {
+            return Optional.empty();
+        }
+        return Optional.of(objectKey);
     }
 
     private HeadObjectResponse headObject(String objectKey) {

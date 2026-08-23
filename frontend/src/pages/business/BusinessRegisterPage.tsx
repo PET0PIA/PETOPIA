@@ -11,6 +11,7 @@ import { ApiError } from "../../api/client";
 import { registerBusiness, type BusinessRegisterRequest } from "../../api/business";
 import { useAuth } from "../../contexts/AuthContext";
 import { BusinessTermsAgreement } from "../../components/business/BusinessTermsAgreement";
+import { DateInput } from "../../components/ui/DateInput";
 
 interface FormState {
   name: string;
@@ -137,7 +138,7 @@ export function BusinessRegisterPage() {
   return (
     <PageContainer className="py-10">
       <PageHeader
-        eyebrow="PETOPIA 참여 업체"
+        eyebrow="PETOPIA 참가업체"
         title="사업자 등록을 신청해요"
         description="국세청 진위확인 후 사업자등록증을 첨부해 신청하면, 관리자 심사 후 승인돼요. *는 필수 입력이에요."
       />
@@ -176,7 +177,8 @@ export function BusinessRegisterPage() {
               </div>
               <div>
                 {label("개업일자", true)}
-                <Input type="date" value={form.startDate} onChange={(event) => update("startDate", event.target.value)} required />
+                <DateInput value={form.startDate} onChange={(value) => update("startDate", value)} required />
+                <p className="mt-1 text-xs text-muted">숫자만 입력하면 자동으로 - 가 붙어요.</p>
               </div>
               <div>
                 {label("연락처", true)}

@@ -70,6 +70,8 @@ class FairCancelRefundOrchestrationServiceTest {
                 .willReturn(singlePage(payment(1L)));
         given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "COMPLETED", 0, 100))
                 .willReturn(singlePage(payment(2L)));
+        given(paymentService.getPayments(FAIR_ID, null, "FAIR_OPENING_FEE", "COMPLETED", 0, 100))
+                .willReturn(emptyPage());
 
         int enumerated = orchestrationService.enumerateTargets(50);
 
@@ -91,6 +93,8 @@ class FairCancelRefundOrchestrationServiceTest {
                 .willReturn(singlePage(payment(1L)));
         given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "COMPLETED", 0, 100))
                 .willReturn(emptyPage());
+        given(paymentService.getPayments(FAIR_ID, null, "FAIR_OPENING_FEE", "COMPLETED", 0, 100))
+                .willReturn(emptyPage());
         willThrow(new DuplicateKeyException("UK_FAIR_CANCEL_REFUND_TARGETS_PAYMENT"))
                 .given(targetMapper).insert(any());
 
@@ -110,6 +114,8 @@ class FairCancelRefundOrchestrationServiceTest {
         given(paymentService.getPayments(FAIR_ID, null, "RESERVATION_DEPOSIT", "COMPLETED", 1, 100))
                 .willReturn(new PaymentListResponse(List.of(payment(2L)), 1, 100, 2, 2));
         given(paymentService.getPayments(FAIR_ID, null, "VENDOR_FEE", "COMPLETED", 0, 100))
+                .willReturn(emptyPage());
+        given(paymentService.getPayments(FAIR_ID, null, "FAIR_OPENING_FEE", "COMPLETED", 0, 100))
                 .willReturn(emptyPage());
 
         int enumerated = orchestrationService.enumerateTargets(50);
@@ -254,7 +260,7 @@ class FairCancelRefundOrchestrationServiceTest {
                 paymentId, "PAYMENT_" + paymentId, "RESERVATION_DEPOSIT", 10_000L, "COMPLETED",
                 "MOCK", NOW, NOW.minusMinutes(5), FAIR_ID, null, 1L, null, null,
                 null, null, null, null,
-                null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
         );
     }
 

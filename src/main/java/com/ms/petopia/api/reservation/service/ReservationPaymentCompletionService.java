@@ -3,6 +3,7 @@ package com.ms.petopia.api.reservation.service;
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.auth.service.MailService;
+import com.ms.petopia.api.notification.config.MailAsyncConfig;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -18,10 +19,11 @@ import com.ms.petopia.api.reservation.mapper.ReservationPaymentConfirmationMappe
 import com.ms.petopia.api.statistics.event.ReservationStatusChangedEvent; // 실시간 통계 확인용
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher; // 실시간 통계 확인용
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -30,10 +32,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.RejectedExecutionException;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ReservationPaymentCompletionService {
 
     private static final Map<String, String> RESERVATION_TYPE_LABELS = Map.of(
@@ -49,6 +51,33 @@ public class ReservationPaymentCompletionService {
     private final NotificationService notificationService;
     private final MailService mailService;
     private final AuthMapper authMapper;
+    private final ThreadPoolTaskExecutor mailExecutor;
+
+    // @Qualifier를 쓰려면 생성자를 직접 만들어야 한다. Lombok의 @RequiredArgsConstructor는
+    // 필드에 붙은 @Qualifier를 생성자 파라미터로 옮겨주지 않아서(lombok.config의
+    // copyableAnnotations 설정이 없다), ThreadPoolTaskExecutor 후보가 둘(chatAiExecutor,
+    // mailExecutor)인 상황에서 어느 풀이 주입될지 이름 규칙에 의존하게 된다.
+    public ReservationPaymentCompletionService(
+            ReservationPaymentConfirmationMapper confirmationMapper,
+            ReservationMapper reservationMapper,
+            EntryQrService entryQrService,
+            ReservationTimeProvider timeProvider,
+            ApplicationEventPublisher eventPublisher,
+            NotificationService notificationService,
+            MailService mailService,
+            AuthMapper authMapper,
+            @Qualifier(MailAsyncConfig.MAIL_EXECUTOR) ThreadPoolTaskExecutor mailExecutor
+    ) {
+        this.confirmationMapper = confirmationMapper;
+        this.reservationMapper = reservationMapper;
+        this.entryQrService = entryQrService;
+        this.timeProvider = timeProvider;
+        this.eventPublisher = eventPublisher;
+        this.notificationService = notificationService;
+        this.mailService = mailService;
+        this.authMapper = authMapper;
+        this.mailExecutor = mailExecutor;
+    }
 
     /**
      * 결제 도메인이 검증한 성공 통지를 예약 상태에 반영한다.
@@ -159,7 +188,7 @@ public class ReservationPaymentCompletionService {
                     log.error("예약 확정 알림 저장 실패. userId={}, reservationId={}",
                             notifyUserId, reservationId, e);
                 }
-                sendConfirmationEmail(notifyUserId, reservationId, qrToken, row);
+                submitConfirmationEmail(notifyUserId, reservationId, qrToken, row);
             }
         });
 
@@ -172,9 +201,39 @@ public class ReservationPaymentCompletionService {
     }
 
     /**
+     * 예약확정 메일을 전용 워커 풀에 넘긴다.
+     *
+     * <p>{@code afterCommit}은 커밋 뒤에 돌지만 여전히 요청 스레드다. 여기서 SMTP를 직접
+     * 태우면 메일 서버가 느려진 만큼 예약 확정 응답이 늦어진다. 결제를 마치고 확정 화면을
+     * 기다리는 사용자에게는, 메일이 몇 초 늦는 것보다 그게 훨씬 나쁘다.
+     *
+     * <p><b>{@code @Async}를 쓰지 않는 이유</b>는 {@code ChatAiAnswerListener}와 같다 — 큐가
+     * 넘쳤을 때 거부 사실이 호출부에 전달되지 않는다. 이 메일에는 입장 QR이 들어 있고 재시도
+     * 장치가 없어서, 유실됐다면 최소한 그 사실이 로그에 남아야 한다.
+     *
+     * <p>{@code row}는 호출부가 알림 제목용으로 이미 조회해둔 것을 그대로 넘겨받아 워커까지
+     * 전달한다. 조회는 어차피 요청 스레드에서 한 번 일어나야 하므로 여기서 다시 하지 않는다.
+     * 조회 뒤로는 아무도 이 객체를 고치지 않고, {@code execute}가 happens-before를 보장하므로
+     * 다른 스레드에서 읽어도 안전하다.
+     */
+    private void submitConfirmationEmail(Long userId, Long reservationId, String qrToken,
+                                         ReservationListRow row) {
+        try {
+            mailExecutor.execute(() -> sendConfirmationEmail(userId, reservationId, qrToken, row));
+        } catch (RejectedExecutionException e) {
+            // 큐가 찼거나 애플리케이션이 종료 중이다. 예약 확정은 이미 커밋됐으니 되돌릴 것은
+            // 없다. 사용자가 QR 메일을 받지 못했다는 사실만 남긴다.
+            log.error("예약확정 이메일을 큐에 넣지 못했다. userId={}, reservationId={}, 큐={}/{}",
+                    userId, reservationId,
+                    mailExecutor.getThreadPoolExecutor().getQueue().size(),
+                    mailExecutor.getQueueCapacity(), e);
+        }
+    }
+
+    /**
      * 예약확정 HTML 이메일(QR 이미지 포함)을 보낸다. 실패해도 예약 확정 처리에는 영향 없음.
      * row는 afterCommit 콜백이 알림 제목용으로 이미 조회해둔 것을 그대로 받는다(중복 조회 방지) -
-     * 그 조회 자체가 실패했으면 null로 넘어온다.
+     * 그 조회 자체가 실패했으면 null로 넘어오고, 그때는 아래에서 한 번 다시 조회한다.
      */
     private void sendConfirmationEmail(Long userId, Long reservationId, String qrToken, ReservationListRow row) {
         try {
@@ -183,21 +242,38 @@ public class ReservationPaymentCompletionService {
                 log.warn("예약확정 이메일 발송 스킵 — 이메일 주소 없음. userId={}, reservationId={}", userId, reservationId);
                 return;
             }
-            if (row == null) {
+            // 호출부의 조회가 일시적 DB 오류로 실패했으면 여기서 한 번 더 시도한다. 이 메일에는
+            // 입장 QR이 들어 있고 재시도 장치가 없어서, 한 번의 조회 실패로 영구 유실되면 손해가
+            // 크다. 재조회를 여기서 하는 건 워커 스레드라 응답 시간에 영향이 없기 때문이다 -
+            // 발송을 비동기로 옮긴 덕에 생긴 여유다.
+            //
+            // 다만 이건 일시적 실패만 건진다. DB가 오래 죽어 있으면 여전히 유실되며, 그걸 막으려면
+            // 발송 대기를 DB에 남기고 배치가 재시도하는 구조가 필요하다(이번 범위 밖).
+            ReservationListRow reservationRow = row;
+            if (reservationRow == null) {
+                try {
+                    reservationRow = reservationMapper.selectReservationForOwner(reservationId, userId);
+                } catch (Exception e) {
+                    log.warn("예약확정 이메일용 예약 정보 재조회 실패. userId={}, reservationId={}",
+                            userId, reservationId, e);
+                }
+            }
+            if (reservationRow == null) {
                 log.warn("예약확정 이메일 발송 스킵 — 예약 조회 실패. userId={}, reservationId={}", userId, reservationId);
                 return;
             }
-            String typeLabel = RESERVATION_TYPE_LABELS.getOrDefault(row.getReservationType(), row.getReservationType());
+            String typeLabel = RESERVATION_TYPE_LABELS.getOrDefault(
+                    reservationRow.getReservationType(), reservationRow.getReservationType());
             mailService.sendReservationConfirmedEmail(
                     user.getEmail(),
-                    row.getReservationNo(),
-                    row.getFairName(),
+                    reservationRow.getReservationNo(),
+                    reservationRow.getFairName(),
                     typeLabel,
-                    row.getVisitDate(),
-                    row.getEntryStartTime(),
-                    row.getEntryEndTime(),
-                    row.getAmount(),
-                    row.getReservedAt(),
+                    reservationRow.getVisitDate(),
+                    reservationRow.getEntryStartTime(),
+                    reservationRow.getEntryEndTime(),
+                    reservationRow.getAmount(),
+                    reservationRow.getReservedAt(),
                     qrToken
             );
         } catch (Exception e) {

@@ -1,6 +1,5 @@
 package com.ms.petopia.api.notification.service;
 
-import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.notification.dto.*;
 import com.ms.petopia.api.notification.entity.Notification;
@@ -31,7 +30,6 @@ class NotificationServiceTest {
 
     @Mock NotificationMapper notificationMapper;
     @Mock NotificationDeliveryMapper notificationDeliveryMapper;
-    @Mock EmailSenderService emailSenderService;
     @Mock AuthMapper authMapper;
     @Mock PlatformTransactionManager transactionManager;
     @InjectMocks NotificationService notificationService;
@@ -60,25 +58,6 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("채널 수만큼 delivery 행이 삽입된다")
-    void save_insertsDeliveryPerChannel() {
-        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
-                .when(notificationMapper).insert(any());
-
-        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
-                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
-                "제목", "내용", null,
-                List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
-                "user@example.com"
-        );
-
-        notificationService.save(request);
-
-        // 채널이 2개니까 delivery insert도 2번
-        verify(notificationDeliveryMapper, times(2)).insert(any(NotificationDelivery.class));
-    }
-
-    @Test
     @DisplayName("IN_APP 채널의 recipientContact는 null이다")
     void save_inAppChannel_recipientContactIsNull() {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
@@ -88,179 +67,54 @@ class NotificationServiceTest {
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "제목", "내용", null,
                 List.of(DeliveryChannel.IN_APP),
-                "user@example.com" // 요청엔 있어도
-        );
-
-        notificationService.save(request);
-
-        ArgumentCaptor<NotificationDelivery> captor = ArgumentCaptor.forClass(NotificationDelivery.class);
-        verify(notificationDeliveryMapper).insert(captor.capture());
-
-        assertThat(captor.getValue().getRecipientContact()).isNull(); // IN_APP이면 무조건 null
-    }
-
-    @Test
-    @DisplayName("EMAIL 채널은 recipientContact가 요청값 그대로 들어간다")
-    void save_emailChannel_recipientContactIsSet() {
-        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
-                .when(notificationMapper).insert(any());
-
-        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
-                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
-                "제목", "내용", null,
-                List.of(DeliveryChannel.EMAIL),
-                "user@example.com"
-        );
-
-        notificationService.save(request);
-
-        ArgumentCaptor<NotificationDelivery> captor = ArgumentCaptor.forClass(NotificationDelivery.class);
-        verify(notificationDeliveryMapper).insert(captor.capture());
-
-        assertThat(captor.getValue().getRecipientContact()).isEqualTo("user@example.com");
-    }
-
-    @Test
-    @DisplayName("EMAIL 채널 발송 성공 시 delivery 상태가 SENT로 업데이트된다")
-    void save_emailChannel_success_updatesStatusToSent() {
-        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
-                .when(notificationMapper).insert(any());
-
-        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
-                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
-                "제목", "내용", null,
-                List.of(DeliveryChannel.EMAIL),
-                "user@example.com"
-        );
-
-        notificationService.save(request);
-
-        verify(emailSenderService).send("user@example.com", "제목", "내용");
-        verify(notificationDeliveryMapper).updateStatus(any(), eq(DeliveryStatus.SENT), any(), isNull());
-    }
-
-    @Test
-    @DisplayName("EMAIL 발송 실패 시 delivery 상태가 FAILED로 업데이트되고 오류 메시지가 기록된다")
-    void save_emailChannel_failure_updatesStatusToFailed() {
-        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
-                .when(notificationMapper).insert(any());
-        doThrow(new RuntimeException("SMTP 연결 실패")).when(emailSenderService).send(any(), any(), any());
-
-        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
-                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
-                "제목", "내용", null,
-                List.of(DeliveryChannel.EMAIL),
-                "user@example.com"
-        );
-
-        notificationService.save(request);
-
-        verify(notificationDeliveryMapper).updateStatus(any(), eq(DeliveryStatus.FAILED), isNull(), eq("SMTP 연결 실패"));
-    }
-
-    @Test
-    @DisplayName("IN_APP 채널만 있으면 emailSenderService는 호출되지 않는다")
-    void save_inAppOnly_doesNotCallEmailSender() {
-        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
-                .when(notificationMapper).insert(any());
-
-        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
-                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
-                "제목", "내용", null,
-                List.of(DeliveryChannel.IN_APP),
                 null
         );
 
         notificationService.save(request);
 
-        verifyNoInteractions(emailSenderService);
+        ArgumentCaptor<NotificationDelivery> captor = ArgumentCaptor.forClass(NotificationDelivery.class);
+        verify(notificationDeliveryMapper).insert(captor.capture());
+
+        assertThat(captor.getValue().getRecipientContact()).isNull();
     }
 
     @Test
-    @DisplayName("IN_APP + EMAIL 동시 요청 시 이메일은 정확히 1번만 발송되고 IN_APP delivery는 이메일 없이 처리된다")
-    void save_inAppAndEmail_emailSentOnce() {
+    @DisplayName("channels에 EMAIL이 섞여 있어도 무시되고 IN_APP delivery만 생성된다 (EmailSenderService 제거 후 하위 호환)")
+    void save_ignoresEmailChannel_onlyCreatesInAppDelivery() {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
 
         SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
-                "결제 완료", "결제가 완료됐습니다.", null,
+                "제목", "내용", null,
                 List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
                 "user@example.com"
         );
 
         notificationService.save(request);
 
-        // delivery 행은 채널 수만큼 2개
-        verify(notificationDeliveryMapper, times(2)).insert(any(NotificationDelivery.class));
-        // 이메일은 EMAIL 채널에만 1번만 발송
-        verify(emailSenderService, times(1)).send("user@example.com", "결제 완료", "결제가 완료됐습니다.");
-        // 이메일 발송 성공 후 SENT 업데이트도 1번
-        verify(notificationDeliveryMapper, times(1)).updateStatus(any(), eq(DeliveryStatus.SENT), any(), isNull());
-    }
-
-    @Test
-    @DisplayName("EMAIL 채널이고 recipientContact가 null이면 authMapper로 이메일을 자동 조회해 발송한다")
-    void save_emailChannel_nullContact_autoResolvesEmailFromUser() {
-        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
-                .when(notificationMapper).insert(any());
-        User user = User.builder().email("auto@example.com").build();
-        given(authMapper.selectUserById(1L)).willReturn(user);
-
-        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
-                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
-                "제목", "내용", null,
-                List.of(DeliveryChannel.EMAIL),
-                null  // recipientContact 없음
-        );
-
-        notificationService.save(request);
-
-        verify(authMapper).selectUserById(1L);
-        verify(emailSenderService).send("auto@example.com", "제목", "내용");
         ArgumentCaptor<NotificationDelivery> captor = ArgumentCaptor.forClass(NotificationDelivery.class);
-        verify(notificationDeliveryMapper).insert(captor.capture());
-        assertThat(captor.getValue().getRecipientContact()).isEqualTo("auto@example.com");
+        verify(notificationDeliveryMapper, times(1)).insert(captor.capture());
+        assertThat(captor.getValue().getChannel()).isEqualTo(DeliveryChannel.IN_APP);
+        verifyNoInteractions(authMapper);
     }
 
     @Test
-    @DisplayName("EMAIL 채널이고 authMapper가 이메일을 반환하지 못하면 EMAIL delivery를 생성하지 않는다")
-    void save_emailChannel_nullContact_userEmailNotFound_skipsEmailDelivery() {
+    @DisplayName("EMAIL 채널만 요청하면 delivery가 아예 생성되지 않는다")
+    void save_emailOnly_createsNoDelivery() {
         doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
                 .when(notificationMapper).insert(any());
-        given(authMapper.selectUserById(1L)).willReturn(null);
 
         SaveNotificationDto.Request request = new SaveNotificationDto.Request(
                 1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
                 "제목", "내용", null,
                 List.of(DeliveryChannel.EMAIL),
-                null
+                "user@example.com"
         );
 
         notificationService.save(request);
 
         verify(notificationDeliveryMapper, never()).insert(any());
-        verifyNoInteractions(emailSenderService);
-    }
-
-    @Test
-    @DisplayName("IN_APP + EMAIL 동시 요청 시 이메일 조회 실패하면 IN_APP delivery만 생성된다")
-    void save_inAppAndEmail_emailNotFound_onlyInAppDeliveryCreated() {
-        doAnswer(inv -> { ((Notification) inv.getArgument(0)).setNotificationId(1L); return null; })
-                .when(notificationMapper).insert(any());
-        given(authMapper.selectUserById(1L)).willReturn(null);
-
-        SaveNotificationDto.Request request = new SaveNotificationDto.Request(
-                1L, RecipientType.USER, NotificationType.PAYMENT_COMPLETED,
-                "제목", "내용", null,
-                List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
-                null
-        );
-
-        notificationService.save(request);
-
-        verify(notificationDeliveryMapper, times(1)).insert(any(NotificationDelivery.class));
-        verifyNoInteractions(emailSenderService);
     }
 
     // ===== markAsRead =====

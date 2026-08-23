@@ -133,4 +133,37 @@ class S3StorageServiceTest {
 
         verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
+
+    @Test
+    void toObjectKeyRestoresKeyFromPublicUrl() {
+        String objectKey = "uploads/document/2026/08/04/550e8400-e29b-41d4-a716-446655440000.pdf";
+
+        String publicUrl = storageService.toPublicUrl(objectKey);
+
+        // toPublicUrl의 역연산이어야 한다 - 고아 객체 정리가 이 왕복에 기대고 있다.
+        assertThat(storageService.toObjectKey(publicUrl)).contains(objectKey);
+    }
+
+    @Test
+    void toObjectKeyIsEmptyForOtherBaseUrl() {
+        // 다른 환경(다른 CDN 도메인)에서 만든 주소는 우리 버킷의 어느 키인지 알 수 없다.
+        assertThat(storageService.toObjectKey("https://other.example/uploads/document/a.pdf")).isEmpty();
+    }
+
+    @Test
+    void toObjectKeyIsEmptyForTemporaryObject() {
+        // tmp/는 확정 전 객체다. 정리 대상은 확정 객체(uploads/)뿐이다.
+        assertThat(storageService.toObjectKey("https://cdn.example/tmp/document/a.pdf")).isEmpty();
+    }
+
+    @Test
+    void toObjectKeyIsEmptyForPathTraversal() {
+        assertThat(storageService.toObjectKey("https://cdn.example/uploads/../secret.pdf")).isEmpty();
+    }
+
+    @Test
+    void toObjectKeyIsEmptyForBlankUrl() {
+        assertThat(storageService.toObjectKey(null)).isEmpty();
+        assertThat(storageService.toObjectKey("  ")).isEmpty();
+    }
 }

@@ -17,6 +17,9 @@ import com.ms.petopia.api.audit.model.ActionType;
 import com.ms.petopia.api.audit.model.ActorType;
 import com.ms.petopia.api.audit.model.TargetType;
 import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
@@ -80,6 +83,12 @@ class FairCancelRequestServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private AuthMapper authMapper;
+
+    @Mock
+    private MailService mailService;
+
     @InjectMocks
     private FairCancelRequestService cancelRequestService;
 
@@ -90,6 +99,9 @@ class FairCancelRequestServiceTest {
         // 등록하므로(FairServiceTest와 동일한 이유), 활성 트랜잭션 동기화 컨텍스트가 있어야
         // registerSynchronization이 IllegalStateException 없이 통과한다.
         TransactionSynchronizationManager.initSynchronization();
+        org.mockito.Mockito.lenient().when(authMapper.selectUserById(REQUESTED_BY)).thenReturn(
+                User.builder().userId(REQUESTED_BY).email("organizer@petopia.example").role("EVENT_ADMIN").build()
+        );
     }
 
     @AfterEach
@@ -324,8 +336,10 @@ class FairCancelRequestServiceTest {
         assertThat(notifCaptor.getValue().userId()).isEqualTo(REQUESTED_BY);
         assertThat(notifCaptor.getValue().recipientType()).isEqualTo(RecipientType.EVENT_ADMIN);
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_CANCEL_REQUEST_APPROVED);
-        assertThat(notifCaptor.getValue().channels()).containsExactly(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL);
+        assertThat(notifCaptor.getValue().channels()).containsExactly(DeliveryChannel.IN_APP);
         assertThat(notifCaptor.getValue().body()).contains("2026 서울 펫페어");
+        // 이메일은 notification 도메인의 일반 텍스트 채널이 아니라, PETOPIA HTML 템플릿(MailService)으로 별도 발송한다.
+        verify(mailService).sendFairCancelRequestApprovedEmail("organizer@petopia.example", "2026 서울 펫페어");
     }
 
     @Test
@@ -369,7 +383,9 @@ class FairCancelRequestServiceTest {
         verify(notificationService).save(notifCaptor.capture());
         assertThat(notifCaptor.getValue().userId()).isEqualTo(REQUESTED_BY);
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_CANCEL_REQUEST_REJECTED);
+        assertThat(notifCaptor.getValue().channels()).containsExactly(DeliveryChannel.IN_APP);
         assertThat(notifCaptor.getValue().body()).contains("서류 미비");
+        verify(mailService).sendFairCancelRequestRejectedEmail("organizer@petopia.example", "2026 서울 펫페어", "서류 미비");
     }
 
     @Test

@@ -56,7 +56,7 @@ export function GateEntryScanPage() {
     return (
       <div className="mx-auto max-w-3xl py-2">
         <PageHeader
-          eyebrow="박람회 관리자"
+          eyebrow="행사 관리자"
           title="QR 입장 스캔"
           description="게이트에서 관람객의 입장 QR을 스캔해 입장을 처리해요."
         />

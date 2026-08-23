@@ -316,7 +316,7 @@ export function FairApplicationNewPage() {
                 </div>
                 <div>
                   {label("noticeText", "관람 안내사항")}
-                  <Textarea id="noticeText" value={form.noticeText} onChange={(event) => update("noticeText", event.target.value)} placeholder="방문객이 꼭 알아야 할 관람 안내사항을 입력해 주세요." />
+                  <Textarea id="noticeText" value={form.noticeText} onChange={(event) => update("noticeText", event.target.value)} placeholder="관람객이 꼭 알아야 할 관람 안내사항을 입력해 주세요." />
                 </div>
               </div>
             </div>
@@ -386,16 +386,16 @@ export function FairApplicationNewPage() {
             <SectionHeader title="예약 정책" help="관람객 예약금과 취소·변경 가능 기한이에요." icon={<Ticket size={18} aria-hidden="true" />} />
             <Card className="space-y-5 p-6">
               <div>
-                {label("reservationFee", "예약금(원)", false, "관람객이 예매 때 내는 예약금이에요. 무료면 0.")}
+                {label("reservationFee", "예약금(원)", false, "관람객이 예약 때 내는 예약금이에요. 무료면 0.")}
                 <Input id="reservationFee" type="number" min={0} value={form.reservationFee} onChange={(event) => update("reservationFee", event.target.value)} placeholder="0" />
               </div>
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
-                  {label("reservationCancelDeadlineHours", "취소 가능 기한(시간)", false, "방문 몇 시간 전까지 취소를 허용할지. 예: 24 = 하루 전까지.")}
+                  {label("reservationCancelDeadlineHours", "취소 가능 기한(시간)", false, "방문 몇 시간 전까지 취소를 허용할지. 예: 24 = 하루 전까지. 비워두면 기본 12시간.")}
                   <Input id="reservationCancelDeadlineHours" type="number" min={0} value={form.reservationCancelDeadlineHours} onChange={(event) => update("reservationCancelDeadlineHours", event.target.value)} placeholder="예: 24" />
                 </div>
                 <div>
-                  {label("reservationChangeDeadlineHours", "변경 가능 기한(시간)", false, "방문 몇 시간 전까지 방문일 변경을 허용할지.")}
+                  {label("reservationChangeDeadlineHours", "변경 가능 기한(시간)", false, "방문 몇 시간 전까지 방문일 변경을 허용할지. 비워두면 기본 12시간.")}
                   <Input id="reservationChangeDeadlineHours" type="number" min={0} value={form.reservationChangeDeadlineHours} onChange={(event) => update("reservationChangeDeadlineHours", event.target.value)} placeholder="예: 24" />
                 </div>
               </div>

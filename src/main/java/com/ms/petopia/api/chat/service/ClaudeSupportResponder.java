@@ -40,7 +40,7 @@ public class ClaudeSupportResponder {
     private static final long MAX_TOKENS = 1024L;
 
     private static final String SYSTEM_PROMPT = """
-            당신은 반려동물 박람회 플랫폼 '펫토피아'의 상담 도우미입니다.
+            당신은 반려동물 행사 플랫폼 '펫토피아'의 상담 도우미입니다.
             지금은 상담사 운영시간이 아니어서, 상담사를 대신해 당신이 답변합니다.
 
             규칙:

@@ -7,6 +7,9 @@ import com.ms.petopia.api.application.domain.BoothSlotHallRef;
 import com.ms.petopia.api.application.dto.request.*;
 import com.ms.petopia.api.application.dto.response.*;
 import com.ms.petopia.api.application.mapper.ApplicationMapper;
+import com.ms.petopia.api.auth.domain.User;
+import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
@@ -14,6 +17,7 @@ import com.ms.petopia.api.fair.service.BoothSlotService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
@@ -89,6 +93,15 @@ class ApplicationServiceTest {
 
     @Mock
     private FairAdminAccessGuard fairAdminAccessGuard;
+
+    @Mock
+    private PaymentMapper paymentMapper;
+
+    @Mock
+    private AuthMapper authMapper;
+
+    @Mock
+    private MailService mailService;
 
     @InjectMocks
     private ApplicationService applicationService;
@@ -965,6 +978,54 @@ class ApplicationServiceTest {
             verify(notificationService).save(argThat(req ->
                     req.userId().equals(ownerId) && req.type() == NotificationType.VENDOR_APPLICATION_APPROVED));
 
+        }
+
+        @Test
+        @DisplayName("신청서에 담당자 이메일이 있으면 승인 메일은 계정 이메일이 아니라 담당자 이메일로 간다")
+        void notifiesManagerEmail_whenPresent_insteadOfAccountEmail() {
+            Long applicationId = 1L;
+            Long fairId = 1L;
+            Long ownerId = 5L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
+            given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(900000L), any(), any()))
+                    .willReturn(1);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectManagerEmailByApplicationId(applicationId))
+                    .willReturn("manager@example.com");
+
+            applicationService.approveApplication(applicationId, null);
+            simulateTransactionCommit();
+
+            verify(mailService).sendVendorApplicationApprovedEmail(
+                    eq("manager@example.com"), any(), any(), any(), any());
+            verify(authMapper, never()).selectUserById(any());
+        }
+
+        @Test
+        @DisplayName("신청서에 담당자 이메일이 없으면 승인 메일은 사업자 계정 이메일로 폴백한다")
+        void notifiesAccountEmail_whenManagerEmailBlank() {
+            Long applicationId = 1L;
+            Long fairId = 1L;
+            Long ownerId = 5L;
+
+            given(applicationMapper.selectById(applicationId))
+                    .willReturn(createApplication(applicationId, fairId, Application.Status.PENDING_REVIEW));
+            given(applicationMapper.sumSlotPricesByApplicationId(applicationId)).willReturn(900000L);
+            given(applicationMapper.updateApplicationApproved(eq(applicationId), eq(900000L), any(), any()))
+                    .willReturn(1);
+            given(businessMapper.selectById(1L)).willReturn(createBusiness(1L, ownerId));
+            given(applicationMapper.selectManagerEmailByApplicationId(applicationId)).willReturn(null);
+            given(authMapper.selectUserById(ownerId))
+                    .willReturn(User.builder().userId(ownerId).email("owner@example.com").build());
+
+            applicationService.approveApplication(applicationId, null);
+            simulateTransactionCommit();
+
+            verify(mailService).sendVendorApplicationApprovedEmail(
+                    eq("owner@example.com"), any(), any(), any(), any());
         }
 
         @Test

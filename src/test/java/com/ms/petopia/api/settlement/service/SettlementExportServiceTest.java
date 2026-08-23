@@ -54,7 +54,7 @@ class SettlementExportServiceTest {
 
             Row header = sheet.getRow(0);
             assertThat(header.getCell(0).getStringCellValue()).isEqualTo("정산ID");
-            assertThat(header.getCell(1).getStringCellValue()).isEqualTo("업체ID");
+            assertThat(header.getCell(1).getStringCellValue()).isEqualTo("사업자ID");
             assertThat(header.getCell(6).getStringCellValue()).isEqualTo("정산액");
 
             Row confirmedRow = sheet.getRow(1);
@@ -104,11 +104,11 @@ class SettlementExportServiceTest {
             Row header = sheet.getRow(0);
             assertThat(header.getCell(0).getStringCellValue()).isEqualTo("행사ID");
             assertThat(header.getCell(1).getStringCellValue()).isEqualTo("행사명");
-            assertThat(header.getCell(2).getStringCellValue()).isEqualTo("티켓예매 총금액");
-            assertThat(header.getCell(3).getStringCellValue()).isEqualTo("참가비용 총금액");
+            assertThat(header.getCell(2).getStringCellValue()).isEqualTo("예약금 총금액");
+            assertThat(header.getCell(3).getStringCellValue()).isEqualTo("참가비 총금액");
             assertThat(header.getCell(4).getStringCellValue()).isEqualTo("전체금액");
             assertThat(header.getCell(5).getStringCellValue()).isEqualTo("수수료율");
-            assertThat(header.getCell(6).getStringCellValue()).isEqualTo("행사업체금액");
+            assertThat(header.getCell(6).getStringCellValue()).isEqualTo("주최측금액");
             assertThat(header.getCell(7).getStringCellValue()).isEqualTo("플랫폼금액");
 
             // 금액·ID·수수료율은 이제 숫자 셀로 쓴다(CodeRabbit 리뷰 지적, PR #222 - 전엔 전부

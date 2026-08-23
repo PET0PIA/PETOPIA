@@ -7,8 +7,10 @@ import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
 import com.ms.petopia.api.booth.dto.response.*;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
+import com.ms.petopia.api.booth.mapper.BoothStatsMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.statistics.dto.LabelCountDto;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import com.ms.petopia.global.storage.StorageService;
@@ -24,6 +26,7 @@ import java.util.List;
 public class BoothService {
 
     private final BoothMapper boothMapper;
+    private final BoothStatsMapper boothStatsMapper;
     private final BusinessMapper businessMapper;
     private final StorageService storageService;
 
@@ -63,6 +66,25 @@ public class BoothService {
     public List<BoothFavoriteResponse> getMyBooths(Long userId) {
 
         return boothMapper.selectByOwnerId(userId);
+
+    }
+
+    /*
+     * 부스 관리자용 방문 통계("내 부스 관리" 상세) - 본인 소유 부스만 조회 가능하다
+     * (verifyOwner 재사용, updateBooth와 동일한 소유권 검증).
+     */
+    public BoothStatsResponse getBoothStats(Long callerId, Long boothId) {
+
+        verifyOwner(callerId, boothId);
+
+        BoothStatsSummaryRow summary = boothStatsMapper.selectSummary(boothId);
+        List<BoothDailyVisitRow> dailyVisits = boothStatsMapper.selectDailyVisitCounts(boothId);
+        List<LabelCountDto> petSpeciesBreakdown = boothStatsMapper.selectPetSpeciesBreakdown(boothId);
+        Double avgPetAge = boothStatsMapper.selectAvgPetAge(boothId);
+        List<LabelCountDto> petAllergyBreakdown = boothStatsMapper.selectPetAllergyBreakdown(boothId);
+
+        return BoothStatsResponse.from(
+                boothId, summary, dailyVisits, petSpeciesBreakdown, avgPetAge, petAllergyBreakdown);
 
     }
 

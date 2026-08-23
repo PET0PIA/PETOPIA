@@ -20,7 +20,7 @@ export const statusTone: Record<PaymentStatus, "leaf" | "sun" | "neutral" | "pri
 };
 
 export const paymentTypeLabels: Record<PaymentType, string> = {
-  RESERVATION_DEPOSIT: "예약 예약금",
+  RESERVATION_DEPOSIT: "관람객 예약금",
   VENDOR_FEE: "참가업체 참가비",
   FAIR_OPENING_FEE: "행사 개설비",
 };
@@ -45,13 +45,15 @@ export const refundReasonLabels: Record<string, string> = {
   FAIR_CANCEL_USER: "행사취소로 인한 관람객예약 일괄취소",
   VENDOR_CANCEL: "참가업체 자진취소",
   FAIR_CANCEL_VENDOR: "행사취소로 인한 참가업체 환불",
+  FAIR_CANCEL_OPENING_FEE: "행사취소로 인한 개설비 환불",
   OPENING_FEE_MANUAL: "행사 개설비 환불(관리자 수동)",
+  ADMIN_CANCEL: "관리자 대행 예약취소",
 };
 
 export const refundRequestedByDomainLabels: Record<string, string> = {
   RESERVATION: "예약 도메인",
   FAIR: "행사 도메인",
-  VENDOR: "참여업체 도메인",
+  VENDOR: "참가업체 도메인",
   PAYMENT_ADMIN: "결제 관리자",
 };
 

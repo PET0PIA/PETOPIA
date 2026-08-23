@@ -19,6 +19,7 @@ import java.util.Set; // 실시간 통계 확인용
 public class ReservationExpirationService {
 
     private static final String ADVANCE = "ADVANCE";
+    private static final String ONSITE_DIRECT = "ONSITE_DIRECT";
 
     private final ReservationExpirationMapper expirationMapper;
     private final ReservationCapacityMapper capacityMapper;
@@ -43,8 +44,11 @@ public class ReservationExpirationService {
                 expirationMapper.insertExpiredHistory(row.getReservationId(), now);
                 // 결제하지 않아 만료된 좌석을 정원에 돌려준다. 건별로 상태 전이가 성사된
                 // 경우에만 반납해야 중복 반납이 생기지 않는다.
+                // 사전예약과 현장예매는 정원을 따로 센다(V49).
                 if (ADVANCE.equals(row.getReservationType())) {
                     capacityMapper.release(row.getFairId(), row.getVisitDate());
+                } else if (ONSITE_DIRECT.equals(row.getReservationType())) {
+                    capacityMapper.releaseOnsite(row.getFairId(), row.getVisitDate());
                 }
                 changedFairIds.add(row.getFairId()); // 실시간 통계 확인용
                 expired++;

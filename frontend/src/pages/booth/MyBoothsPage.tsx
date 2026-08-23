@@ -1,4 +1,4 @@
-import { ImageIcon } from "lucide-react";
+import { BarChart3, ImageIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageContainer } from "../../components/common/PageContainer";
@@ -67,27 +67,35 @@ export function MyBoothsPage() {
       {!loading && !loadError && booths.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2">
           {booths.map((booth) => (
-            <Link
-              key={booth.boothId}
-              to={`/booths/${booth.boothId}/edit`}
-              className="surface flex items-center gap-3 p-5 transition hover:bg-page"
-            >
-              <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-primary-soft text-primary-strong">
-                {booth.imageUrl ? (
-                  <img src={booth.imageUrl} alt="" className="size-full object-cover" />
-                ) : (
-                  <ImageIcon size={18} />
-                )}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate font-bold text-ink">{booth.name}</p>
-                <p className="truncate text-xs text-muted">{booth.fairName}</p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {booth.category && <Badge tone="primary">{booth.category}</Badge>}
-                  {booth.targetAnimal && <Badge tone="sun">{targetAnimalLabels[booth.targetAnimal]}</Badge>}
+            <div key={booth.boothId} className="surface flex items-center gap-3 p-5">
+              <Link
+                to={`/booths/${booth.boothId}/edit`}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-button transition hover:opacity-80"
+              >
+                <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-full bg-primary-soft text-primary-strong">
+                  {booth.imageUrl ? (
+                    <img src={booth.imageUrl} alt="" className="size-full object-cover" />
+                  ) : (
+                    <ImageIcon size={18} />
+                  )}
                 </div>
-              </div>
-            </Link>
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-ink">{booth.name}</p>
+                  <p className="truncate text-xs text-muted">{booth.fairName}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {booth.category && <Badge tone="primary">{booth.category}</Badge>}
+                    {booth.targetAnimal && <Badge tone="sun">{targetAnimalLabels[booth.targetAnimal]}</Badge>}
+                  </div>
+                </div>
+              </Link>
+              <Link
+                to={`/booths/${booth.boothId}/stats`}
+                className="flex shrink-0 items-center gap-1 rounded-button border border-line px-3 py-2 text-xs font-bold text-ink transition hover:bg-page"
+              >
+                <BarChart3 size={14} />
+                통계
+              </Link>
+            </div>
           ))}
         </div>
       )}

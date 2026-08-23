@@ -52,7 +52,7 @@ import java.util.Map;
  * {@code settlement.commission_rate}에 스냅샷으로 저장하고, 이후 요율이 바뀌어도 그 정산은
  * 영향받지 않는다 — {@link #recalculate}도 새로 조회하지 않고 이 스냅샷을 그대로 재사용한다.
  *
- * <p>{@link #calculate}로 한 번 만들어진 정산은 같은 행사·업체 조합으로 다시 계산 요청하면
+ * <p>{@link #calculate}로 한 번 만들어진 정산은 같은 행사·사업자 조합으로 다시 계산 요청하면
  * {@code UK_SETTLEMENT_FAIR_BUSINESS} 때문에 {@link ErrorCode#SETTLEMENT_ALREADY_EXISTS}가
  * 난다. 계산 이후 결제가 새로 완료되거나 환불이 들어와서 금액을 갱신해야 하면 {@link #recalculate}를
  * 쓴다 — PENDING 상태인 동안만 가능하다. CONFIRMED 이후 정정이 필요하면 {@link #reopen}으로
@@ -80,7 +80,7 @@ public class SettlementService {
     private final MailService mailService;
 
     /**
-     * 특정 행사·업체의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
+     * 특정 행사·사업자의 정산을 계산해서 확정 전 상태(PENDING)로 만든다.
      *
      * <p>정산대상은 "결제완료된 참가비"만이고, 그 중 환불완료된 금액은 차감한다
      * (예약금·행사개설비는 운영매출 조회대상일 뿐 참가업체 정산대상 아님).
@@ -449,7 +449,7 @@ public class SettlementService {
     }
 
     /**
-     * 행사·업체 조합으로 정산 단건 조회(EVENT_ADMIN/SUPER_ADMIN — SettlementController 참고).
+     * 행사·사업자 조합으로 정산 단건 조회(EVENT_ADMIN/SUPER_ADMIN — SettlementController 참고).
      *
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
      */
@@ -463,7 +463,7 @@ public class SettlementService {
     }
 
     /**
-     * 행사 하나에 속한 정산 목록 조회(박람회관리자 조회용). {@link SettlementExportService}가
+     * 행사 하나에 속한 정산 목록 조회(행사 관리자 조회용). {@link SettlementExportService}가
      * 엑셀 다운로드에서도 재사용한다 — 둘 다 HTTP 요청 경로(SettlementController)로만 들어와서
      * 여기 가드를 넣어도 SecurityContext 없는 내부 호출과 충돌하지 않는다.
      *

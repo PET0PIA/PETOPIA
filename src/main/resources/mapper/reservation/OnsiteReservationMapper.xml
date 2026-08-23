@@ -55,6 +55,8 @@
         SELECT onsite_sales_policy_id
              , fair_date_id
              , price
+             , capacity
+             , reserved_count
              , status
              , updated_by
              , version
@@ -68,6 +70,7 @@
         INSERT INTO onsite_sales_policies (
                fair_date_id
              , price
+             , capacity
              , status
              , updated_by
              , version
@@ -76,6 +79,7 @@
         ) VALUES (
                #{fairDateId}
              , #{price}
+             , #{capacity}
              , #{status}
              , #{updatedBy}
              , 0
@@ -84,9 +88,14 @@
         )
     </insert>
 
+    <!--
+        reserved_count 는 여기서 절대 건드리지 않는다. 판매 중인 자리 수는 예약·취소가
+        움직이는 값이라, 관리자 저장이 덮어쓰면 팔린 자리가 통째로 사라진다.
+    -->
     <update id="updatePolicy">
         UPDATE onsite_sales_policies
            SET price = #{price}
+             , capacity = #{capacity}
              , status = #{status}
              , updated_by = #{updatedBy}
              , version = version + 1

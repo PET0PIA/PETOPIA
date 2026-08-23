@@ -447,7 +447,7 @@ export function PaymentFailPage() {
       actions={
         <>
           <PrimaryLink to="/reservations/me">내 예약 목록으로</PrimaryLink>
-          <SecondaryLink to="/fairs/upcoming">예매 가능한 행사 보기</SecondaryLink>
+          <SecondaryLink to="/fairs/upcoming">예약 가능한 행사 보기</SecondaryLink>
         </>
       }
     >

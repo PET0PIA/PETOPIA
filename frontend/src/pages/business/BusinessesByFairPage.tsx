@@ -11,7 +11,7 @@ interface FairListEntry {
   ended: boolean;
 }
 
-/** 행사별 참여 기업(확정 부스) 목록 - 행사를 고르면 그 행사의 확정 부스 목록으로 이동한다. */
+/** 행사별 참가업체(확정 부스) 목록 - 행사를 고르면 그 행사의 확정 부스 목록으로 이동한다. */
 export function BusinessesByFairPage() {
   const [upcoming, setUpcoming] = useState<FairPublicListItem[]>([]);
   const [past, setPast] = useState<FairPublicListItem[]>([]);
@@ -47,7 +47,7 @@ export function BusinessesByFairPage() {
 
   return (
     <PageContainer className="py-7 sm:py-10">
-      <PageHeader eyebrow="참여 기업" title="행사별 참여 기업" description="행사를 선택하면 확정된 참가 부스를 볼 수 있어요." />
+      <PageHeader eyebrow="참가업체" title="행사별 참가업체" description="행사를 선택하면 확정된 참가 부스를 볼 수 있어요." />
 
       {loading && <p className="text-sm text-muted">불러오는 중...</p>}
 

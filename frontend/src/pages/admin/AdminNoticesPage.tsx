@@ -330,7 +330,7 @@ export function AdminNoticesPage() {
             </div>
             <div>
               {label("제목", true)}
-              <Input value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="예: 2026 서울 펫페어 예매 안내" required />
+              <Input value={form.title} onChange={(event) => update("title", event.target.value)} placeholder="예: 2026 서울 펫페어 예약 안내" required />
             </div>
           </div>
 

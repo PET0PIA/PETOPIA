@@ -46,10 +46,10 @@ import java.util.stream.Collectors;
 /**
  * 행사별 최종정산(플랫폼 ↔ 행사) 계산·확정·조회 서비스(2026-08-22).
  *
- * <p>기존 {@code settlement.service.SettlementService}(업체별 정산, fair_id+business_id 단위)는
+ * <p>기존 {@code settlement.service.SettlementService}(사업자별 정산, fair_id+business_id 단위)는
  * 그대로 두고 건드리지 않는다 - 나중에 필요해질 수 있어 백엔드에 남겨두기로 한 팀 결정이다.
- * 이 서비스는 그 대신 화면에 실제로 붙는 도메인으로, 업체 구분 없이 행사 하나당 정산 1건만
- * 가진다: 그 행사에 참가한 모든 업체의 완료된 참가비(VENDOR_FEE)를 합산해서 플랫폼이 행사
+ * 이 서비스는 그 대신 화면에 실제로 붙는 도메인으로, 사업자 구분 없이 행사 하나당 정산 1건만
+ * 가진다: 그 행사에 참가한 모든 사업자의 완료된 참가비(VENDOR_FEE)를 합산해서 플랫폼이 행사
  * (주최측)에 정산해주는 개념이다. 계산·확정·재계산·되돌리기·행사취소가드·감사기록 등 세부
  * 규칙은 전부 기존 SettlementService와 동일한 패턴을 따른다.
  */
@@ -75,7 +75,7 @@ public class FairSettlementService {
 
     /**
      * 행사 하나의 최종정산을 계산해서 확정 전 상태(PENDING)로 만든다. 그 행사에 참가한 모든
-     * 업체의 완료된 참가비를 합산하고, 그 중 환불완료된 금액은 차감한다.
+     * 사업자의 완료된 참가비를 합산하고, 그 중 환불완료된 금액은 차감한다.
      *
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
      * @throws CommonException {@link ErrorCode#SETTLEMENT_ALREADY_EXISTS} 이미 계산된 정산이 있을 때
@@ -118,7 +118,7 @@ public class FairSettlementService {
      * PENDING 정산을 현재 시점의 결제·환불 상태로 다시 집계한다. 재계산·확정은 SUPER_ADMIN
      * 전용 업무로 좁혔다(2026-08-22) - 그 행사 담당 EVENT_ADMIN이라도 호출할 수 없다.
      *
-     * <p>수수료율도 이 시점에 다시 조회해서 반영한다 - 기존 settlement 도메인(업체별 정산)은
+     * <p>수수료율도 이 시점에 다시 조회해서 반영한다 - 기존 settlement 도메인(사업자별 정산)은
      * calculate() 때 스냅샷한 요율을 재계산에서도 그대로 재사용하지만("행사별로 요율을
      * 바꿔도 재계산에 반영이 안 된다"는 지적, 2026-08-22), 여기는 재계산 = "지금 기준으로
      * 다시 계산"이라는 의미를 요율까지 확장했다. 요율이 실제로 달라졌을 때만 감사로그

@@ -23,6 +23,7 @@ public enum NotificationType {
     VENDOR_APPLICATION_CANCEL_REQUESTED, // 참가 취소 요청 접수(심사 대기) - EVENT_ADMIN용
     VENDOR_APPLICATION_CANCEL_APPROVED,
     VENDOR_APPLICATION_CANCEL_REJECTED,
+    BOOTH_VISIT_CHECKED_IN, // 부스 QR 스캔으로 방문이 기록됨 - 관람객(QR 주인)용
 
     // 4. 사업자 등록
     BUSINESS_REGISTRATION_SUBMITTED, // 사업자 등록 신청 접수(심사 대기) - SUPER_ADMIN용

@@ -1,5 +1,5 @@
 import { ChevronLeft, CreditCard, PawPrint, QrCode } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Badge } from "../../components/ui/Badge";
@@ -31,7 +31,10 @@ import {
   type ReservationPaymentMethod,
 } from "../../payments/toss";
 import {
+  fairCancellationLabel,
+  fairCancellationNotice,
   formatEntryTime,
+  formatRemaining,
   formatVisitDateDow,
   reservationStatusLabels,
   reservationStatusTones,
@@ -70,6 +73,22 @@ function cancelErrorMessage(err: unknown) {
     default:
       return err.message;
   }
+}
+
+/**
+ * 방문일 변경 실패를 사용자 문구로 바꾼다.
+ *
+ * R005는 "옮겨갈 날짜에 내 다른 예약이 이미 있다"는 뜻이다. 서버 기본 문구("이미 활성 예약이
+ * 존재합니다")만 띄우면 지금 보고 있는 예약이 문제인 줄 알기 쉬워서, 무엇을 하면 되는지까지 적는다.
+ * 다이얼로그의 날짜 카드가 이미 그런 날짜를 막고 있으므로 여기까지 오는 건 화면이 낡았거나
+ * 경합이 난 경우다.
+ */
+function changeDateErrorMessage(err: unknown) {
+  if (!(err instanceof ApiError)) return "방문일 변경에 실패했어요.";
+  if (err.code === "R005") {
+    return "그 날짜에는 이미 다른 예약이 있어요. 먼저 그 예약을 취소하거나 결제를 마친 뒤 다시 시도해 주세요.";
+  }
+  return err.message;
 }
 
 function BackLink() {
@@ -124,11 +143,13 @@ export function ReservationDetailPage() {
   // 따라 문구가 달라지고, 사유·요청도메인·처리시각까지 같이 보여줘야 해서다.
   const [refund, setRefund] = useState<PaymentRecord | null>(null);
 
-  // 결제 대기 예약을 이어서 결제하는 흐름(예매 화면의 결제 단계와 동일).
+  // 결제 대기 예약을 이어서 결제하는 흐름(예약 화면의 결제 단계와 동일).
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   // 예약금은 가상계좌를 쓸 수 없어서 타입부터 좁혀 둔다(ReservationPaymentMethod 주석 참고).
   const [paymentMethod, setPaymentMethod] = useState<ReservationPaymentMethod>("CARD");
+  // 결제 제한시각 카운트다운용 시계. 결제 대기 예약일 때만 돌린다.
+  const [now, setNow] = useState(() => Date.now());
 
   // 입장 QR은 별도 API로 실제 토큰을 받아 그린다.
   const [qrToken, setQrToken] = useState<string | null>(null);
@@ -209,6 +230,43 @@ export function ReservationDetailPage() {
     };
   }, [id, qrAvailable]);
 
+  // 결제 마감까지 남은 시간. 지났거나 값이 없으면 null이고, 만료 배치가 곧 상태를 정리한다.
+  // 렌더보다 앞에서 구해 두는 이유는 카운트다운을 멈추는 조건으로도 쓰기 때문이다.
+  const paymentAvailable = reservation?.paymentAvailable ?? false;
+  const paymentRemaining = paymentAvailable
+    ? formatRemaining(reservation?.paymentExpiresAt ?? null, now)
+    : null;
+  // 결제로 넘어갈 수 있는지는 "지금" 기준으로 다시 판단한다. paymentAvailable은 응답을 만든
+  // 시점의 값이라, 화면을 열어둔 채 마감을 넘기면 서버가 거절하는 결제창을 열게 된다.
+  const paymentPayable = paymentAvailable && paymentRemaining !== null;
+
+  // 결제 대기 예약에서만 카운트다운을 돌린다 - 확정된 예약을 1초마다 리렌더할 이유가 없다.
+  // 마감에 닿으면 멈춘다. 남은 시간이 계속 null이라 다시 켜지지도 않는다.
+  useEffect(() => {
+    if (!paymentPayable) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [paymentPayable]);
+
+  // 마감에 닿은 순간 상세를 한 번 다시 읽어 서버 기준 상태로 맞춘다. 예약 한 건당 한 번만 -
+  // 서버 시계가 몇 초 뒤라 여전히 결제 가능으로 응답하면 매초 재조회가 돈다.
+  const refetchedOnExpiry = useRef(false);
+  useEffect(() => {
+    if (!paymentAvailable || paymentRemaining !== null || refetchedOnExpiry.current) return;
+    refetchedOnExpiry.current = true;
+    let alive = true;
+    getReservationDetail(id)
+      .then((res) => {
+        if (alive) setReservation(res);
+      })
+      .catch(() => {
+        // 조용히 넘긴다 - 결제 진입은 이미 잠갔고, 안내 문구도 만료를 알린다.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, paymentAvailable, paymentRemaining]);
+
   if (!idValid) {
     return (
       <div className="mx-auto max-w-3xl py-2">
@@ -250,18 +308,24 @@ export function ReservationDetailPage() {
     );
   }
 
-  // 케밥 노출은 서버가 계산한 플래그를 그대로 쓴다(유형·상태 규칙이 여기 반영돼 있음).
+  // 케밥 노출은 서버가 계산한 플래그를 그대로 쓴다(유형·상태 + 취소·변경 마감이 반영돼 있음).
   // 유료 확정 예약도 취소 가능하다 — 서버가 예약금을 전액 환불하고 CANCELED로 넘긴다.
-  // 12시간 마감은 플래그에 없어서, 실제 변경·취소 호출 시 R018/R019로 최종 검증된다.
+  // 화면을 열어둔 채 마감을 넘길 수 있으니, 실제 호출의 R018/R019 처리는 그대로 남겨 둔다.
   const target = reservation; // 아래 콜백에서 non-null로 쓰기 위한 지역 별칭
 
   /**
-   * 결제 대기 예약을 이어서 결제한다. 예매 화면(TicketReservationPage)의 결제 단계와 같은 흐름 —
+   * 결제 대기 예약을 이어서 결제한다. 예약 화면(TicketReservationPage)의 결제 단계와 같은 흐름 —
    * 결제를 생성한 뒤 토스 결제창을 띄운다. 정상 흐름이면 /payments/success로 리다이렉트되므로
    * 이 함수가 끝까지 진행되면 페이지는 곧 사라진다(그래서 성공 시 paying을 되돌리지 않는다).
    */
   const handleResumePayment = async () => {
     if (paying) return;
+    // 버튼을 그린 뒤 클릭까지의 사이에 마감을 넘길 수 있다. 서버가 거절할 결제창을 여느니
+    // 여기서 막는다 - 결제창까지 갔다가 승인만 되고 예약이 거절되면 돈만 나간다.
+    if (!paymentPayable) {
+      setPayError("결제 제한시각이 지났어요. 이 예약은 곧 자동으로 만료돼요.");
+      return;
+    }
     if (!user) {
       setPayError("로그인이 풀렸어요. 다시 로그인한 뒤 결제를 이어가 주세요.");
       return;
@@ -298,7 +362,7 @@ export function ReservationDetailPage() {
     setChangePetIds(target.pets.map((pet) => pet.petId));
     setChangePetAllowed(false);
     setDateDialogOpen(true);
-    // 예매 화면과 같은 방식으로 이 행사의 예약 가능 운영일·잔여석을 불러온다.
+    // 예약 화면과 같은 방식으로 이 행사의 예약 가능 운영일·잔여석을 불러온다.
     setAvailLoading(true);
     getReservationAvailability(target.fairId)
       .then((res) => {
@@ -339,8 +403,17 @@ export function ReservationDetailPage() {
       });
       setDateDialogOpen(false);
     } catch (err) {
-      // R018 변경 마감 / R002 날짜 불가 / R004 마감 / R013 상태 불가
-      setChangeError(err instanceof ApiError ? err.message : "방문일 변경에 실패했어요.");
+      // R018 변경 마감 / R002 날짜 불가 / R004 마감 / R013 상태 불가 / R005 그 날짜에 다른 예약
+      setChangeError(changeDateErrorMessage(err));
+      // 화면이 낡아서 막힌 날짜를 고를 수 있었던 상황이다. 날짜 목록을 다시 읽어
+      // 그 카드가 '다른 예약 있음'으로 바뀌게 한다 - 안 그러면 같은 실패를 반복하게 된다.
+      if (err instanceof ApiError && err.code === "R005") {
+        getReservationAvailability(target.fairId)
+          .then((res) => setAvailDates(res.dates))
+          .catch(() => {
+            // 새로고침 실패는 조용히 넘긴다 - 이미 표시 중인 실패 안내가 본론이다.
+          });
+      }
     } finally {
       setChangeSubmitting(false);
     }
@@ -377,7 +450,10 @@ export function ReservationDetailPage() {
       setQrToken(null);
       setCancelNotice(
         res.refunded && res.refundAmount !== null
-          ? `예약이 취소되고 예약금 ${res.refundAmount.toLocaleString()}원의 환불이 접수됐어요. `
+          // "접수됐어요"가 아니라 "환불 완료"로 쓴다 - 서버가 접수와 동시에 COMPLETED로 확정하고
+          // (RefundService 참고) 아래 '환불 정보' 블록도 이미 "완료"로 표시하는데, 안내 문구만
+          // 접수 단계인 것처럼 읽혀 화면 안에서 말이 어긋났다.
+          ? `예약이 취소되었어요. 예약금 ${res.refundAmount.toLocaleString()}원 환불 완료. `
             + "카드사에 따라 영업일 기준 3~5일 이내 반영돼요."
           : "예약이 취소됐어요.",
       );
@@ -385,6 +461,25 @@ export function ReservationDetailPage() {
       setActionError(cancelErrorMessage(err));
     }
   };
+
+  // 취소·변경 기한은 사전예약이 확정된 동안에만 의미가 있다. 결제 대기 예약의 취소에는
+  // 마감이 없고(서버도 마감을 보지 않는다), 끝난·취소된 예약에 기한을 보여주면 혼란만 준다.
+  const deadlinesApply =
+    reservation.reservationType === "ADVANCE"
+    && reservation.reservationStatus === "CONFIRMED"
+    && !reservation.isEnded;
+  // 기한이 지나 메뉴에서 사라진 경우, 왜 없는지 한 줄로 밝혀 준다.
+  // 취소와 변경은 행사가 서로 다르게 정할 수 있어(예: 취소 48시간·변경 6시간) 한쪽만 닫힐 수 있다.
+  // 둘 다 닫힌 것처럼 안내하면 아직 되는 일을 못 한다고 오해하게 된다.
+  const cancelClosed = deadlinesApply && !reservation.canCancel;
+  const changeClosed = deadlinesApply && !reservation.canChangeVisitDate;
+  const deadlineNotice = cancelClosed && changeClosed
+    ? "취소·변경 가능 기한이 지나 지금은 예약을 바꿀 수 없어요. 방문이 어려우시면 행사 주최측에 문의해 주세요."
+    : cancelClosed
+      ? "취소 가능 기한이 지났어요. 방문일 변경은 아직 할 수 있어요."
+      : changeClosed
+        ? "방문일 변경 가능 기한이 지났어요. 예약 취소는 아직 할 수 있어요."
+        : null;
 
   const menuItems: { label: string; onSelect: () => void }[] = [];
   if (reservation.canChangeVisitDate) {
@@ -404,6 +499,8 @@ export function ReservationDetailPage() {
       <div className="mt-4 mb-6 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
+            {/* 주최측 취소는 내가 취소한 것과 다르므로 배지로 먼저 구분해 준다. */}
+            {reservation.canceledByFairCancellation && <Badge tone="sun">{fairCancellationLabel}</Badge>}
             <Badge tone={reservationStatusTones[reservation.reservationStatus]}>
               {reservationStatusLabels[reservation.reservationStatus]}
             </Badge>
@@ -415,6 +512,13 @@ export function ReservationDetailPage() {
         </div>
         {menuItems.length > 0 && <DropdownMenu label="관리" items={menuItems} />}
       </div>
+
+      {/* 행사 취소로 자동 취소된 예약: 왜 취소됐고 돈은 어떻게 됐는지 상단에 고정 안내한다. */}
+      {reservation.canceledByFairCancellation && (
+        <p className="mb-4 rounded-card bg-sun-soft px-4 py-3 text-sm leading-6 text-ink">
+          {fairCancellationNotice}
+        </p>
+      )}
 
       {actionError && (
         <p role="alert" className="mb-4 text-sm font-bold text-primary-strong">
@@ -428,18 +532,37 @@ export function ReservationDetailPage() {
         </p>
       )}
 
-      {/* 결제 이어가기: 결제 대기 예약에서만(paymentAvailable) 뜬다. 결제를 마쳐야 예약이 확정된다. */}
-      {reservation.paymentAvailable && (
+      {/* 결제 이어가기: 결제 대기 예약에서 뜬다. 결제를 마쳐야 예약이 확정된다.
+          이 카드가 화면 맨 위에 오는 이유를 한 줄로 밝혀 둔다 - QA에서 "티켓 확인하려고 눌렀는데
+          왜 결제 화면이 뜨냐"는 지적이 나왔다. 아직 안 끝난 일이 무엇인지부터 알려주는 게 맞다.
+          조건을 paymentAvailable이 아니라 예약 상태로 두는 이유: 마감이 지나면 그 플래그가
+          false로 내려오는데, 그때 카드까지 사라지면 "결제하려고 들어왔는데 아무 설명이 없는"
+          화면이 된다. 카드는 남겨 두고 안에서 결제 진입만 잠근다. */}
+      {reservation.reservationStatus === "PENDING_PAYMENT" && (
         <Card className="mb-4 p-6">
           <div className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
             <CreditCard size={16} />
             예약금 결제
           </div>
+          <p className="mb-3 rounded-card bg-sun-soft px-4 py-3 text-sm leading-6 text-ink">
+            아직 결제가 끝나지 않은 예약이라 결제부터 보여드려요. 결제를 마치면 이 자리에 입장 QR이 나와요.
+            {paymentRemaining
+              ? ` 결제 마감까지 ${paymentRemaining} 남았어요.`
+              : " 결제 제한시각이 지나 곧 자동으로 만료돼요."}
+          </p>
           <div className="flex items-center justify-between gap-4">
             <p className="text-sm text-muted">결제를 마쳐야 예약이 확정돼요.</p>
             <p className="shrink-0 text-lg font-extrabold text-ink">{reservation.amount.toLocaleString()}원</p>
           </div>
-          {isTossConfigured() ? (
+          {!paymentPayable ? (
+            <div className="mt-4 grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-8 text-center text-sm text-muted">
+              <p className="font-bold text-ink">결제 제한시각이 지났어요</p>
+              <p>
+                이제는 결제를 진행할 수 없어요. 같은 날짜로 다시 예약하려면 위 &lsquo;관리&rsquo; 메뉴에서
+                이 예약을 취소해 주세요.
+              </p>
+            </div>
+          ) : isTossConfigured() ? (
             <div className="mt-4">
               <PaymentMethodPicker
                 value={paymentMethod}
@@ -461,7 +584,8 @@ export function ReservationDetailPage() {
           )}
           {payError && <p className="mt-3 text-sm font-bold text-primary-strong">{payError}</p>}
           <p className="mt-3 text-xs leading-5 text-muted">
-            제한시각까지 결제하지 않으면 예약이 자동으로 만료돼요.
+            제한시각까지 결제하지 않으면 예약이 자동으로 만료돼요. 예약할 생각이 없다면 위 &lsquo;관리&rsquo;
+            메뉴에서 지금 취소할 수 있어요 - 그래야 같은 날짜로 다시 예약할 수 있어요.
           </p>
         </Card>
       )}
@@ -506,6 +630,15 @@ export function ReservationDetailPage() {
           />
           <DetailRow label="예약 확정시각" value={formatDateTime(reservation.reservedAt)} />
           <DetailRow label="최초 입장시각" value={formatDateTime(reservation.checkedInAt)} />
+          {/* 언제까지 취소·변경할 수 있는지 알려준다. 예전에는 이 정보가 화면에 없어서
+              메뉴를 눌러본 뒤 R018/R019 오류로만 마감을 알 수 있었다. 기한은 행사가 정하고
+              (미설정이면 입장 12시간 전), 계산할 수 없으면 서버가 null을 주므로 줄을 그리지 않는다. */}
+          {deadlinesApply && reservation.cancelDeadlineAt !== null && (
+            <DetailRow label="취소 가능 기한" value={formatDateTime(reservation.cancelDeadlineAt)} />
+          )}
+          {deadlinesApply && reservation.changeDeadlineAt !== null && (
+            <DetailRow label="변경 가능 기한" value={formatDateTime(reservation.changeDeadlineAt)} />
+          )}
           {/* 결제 줄은 결제 행이 있는 유료 예약에서만 그린다(무료 예약은 서버가 null로 내려준다). */}
           {reservation.paymentId !== null && (
             <DetailRow label="결제 ID" value={String(reservation.paymentId)} />
@@ -514,6 +647,11 @@ export function ReservationDetailPage() {
             <DetailRow label="결제수단" value={reservation.paymentMethod} />
           )}
         </dl>
+        {deadlineNotice && (
+          <p className="mt-4 rounded-card bg-sun-soft px-4 py-3 text-sm leading-6 text-ink">
+            {deadlineNotice}
+          </p>
+        )}
 
         {/* 환불 정보는 맨 밑에 별도 블록으로 - 환불이 있을 때만(refund !== null) 보여준다.
             PaymentDetailPage.tsx(관리자용)의 "환불 정보" 블록과 같은 필드 구성. */}
@@ -581,24 +719,37 @@ export function ReservationDetailPage() {
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               {availDates.map((date) => {
-                const soldOut = !date.available || date.remainingCapacity === 0;
+                // 지금 보고 있는 예약 자신의 날짜는 고를 수 있어야 한다 - 날짜는 그대로 두고
+                // 동반 반려동물만 바꾸는 저장이 이 다이얼로그의 정식 사용법이다.
+                const isThisReservation = date.myReservationId === reservation.reservationId;
+                // 다른 예약이 이미 잡고 있는 날짜로는 옮길 수 없다(한 행사·한 날짜에 한 건).
+                const takenByOther = date.myReservationId !== null && !isThisReservation;
+                // 내 예약이 마지막 자리를 쓰고 있으면 잔여가 0이다. 그 이유로 자기 날짜를
+                // 잠그면 날짜를 그대로 두고 반려동물만 바꾸는 저장이 막힌다(이 경로는 정원을
+                // 새로 잡지 않으므로 잔여와 무관하다).
+                const soldOut = !isThisReservation && (!date.available || date.remainingCapacity === 0);
+                const blocked = takenByOther || soldOut;
                 const selected = date.visitDate === selectedNewDate;
                 return (
                   <button
                     key={date.visitDate}
                     type="button"
-                    disabled={soldOut}
+                    disabled={blocked}
                     onClick={() => setSelectedNewDate(date.visitDate)}
                     className={`rounded-card border p-3 text-left transition ${
                       selected ? "border-primary-strong bg-primary-soft" : "border-line bg-card hover:bg-page"
-                    } ${soldOut ? "cursor-not-allowed opacity-50 hover:bg-card" : ""}`}
+                    } ${blocked ? "cursor-not-allowed opacity-50 hover:bg-card" : ""}`}
                   >
                     <p className="font-bold text-ink">{formatVisitDateDow(date.visitDate)}</p>
                     <p className="mt-1 text-xs text-muted">
                       {formatEntryTime(date.entryStartTime)} ~ {formatEntryTime(date.entryEndTime)}
                     </p>
                     <p className="mt-1 text-xs font-bold">
-                      {soldOut ? (
+                      {takenByOther ? (
+                        <span className="text-primary-strong">다른 예약 있음</span>
+                      ) : isThisReservation ? (
+                        <span className="text-ink">현재 방문일</span>
+                      ) : soldOut ? (
                         <span className="text-muted">마감</span>
                       ) : (
                         <span className="text-ink">잔여 {date.remainingCapacity}석</span>

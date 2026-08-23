@@ -269,12 +269,13 @@ public class FairService {
                 fair.getName(),
                 fair.getStatus() == null ? null : fair.getStatus().name(),
                 fair.getOpeningFeeAmount(),
-                fair.getPaymentDueAt()
+                fair.getPaymentDueAt(),
+                fair.getCanceledAt()
         );
     }
 
     /**
-     * 공개된 행사의 요약 정보를 인증 없이 조회한다(티켓 예매 화면 등). {@link #getApplication}·
+     * 공개된 행사의 요약 정보를 인증 없이 조회한다(티켓 예약 화면 등). {@link #getApplication}·
      * {@link #getMyApplicationDetail}과 달리 managerName/managerPhone/managerEmail 같은 PII와
      * 심사 관련 필드(reviewedAt/rejectReason/paymentDueAt)를 아예 응답에 담지 않는다
      * ({@link FairPublicSummaryResponse} 참고) - 그래서 요청자 신원 검증 자체가 필요 없다.
@@ -301,7 +302,7 @@ public class FairService {
     }
 
     /**
-     * 공개된 행사 목록을 인증 없이 조회한다(지난 행사/예정 행사/티켓 예매 가능한 행사 화면).
+     * 공개된 행사 목록을 인증 없이 조회한다(지난 행사/예정 행사/티켓 예약 가능한 행사 화면).
      * {@link #getPublicSummary}와 같은 기준(published_at IS NOT NULL, canceled_at IS NULL)으로
      * 걸러진 행사만 반환하고, PII·심사 필드는 목록 단계부터 아예 담지 않는다
      * ({@link FairPublicListItemResponse} 참고).
@@ -322,7 +323,7 @@ public class FairService {
     }
 
     /**
-     * 부스 모집중인 행사 목록을 인증 없이 조회한다(참여 부스 신청 진입점 전용).
+     * 부스 모집중인 행사 목록을 인증 없이 조회한다(부스 참가 신청 진입점 전용).
      * {@link #listPublicFairs}와 달리 published_at을 요구하지 않는다 - "전체공개"는 일반
      * 소비자 노출·사전예약·리뷰 작성 가능 여부만 통제하고, 참가업체 모집 노출은 그와 별개로
      * 모집공고+부스슬롯만 준비되면(= recruiting 계산식) 시작된 것으로 본다.
@@ -661,14 +662,14 @@ public class FairService {
                     "행사 신청이 승인되었습니다",
                     "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.",
                     paymentPath,
-                    () -> mailService.sendFairApprovalEmail(applicantEmail,
+                    () -> mailService.sendFairApprovalEmail(applicantEmail, fair.getName(),
                             update.getOpeningFeeAmount(), update.getPaymentDueAt(), frontendUrl + paymentPath));
         } else {
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_REJECTED,
                     "행사 신청이 반려되었습니다",
                     "반려 사유: " + update.getRejectReason(),
                     "/fair-applications/me/" + fairId,
-                    () -> mailService.sendFairRejectionEmail(applicantEmail, update.getRejectReason()));
+                    () -> mailService.sendFairRejectionEmail(applicantEmail, fair.getName(), update.getRejectReason()));
         }
 
         return new ReviewFairApplicationResponse(
@@ -930,6 +931,8 @@ public class FairService {
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        validateDeadlineHours(request.reservationCancelDeadlineHours());
+        validateDeadlineHours(request.reservationChangeDeadlineHours());
         validateManagerPhoneFormat(request.managerPhone());
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
@@ -1008,6 +1011,8 @@ public class FairService {
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        validateDeadlineHours(request.reservationCancelDeadlineHours());
+        validateDeadlineHours(request.reservationChangeDeadlineHours());
         validateManagerPhoneFormat(request.managerPhone());
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
@@ -1025,6 +1030,20 @@ public class FairService {
                 ErrorCode.FAIR_INVALID_OPERATION_PERIOD
         );
         validateNotInPast(request.operationStartDate(), today, ErrorCode.FAIR_OPERATION_START_IN_PAST);
+    }
+
+    /**
+     * 예약 취소·변경 가능 기한 검사. "입장 몇 시간 전까지"라는 뜻이라 음수가 될 수 없다.
+     *
+     * <p>여기서 막지 않으면 음수가 그대로 저장되고, 나중에 관람객이 취소·변경을 누르는 순간
+     * 400(INVALID_INPUT_VALUE)으로 거절된다 - 잘못은 행사 설정에 있는데 관람객 쪽에서 터지니
+     * 원인을 찾기 어렵다(ReservationCancellationService·ReservationVisitDateChangeService 참고).
+     * 값을 보내지 않았으면(null) 검사하지 않는다 - 예약 도메인이 기본값 12시간을 쓴다.
+     */
+    private void validateDeadlineHours(Integer deadlineHours) {
+        if (deadlineHours != null && deadlineHours < 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
     }
 
     private void validatePeriod(LocalDate startDate, LocalDate endDate, ErrorCode errorCode) {

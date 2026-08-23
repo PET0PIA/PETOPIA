@@ -672,7 +672,7 @@ class SettlementServiceTest {
     }
 
     @Test
-    @DisplayName("행사별 매출 요약은 티켓예매+참가비를 합산해 수수료율만큼 플랫폼/행사업체 몫으로 나눈다")
+    @DisplayName("행사별 매출 요약은 예약금+참가비를 합산해 수수료율만큼 플랫폼/주최측 몫으로 나눈다")
     void getFairRevenueSummaries_티켓과참가비합산_수수료율분배() {
         // Arrange: 티켓 70000원 + 참가비 30000원 = 전체 100000원, 수수료율 10%
         given(paymentMapper.selectFairRevenueSummary())

@@ -6,6 +6,7 @@ import com.ms.petopia.api.reservation.dto.OnsiteReservationCreationContext;
 import com.ms.petopia.api.reservation.dto.ReservationInsertRow;
 import com.ms.petopia.api.reservation.dto.ReservationUserSnapshot;
 import com.ms.petopia.api.reservation.mapper.OnsiteReservationMapper;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
@@ -44,6 +45,8 @@ class OnsiteReservationServiceTest {
     @Mock
     private ReservationMapper reservationMapper;
     @Mock
+    private ReservationCapacityMapper capacityMapper;
+    @Mock
     private ReservationNumberGenerator reservationNumberGenerator;
     @Mock
     private ReservationTimeProvider timeProvider;
@@ -64,6 +67,7 @@ class OnsiteReservationServiceTest {
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801FREE0001");
         given(entryQrService.issueForReservation(RESERVATION_ID)).willReturn("qr-token");
+        givenSeatAvailable();
         assignGeneratedReservationId();
 
         CreateOnsiteReservationResponse response = service.create(FAIR_ID, USER_ID, null);
@@ -73,8 +77,9 @@ class OnsiteReservationServiceTest {
         assertThat(response.amount()).isZero();
         assertThat(response.paymentExpiresAt()).isNull();
         assertThat(response.entryQrToken()).isEqualTo("qr-token");
-        // 현장예매가 사전예약 정원을 건드리지 않는다는 건 이제 구조가 보장한다 -
-        // OnsiteReservationService는 ReservationCapacityMapper에 의존조차 하지 않는다.
+        // 현장예매는 자기 정원(onsite_sales_policies)만 쓴다. 사전예약 정원은 손대지 않는다.
+        verify(capacityMapper).occupyOnsite(FAIR_ID, NOW.toLocalDate());
+        verify(capacityMapper, never()).occupy(any(), any());
 
         ArgumentCaptor<ReservationInsertRow> captor = ArgumentCaptor.forClass(ReservationInsertRow.class);
         verify(reservationMapper).insertReservation(captor.capture());
@@ -91,6 +96,7 @@ class OnsiteReservationServiceTest {
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(admin);
         given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, NOW.toLocalDate())).willReturn(false);
         given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801ADMIN001");
+        givenSeatAvailable();
         assignGeneratedReservationId();
 
         CreateOnsiteReservationResponse response = service.create(FAIR_ID, USER_ID, null);
@@ -105,6 +111,7 @@ class OnsiteReservationServiceTest {
         givenOpenContext(0);
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801PET00001");
+        givenSeatAvailable();
         assignGeneratedReservationId();
 
         service.create(
@@ -122,6 +129,7 @@ class OnsiteReservationServiceTest {
         givenOpenContext(0);
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801PET00002");
+        givenSeatAvailable();
         assignGeneratedReservationId();
 
         service.create(FAIR_ID, USER_ID, null);
@@ -135,6 +143,7 @@ class OnsiteReservationServiceTest {
         givenOpenContext(12_345);
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801PAID0001");
+        givenSeatAvailable();
         assignGeneratedReservationId();
 
         CreateOnsiteReservationResponse response = service.create(
@@ -166,6 +175,7 @@ class OnsiteReservationServiceTest {
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(tenMinutesBeforeEntryEnd.toLocalDate()))
                 .willReturn("R20260801PAID0002");
+        givenSeatAvailable();
         assignGeneratedReservationId();
 
         CreateOnsiteReservationResponse response = service.create(
@@ -210,6 +220,7 @@ class OnsiteReservationServiceTest {
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(entryEnd.toLocalDate())).willReturn("R20260801FREE0002");
         given(entryQrService.issueForReservation(RESERVATION_ID)).willReturn("qr-token");
+        givenSeatAvailable();
         assignGeneratedReservationId();
 
         CreateOnsiteReservationResponse response = service.create(FAIR_ID, USER_ID, null);
@@ -265,10 +276,24 @@ class OnsiteReservationServiceTest {
         givenOpenContext(0);
         givenUserAndNoDuplicate();
         given(reservationNumberGenerator.generate(NOW.toLocalDate())).willReturn("R20260801DUPL0001");
+        givenSeatAvailable();
         given(reservationMapper.insertReservation(any()))
                 .willThrow(new DuplicateKeyException("UK_RESERVATION_ACTIVE_USER_FAIR_DATE"));
 
         assertError(() -> service.create(FAIR_ID, USER_ID, null), ErrorCode.DUPLICATED_RESERVATION);
+    }
+
+    @Test
+    @DisplayName("현장예매 정원이 다 차면 예약을 만들지 않고 매진으로 거절한다")
+    void create_onsiteCapacityFull_rejects() {
+        givenOpenContext(0);
+        givenUserAndNoDuplicate();
+        // 판정과 차감이 한 문장이라, 매진은 "영향 행수 0"으로만 드러난다.
+        given(capacityMapper.occupyOnsite(FAIR_ID, NOW.toLocalDate())).willReturn(0);
+
+        assertError(() -> service.create(FAIR_ID, USER_ID, null), ErrorCode.RESERVATION_SOLD_OUT);
+        // 자리를 못 잡았으면 예약 자체가 생기면 안 된다.
+        verify(reservationMapper, never()).insertReservation(any());
     }
 
     private void givenOpenContext(long price) {
@@ -284,6 +309,11 @@ class OnsiteReservationServiceTest {
     private void givenUserAndNoDuplicate() {
         given(reservationMapper.selectUserSnapshot(USER_ID)).willReturn(activeUser());
         given(reservationMapper.existsActiveReservation(FAIR_ID, USER_ID, NOW.toLocalDate())).willReturn(false);
+    }
+
+    /** 현장예매 정원에 자리가 남아 있는 상태. capacity가 NULL(제한 없음)일 때도 이 결과다. */
+    private void givenSeatAvailable() {
+        given(capacityMapper.occupyOnsite(any(), any())).willReturn(1);
     }
 
     private void assignGeneratedReservationId() {

@@ -52,7 +52,7 @@ export function MyBusinessesPage() {
   return (
     <PageContainer className="py-10">
       <PageHeader
-        eyebrow="참여 업체"
+        eyebrow="참가업체"
         title="내 사업자 목록"
         action={
           <Link to="/businesses/new" className="inline-flex min-h-11 items-center gap-2 rounded-button bg-primary-strong px-4 text-sm font-bold text-white hover:opacity-90">

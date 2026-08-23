@@ -56,8 +56,8 @@
                     'refundAmount', #{refundAmount}
                )
              , #{changedBy}
-             , 'USER'
-             , FALSE
+             , #{actorType}
+             , #{isAdminAction}
              , #{reason}
              , #{now}
         )

@@ -23,9 +23,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 행사 취소 승인 뒤 관람객 예약금·참가업체 참가비를 환불한다(개설비는 관리자 수동 처리
- * 대상이라 제외 - {@link RefundReason#OPENING_FEE_MANUAL} 참고). {@link FairCancelRefundJob}이
- * 주기적으로 호출하는 두 단계로 나뉜다.
+ * 행사 취소 승인 뒤 관람객 예약금·참가업체 참가비·행사 개설비를 환불한다(2026-08-23 개설비
+ * 추가 - 이전엔 관리자 수동 처리 대상이라 제외했었는데, 취소된 행사의 개설비 결제상세에
+ * 환불정보가 안 보인다는 지적을 받고 다른 두 결제유형과 동일하게 자동환불 대상에 포함시켰다.
+ * 사유는 {@link RefundReason#FAIR_CANCEL_OPENING_FEE} - 취소가 아닌 사유로 개설비를 수동
+ * 환불해야 할 때 쓰는 {@link RefundReason#OPENING_FEE_MANUAL}과는 구분한다).
+ * {@link FairCancelRefundJob}이 주기적으로 호출하는 두 단계로 나뉜다.
  *
  * <p><b>왜 승인 API 응답 안에서 동기로 처리하지 않는가</b>: 처음엔 취소 승인 직후 이 도메인이
  * {@code PaymentService.getPayments()}로 대상을 조회하고 바로 {@code RefundService.refund()}를
@@ -61,10 +64,11 @@ public class FairCancelRefundOrchestrationService {
      * 로그로만 남기고 저장하지 않는다(REFUND 테이블에 별도 컬럼 없음). */
     private static final Long SYSTEM_ACTOR_USER_ID = 0L;
 
-    /** 자동 환불 대상 결제유형 -> 환불 사유. 개설비는 의도적으로 포함하지 않는다. */
+    /** 자동 환불 대상 결제유형 -> 환불 사유. */
     private static final Map<String, RefundReason> REFUNDABLE_TYPES = Map.of(
             "RESERVATION_DEPOSIT", RefundReason.FAIR_CANCEL_USER,
-            "VENDOR_FEE", RefundReason.FAIR_CANCEL_VENDOR
+            "VENDOR_FEE", RefundReason.FAIR_CANCEL_VENDOR,
+            "FAIR_OPENING_FEE", RefundReason.FAIR_CANCEL_OPENING_FEE
     );
 
     private final FairCancelRefundTargetMapper targetMapper;
@@ -73,8 +77,8 @@ public class FairCancelRefundOrchestrationService {
     private final FairTimeProvider timeProvider;
 
     /**
-     * 취소됐지만 아직 발견 단계를 끝까지 완료하지 않은 행사를 찾아, COMPLETED 예약금·참가비
-     * 결제를 전부 작업행으로 등록한다. 이미 등록된 결제는 유니크 제약으로 조용히 건너뛴다.
+     * 취소됐지만 아직 발견 단계를 끝까지 완료하지 않은 행사를 찾아, COMPLETED 예약금·참가비·
+     * 개설비 결제를 전부 작업행으로 등록한다. 이미 등록된 결제는 유니크 제약으로 조용히 건너뛴다.
      *
      * <p>행사 하나는 모든 결제유형·모든 페이지를 예외 없이 다 훑었을 때만 완료로 기록한다
      * (참가비 결제가 0건이어도 완료로 기록됨 - "확인해서 0건"과 "아직 확인 안 함"을

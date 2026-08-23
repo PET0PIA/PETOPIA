@@ -14,6 +14,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,6 +29,22 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CorsConfigurationSource corsConfigurationSource;
+
+    /**
+     * 내부 계약 API(/internal/**) 허용 대역 - 루프백만.
+     *
+     * <p>내부 클라이언트 4개(ReservationPaymentContractClient 등)는 모두
+     * petopia.*.internal-base-url 기본값 http://localhost:8080으로 자기 자신을 호출하므로,
+     * 정상 호출은 항상 루프백에서 온다. 도메인을 별도 서비스로 분리하면 이 전제가 깨지니
+     * 그때 baseUrl과 이 규칙을 함께 고쳐야 한다.
+     *
+     * <p><b>주의</b>: getRemoteAddr() 기준이다. server.forward-headers-strategy를 켜면
+     * X-Forwarded-For 맨 앞 값이 remoteAddr로 들어와 위조로 통과된다(ALB는 XFF를 덮어쓰지
+     * 않고 뒤에 이어붙인다). 그래서 application.yaml에 none으로 명시해 뒀다.
+     */
+    private static final RequestMatcher LOOPBACK_ONLY = new OrRequestMatcher(
+            new IpAddressMatcher("127.0.0.1"),
+            new IpAddressMatcher("::1"));
 
     //특정 HTTP 요청에 대한 웹 기반 보안 구성
     @Bean
@@ -54,6 +74,11 @@ public class SecurityConfig {
                                 // 미인증으로 통과시키면 토큰 하나로 여러 계정이 게이트를 넘을 수 있다.
                                 "/api/v1/fairs/*/waiting-room/**"
                         ).authenticated()
+                        // 홈 화면 상단 숫자(전체 방문자·동반 반려동물 합계). 합계만 나가고
+                        // 개인정보가 없어 비로그인도 봐야 한다. 지금은 anyRequest().permitAll()에
+                        // 이미 걸리지만, 기본값이 나중에 authenticated()로 바뀌면 홈 상단이
+                        // 조용히 비어버리므로 chat 규칙과 같은 이유로 명시해 둔다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/entry-stats/public").permitAll()
                         .requestMatchers("/api/v1/admin/fairs/**")
                         .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // 관리자 로그인 자체는 인증 전 상태에서 호출돼야 하므로 아래 /api/admin/** 규칙보다
@@ -63,9 +88,9 @@ public class SecurityConfig {
                         // AuditLogController, AdminDashboardController가 여기 해당한다.
                         //
                         // 상담 콘솔(AdminChatController, /api/admin/chat/**)도 이 규칙에 걸려 SUPER_ADMIN
-                        // 전용이다. 박람회 관리자에게도 상담 답변을 열어주려면 그 규칙을 이 줄 "위에"
+                        // 전용이다. 행사 관리자에게도 상담 답변을 열어주려면 그 규칙을 이 줄 "위에"
                         // 놓아야 한다 - 아래에 두면 이 매처가 먼저 잡아 도달하지 못한다.
-                        // (박람회 관리자 허용 여부는 미정. 열어줄 때 chat_conversation.fair_id로
+                        // (행사 관리자 허용 여부는 미정. 열어줄 때 chat_conversation.fair_id로
                         //  "자기 행사 문의만" 스코프를 함께 걸어야 한다.)
                         .requestMatchers("/api/admin/**")
                         .hasRole("SUPER_ADMIN")
@@ -74,11 +99,16 @@ public class SecurityConfig {
                         .hasRole("VENDOR")
                         // Notification 도메인 - JWT로 전환됨(@AuthenticationPrincipal). 미인증 요청이
                         // permitAll로 통과하면 userId가 null이 되어 조회/처리가 깨지므로 로그인만 요구한다.
-                        // POST(다른 도메인 이벤트로 알림을 생성)는 사용자 인증 대상이 아니라 여기서 제외한다.
                         .requestMatchers(HttpMethod.GET, "/api/notifications", "/api/notifications/unread-count")
                         .authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/notifications/*/read", "/api/notifications/read-all")
                         .authenticated()
+                        // POST(임의의 userId로 알림 생성)는 실제로는 전부 서비스 계층 간 직접 호출
+                        // (NotificationService.save())로 이뤄져 이 HTTP 엔드포인트를 거치지 않는다.
+                        // 예전엔 "사용자 인증 대상이 아니다"로 보고 규칙에서 아예 뺐는데, 그러면
+                        // anyRequest().permitAll()로 떨어져 누구나 로그인 없이 남의 userId로 알림을
+                        // 만들 수 있는 구멍이었다 - SUPER_ADMIN 전용으로 잠근다(2026-08-23).
+                        .requestMatchers(HttpMethod.POST, "/api/notifications").hasRole("SUPER_ADMIN")
                         //로그인한 본인만 비밀번호 변경 가능 - anyRequest().permitAll()보다 먼저 와야 함
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/password/change").authenticated()
                         //로그인한 본인만 내 프로필 조회/수정 가능
@@ -94,7 +124,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/fairs").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/fairs/mine", "/api/fairs/*/mine").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*").authenticated()
-                        // Fair 도메인 - 공개된 행사 요약 조회는 인증 없이 허용(티켓 예매 화면 등).
+                        // Fair 도메인 - 공개된 행사 요약 조회는 인증 없이 허용(티켓 예약 화면 등).
                         // "/api/fairs/*"(SUPER_ADMIN 전용, 아래)와 세그먼트 수가 달라 원래도 안 겹치지만
                         // (Ant *는 세그먼트 하나만 매치), 의도를 명시하려고 따로 적어둔다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/public").permitAll()
@@ -155,9 +185,11 @@ public class SecurityConfig {
                         // Review 도메인 - 공개 리뷰 목록·요약 조회는 인증 불필요.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/summary").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews").permitAll()
-                        // Review 도메인 - 행사관리자 통계(카테고리별 태그 TOP5 등)는 그 행사 담당
+                        // Review 도메인 - 행사 관리자 통계(카테고리별 태그 TOP5 등)는 그 행사 담당
                         // EVENT_ADMIN 또는 SUPER_ADMIN만 - FairAdminAccessGuard가 서비스 계층에서 확인한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/stats", "/api/fairs/*/reviews/stats/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Review 도메인 - 내 리뷰 목록 조회는 로그인한 본인 것만.
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/me").authenticated()
                         // FeedbackTag 도메인 - 태그 마스터 활성 목록 조회는 누구나(리뷰 마법사에서 사용).
                         // 등록·수정·사용현황 조회는 SUPER_ADMIN만.
                         .requestMatchers(HttpMethod.GET, "/api/feedback-tags").permitAll()
@@ -208,7 +240,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/*/reopen").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        // 행사별 최종정산(플랫폼↔행사, 업체 구분 없음, 2026-08-22) - 계산/조회는 그 행사
+                        // 행사별 최종정산(플랫폼↔행사, 사업자 구분 없음, 2026-08-22) - 계산/조회는 그 행사
                         // 담당 EVENT_ADMIN 또는 SUPER_ADMIN(FairSettlementService가 FairAdminAccessGuard로
                         // 한 번 더 확인). 재계산·확정·되돌리기는 "최고관리자 업무"로 판단해 담당
                         // EVENT_ADMIN도 제외하고 SUPER_ADMIN만 허용한다(2026-08-22 재조정).
@@ -234,8 +266,14 @@ public class SecurityConfig {
                         // 입금 웹훅. 위조 방지는 여기(인증)가 아니라 PaymentService.handleDepositWebhook의
                         // secret 대조가 담당한다.
                         .requestMatchers(HttpMethod.POST, "/webhooks/toss/**").permitAll()
-                        // FairPaymentContractController(/internal/api/v1/**)는 사용자 JWT가 아니라
-                        // 도메인 간 내부 호출자 헤더(X-Internal-Caller)로 별도 인증하므로 여기서 다루지 않는다.
+                        // 도메인 간 내부 계약 API(/internal/**) - 같은 컨테이너 안에서 자기 자신을 부르는
+                        // 호출만 허용한다. 예전엔 규칙이 없어 anyRequest().permitAll()로 떨어졌고, 고정 문자열
+                        // 헤더(X-Internal-Caller: PAYMENT)만 붙이면 외부에서도 남의 예약 결제정보 조회와
+                        // 결제완료 처리가 가능한 구멍이었다(2026-08-23).
+                        // 컨트롤러의 X-Internal-Caller 검증은 계층 방어로 그대로 남겨둔다.
+                        .requestMatchers("/internal/**")
+                        .access((authentication, context) ->
+                                new AuthorizationDecision(LOOPBACK_ONLY.matches(context.getRequest())))
                         // Business 도메인 - 등록/조회는 로그인만 필요. VENDOR 승격은 등록 시점이 아니라
                         // 관리자 승인(PATCH /api/businesses/*/approve) 시점에 서비스 계층에서 처리한다.
                         // 심사 조회·승인·반려·취소는 SUPER_ADMIN 전용이며, 아래 "/api/businesses/*"

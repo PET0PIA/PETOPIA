@@ -28,6 +28,8 @@ class ReservationMapperSqlContractTest {
             "<select id=\"selectMyReservations\"[^>]*>(.*?)</select>", Pattern.DOTALL);
     private static final Pattern COUNT_MY = Pattern.compile(
             "<select id=\"countMyReservations\"[^>]*>(.*?)</select>", Pattern.DOTALL);
+    private static final Pattern SELECT_OWNER = Pattern.compile(
+            "<select id=\"selectReservationForOwner\"[^>]*>(.*?)</select>", Pattern.DOTALL);
 
     @Test
     @DisplayName("내 예약 목록은 만료 예약을 SQL에서 제외한다")
@@ -53,6 +55,17 @@ class ReservationMapperSqlContractTest {
         // 의도적으로 목록에 남긴다. 다시 숨기려면 이 테스트를 먼저 고쳐야 한다(그때 이 이유를 볼 것).
         assertThat(extract(SELECT_MY)).doesNotContain("'CANCELED'");
         assertThat(extract(COUNT_MY)).doesNotContain("'CANCELED'");
+    }
+
+    @Test
+    @DisplayName("예약 상세는 행사가 정한 취소·변경 가능 기한을 함께 읽는다")
+    void selectReservationForOwner_취소변경기한을함께읽는다() throws IOException {
+        String sql = extract(SELECT_OWNER);
+
+        // 이 두 줄이 빠지면 값이 null로 들어와, 행사가 24시간·48시간으로 정해 놨어도 화면에는
+        // 기본값 12시간 기준의 마감이 조용히 표시된다(문법도 매핑도 깨지지 않아 안 잡힌다).
+        assertThat(sql).contains("f.reservation_cancel_deadline_hours AS cancel_deadline_hours");
+        assertThat(sql).contains("f.reservation_change_deadline_hours AS change_deadline_hours");
     }
 
     private String extract(Pattern pattern) throws IOException {

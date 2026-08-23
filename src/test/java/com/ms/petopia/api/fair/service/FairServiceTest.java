@@ -317,6 +317,56 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("취소 가능 기한이 음수면 INVALID_INPUT_VALUE를 던진다")
+    void createApplication_취소기한이_음수면_예외를_던진다() {
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                0L, -1, null,
+                "김담당", null, "manager@petopia.example"
+        );
+        assertErrorCode(() -> fairService.createApplication(USER_ID, request), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("변경 가능 기한이 음수면 INVALID_INPUT_VALUE를 던진다")
+    void createApplication_변경기한이_음수면_예외를_던진다() {
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                0L, null, -1,
+                "김담당", null, "manager@petopia.example"
+        );
+        assertErrorCode(() -> fairService.createApplication(USER_ID, request), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).insert(any());
+    }
+
+    /** 0은 정상값이다 - "입장 시작 직전까지 취소·변경 허용"을 뜻한다. */
+    @Test
+    @DisplayName("취소·변경 기한이 0이면 그대로 저장한다")
+    void createApplication_기한이_0이면_저장한다() {
+        willAnswer(invocation -> {
+            Fair fair = invocation.getArgument(0);
+            fair.setFairId(FAIR_ID);
+            return 1;
+        }).given(fairMapper).insert(any(Fair.class));
+
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                0L, 0, 0,
+                "김담당", null, "manager@petopia.example"
+        );
+        fairService.createApplication(USER_ID, request);
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).insert(captor.capture());
+        assertThat(captor.getValue().getReservationCancelDeadlineHours()).isZero();
+        assertThat(captor.getValue().getReservationChangeDeadlineHours()).isZero();
+    }
+
+    @Test
     @DisplayName("참가업체 모집 종료일이 시작일보다 빠르면 FAIR_INVALID_VENDOR_RECRUIT_PERIOD를 던진다")
     void createApplication_모집기간이_거꾸로면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
@@ -900,6 +950,26 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("취소·변경 가능 기한을 음수로 수정하려 하면 INVALID_INPUT_VALUE를 던진다")
+    void updateApplication_기한이_음수면_예외를_던진다() {
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                "이름", null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                null, -1, null,
+                "김담당", null, "manager@petopia.example"
+        );
+
+        assertErrorCode(
+                () -> fairService.updateApplication(
+                        FAIR_ID, USER_ID, request, Set.of("name", "reservationCancelDeadlineHours", "managerName")
+                ),
+                ErrorCode.INVALID_INPUT_VALUE
+        );
+        verify(fairMapper, never()).updateApplication(any(), any());
+    }
+
+    @Test
     @DisplayName("수정 가능한 필수 필드(name/managerName)를 명시적으로 비우려 하면 INVALID_INPUT_VALUE를 던진다")
     void updateApplication_필수필드를_명시적으로_비우면_예외를_던진다() {
         UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
@@ -989,6 +1059,7 @@ class FairServiceTest {
                 .isEqualTo("개설비를 2026-08-08까지 결제해 주세요.");
         verify(mailService).sendFairApprovalEmail(
                 "user@petopia.example",
+                "2026 서울 펫페어",
                 500_000L,
                 NOW.plusDays(7),
                 "https://petopia-kappa.vercel.app/payments/fair-opening-fee/" + FAIR_ID
@@ -1018,7 +1089,7 @@ class FairServiceTest {
         assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_APPLICATION_REJECTED);
         assertThat(notifCaptor.getValue().channels()).containsExactly(DeliveryChannel.IN_APP);
-        verify(mailService).sendFairRejectionEmail("user@petopia.example", "서류 미비");
+        verify(mailService).sendFairRejectionEmail("user@petopia.example", "2026 서울 펫페어", "서류 미비");
     }
 
     @Test

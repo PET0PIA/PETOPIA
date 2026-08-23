@@ -451,11 +451,11 @@ export function AdminBannersPage() {
 
           <div>
             {label("제목", true)}
-            <Textarea value={form.title} onChange={(event) => update("title", event.target.value)} placeholder={"예: 2026 서울 펫페어\n지금 예매하세요 (줄바꿈하면 두 줄 헤드라인이 돼요)"} required />
+            <Textarea value={form.title} onChange={(event) => update("title", event.target.value)} placeholder={"예: 2026 서울 펫페어\n지금 예약하세요 (줄바꿈하면 두 줄 헤드라인이 돼요)"} required />
           </div>
           <div>
             {label("상단 라벨 (eyebrow)")}
-            <Input value={form.eyebrow} onChange={(event) => update("eyebrow", event.target.value)} placeholder="예: 예매 오픈" />
+            <Input value={form.eyebrow} onChange={(event) => update("eyebrow", event.target.value)} placeholder="예: 예약 오픈" />
           </div>
           <div>
             {label("부제")}
@@ -499,7 +499,7 @@ export function AdminBannersPage() {
             <div className="space-y-3">
               <div>
                 {label("버튼 문구")}
-                <Input value={form.linkLabel} onChange={(event) => update("linkLabel", event.target.value)} placeholder="예: 예매하러 가기" />
+                <Input value={form.linkLabel} onChange={(event) => update("linkLabel", event.target.value)} placeholder="예: 예약하러 가기" />
               </div>
               <div className="grid grid-cols-[1fr_auto] gap-3">
                 <div>
@@ -522,7 +522,7 @@ export function AdminBannersPage() {
             <div className="space-y-3">
               <div>
                 {label("버튼 문구")}
-                <Input value={form.link2Label} onChange={(event) => update("link2Label", event.target.value)} placeholder="예: 티켓 예매하기" />
+                <Input value={form.link2Label} onChange={(event) => update("link2Label", event.target.value)} placeholder="예: 티켓 예약하기" />
               </div>
               <div className="grid grid-cols-[1fr_auto] gap-3">
                 <div>

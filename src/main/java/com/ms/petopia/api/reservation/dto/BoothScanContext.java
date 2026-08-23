@@ -13,4 +13,5 @@ public class BoothScanContext {
     private Long boothId;
     private Long businessId;
     private Long fairId;
+    private String name;
 }

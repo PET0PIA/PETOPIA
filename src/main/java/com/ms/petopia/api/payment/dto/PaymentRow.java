@@ -28,6 +28,25 @@ public class PaymentRow {
     private LocalDateTime createdAt;
     private Long fairId;
     private Long businessId;
+    /**
+     * 아래 2개는 fairs/businesses를 LEFT JOIN해서 채운다(selectByIdWithRefund/selectByFilter
+     * 전용 - refund 6개와 동일한 이유로 내부 비즈니스 로직이 쓰는 조회엔 안 붙인다). businessName은
+     * 관람객 예약금 결제처럼 businessId가 없으면 null.
+     */
+    private String fairName;
+    /** 행사 신청 시 입력한 담당자 정보(fairs 테이블). manager_phone만 원래 nullable이라 null일 수 있다. */
+    private String fairManagerName;
+    private String fairManagerPhone;
+    private String fairManagerEmail;
+    private String businessName;
+    /**
+     * 아래 3개는 application_form을 LEFT JOIN해서 채운다 - VENDOR_FEE(참가업체 참가비) 결제만
+     * applicationId가 있어서 그 외 결제유형은 전부 null. 부스(참가) 신청서 작성 시 입력한
+     * 담당자 정보다.
+     */
+    private String applicationManagerName;
+    private String applicationManagerPhone;
+    private String applicationManagerEmail;
     private Long payerUserId;
     private Long reservationId;
     private Long applicationId;

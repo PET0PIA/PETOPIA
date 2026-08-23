@@ -34,7 +34,6 @@ import { PaymentListPage } from "../pages/payment/PaymentListPage";
 import { PaymentFailPage, PaymentSuccessPage } from "../pages/payment/PaymentResultPage";
 import { FairOpeningFeePaymentPage } from "../pages/payment/FairOpeningFeePaymentPage";
 import { FairOpeningFeeSelectPage } from "../pages/payment/FairOpeningFeeSelectPage";
-import { RefundPage } from "../pages/payment/RefundPage";
 import { AuditLogPage } from "../pages/admin/AuditLogPage";
 import { SettlementPage } from "../pages/admin/SettlementPage";
 import { NotificationsPage } from "../pages/notification/NotificationsPage";
@@ -83,6 +82,7 @@ import { FairPaymentSettlementPage } from "../pages/fair-admin/FairPaymentSettle
 import { CancelRequestReviewPage } from "../pages/fair-admin/CancelRequestReviewPage";
 import { BoothDetailPage } from "../pages/booth/BoothDetailPage";
 import { BoothEditPage } from "../pages/booth/BoothEditPage";
+import { BoothStatsPage } from "../pages/booth/BoothStatsPage";
 import { BoothFavoritesPage } from "../pages/booth/BoothFavoritesPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { BusinessesByFairPage } from "../pages/business/BusinessesByFairPage";
@@ -95,40 +95,14 @@ import { AdvertisingInquiryPage } from "../pages/advertising/AdvertisingInquiryP
 import { BusinessReviewPage } from "../pages/admin/BusinessReviewPage";
 // TODO: 백엔드 role 가드 + 관리자 계정 발급 흐름 갖춰지면 fair-admin/admin도 ProtectedRoute로 감싸기
 
-const fairAdminImplementedPaths = [
-  "/fair-admin/booths",
-  "/fair-admin/fair",
-  "/fair-admin/onsite-sales",
-  "/fair-admin/qr",
-  "/fair-admin/reservations",
-  "/fair-admin/payments",
-  "/fair-admin/reviews/manage",
-  "/fair-admin/statistics",
-  "/fair-admin/cancellation",
-  "/fair-admin/recruit-notice",
-  "/fair-admin/participations",
-  "/fair-admin/cancellation-requests",
-  // fair-admin 레이아웃 밖(PublicLayout)에 별도로 라우팅돼 있다 - fair-admin 하위
-  // 폴백 라우트(AdminFallback)를 만들 필요가 없어서 여기 포함시켜 그 목록에서 뺀다.
-  "/payments/fair-opening-fee",
-];
-const fairAdminFallbackNavigation = flattenNavigation(fairAdminNavigation).filter((item) => !fairAdminImplementedPaths.includes(item.path ?? ""));
-const superAdminFallbackNavigation = flattenNavigation(superAdminNavigation).filter(
-  (item) =>
-    item.path !== "/admin/dashboard" &&
-    item.path !== "/admin/fair-applications" &&
-    item.path !== "/admin/audit-logs" &&
-    item.path !== "/admin/payments" &&
-    item.path !== "/admin/payments/list" &&
-    item.path !== "/admin/refunds" &&
-    item.path !== "/admin/settlements" &&
-    item.path !== "/admin/cancellations" &&
-    item.path !== "/admin/accounts" &&
-    item.path !== "/admin/banners" &&
-    item.path !== "/admin/popups" &&
-    item.path !== "/admin/chat" &&
-    item.path !== "/admin/businesses"
-);
+/**
+ * 콘솔 사이드바에 메뉴는 있지만 화면이 아직 없는 경로에서 "준비 중" 자리표시를 보여준다.
+ *
+ * 각 콘솔 맨 아래의 <Route path="*">가 이 역할을 하므로, "구현된 경로 목록"을 따로 들고
+ * 껍데기 라우트를 미리 만들어 둘 필요가 없다(2026-08-23 정리). 예전에는 그 목록과 실제
+ * 라우트가 어긋나서 같은 경로(/admin/notices)가 두 번 등록됐고, 먼저 선언된 쪽이 이기는
+ * 순서 의존 버그가 있었다. 이제는 메뉴만 추가하고 화면을 안 만들면 자동으로 여기에 걸린다.
+ */
 function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   const location = useLocation();
   const nav = kind === "fair" ? flattenNavigation(fairAdminNavigation) : flattenNavigation(superAdminNavigation);
@@ -186,6 +160,7 @@ export function AppRouter() {
             <Route path="/mypage/pets/new" element={<PetFormPage />} />
             <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
             <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
+            <Route path="/booths/:boothId/stats" element={<BoothStatsPage />} />
             {/* 옛 경로는 마이페이지 안의 새 위치로 리다이렉트(북마크·내부 링크 호환). */}
             <Route path="/booths/favorites/me" element={<Navigate to="/mypage/favorites" replace />} />
             <Route path="/booths/visited/me" element={<Navigate to="/mypage/booths/visited" replace />} />
@@ -201,7 +176,7 @@ export function AppRouter() {
               옛 "지난 행사" 경로(북마크·외부 링크)로 들어와도 같은 목록으로 넘긴다. */}
           <Route path="/fairs/upcoming" element={<FairListPage />} />
           <Route path="/fairs/past" element={<Navigate to="/fairs/upcoming" replace />} />
-          {/* 행사 상세(공개). 목록 카드가 여기로 오고, '예매하기'는 /tickets/:fairId로 넘긴다.
+          {/* 행사 상세(공개). 목록 카드가 여기로 오고, '예약하기'는 /tickets/:fairId로 넘긴다.
               정적 경로(/fairs/upcoming 등)가 :fairId보다 우선 매칭되므로 충돌 없다. */}
           <Route path="/fairs/:fairId" element={<FairDetailPage />} />
           {/* 비즈니스 ▾ "부스 참가 신청" 입구. 실제 목록·신청 흐름은 /participations/new에 있어,
@@ -213,7 +188,7 @@ export function AppRouter() {
               기존 /fairs/:fairId/recruit-notice 화면으로 간다(서버가 linkPath로 정해준다). */}
           <Route path="/news" element={<NewsListPage />} />
           <Route path="/news/:noticeId" element={<NewsDetailPage />} />
-          {/* 예매는 로그인 필수. 미로그인으로 화면을 열면 날짜·유형을 다 고르고 마지막
+          {/* 예약은 로그인 필수. 미로그인으로 화면을 열면 날짜·유형을 다 고르고 마지막
               예약 API에서 401로 막히므로, 들어오는 순간 /login으로 보냈다가 복귀시킨다. */}
           <Route element={<ProtectedRoute />}>
             <Route path="/tickets/:fairId" element={<TicketReservationPage />} />
@@ -261,14 +236,14 @@ export function AppRouter() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
-        {/* 박람회 관리자 콘솔 - EVENT_ADMIN(+ 상위 SUPER_ADMIN) 전용. URL 직접 진입도 role로 가드한다. */}
+        {/* 행사 관리자 콘솔 - EVENT_ADMIN(+ 상위 SUPER_ADMIN) 전용. URL 직접 진입도 role로 가드한다. */}
         <Route element={<ProtectedRoute roles={["EVENT_ADMIN", "SUPER_ADMIN"]} />}>
           <Route path="fair-admin" element={<FairAdminLayout />}>
             <Route
               index
               element={
                 <ConsoleHome
-                  consoleLabel="박람회 관리자"
+                  consoleLabel="행사 관리자"
                   description="담당 행사의 운영·예약·정산을 여기서 관리해요. 상단 '관리 행사'에서 행사를 먼저 골라 주세요."
                   navigation={fairAdminNavigation}
                 />
@@ -293,9 +268,6 @@ export function AppRouter() {
             <Route path="recruit-notice/:fairId" element={<RecruitNoticeFormPage />} />
             <Route path="participations" element={<ParticipationReviewPage />} />
             <Route path="cancellation-requests" element={<CancelRequestReviewPage />} />
-            {fairAdminFallbackNavigation.map((item) => (
-              <Route key={item.path} path={item.path?.replace("/fair-admin/", "")} element={<AdminFallback kind="fair" />} />
-            ))}
             <Route path="*" element={<AdminFallback kind="fair" />} />
           </Route>
         </Route>
@@ -319,7 +291,9 @@ export function AppRouter() {
             <Route path="audit-logs" element={<AuditLogPage />} />
             <Route path="payments" element={<PaymentDetailPage />} />
             <Route path="payments/list" element={<PaymentListPage />} />
-            <Route path="refunds" element={<RefundPage />} />
+            {/* 환불 전용 조회 화면(/admin/refunds)은 없앴다(2026-08-23) - 환불 정보가 결제 목록의
+                상태 배지와 결제 상세의 "환불 정보" 섹션으로 흡수돼 볼 곳이 두 군데가 됐고,
+                사이드바 메뉴도 링크도 없어 주소를 직접 쳐야만 열리는 화면이었다. */}
             <Route path="settlements" element={<SettlementPage />} />
             <Route path="cancellations" element={<FairCancelRequestReviewPage />} />
             <Route path="accounts" element={<AdminAccountsPage />} />
@@ -332,13 +306,10 @@ export function AppRouter() {
             <Route path="chat/settings" element={<AdminChatSettingsPage />} />
             {/* 사업자 관리 */}
             <Route path="businesses" element={<BusinessReviewPage />} />
-            {superAdminFallbackNavigation.map((item) => (
-              <Route key={item.path} path={item.path?.replace("/admin/", "")} element={<AdminFallback kind="super" />} />
-            ))}
             <Route path="*" element={<AdminFallback kind="super" />} />
           </Route>
         </Route>
-        {/* 부스(참여기업) 콘솔 - VENDOR 전용. 흩어져 있던 참가업체 기능을 한 콘솔로 모은다. */}
+        {/* 부스(참가업체) 콘솔 - VENDOR 전용. 흩어져 있던 참가업체 기능을 한 콘솔로 모은다. */}
         <Route element={<ProtectedRoute roles={["VENDOR"]} />}>
           <Route path="vendor" element={<VendorLayout />}>
             <Route

@@ -96,7 +96,7 @@ export function FairCancelRequestPage() {
   return (
     <div className="mx-auto max-w-4xl py-2">
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title="행사 취소 신청"
         description="담당 행사를 더 이상 진행할 수 없을 때 취소를 신청해요. 신청은 SUPER_ADMIN 검토 후 승인되면 확정돼요."
       />

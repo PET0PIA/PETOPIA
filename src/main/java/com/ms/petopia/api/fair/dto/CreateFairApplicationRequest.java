@@ -22,7 +22,7 @@ public record CreateFairApplicationRequest(
         String noticeText,
         /**
          * 반려동물 동반 가능 여부. null이면 저장하지 않고 DB 기본값(TRUE)을 쓴다 -
-         * 반려동물 박람회 플랫폼이라 "동반 가능"이 기본이다(정책 P1).
+         * 반려동물 행사 플랫폼이라 "동반 가능"이 기본이다(정책 P1).
          */
         Boolean petAllowed,
 

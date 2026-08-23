@@ -3,6 +3,7 @@ package com.ms.petopia.api.review.mapper;
 import com.ms.petopia.api.review.dto.FairReview;
 import com.ms.petopia.api.review.dto.FairReviewListRow;
 import com.ms.petopia.api.review.dto.LabeledCountRow;
+import com.ms.petopia.api.review.dto.MyReviewListRow;
 import com.ms.petopia.api.review.dto.ReviewTagLabelRow;
 import com.ms.petopia.api.review.dto.TagCountRow;
 import org.apache.ibatis.annotations.Mapper;
@@ -47,7 +48,14 @@ public interface FairReviewMapper {
      * 호출하지 않는다(서비스 계층에서 가드). */
     List<ReviewTagLabelRow> selectFairTagLabelsByReviewIds(@Param("reviewIds") List<Long> reviewIds);
 
-    // ===== 행사관리자 통계(Phase 6) =====
+    // ===== 내 리뷰 목록(마이페이지) =====
+
+    long countByUserId(@Param("userId") Long userId);
+
+    /** 최신순 페이지네이션. fairs를 조인해 행사명·포스터 이미지까지 한 번에 가져온다. */
+    List<MyReviewListRow> selectListByUserId(@Param("userId") Long userId, @Param("offset") long offset, @Param("limit") int limit);
+
+    // ===== 행사 관리자 통계(Phase 6) =====
 
     long countByFairId(@Param("fairId") Long fairId);
 
