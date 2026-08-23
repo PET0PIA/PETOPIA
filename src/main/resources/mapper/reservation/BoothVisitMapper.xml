@@ -8,6 +8,7 @@
         SELECT b.booth_id
              , b.business_id
              , a.fair_id
+             , b.name
           FROM booth b
           JOIN application a
             ON a.application_id = b.application_id
