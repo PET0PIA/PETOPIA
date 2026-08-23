@@ -118,7 +118,8 @@ public class ReservationQueryService {
                 isPaymentAvailable(row, now),
                 row.getAmount(),
                 row.getReservedAt(),
-                row.getCheckedInAt()
+                row.getCheckedInAt(),
+                row.getRefundStatus()
         );
     }
 

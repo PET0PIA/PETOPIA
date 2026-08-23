@@ -298,7 +298,15 @@ class ReservationHttpControllerTest {
                                 30L, "서울 펫페어", null,
                                 LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0),
                                 "CONFIRMED", false, true, false, 10_000,
-                                LocalDateTime.of(2026, 8, 1, 9, 0), null
+                                LocalDateTime.of(2026, 8, 1, 9, 0), null, null
+                        ),
+                        // 환불까지 끝난 취소 건. 목록 카드가 "취소됨" 배지만으로는 결제 전 취소와
+                        // 구분할 수 없어서 refundStatus를 함께 내려준다(금액줄 표시가 갈린다).
+                        new ReservationListItemResponse(
+                                31L, "부산 펫페어", null,
+                                LocalDate.of(2026, 8, 3), LocalTime.of(10, 0), LocalTime.of(18, 0),
+                                "CANCELED", false, false, false, 10_000,
+                                LocalDateTime.of(2026, 8, 1, 9, 30), null, "COMPLETED"
                         )
                 ), 1, 10, 11, 2, false)
         );
@@ -310,6 +318,10 @@ class ReservationHttpControllerTest {
                 .andExpect(jsonPath("$.items[0].entryStartTime").value("10:00:00"))
                 .andExpect(jsonPath("$.items[0].isEnded").value(false))
                 .andExpect(jsonPath("$.items[0].qrAvailable").value(true))
+                // 환불이 없는 예약은 refundStatus가 null로 내려가야 한다(응답에서 빠지면 안 된다).
+                .andExpect(jsonPath("$.items[0].refundStatus").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.items[1].reservationStatus").value("CANCELED"))
+                .andExpect(jsonPath("$.items[1].refundStatus").value("COMPLETED"))
                 .andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.totalPages").value(2));
 

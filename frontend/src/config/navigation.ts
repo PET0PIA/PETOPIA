@@ -41,8 +41,8 @@ export const superAdminNavigation: NavigationItem[] = [
     icon: CalendarDays,
     children: [
       { label: "행사 등록 신청 검토", path: "/admin/fair-applications", icon: FileCheck2 },
-      { label: "행사 안내 관리", path: "/admin/fairs", icon: Store },
-      { label: "장소 관리", path: "/admin/venues", icon: Map },
+      // "행사 안내 관리"(/admin/fairs)·"장소 관리"(/admin/venues)는 화면이 없어 눌러도 "준비 중"
+      // 자리표시만 떴어서 뺐다(2026-08-23). 화면을 만들 때 이 자리에 다시 넣으면 된다.
       { label: "행사 취소 신청 처리", path: "/admin/cancellations", icon: Ban },
     ],
   },

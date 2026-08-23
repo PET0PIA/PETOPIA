@@ -14,6 +14,27 @@ import {
   reservationStatusTones,
 } from "./reservationDisplay";
 
+/**
+ * 금액줄을 어떻게 그릴지 정한다.
+ *
+ * "취소됨" 배지만 있으면 환불받은 취소·결제 전 취소·무료 예약 취소가 화면에서 똑같이 보이고,
+ * 원래 결제금액이 그대로 남아 환불받았는데도 돈이 아직 나가 있는 것처럼 읽힌다. 그래서 취소
+ * 건은 금액에 취소선을 긋고 결과만 짧은 라벨로 덧붙인다 - 라벨에 금액을 다시 쓰지 않는다
+ * (취소선 그은 금액이 이미 그 금액이다).
+ *
+ * 무료 예약(amount 0)은 지금처럼 금액줄 자체를 그리지 않는다(null 반환).
+ */
+function amountLine(item: ReservationListItem): { struck: boolean; note: string | null } | null {
+  if (item.amount <= 0) return null;
+  if (item.reservationStatus !== "CANCELED") return { struck: false, note: null };
+  if (item.refundStatus === "COMPLETED") return { struck: true, note: "환불 완료" };
+  if (item.refundStatus === "REQUESTED") return { struck: true, note: "환불 진행 중" };
+  // 환불이 거절되면 돈이 그대로 남아 있으니 취소선을 긋지 않는다(지금은 오지 않는 상태).
+  if (item.refundStatus === "REJECTED") return { struck: false, note: "환불 거절" };
+  // 환불 원장이 없는 취소 = 결제까지 가기 전에 취소한 건이라, 애초에 나간 돈이 없다.
+  return { struck: true, note: "결제 없음" };
+}
+
 export function MyReservationsPage() {
   const [reservations, setReservations] = useState<ReservationListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +81,7 @@ export function MyReservationsPage() {
         <ul className="flex flex-col gap-3">
           {reservations.map((item) => {
             const inactive = inactiveReservationStatuses.includes(item.reservationStatus);
+            const amount = amountLine(item);
             return (
               <li key={item.reservationId}>
                 <Link
@@ -89,8 +111,13 @@ export function MyReservationsPage() {
                     <p className="text-sm text-muted">
                       {formatVisitDateDow(item.visitDate)} · {formatEntryTime(item.entryStartTime)}~{formatEntryTime(item.entryEndTime)}
                     </p>
-                    {item.amount > 0 && (
-                      <p className="text-sm text-muted">{item.amount.toLocaleString()}원</p>
+                    {amount && (
+                      <p className="text-sm text-muted">
+                        <span className={amount.struck ? "line-through" : undefined}>
+                          {item.amount.toLocaleString()}원
+                        </span>
+                        {amount.note && <span className="ml-2 font-bold text-ink">{amount.note}</span>}
+                      </p>
                     )}
                     {/* 결제 대기 예약: 카드를 누르면 상세에서 결제를 이어갈 수 있음을 알린다. */}
                     {item.paymentAvailable && (

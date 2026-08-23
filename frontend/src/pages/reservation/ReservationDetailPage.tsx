@@ -377,7 +377,10 @@ export function ReservationDetailPage() {
       setQrToken(null);
       setCancelNotice(
         res.refunded && res.refundAmount !== null
-          ? `예약이 취소되고 예약금 ${res.refundAmount.toLocaleString()}원의 환불이 접수됐어요. `
+          // "접수됐어요"가 아니라 "환불 완료"로 쓴다 - 서버가 접수와 동시에 COMPLETED로 확정하고
+          // (RefundService 참고) 아래 '환불 정보' 블록도 이미 "완료"로 표시하는데, 안내 문구만
+          // 접수 단계인 것처럼 읽혀 화면 안에서 말이 어긋났다.
+          ? `예약이 취소되었어요. 예약금 ${res.refundAmount.toLocaleString()}원 환불 완료. `
             + "카드사에 따라 영업일 기준 3~5일 이내 반영돼요."
           : "예약이 취소됐어요.",
       );

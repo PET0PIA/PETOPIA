@@ -30,4 +30,13 @@ public class ReservationListRow {
     private String paymentStatus;
     private String paymentMethod;
     private String easyPayProvider;
+    /**
+     * 예약금 환불 상태(REQUESTED/COMPLETED/REJECTED). 환불이 없으면 null.
+     *
+     * <p>목록 화면이 "취소됨"만으로는 구분할 수 없는 세 상황(환불받은 취소 / 결제 전 취소 /
+     * 무료 예약 취소)을 가르는 데 쓴다. 금액은 목록에 다시 쓰지 않기로 해서 환불 금액은
+     * 싣지 않는다 - 필요해지면 그때 추가한다. 목록 조회(selectMyReservations)에서만 채워지고
+     * 상세 조회에서는 null이다(상세는 결제 상세 API로 환불 정보를 더 자세히 가져온다).
+     */
+    private String refundStatus;
 }
