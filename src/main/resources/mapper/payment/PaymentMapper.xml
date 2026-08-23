@@ -363,4 +363,13 @@
          WHERE f.fair_id = #{fairId}
     </select>
 
+    <!--
+        환불/정산 완료 이메일에 행사명을 표시하기 위한 단건 조회(2026-08-22). 없으면 null.
+    -->
+    <select id="selectFairNameById" resultType="String">
+        SELECT name
+          FROM fairs
+         WHERE fair_id = #{fairId}
+    </select>
+
 </mapper>

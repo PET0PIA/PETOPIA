@@ -196,4 +196,12 @@ public interface PaymentMapper {
      * 정산 화면용, 2026-08-22). 그 fairId가 fairs에 없으면 null.
      */
     FairRevenueSummaryRow selectFairRevenueSummaryByFairId(@Param("fairId") Long fairId);
+
+    /**
+     * 행사 이름만 조회한다(환불/정산 완료 이메일에 "어느 행사인지" 표시하는 용도, 2026-08-22).
+     * 결제·정산 도메인은 행사 도메인을 직접 자바로 참조하지 않는다는 기존 원칙(FairContractClient
+     * 참고)을 지키기 위해, 이미 fairs를 조인해 쓰고 있는 이 매퍼에 추가한다
+     * (selectFairRevenueSummary와 동일한 패턴). 없으면 null.
+     */
+    String selectFairNameById(@Param("fairId") Long fairId);
 }

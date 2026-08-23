@@ -37,11 +37,13 @@ const REVIEW_TABS: { status: ApplicationStatus; label: string }[] = [
   { status: "REJECTED", label: "반려" },
 ];
 
+// MyApplicationsPage.tsx와 동일하게 맞춘 색 규칙(2026-08-22) - 이 테마의 "primary"는
+// 검정이라(빨강 아님) PAYMENT_PENDING을 primary로 두면 neutral과 거의 안 구분됐었다.
 const statusTones: Record<ApplicationStatus, "primary" | "sun" | "leaf" | "neutral"> = {
-  PENDING_REVIEW: "sun",
-  PAYMENT_PENDING: "primary",
+  PENDING_REVIEW: "neutral",
+  PAYMENT_PENDING: "sun",
   CONFIRMED: "leaf",
-  REJECTED: "neutral",
+  REJECTED: "primary",
   CANCELED: "neutral",
 };
 

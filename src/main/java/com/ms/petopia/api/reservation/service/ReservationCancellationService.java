@@ -177,7 +177,7 @@ public class ReservationCancellationService {
                             NotificationType.RESERVATION_CANCELED,
                             "예약이 취소되었습니다",
                             "예약이 정상적으로 취소 처리되었습니다.",
-                            null,
+                            "/reservations/me/" + reservationId,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));

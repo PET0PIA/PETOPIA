@@ -1,4 +1,4 @@
-import { AlertCircle, ChevronLeft, Paperclip, Pencil, XCircle } from "lucide-react";
+import { AlertCircle, ChevronLeft, Clock3, CreditCard, Paperclip, Pencil, XCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useEffect } from "react";
@@ -10,7 +10,7 @@ import { Dialog } from "../../components/ui/Dialog";
 import { Textarea } from "../../components/ui/Textarea";
 import { useConfirm } from "../../components/ui/useConfirm";
 import { ApiError } from "../../api/client";
-import { createVendorFeePayment } from "../../api/payment";
+import { createVendorFeePayment, getMyPayments, type PaymentDetail as PaymentRecord } from "../../api/payment";
 import { useAuth } from "../../contexts/AuthContext";
 import { getApplicationDetail, submitCancelRequest, type ApplicationDetail, type ApplicationStatus } from "../../api/application";
 import {
@@ -28,11 +28,14 @@ const statusLabels: Record<ApplicationStatus, string> = {
   REJECTED: "반려됨",
   CANCELED: "취소됨",
 };
+// MyApplicationsPage.tsx와 동일하게 맞춘 색 규칙(2026-08-22) - 이 테마의 "primary"는
+// 검정이라(빨강 아님) PAYMENT_PENDING을 primary로 두면 neutral과 거의 안 구분됐었다.
+// 앱 전역 결제상태 색(paymentDisplay.ts)에 맞춰 노랑=결제대기/초록=확정/검정=반려/회색=대기·취소.
 const statusTones: Record<ApplicationStatus, "primary" | "sun" | "leaf" | "neutral"> = {
-  PENDING_REVIEW: "sun",
-  PAYMENT_PENDING: "primary",
+  PENDING_REVIEW: "neutral",
+  PAYMENT_PENDING: "sun",
   CONFIRMED: "leaf",
-  REJECTED: "neutral",
+  REJECTED: "primary",
   CANCELED: "neutral",
 };
 
@@ -100,6 +103,13 @@ function ApplicationDetailContent({ id }: { id: number }) {
   const [payError, setPayError] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>("CARD");
 
+  // 이미 가상계좌로 결제를 시작해서 입금 대기 중(WAITING_FOR_DEPOSIT)인 결제가 있으면, 새
+  // 결제 시도 자체가 막힌다(createOrRetryPayment는 PENDING/FAILED/CANCELED/EXPIRED만
+  // 재시도를 허용) - 그런데 화면은 그냥 "결제할 수 없는 상태"만 보여줘서 이유를 알 수 없었다
+  // (2026-08-22 발견). ApplicationDetail에는 결제 정보가 없어서(applicationId만으로 단건
+  // 조회하는 API가 없음), 신청자 본인 결제 목록(getMyPayments)에서 이 신청서 것만 걸러 찾는다.
+  const [pendingVirtualAccount, setPendingVirtualAccount] = useState<PaymentRecord | null>(null);
+
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [canceling, setCanceling] = useState(false);
@@ -124,6 +134,24 @@ function ApplicationDetailContent({ id }: { id: number }) {
       alive = false;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    getMyPayments(user.userId, 0, 100)
+      .then((res) => {
+        if (!alive) return;
+        const waiting = res.content.find((p) => p.applicationId === id && p.status === "WAITING_FOR_DEPOSIT");
+        setPendingVirtualAccount(waiting ?? null);
+      })
+      .catch(() => {
+        // 부가 정보라 실패해도 신청서 화면 자체는 그대로 보여준다 - 못 찾으면 그냥 기존
+        // 결제 폼으로 안내(실제로 재시도가 막혀있으면 결제하기를 눌렀을 때 에러로 드러남).
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, user]);
 
   async function handlePay() {
     if (!detail || !user || detail.finalPrice === null) return;
@@ -242,7 +270,8 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
       <div className="space-y-6">
         <Card className="space-y-4 p-6">
-          <h3 className="text-sm font-extrabold text-muted">선택한 부스 슬롯</h3>
+          <h3 className="text-sm font-extrabold text-muted">참가비 결제</h3>
+          <div className="text-sm font-bold text-ink">선택한 부스 슬롯</div>
           <ul className="space-y-1 text-sm text-ink">
             {detail.slots.map((slot) => (
               <li key={slot.boothSlotsId} className="flex justify-between">
@@ -278,29 +307,59 @@ function ApplicationDetailContent({ id }: { id: number }) {
 
           {detail.status === "PAYMENT_PENDING" && detail.cancelRequestStatus !== "REQUESTED" && (
             <div className="border-t border-line pt-4">
-              {tossReady ? (
-                <PaymentMethodPicker
-                  value={paymentMethod}
-                  onChange={setPaymentMethod}
-                  options={ALL_PAYMENT_METHODS}
-                  disabled={paying}
-                />
+              {pendingVirtualAccount ? (
+                // 이미 가상계좌를 발급받아 입금 대기 중이면 결제수단 선택 폼 대신 계좌정보를
+                // 보여준다 - 지금 결제하기를 눌러도 재시도가 막혀서 에러만 난다(PaymentResultPage.tsx의
+                // WAITING_FOR_DEPOSIT 화면과 동일한 문구·구성).
+                <>
+                  <div className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
+                    <Clock3 size={16} />
+                    가상계좌 입금을 기다리고 있어요
+                  </div>
+                  <div className="grid gap-1 rounded-button bg-page px-4 py-3 text-sm text-ink">
+                    <div>은행코드: {pendingVirtualAccount.virtualAccountBankCode}</div>
+                    <div>계좌번호: {pendingVirtualAccount.virtualAccountNumber}</div>
+                    {pendingVirtualAccount.virtualAccountDueDate && (
+                      <div>
+                        입금기한: {new Date(pendingVirtualAccount.virtualAccountDueDate).toLocaleString("ko-KR")} (한국시간)
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-muted">
+                    위 계좌로 참가비를 입금하면 자동으로 결제가 완료돼요.
+                  </p>
+                </>
               ) : (
-                <p className="rounded-button border border-dashed border-line bg-page p-4 text-center text-sm text-muted">
-                  결제 설정이 없어요. 결제 클라이언트 키가 주입되지 않았어요.
-                </p>
+                <>
+                  <div className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
+                    <CreditCard size={16} />
+                    결제 수단
+                  </div>
+                  {tossReady ? (
+                    <PaymentMethodPicker
+                      value={paymentMethod}
+                      onChange={setPaymentMethod}
+                      options={ALL_PAYMENT_METHODS}
+                      disabled={paying}
+                    />
+                  ) : (
+                    <p className="rounded-button border border-dashed border-line bg-page p-4 text-center text-sm text-muted">
+                      결제 설정이 없어요. 결제 클라이언트 키가 주입되지 않았어요.
+                    </p>
+                  )}
+                  {payError && (
+                    <div className="mt-3 flex items-start gap-2 text-sm text-primary-strong">
+                      <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                      <p>{payError}</p>
+                    </div>
+                  )}
+                  <div className="mt-3 flex justify-end">
+                    <Button type="button" onClick={handlePay} disabled={paying || !tossReady}>
+                      {paying ? "결제창을 여는 중..." : "결제하기"}
+                    </Button>
+                  </div>
+                </>
               )}
-              {payError && (
-                <div className="mt-3 flex items-start gap-2 text-sm text-primary-strong">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <p>{payError}</p>
-                </div>
-              )}
-              <div className="mt-3 flex justify-end">
-                <Button type="button" onClick={handlePay} disabled={paying || !tossReady}>
-                  {paying ? "결제창을 여는 중..." : "결제하기"}
-                </Button>
-              </div>
             </div>
           )}
         </Card>
