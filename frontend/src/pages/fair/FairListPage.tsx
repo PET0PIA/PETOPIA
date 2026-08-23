@@ -5,7 +5,7 @@ import { PageHeader } from "../../components/common/PageHeader";
 import { ApiError } from "../../api/client";
 import { getPublicFairs, type FairPublicListItem } from "../../api/fair";
 import { FairPublicCard } from "./FairPublicCard";
-import { isFairInProgress } from "./fairCard";
+import { isFairInProgress, reserveCta } from "./fairCard";
 
 interface FairListEntry {
   fair: FairPublicListItem;
@@ -43,28 +43,6 @@ const EMPTY_BY_TAB: Record<TabKey, { title: string; description: string }> = {
 /** 운영 중 판정. 카드 CTA와 탭 필터가 반드시 같은 기준을 써야 해서 한곳을 거친다. */
 function inProgress(fair: FairPublicListItem): boolean {
   return isFairInProgress(fair.status, fair.operationStartDate, fair.operationEndDate);
-}
-
-/*
- * 목록 카드 하단 버튼. 예약 화면(/tickets/:fairId)은 사전예약과 현장예매를 **둘 다** 다루므로,
- * 둘 중 하나라도 가능성이 있으면 비활성 버튼이 아니라 링크를 준다.
- *
- * - reservable: 사전예약 가능(예약 기간 안 + 자리 남은 운영일 존재) → "예약하기"
- * - IN_PROGRESS: 운영 중인 행사 → "현장예매". 사전예약이 닫혔어도 현장예매는 열려 있을 수
- *   있고, 그 화면은 오늘이 운영기간 안이면 현장예매 폼을 띄운다(TicketReservationPage).
- *
- * reservable을 먼저 보는 이유: 여러 날 열리는 행사는 운영 중에도 남은 날짜 사전예약이 열려
- * 있다. 그 화면은 두 유형을 함께 보여주므로 더 넓은 쪽인 "예약하기"로 부르는 게 맞다.
- *
- * 진행 중을 비활성으로 두면 안 되는 이유: 현장예매 입구가 이 버튼뿐이라, 회색 버튼으로
- * 막으면 실제로 가능한 현장예매까지 차단된다. 판매 상태(OPEN/PAUSED/CLOSED)·입장 마감 시각
- * 같은 최종 판정은 백엔드 OnsiteReservationService가 하므로 여기서 미리 닫지 않는다.
- */
-function reserveCta(fair: FairPublicListItem, ended: boolean): { to?: string; label: string } {
-  if (ended) return { label: "종료" };
-  if (fair.reservable) return { to: `/tickets/${fair.fairId}`, label: "예약하기" };
-  if (inProgress(fair)) return { to: `/tickets/${fair.fairId}`, label: "현장예매" };
-  return { label: "오픈 예정" };
 }
 
 /*
