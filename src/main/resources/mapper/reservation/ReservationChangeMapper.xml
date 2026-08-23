@@ -38,6 +38,17 @@
          FOR UPDATE
     </select>
 
+    <!--
+        방문일 변경 마감 시간을 행사에서 읽는다. 값이 NULL이면 서비스가 기본값(12시간)을 쓴다.
+        취소(ReservationCancellationMapper)는 예약 조회에 fairs를 조인해 함께 읽지만, 여기는
+        예약 조회가 FOR UPDATE라 조인하면 행사 행까지 잠겨 별도 SELECT로 둔다(잠그지 않는다).
+    -->
+    <select id="selectChangeDeadlineHours" resultType="java.lang.Integer">
+        SELECT reservation_change_deadline_hours
+          FROM fairs
+         WHERE fair_id = #{fairId}
+    </select>
+
     <update id="updateVisitDate">
         UPDATE reservations
            SET visit_date = #{visitDate}

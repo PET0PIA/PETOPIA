@@ -111,6 +111,69 @@ class ReservationQueryServiceTest {
         assertThat(detail.canCancel()).isTrue();
     }
 
+    /** 기본 12시간이 적용된 마감 시각(입장 8/2 10:00 - 12시간 = 8/1 22:00)을 그대로 알려준다. */
+    @Test
+    void exposesDefaultDeadlinesOnDetail() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CONFIRMED", "ADVANCE", 10_000, null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.cancelDeadlineAt()).isEqualTo(LocalDateTime.of(2026, 8, 1, 22, 0));
+        assertThat(detail.changeDeadlineAt()).isEqualTo(LocalDateTime.of(2026, 8, 1, 22, 0));
+    }
+
+    /** 행사가 정한 기한(취소 48시간·변경 6시간)이 기본값보다 우선한다. */
+    @Test
+    void exposesFairConfiguredDeadlinesOnDetail() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 7, 30, 9, 0));
+        ReservationListRow row = detailRow("CONFIRMED", "ADVANCE", 10_000, null);
+        row.setCancelDeadlineHours(48);
+        row.setChangeDeadlineHours(6);
+        given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(row);
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.cancelDeadlineAt()).isEqualTo(LocalDateTime.of(2026, 7, 31, 10, 0));
+        assertThat(detail.changeDeadlineAt()).isEqualTo(LocalDateTime.of(2026, 8, 2, 4, 0));
+        assertThat(detail.canCancel()).isTrue();
+        assertThat(detail.canChangeVisitDate()).isTrue();
+    }
+
+    /**
+     * 마감이 지난 확정 예약은 케밥에 변경·취소를 열어주지 않는다.
+     * 입장 종료(8/2 18:00) 전이라 "종료된 예약"은 아니지만, 마감(8/1 22:00)은 이미 지났다.
+     */
+    @Test
+    void hidesChangeAndCancelAfterDeadlinePassed() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 2, 9, 0));
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CONFIRMED", "ADVANCE", 10_000, null));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.isEnded()).isFalse();
+        assertThat(detail.canChangeVisitDate()).isFalse();
+        assertThat(detail.canCancel()).isFalse();
+        // 마감 시각 자체는 계속 내려준다 - 화면이 "언제까지였는지" 안내할 수 있어야 한다.
+        assertThat(detail.cancelDeadlineAt()).isEqualTo(LocalDateTime.of(2026, 8, 1, 22, 0));
+    }
+
+    /** 결제 대기 예약은 마감이 지나도 취소할 수 있다(받은 돈이 없어 취소 API도 마감을 보지 않는다). */
+    @Test
+    void keepsCancelAvailableForPendingPaymentAfterDeadlinePassed() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 2, 9, 0);
+        given(timeProvider.now()).willReturn(now);
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("PENDING_PAYMENT", "ADVANCE", 10_000, now.plusMinutes(10)));
+
+        ReservationDetailResponse detail = service.getReservationDetail(30L, 20L);
+
+        assertThat(detail.canCancel()).isTrue();
+        assertThat(detail.canChangeVisitDate()).isFalse();
+    }
+
     @Test
     void detailOfFreeConfirmedAdvanceAllowsCancel() {
         given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
@@ -136,6 +199,39 @@ class ReservationQueryServiceTest {
         assertThat(detail.canCancel()).isTrue();
         assertThat(detail.canChangeVisitDate()).isFalse();
         assertThat(detail.qrAvailable()).isFalse();
+    }
+
+    @Test
+    void exposesPaymentDeadlineOnlyWhilePaymentIsStillPending() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 1, 9, 0);
+        LocalDateTime deadline = now.plusMinutes(10);
+        given(timeProvider.now()).willReturn(now);
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("PENDING_PAYMENT", "ADVANCE", 10_000, deadline));
+
+        assertThat(service.getReservationDetail(30L, 20L).paymentExpiresAt()).isEqualTo(deadline);
+
+        // 결제가 끝난 뒤에도 payment_expires_at은 원장에 남는다. 그대로 내보내면 확정된 예약에
+        // 지난 마감시각이 붙어 화면이 "곧 만료됨"처럼 보인다.
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CONFIRMED", "ADVANCE", 10_000, deadline));
+
+        assertThat(service.getReservationDetail(30L, 20L).paymentExpiresAt()).isNull();
+    }
+
+    @Test
+    void listExposesPaymentDeadlineForPendingPaymentItems() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 1, 9, 0);
+        LocalDateTime deadline = now.plusMinutes(10);
+        given(timeProvider.now()).willReturn(now);
+        given(reservationMapper.countMyReservations(20L)).willReturn(1L);
+        given(reservationMapper.selectMyReservations(20L, 0L, 20)).willReturn(List.of(
+                row(30L, "PENDING_PAYMENT", deadline, null)
+        ));
+
+        ReservationListResponse response = service.getMyReservations(20L, 0, 20);
+
+        assertThat(response.items().getFirst().paymentExpiresAt()).isEqualTo(deadline);
     }
 
     @Test
@@ -262,6 +358,36 @@ class ReservationQueryServiceTest {
         // 취소 후에도 사용자가 확인해야 하는 정보라 의도적으로 그대로 노출한다.
         assertThat(detail.paymentId()).isEqualTo(1042L);
         assertThat(detail.paymentMethod()).isEqualTo("카드");
+    }
+
+    @Test
+    void detailMarksReservationCanceledByFairCancellation() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        // 행사 취소 정리는 사람이 아니므로 canceled_by를 남기지 않는다.
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CANCELED", "ADVANCE", 10_000, null));
+
+        assertThat(service.getReservationDetail(30L, 20L).canceledByFairCancellation()).isTrue();
+    }
+
+    @Test
+    void detailDoesNotMarkSelfCanceledReservationAsFairCancellation() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        ReservationListRow row = detailRow("CANCELED", "ADVANCE", 10_000, null);
+        row.setCanceledBy(20L); // 본인이 직접 취소한 예약
+        given(reservationMapper.selectReservationForOwner(30L, 20L)).willReturn(row);
+
+        assertThat(service.getReservationDetail(30L, 20L).canceledByFairCancellation()).isFalse();
+    }
+
+    @Test
+    void detailOfLiveReservationIsNotMarkedAsFairCancellation() {
+        given(timeProvider.now()).willReturn(LocalDateTime.of(2026, 8, 1, 9, 0));
+        // 취소되지 않은 예약은 canceled_by가 없는 게 정상이라, 상태까지 함께 봐야 한다.
+        given(reservationMapper.selectReservationForOwner(30L, 20L))
+                .willReturn(detailRow("CONFIRMED", "ADVANCE", 10_000, null));
+
+        assertThat(service.getReservationDetail(30L, 20L).canceledByFairCancellation()).isFalse();
     }
 
     /** detailRow에 결제 행 정보를 얹는다. 결제 행이 없는(무료) 예약은 이 헬퍼를 안 쓴다. */

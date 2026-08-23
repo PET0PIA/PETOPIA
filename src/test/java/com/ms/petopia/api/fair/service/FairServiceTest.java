@@ -317,6 +317,56 @@ class FairServiceTest {
     }
 
     @Test
+    @DisplayName("취소 가능 기한이 음수면 INVALID_INPUT_VALUE를 던진다")
+    void createApplication_취소기한이_음수면_예외를_던진다() {
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                0L, -1, null,
+                "김담당", null, "manager@petopia.example"
+        );
+        assertErrorCode(() -> fairService.createApplication(USER_ID, request), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("변경 가능 기한이 음수면 INVALID_INPUT_VALUE를 던진다")
+    void createApplication_변경기한이_음수면_예외를_던진다() {
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                0L, null, -1,
+                "김담당", null, "manager@petopia.example"
+        );
+        assertErrorCode(() -> fairService.createApplication(USER_ID, request), ErrorCode.INVALID_INPUT_VALUE);
+        verify(fairMapper, never()).insert(any());
+    }
+
+    /** 0은 정상값이다 - "입장 시작 직전까지 취소·변경 허용"을 뜻한다. */
+    @Test
+    @DisplayName("취소·변경 기한이 0이면 그대로 저장한다")
+    void createApplication_기한이_0이면_저장한다() {
+        willAnswer(invocation -> {
+            Fair fair = invocation.getArgument(0);
+            fair.setFairId(FAIR_ID);
+            return 1;
+        }).given(fairMapper).insert(any(Fair.class));
+
+        CreateFairApplicationRequest request = new CreateFairApplicationRequest(
+                "2026 서울 펫페어", null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                0L, 0, 0,
+                "김담당", null, "manager@petopia.example"
+        );
+        fairService.createApplication(USER_ID, request);
+
+        ArgumentCaptor<Fair> captor = ArgumentCaptor.forClass(Fair.class);
+        verify(fairMapper).insert(captor.capture());
+        assertThat(captor.getValue().getReservationCancelDeadlineHours()).isZero();
+        assertThat(captor.getValue().getReservationChangeDeadlineHours()).isZero();
+    }
+
+    @Test
     @DisplayName("참가업체 모집 종료일이 시작일보다 빠르면 FAIR_INVALID_VENDOR_RECRUIT_PERIOD를 던진다")
     void createApplication_모집기간이_거꾸로면_예외를_던진다() {
         CreateFairApplicationRequest request = new CreateFairApplicationRequest(
@@ -894,6 +944,26 @@ class FairServiceTest {
 
         assertErrorCode(
                 () -> fairService.updateApplication(FAIR_ID, USER_ID, request, Set.of("name", "petAllowed", "managerName")),
+                ErrorCode.INVALID_INPUT_VALUE
+        );
+        verify(fairMapper, never()).updateApplication(any(), any());
+    }
+
+    @Test
+    @DisplayName("취소·변경 가능 기한을 음수로 수정하려 하면 INVALID_INPUT_VALUE를 던진다")
+    void updateApplication_기한이_음수면_예외를_던진다() {
+        UpdateFairApplicationRequest request = new UpdateFairApplicationRequest(
+                "이름", null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                null, -1, null,
+                "김담당", null, "manager@petopia.example"
+        );
+
+        assertErrorCode(
+                () -> fairService.updateApplication(
+                        FAIR_ID, USER_ID, request, Set.of("name", "reservationCancelDeadlineHours", "managerName")
+                ),
                 ErrorCode.INVALID_INPUT_VALUE
         );
         verify(fairMapper, never()).updateApplication(any(), any());

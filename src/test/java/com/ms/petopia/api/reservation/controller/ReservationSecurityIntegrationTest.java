@@ -130,7 +130,7 @@ class ReservationSecurityIntegrationTest {
         given(policyService.get(10L, 11L, 20L)).willReturn(
                 new OnsiteSalesPolicyResponse(
                         10L, 11L, LocalDate.of(2026, 8, 1),
-                        12_000, "OPEN", 3, LocalDateTime.of(2026, 8, 1, 9, 0)
+                        12_000, 50, 7, "OPEN", 3, LocalDateTime.of(2026, 8, 1, 9, 0)
                 )
         );
 

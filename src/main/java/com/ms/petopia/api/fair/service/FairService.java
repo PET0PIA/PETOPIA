@@ -930,6 +930,8 @@ public class FairService {
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        validateDeadlineHours(request.reservationCancelDeadlineHours());
+        validateDeadlineHours(request.reservationChangeDeadlineHours());
         validateManagerPhoneFormat(request.managerPhone());
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
@@ -1008,6 +1010,8 @@ public class FairService {
         if (request.reservationFee() != null && request.reservationFee() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+        validateDeadlineHours(request.reservationCancelDeadlineHours());
+        validateDeadlineHours(request.reservationChangeDeadlineHours());
         validateManagerPhoneFormat(request.managerPhone());
         LocalDate today = timeProvider.now().toLocalDate();
         validatePeriod(
@@ -1025,6 +1029,20 @@ public class FairService {
                 ErrorCode.FAIR_INVALID_OPERATION_PERIOD
         );
         validateNotInPast(request.operationStartDate(), today, ErrorCode.FAIR_OPERATION_START_IN_PAST);
+    }
+
+    /**
+     * 예약 취소·변경 가능 기한 검사. "입장 몇 시간 전까지"라는 뜻이라 음수가 될 수 없다.
+     *
+     * <p>여기서 막지 않으면 음수가 그대로 저장되고, 나중에 관람객이 취소·변경을 누르는 순간
+     * 400(INVALID_INPUT_VALUE)으로 거절된다 - 잘못은 행사 설정에 있는데 관람객 쪽에서 터지니
+     * 원인을 찾기 어렵다(ReservationCancellationService·ReservationVisitDateChangeService 참고).
+     * 값을 보내지 않았으면(null) 검사하지 않는다 - 예약 도메인이 기본값 12시간을 쓴다.
+     */
+    private void validateDeadlineHours(Integer deadlineHours) {
+        if (deadlineHours != null && deadlineHours < 0) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
     }
 
     private void validatePeriod(LocalDate startDate, LocalDate endDate, ErrorCode errorCode) {

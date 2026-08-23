@@ -6,7 +6,11 @@ import org.apache.ibatis.annotations.Param;
 import java.time.LocalDate;
 
 /**
- * 운영일별 사전예약 정원을 조건부 UPDATE 한 문장으로 점유·반납한다.
+ * 운영일별 예약 정원을 조건부 UPDATE 한 문장으로 점유·반납한다.
+ *
+ * <p>정원은 두 벌이다. 사전예약은 {@code fair_dates.capacity}를, 현장예매는
+ * {@code onsite_sales_policies.capacity}를 쓴다(V49). 서로 자리를 뺏지 않도록 분리했으므로
+ * 두 카운터를 섞어 쓰면 안 된다 - 어느 쪽 자리를 반납하는지는 예약의 reservation_type이 정한다.
  *
  * <p>"운영일별 확정 예약 수 ≤ capacity"라는 불변식을 지키는 <b>유일한</b> 장치다.
  * 예전에는 {@code fair_dates}를 {@code FOR UPDATE}로 잠그고 {@code reservations}를
@@ -43,6 +47,29 @@ public interface ReservationCapacityMapper {
      * @return 1이면 반납 성공, 0이면 이미 0이거나 해당 운영일 없음
      */
     int release(
+            @Param("fairId") Long fairId,
+            @Param("visitDate") LocalDate visitDate
+    );
+
+    /**
+     * 현장예매 전용 정원을 1 점유한다.
+     *
+     * <p>{@code capacity IS NULL}이면 제한이 없다는 뜻이라 언제나 성공한다. 정원을 걸지 않은
+     * 기존 행사가 이 변경만으로 갑자기 매진되지 않게 하기 위한 기본값이다.
+     *
+     * @return 1이면 점유 성공, 0이면 매진(또는 그 운영일에 현장 판매 정책이 없음)
+     */
+    int occupyOnsite(
+            @Param("fairId") Long fairId,
+            @Param("visitDate") LocalDate visitDate
+    );
+
+    /**
+     * 점유했던 현장예매 정원을 1 반납한다.
+     *
+     * @return 1이면 반납 성공, 0이면 이미 0이거나 그 운영일에 현장 판매 정책이 없음
+     */
+    int releaseOnsite(
             @Param("fairId") Long fairId,
             @Param("visitDate") LocalDate visitDate
     );
