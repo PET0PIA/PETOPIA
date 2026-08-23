@@ -85,6 +85,32 @@ export interface BoothVisitResponse {
   visitCount: number;
 }
 
+export interface BoothDailyVisitResponse {
+  visitDate: string;
+  visitorCount: number;
+}
+
+export interface LabelCount {
+  label: string;
+  count: number;
+}
+
+export interface BoothStatsResponse {
+  boothId: number;
+  uniqueVisitorCount: number;
+  totalScanCount: number;
+  revisitCount: number;
+  revisitRate: number;
+  reviewedVisitorCount: number;
+  reviewConversionRate: number;
+  favoritedVisitorCount: number;
+  favoriteConversionRate: number;
+  dailyVisits: BoothDailyVisitResponse[];
+  petSpeciesBreakdown: LabelCount[];
+  avgPetAge: number | null;
+  petAllergyBreakdown: LabelCount[];
+}
+
 // 부스 상세 조회 (공개, 선택적 인증 - 로그인 시 favorited가 실제 값으로 내려옴)
 export async function getBooth(boothId: number): Promise<BoothResponse> {
   const response = await apiClient.get<ApiEnvelope<BoothResponse>>(`/api/booths/${boothId}`);
@@ -133,6 +159,12 @@ export async function deleteBoothItem(boothItemId: number): Promise<void> {
 // 행사의 확정 부스 안내 조회 (공개, 인증 불필요)
 export async function getConfirmedBooths(fairId: number): Promise<ConfirmedBoothResponse[]> {
   const response = await apiClient.get<ApiEnvelope<ConfirmedBoothResponse[]>>(`/api/fairs/${fairId}/confirmed-booths`);
+  return response.data;
+}
+
+// 부스 관리자용 방문 통계 조회 (본인 소유 부스만)
+export async function getBoothStats(boothId: number): Promise<BoothStatsResponse> {
+  const response = await apiClient.get<ApiEnvelope<BoothStatsResponse>>(`/api/booths/${boothId}/stats`);
   return response.data;
 }
 
