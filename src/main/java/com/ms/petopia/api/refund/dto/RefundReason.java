@@ -10,7 +10,10 @@ public enum RefundReason {
     VENDOR_CANCEL,
     /** 행사취소로 인한 참가업체 환불 */
     FAIR_CANCEL_VENDOR,
-    /** 행사 개설비 환불(관리자 수동 처리) */
+    /** 행사취소로 인한 개설비 환불(2026-08-23 자동환불 대상에 추가 - FairCancelRefundOrchestrationService 참고) */
+    FAIR_CANCEL_OPENING_FEE,
+    /** 행사 개설비 환불(관리자 수동 처리) - 취소가 아닌 사유로 개설비를 환불해야 할 때 쓴다.
+     * 취소로 인한 개설비 환불은 이제 FAIR_CANCEL_OPENING_FEE로 자동 처리된다. */
     OPENING_FEE_MANUAL,
     /**
      * 관리자 대행 예약취소. 관람객 자진취소(USER_CANCEL)와 돈 흐름은 같지만, 취소를 누른

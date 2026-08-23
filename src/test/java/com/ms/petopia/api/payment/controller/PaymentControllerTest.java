@@ -121,7 +121,7 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, null, null, 40L,
                         null, null, null, null,
-                        null, null, null, null, null, null, null
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
                 )
         );
 
@@ -152,7 +152,7 @@ class PaymentControllerTest {
                         10L, null, 99L, 500L, null,
                         null, null, null, null,
                         5L, "COMPLETED", 10000L, "USER_CANCEL", "RESERVATION",
-                        LocalDateTime.of(2026, 8, 4, 9, 0), LocalDateTime.of(2026, 8, 4, 9, 5)
+                        LocalDateTime.of(2026, 8, 4, 9, 0), LocalDateTime.of(2026, 8, 4, 9, 5), null, null, null, null, null, null, null, null
                 )
         );
 
@@ -175,7 +175,7 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 5, 10, 0),
                         10L, null, 90L, 500L, null,
                         null, null, null, null,
-                        null, null, null, null, null, null, null
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
                 )
         );
 
@@ -234,7 +234,7 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, null, null, 40L,
                         null, null, null, null,
-                        null, null, null, null, null, null, null
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
                 )
         );
 
@@ -281,7 +281,7 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 3, 10, 0),
                         10L, 20L, 99L, null, 40L,
                         null, null, null, null,
-                        null, null, null, null, null, null, null
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
                 )
         );
 
@@ -332,7 +332,7 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 5, 10, 0),
                         10L, null, 99L, 500L, null,
                         null, null, null, null,
-                        null, null, null, null, null, null, null
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
                 )
         );
 
@@ -379,7 +379,7 @@ class PaymentControllerTest {
                         LocalDateTime.of(2026, 8, 6, 10, 0),
                         10L, null, 3L, null, null,
                         null, null, null, null,
-                        null, null, null, null, null, null, null
+                        null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
                 )
         );
 
@@ -413,7 +413,7 @@ class PaymentControllerTest {
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
                                 10L, 20L, 99L, null, 40L,
                                 null, null, null, null,
-                                null, null, null, null, null, null, null
+                                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
                         )
                 ), 0, 20, 1L, 1)
         );
@@ -504,7 +504,7 @@ class PaymentControllerTest {
                                 LocalDateTime.of(2026, 8, 3, 10, 0),
                                 10L, 20L, 99L, null, 40L,
                                 null, null, null, null,
-                                null, null, null, null, null, null, null
+                                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
                         )
                 ), 0, 20, 1L, 1));
 
