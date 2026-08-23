@@ -66,6 +66,11 @@
         VALUES (#{applicationId}, #{purpose}, #{itemsDesc}, #{managerName}, #{managerPhone}, #{managerEmail}, #{agreedTerms}, #{attachmentUrl})
     </insert>
 
+    <!-- 승인/반려/취소 알림 이메일 발송 대상 결정용 - 신청서에 담당자 이메일이 없으면 null(서비스에서 계정 이메일로 폴백) -->
+    <select id="selectManagerEmailByApplicationId" resultType="String">
+        SELECT manager_email FROM application_form WHERE application_id = #{applicationId}
+    </select>
+
     <!-- 신청-부스슬롯 매핑 저장 (선택한 슬롯 개수만큼 반복 호출) -->
     <insert id="insertApplicationSlot" parameterType="com.ms.petopia.api.application.domain.ApplicationSlot"
             useGeneratedKeys="true" keyProperty="applicationSlotId">
