@@ -32,7 +32,7 @@ function validate(form: FormState): string[] {
   const errors: string[] = [];
   if (form.title.trim() === "") errors.push("공고 제목을 입력해 주세요.");
   if (form.content.trim() === "") errors.push("공고 본문을 입력해 주세요.");
-  if (form.recruitDeadline === "") errors.push("모집 마감일시를 입력해 주세요.");
+  if (form.recruitDeadline === "") errors.push("모집 마감일시를 확인해 주세요.");
   return errors;
 }
 

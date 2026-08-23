@@ -58,10 +58,22 @@ function toSegments(value: string, type: DateInputType): Segments {
   return result;
 }
 
-// 세그먼트들이 전부 다 채워졌으면 ISO 문자열로, 아니면 "".
+// year/month/day가 실제로 존재하는 날짜인지 확인한다("2026-02-31" 같은 값을 걸러낸다).
+// JS Date는 없는 날짜를 다음 달로 넘겨버리므로(2/31 -> 3/3), 되돌아온 값이 입력과
+// 같은지 비교해서 판정한다.
+function isValidCalendarDate(y: string, m: string, d: string): boolean {
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+// 세그먼트들이 전부 다 채워졌고, 실제로 존재하는 날짜일 때만 ISO 문자열로, 아니면 "".
 function segmentsToIso(segments: Segments, type: DateInputType): string {
   const segs = segmentsFor(type);
   if (segs.some((seg) => segments[seg.key].length !== seg.maxLen)) return "";
+  if (!isValidCalendarDate(segments.y, segments.m, segments.d)) return "";
   const date = `${segments.y}-${segments.m}-${segments.d}`;
   return type === "datetime-local" ? `${date}T${segments.hh}:${segments.mm}` : date;
 }
@@ -99,6 +111,9 @@ const BACKSPACE_STREAK_WINDOW_MS = 600;
  *
  * Backspace를 짧은 시간(0.6초) 안에 3번 연속 누르면 전체를 한 번에 지운다 - 2번으로
  * 하면 일반적인 "두 자리 지우기" 동작과 헷갈려서 3번으로 잡았다.
+ *
+ * 일(day)은 자리 검증만으로는 1~31까지 다 통과하므로(2월 31일 등 실존하지 않는 날짜),
+ * segmentsToIso에서 실제 달력 유효성을 한 번 더 확인한다(코드래빗 리뷰 반영, 2026-08-23).
  */
 export function DateInput({
   id,
@@ -289,63 +304,81 @@ export function DateInput({
     focusSegment(lastFocused);
   }
 
+  // 자리는 다 채웠는데 실제로 없는 날짜(9월 31일 등)면 안내 메시지를 보여준다.
+  // 미완성(자리 안 채움)과는 다른 상황이라 구분해서 알려준다.
+  const allFilled = segs.every((seg) => segments[seg.key].length === seg.maxLen);
+  const invalidDate = allFilled && !isValidCalendarDate(segments.y, segments.m, segments.d);
+
   return (
-    <div className={`flex h-12 items-center rounded-button border border-line bg-card px-3 focus-within:border-primary ${className}`}>
-      {segs.map((seg, index) => (
-        <div key={seg.key} className="flex items-center">
-          {index > 0 && (
-            <span className={`text-sm text-muted ${seg.key === "hh" ? "px-1.5" : "px-px"}`}>
-              {seg.key === "hh" ? "\u00A0" : seg.key === "mm" ? ":" : "-"}
-            </span>
-          )}
-          <input
-            ref={(el) => {
-              refs.current[seg.key] = el;
-            }}
-            id={index === 0 ? id : undefined}
-            type="text"
-            inputMode="numeric"
-            value={segments[seg.key]}
-            placeholder={seg.placeholder}
-            maxLength={seg.maxLen}
-            aria-label={index === 0 && ariaLabel ? ariaLabel : seg.label}
-            disabled={disabled}
-            onKeyDown={(event) => handleKeyDown(index, event)}
-            onPaste={(event) => handlePaste(index, event)}
-            onFocus={(event) => event.currentTarget.select()}
-            onBlur={() => handleBlur(index)}
-            onChange={() => {}} // 실제 반영은 onKeyDown/onPaste - React 제어 컴포넌트 경고만 막는 용도
-            className={`text-center text-sm text-ink placeholder:text-muted focus:outline-none ${
-              seg.key === "y" ? "w-11" : "w-6"
-            }`}
-          />
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => nativeRef.current?.showPicker?.()}
-        disabled={disabled}
-        aria-label="달력에서 선택"
-        className="ml-auto grid size-9 shrink-0 place-items-center rounded-button text-muted hover:bg-page disabled:cursor-not-allowed disabled:opacity-50"
+    <div className={className}>
+      <div
+        className={`flex h-12 items-center rounded-button border bg-card px-3 focus-within:border-primary ${
+          invalidDate ? "border-primary-strong" : "border-line"
+        }`}
       >
-        <CalendarDays size={18} aria-hidden="true" />
-      </button>
-      {/* 필수 입력 검증(required)은 이 숨겨진 네이티브 input이 담당한다 - 완성 안 됐으면 빈 값. */}
-      <input
-        ref={nativeRef}
-        type={type}
-        value={segmentsToIso(segments, type)}
-        onChange={(event) => {
-          pendingRef.current = null;
-          commit(toSegments(event.target.value, type));
-        }}
-        min={min}
-        max={max}
-        required={required}
-        tabIndex={-1}
-        aria-hidden="true"
-        className="pointer-events-none absolute size-0 opacity-0"
-      />
+        {segs.map((seg, index) => (
+          <div key={seg.key} className="flex items-center">
+            {index > 0 && (
+              <span className={`text-sm text-muted ${seg.key === "hh" ? "px-1.5" : "px-px"}`}>
+                {seg.key === "hh" ? "\u00A0" : seg.key === "mm" ? ":" : "-"}
+              </span>
+            )}
+            <input
+              ref={(el) => {
+                refs.current[seg.key] = el;
+              }}
+              id={index === 0 ? id : undefined}
+              type="text"
+              inputMode="numeric"
+              value={segments[seg.key]}
+              placeholder={seg.placeholder}
+              maxLength={seg.maxLen}
+              aria-label={index === 0 && ariaLabel ? ariaLabel : seg.label}
+              aria-required={index === 0 ? required : undefined}
+              disabled={disabled}
+              onKeyDown={(event) => handleKeyDown(index, event)}
+              onPaste={(event) => handlePaste(index, event)}
+              onFocus={(event) => event.currentTarget.select()}
+              onBlur={() => handleBlur(index)}
+              onChange={() => {}} // 실제 반영은 onKeyDown/onPaste - React 제어 컴포넌트 경고만 막는 용도
+              className={`text-center text-sm text-ink placeholder:text-muted focus:outline-none ${
+                seg.key === "y" ? "w-11" : "w-6"
+              }`}
+            />
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => nativeRef.current?.showPicker?.()}
+          disabled={disabled}
+          aria-label="달력에서 선택"
+          className="ml-auto grid size-9 shrink-0 place-items-center rounded-button text-muted hover:bg-page disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <CalendarDays size={18} aria-hidden="true" />
+        </button>
+        {/* 
+          필수 입력 검증(required)은 부모 폼(BusinessRegisterPage/RecruitNoticeFormPage)의
+          validate()가 담당한다 - 이 숨겨진 input에 required를 걸면 화면에 안 보이는
+          엘리먼트가 네이티브 폼 검증을 막아버려서 사용자가 뭐가 문제인지 알 수 없다
+          (코드래빗 리뷰 반영, 2026-08-23). 이 input은 달력 아이콘용으로만 쓴다.
+        */}
+        <input
+          ref={nativeRef}
+          type={type}
+          value={segmentsToIso(segments, type)}
+          onChange={(event) => {
+            pendingRef.current = null;
+            commit(toSegments(event.target.value, type));
+          }}
+          min={min}
+          max={max}
+          disabled={disabled}
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-none absolute size-0 opacity-0"
+        />
+      </div>
+      {invalidDate && <p className="mt-1 text-xs font-bold text-primary-strong">존재하지 않는 날짜예요.</p>}
     </div>
   );
 }
