@@ -14,6 +14,10 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,6 +29,22 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CorsConfigurationSource corsConfigurationSource;
+
+    /**
+     * 내부 계약 API(/internal/**) 허용 대역 - 루프백만.
+     *
+     * <p>내부 클라이언트 4개(ReservationPaymentContractClient 등)는 모두
+     * petopia.*.internal-base-url 기본값 http://localhost:8080으로 자기 자신을 호출하므로,
+     * 정상 호출은 항상 루프백에서 온다. 도메인을 별도 서비스로 분리하면 이 전제가 깨지니
+     * 그때 baseUrl과 이 규칙을 함께 고쳐야 한다.
+     *
+     * <p><b>주의</b>: getRemoteAddr() 기준이다. server.forward-headers-strategy를 켜면
+     * X-Forwarded-For 맨 앞 값이 remoteAddr로 들어와 위조로 통과된다(ALB는 XFF를 덮어쓰지
+     * 않고 뒤에 이어붙인다). 그래서 application.yaml에 none으로 명시해 뒀다.
+     */
+    private static final RequestMatcher LOOPBACK_ONLY = new OrRequestMatcher(
+            new IpAddressMatcher("127.0.0.1"),
+            new IpAddressMatcher("::1"));
 
     //특정 HTTP 요청에 대한 웹 기반 보안 구성
     @Bean
@@ -241,8 +261,14 @@ public class SecurityConfig {
                         // 입금 웹훅. 위조 방지는 여기(인증)가 아니라 PaymentService.handleDepositWebhook의
                         // secret 대조가 담당한다.
                         .requestMatchers(HttpMethod.POST, "/webhooks/toss/**").permitAll()
-                        // FairPaymentContractController(/internal/api/v1/**)는 사용자 JWT가 아니라
-                        // 도메인 간 내부 호출자 헤더(X-Internal-Caller)로 별도 인증하므로 여기서 다루지 않는다.
+                        // 도메인 간 내부 계약 API(/internal/**) - 같은 컨테이너 안에서 자기 자신을 부르는
+                        // 호출만 허용한다. 예전엔 규칙이 없어 anyRequest().permitAll()로 떨어졌고, 고정 문자열
+                        // 헤더(X-Internal-Caller: PAYMENT)만 붙이면 외부에서도 남의 예약 결제정보 조회와
+                        // 결제완료 처리가 가능한 구멍이었다(2026-08-23).
+                        // 컨트롤러의 X-Internal-Caller 검증은 계층 방어로 그대로 남겨둔다.
+                        .requestMatchers("/internal/**")
+                        .access((authentication, context) ->
+                                new AuthorizationDecision(LOOPBACK_ONLY.matches(context.getRequest())))
                         // Business 도메인 - 등록/조회는 로그인만 필요. VENDOR 승격은 등록 시점이 아니라
                         // 관리자 승인(PATCH /api/businesses/*/approve) 시점에 서비스 계층에서 처리한다.
                         // 심사 조회·승인·반려·취소는 SUPER_ADMIN 전용이며, 아래 "/api/businesses/*"
