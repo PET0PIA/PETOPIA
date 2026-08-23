@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ms.petopia.api.booth.mapper.BoothStatsMapper">
+
+    <!--
+        부스 하나의 방문·리뷰·찜 전환 통계 요약. booth_visits를 사용자 단위로 먼저 집계해서
+        (UK_BOOTH_VISIT_RESERVATION_BOOTH가 reservation_id+booth_id 기준이라, 같은 사용자가
+        예약을 여러 건 갖고 있으면 행이 여러 개일 수 있음 - user_id 기준으로 다시 묶어야
+        "고유 방문자" 수가 맞는다) 그 결과에 booth_feedbacks(리뷰)·booth_favorites(찜)를
+        LEFT JOIN해서 전환 인원까지 한 번에 센다. 방문 기록이 아예 없으면 서브쿼리가 0행이라
+        바깥 집계는 COUNT=0, SUM=NULL로 나오므로 COALESCE로 0을 채운다.
+    -->
+    <select id="selectSummary" resultType="com.ms.petopia.api.booth.dto.response.BoothStatsSummaryRow">
+        SELECT COUNT(*)                                                             AS unique_visitor_count
+             , COALESCE(SUM(vu.user_scan_count), 0)                                 AS total_scan_count
+             , COALESCE(SUM(CASE WHEN vu.user_scan_count > 1 THEN 1 ELSE 0 END), 0) AS revisit_count
+             , COALESCE(SUM(CASE WHEN bf.user_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS reviewed_visitor_count
+             , COALESCE(SUM(CASE WHEN fav.user_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS favorited_visitor_count
+          FROM (
+                SELECT user_id, SUM(visit_count) AS user_scan_count
+                  FROM booth_visits
+                 WHERE booth_id = #{boothId}
+                 GROUP BY user_id
+               ) vu
+          LEFT JOIN booth_feedbacks bf
+                 ON bf.booth_id = #{boothId} AND bf.user_id = vu.user_id
+          LEFT JOIN booth_favorites fav
+                 ON fav.booth_id = #{boothId} AND fav.user_id = vu.user_id
+    </select>
+
+    <!-- 최초 방문일(DATE(first_visited_at)) 기준 일자별 고유 방문자 수. 오래된 날짜부터 정렬. -->
+    <select id="selectDailyVisitCounts" resultType="com.ms.petopia.api.booth.dto.response.BoothDailyVisitRow">
+        SELECT DATE(first_visited_at)  AS visit_date
+             , COUNT(DISTINCT user_id) AS visitor_count
+          FROM booth_visits
+         WHERE booth_id = #{boothId}
+         GROUP BY DATE(first_visited_at)
+         ORDER BY visit_date ASC
+    </select>
+
+    <!--
+        반려동물 종 분포. ReservationDashboardMapper.selectPetBreedBreakdown과 같은 패턴을
+        booth_visits 기준으로 좁힌 것 - entry_records/reservations 대신 이미 reservation_id를
+        들고 있는 booth_visits에서 바로 reservation_pets로 LEFT JOIN한다(반려동물 등록이
+        없는 방문도 "미등록"으로 잡히게 LEFT JOIN 유지).
+    -->
+    <select id="selectPetSpeciesBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT COALESCE(rp.pet_species_snapshot, '미등록') AS label
+             , COUNT(*)                                    AS count
+          FROM booth_visits bv
+          LEFT JOIN reservation_pets rp ON rp.reservation_id = bv.reservation_id
+         WHERE bv.booth_id = #{boothId}
+         GROUP BY rp.pet_species_snapshot
+         ORDER BY count DESC
+    </select>
+
+    <!-- 평균 반려동물 나이. 최초 방문 시점 기준으로 계산해 과거 방문 통계가 시간이 지나도 변하지 않는다. -->
+    <select id="selectAvgPetAge" resultType="java.lang.Double">
+        SELECT AVG(TIMESTAMPDIFF(YEAR, rp.pet_birth_date_snapshot, bv.first_visited_at))
+          FROM booth_visits bv
+          JOIN reservation_pets rp ON rp.reservation_id = bv.reservation_id
+         WHERE bv.booth_id = #{boothId}
+           AND rp.pet_birth_date_snapshot IS NOT NULL
+    </select>
+
+    <!-- 반려동물 알레르기 분포. 알레르기가 없는 반려동물은 분포에서 빠져야 하므로 INNER JOIN. -->
+    <select id="selectPetAllergyBreakdown" resultType="com.ms.petopia.api.statistics.dto.LabelCountDto">
+        SELECT pat.label AS label
+             , COUNT(*)  AS count
+          FROM booth_visits bv
+          JOIN reservation_pets rp
+                ON rp.reservation_id = bv.reservation_id
+          JOIN reservation_pet_allergies rpa
+                ON rpa.reservation_pet_id = rp.reservation_pet_id
+          JOIN pet_allergy_types pat
+                ON pat.allergy_type_id = rpa.allergy_type_id
+         WHERE bv.booth_id = #{boothId}
+         GROUP BY pat.allergy_type_id, pat.label
+         ORDER BY count DESC
+    </select>
+
+</mapper>

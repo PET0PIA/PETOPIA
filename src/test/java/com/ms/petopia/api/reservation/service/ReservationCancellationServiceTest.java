@@ -388,6 +388,24 @@ class ReservationCancellationServiceTest {
         verifyNoInteractions(refundService, paymentMapper, paymentService);
     }
 
+    @Test
+    void releasesOnsiteCapacityWhenPendingOnsiteReservationIsCanceled() {
+        // 결제 전 현장예매는 사용자가 직접 취소할 수 있다("취소하고 나가기").
+        // 이때 자리는 현장 정원(onsite_sales_policies)으로 돌아가야 한다.
+        ReservationCancellationContext context = context("PENDING_PAYMENT", "ONSITE_DIRECT", 10_000);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+        given(timeProvider.now()).willReturn(NOW);
+        given(paymentMapper.selectByReservationId(RESERVATION_ID)).willReturn(null);
+        given(cancellationMapper.cancelReservation(
+                RESERVATION_ID, "PENDING_PAYMENT", null, USER_ID, NOW
+        )).willReturn(1);
+
+        service.cancel(RESERVATION_ID, USER_ID, null);
+
+        verify(capacityMapper).releaseOnsite(FAIR_ID, LocalDate.of(2026, 8, 5));
+        verify(capacityMapper, never()).release(FAIR_ID, LocalDate.of(2026, 8, 5));
+    }
+
     // ── 관리자 대행 취소(cancelByAdmin) ───────────────────────────────────────
 
     @Test
@@ -462,9 +480,9 @@ class ReservationCancellationServiceTest {
         verifyNoInteractions(refundService);
     }
 
-    /** 본인 취소는 거부하는 현장예매(rejectsOnsiteReservation)도 관리자 대행으로는 취소된다. */
+    /** 본인 취소는 거부하는 확정 현장예매(rejectsOnsiteReservation)도 관리자 대행으로는 취소된다. */
     @Test
-    void adminCancelHandlesOnsiteReservationWithoutReleasingCapacity() {
+    void adminCancelReleasesOnsiteCapacityForOnsiteReservation() {
         givenSuperAdminAuthenticated();
         ReservationCancellationContext context = context("CONFIRMED", "ONSITE_DIRECT", 0);
         given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
@@ -478,8 +496,10 @@ class ReservationCancellationServiceTest {
         );
 
         assertThat(response.reservationStatus()).isEqualTo("CANCELED");
-        // 현장예매는 애초에 정원을 점유하지 않으므로 반납 대상이 아니다.
-        verifyNoInteractions(capacityMapper);
+        // 현장예매는 사전예약과 정원을 따로 센다(V49). 반납도 현장 정원 쪽으로 가야 한다 -
+        // 사전예약 정원에 돌려주면 없던 사전예약 자리가 하나 생긴다.
+        verify(capacityMapper).releaseOnsite(FAIR_ID, LocalDate.of(2026, 8, 5));
+        verify(capacityMapper, never()).release(FAIR_ID, LocalDate.of(2026, 8, 5));
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.ms.petopia.api.reservation.dto.OnsiteReservationCreationContext;
 import com.ms.petopia.api.reservation.dto.ReservationInsertRow;
 import com.ms.petopia.api.reservation.dto.ReservationUserSnapshot;
 import com.ms.petopia.api.reservation.mapper.OnsiteReservationMapper;
+import com.ms.petopia.api.reservation.mapper.ReservationCapacityMapper;
 import com.ms.petopia.api.reservation.mapper.ReservationMapper;
 import com.ms.petopia.api.reservation.model.OnsiteSalesStatus;
 import com.ms.petopia.api.reservation.model.ReservationType;
@@ -33,6 +34,7 @@ public class OnsiteReservationService {
 
     private final OnsiteReservationMapper onsiteReservationMapper;
     private final ReservationMapper reservationMapper;
+    private final ReservationCapacityMapper capacityMapper;
     private final ReservationNumberGenerator reservationNumberGenerator;
     private final ReservationTimeProvider timeProvider;
     private final EntryQrService entryQrService;
@@ -43,7 +45,11 @@ public class OnsiteReservationService {
 
     /**
      * 로그인 회원 본인의 당일 현장 직접예매를 만든다.
-     * 현장예매는 사전예약 정원을 조회하거나 차감하지 않는다.
+     *
+     * <p>정원은 사전예약과 <b>따로</b> 센다(V49). 현장예매는 {@code onsite_sales_policies}의
+     * 정원을, 사전예약은 {@code fair_dates}의 정원을 쓴다 - 사전예약이 다 팔려도 현장에서 팔
+     * 자리가 남아야 하기 때문이다. 정원을 걸지 않은(capacity IS NULL) 운영일은 지금까지처럼
+     * 제한 없이 팔린다.
      */
     @Transactional
     public CreateOnsiteReservationResponse create(
@@ -76,6 +82,13 @@ public class OnsiteReservationService {
         long amount = context.getOnsitePrice();
         boolean paymentRequired = amount > 0;
         validateTerms(paymentRequired, request);
+
+        // 정원은 예약을 만드는 시점에 잡는다. 유료 현장예매는 결제대기(10분)로 먼저 만들어지는데,
+        // 결제 완료 시점에 잡으면 그 10분 동안 정원을 넘겨 예약이 쌓인다.
+        // 판정과 차감이 한 문장이라(occupyOnsite) 동시에 눌러도 정원을 넘지 않는다.
+        if (capacityMapper.occupyOnsite(fairId, today) != 1) {
+            throw new CommonException(ErrorCode.RESERVATION_SOLD_OUT);
+        }
 
         String status = paymentRequired ? PENDING_PAYMENT : CONFIRMED;
         LocalDateTime paymentExpiresAt = paymentRequired ? now.plusMinutes(PAYMENT_WAIT_MINUTES) : null;

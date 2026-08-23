@@ -38,6 +38,17 @@ function formatPrice(price: number) {
   return price === 0 ? "무료" : `${price.toLocaleString()}원`;
 }
 
+/**
+ * 정원 칸에 쓸 문구. 현장예매 정원은 사전예약 정원과 별개이고, 비워두면(null) 제한이 없다.
+ * 제한이 걸린 운영일은 "판매수 / 정원"으로 남은 자리를 바로 읽을 수 있게 한다.
+ */
+function formatCapacity(policy: OnsiteSalesPolicy) {
+  if (policy.capacity === null) {
+    return `제한 없음 · ${policy.reservedCount}건 판매`;
+  }
+  return `${policy.reservedCount} / ${policy.capacity}명`;
+}
+
 export function OnsiteSalesPolicyPage() {
   // 콘솔 상단 바의 "관리 행사" 선택기가 현재 행사를 정한다.
   const { fairId } = useFairSelector();
@@ -49,6 +60,8 @@ export function OnsiteSalesPolicyPage() {
   // 정책 편집 다이얼로그.
   const [editing, setEditing] = useState<PolicyRow | null>(null);
   const [formPrice, setFormPrice] = useState("");
+  // 빈 문자열 = 제한 없음. 숫자를 넣은 운영일만 정원 제한이 걸린다.
+  const [formCapacity, setFormCapacity] = useState("");
   const [formStatus, setFormStatus] = useState<OnsiteSalesStatus>("CLOSED");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -86,6 +99,7 @@ export function OnsiteSalesPolicyPage() {
   function openDialog(row: PolicyRow) {
     setEditing(row);
     setFormPrice(String(row.policy.price));
+    setFormCapacity(row.policy.capacity === null ? "" : String(row.policy.capacity));
     setFormStatus(row.policy.status);
     setSaveError(null);
   }
@@ -97,12 +111,23 @@ export function OnsiteSalesPolicyPage() {
       setSaveError("가격은 0 이상의 숫자로 입력해 주세요.");
       return;
     }
+    // 비워두면 제한 없음(null). 값을 넣었다면 0 이상의 정수만 받는다.
+    let capacity: number | null = null;
+    if (formCapacity !== "") {
+      const parsed = Number(formCapacity);
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        setSaveError("정원은 0 이상의 숫자로 입력하거나, 제한이 없으면 비워 주세요.");
+        return;
+      }
+      capacity = parsed;
+    }
 
     setSaving(true);
     setSaveError(null);
     try {
       const saved = await saveOnsiteSalesPolicy(fairId, editing.fairDate.fairDateId, {
         price,
+        capacity,
         status: formStatus,
         // 조회 때 받은 version을 그대로 보낸다. 신규(미설정)면 0.
         expectedVersion: editing.policy.version,
@@ -131,7 +156,7 @@ export function OnsiteSalesPolicyPage() {
       <PageHeader
         eyebrow="박람회 관리자"
         title="현장예매 설정"
-        description="운영일마다 현장 직접예매의 가격과 판매 상태(판매중·일시중지·마감)를 관리해요. 판매중이 아니면 현장예매를 받지 않아요."
+        description="운영일마다 현장 직접예매의 가격·정원·판매 상태(판매중·일시중지·마감)를 관리해요. 판매중이 아니면 현장예매를 받지 않아요. 정원은 사전예약 정원과 별개로 셉니다."
       />
 
       {loadError && (
@@ -167,6 +192,7 @@ export function OnsiteSalesPolicyPage() {
             <tr className="border-b border-line text-xs font-bold text-muted">
               <th className="px-4 py-3">운영 날짜</th>
               <th className="px-4 py-3">현장예매 가격</th>
+              <th className="px-4 py-3">정원(판매/정원)</th>
               <th className="px-4 py-3">판매 상태</th>
               <th className="px-4 py-3 text-right">관리</th>
             </tr>
@@ -176,6 +202,7 @@ export function OnsiteSalesPolicyPage() {
               <tr key={row.fairDate.fairDateId} className="border-b border-line last:border-0">
                 <td className="px-4 py-3 font-bold">{row.fairDate.operationDate}</td>
                 <td className="px-4 py-3 text-muted">{formatPrice(row.policy.price)}</td>
+                <td className="px-4 py-3 text-muted">{formatCapacity(row.policy)}</td>
                 <td className="px-4 py-3">
                   <Badge tone={statusTones[row.policy.status]}>{statusLabels[row.policy.status]}</Badge>
                 </td>
@@ -213,6 +240,31 @@ export function OnsiteSalesPolicyPage() {
           </div>
 
           <div>
+            <span className="mb-1.5 block text-sm font-bold text-ink">현장예매 정원</span>
+            <Input
+              type="number"
+              min={0}
+              value={formCapacity}
+              onChange={(event) => setFormCapacity(event.target.value)}
+              placeholder="비워두면 제한 없음"
+            />
+            <p className="mt-2 text-xs text-muted">
+              사전예약 정원과 별개로 세는 현장예매 전용 정원이에요. 비워두면 인원 제한 없이 팔아요.
+              지금까지 {editing?.policy.reservedCount ?? 0}건 팔렸어요.
+            </p>
+            {/* 이미 팔린 수보다 작게 저장하는 것을 막지는 않는다 - 판매를 중간에 조여야 할 때가
+                있기 때문이다. 대신 "이미 판 건 그대로 남는다"를 분명히 알려준다. */}
+            {editing !== null
+              && formCapacity !== ""
+              && Number(formCapacity) < editing.policy.reservedCount && (
+              <p className="mt-1 text-xs font-bold text-primary-strong">
+                이미 판매된 {editing.policy.reservedCount}건보다 적은 정원이에요. 저장하면 기존
+                예매는 그대로 두고 추가 판매만 멈춰요.
+              </p>
+            )}
+          </div>
+
+          <div>
             <span className="mb-1.5 block text-sm font-bold text-ink">판매 상태</span>
             <div className="grid grid-cols-3 gap-2">
               {(["OPEN", "PAUSED", "CLOSED"] as OnsiteSalesStatus[]).map((status) => (
@@ -231,7 +283,7 @@ export function OnsiteSalesPolicyPage() {
               ))}
             </div>
             <p className="mt-2 text-xs text-muted">
-              판매중(OPEN)일 때만 관람객이 현장예매를 할 수 있어요.
+              판매중(OPEN)이고 정원이 남아 있을 때만 관람객이 현장예매를 할 수 있어요.
             </p>
           </div>
 

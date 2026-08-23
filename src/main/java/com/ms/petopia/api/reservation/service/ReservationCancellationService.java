@@ -63,9 +63,12 @@ import java.util.Map;
  *   <tr><td>CONFIRMED, 예약금 &gt; 0원</td><td>전액 환불({@link RefundService#refund})</td></tr>
  * </table>
  *
- * <p>현장예매(ONSITE_DIRECT)는 자진취소 대상이 아니다 — 당일 현장에서 결제·입장하는 건이라
- * 취소 마감(입장 12시간 전) 규칙을 적용하면 사실상 항상 마감 초과다. 대신 관리자 대행 취소
- * ({@link #cancelByAdmin})로는 취소할 수 있다.
+ * <p><b>현장예매(ONSITE_DIRECT)</b>는 예약 상태에 따라 갈린다. 확정(CONFIRMED)된 현장예매는
+ * 자진취소 대상이 아니다 — 당일 현장에서 결제·입장하는 건이라 취소 마감(입장 12시간 전) 규칙을
+ * 적용하면 사실상 항상 마감 초과다. 대신 관리자 대행 취소({@link #cancelByAdmin})로는 취소할 수
+ * 있다. 반면 결제 전(PENDING_PAYMENT) 현장예매는 사용자가 직접 취소할 수 있다 — 아직 받은 돈이
+ * 없어 마감을 볼 이유가 없고, 취소하지 않으면 같은 날짜로 다시 예약할 수 없기 때문이다. 어느
+ * 경로로 취소되든 점유했던 현장 정원({@code onsite_sales_policies.reserved_count})을 반납한다.
  *
  * <p><b>왜 한 트랜잭션으로 묶는가</b>: 환불 MVP는 외부 PG 호출이 없는 "모의 환불"이라
  * ({@link RefundService} 참고) 환불이 결국 같은 DB에 REFUND 행 하나 쓰는 일이다. 그래서 예약
@@ -90,8 +93,8 @@ public class ReservationCancellationService {
     private static final String PENDING_PAYMENT = "PENDING_PAYMENT";
     private static final String CONFIRMED = "CONFIRMED";
     private static final String ADVANCE = "ADVANCE";
+    private static final String ONSITE_DIRECT = "ONSITE_DIRECT";
     private static final String CANCELED = "CANCELED";
-    private static final int DEFAULT_CANCEL_DEADLINE_HOURS = 12;
 
     /** reservation_histories.actor_type 값. DB CHECK가 USER/ADMIN/SYSTEM/PAYMENT만 허용한다. */
     private static final String ACTOR_USER = "USER";
@@ -180,8 +183,9 @@ public class ReservationCancellationService {
      * <ul>
      *   <li><b>취소 마감(입장 12시간 전)을 적용하지 않는다</b> — 민원은 대부분 마감이 지난 뒤에
      *       들어오므로, 마감을 걸면 이 기능이 존재할 이유가 없어진다.</li>
-     *   <li><b>현장예매(ONSITE_DIRECT)도 취소할 수 있다</b> — 본인 취소에서 막아두고 "현장 관리자
-     *       처리로 남긴다"고 적어둔 그 처리 경로가 바로 여기다.</li>
+     *   <li><b>확정(CONFIRMED)된 현장예매(ONSITE_DIRECT)도 취소할 수 있다</b> — 본인 취소가
+     *       막아두는 그 건을 정리하는 경로가 바로 여기다. 취소하면 사전예약 정원이 아니라 현장
+     *       정원({@code onsite_sales_policies.reserved_count})이 반납된다.</li>
      *   <li>사유가 필수고, 이력의 actor_type이 ADMIN으로 남으며 감사 로그까지 함께 쌓인다.</li>
      * </ul>
      *
@@ -304,9 +308,12 @@ public class ReservationCancellationService {
         // 취소된 좌석을 정원에 돌려준다. 이 반납을 빼면 좌석이 영구 증발한다.
         // cancelReservation이 1을 반환한 뒤에만 호출해야 중복 반납이 생기지 않는다 -
         // 위의 상태 CAS가 이미 "이번 호출이 취소를 성사시킨 유일한 호출"임을 보장한다.
-        // 현장예매(ONSITE_DIRECT)는 애초에 정원을 점유하지 않으므로 반납 대상이 아니다.
+        // 사전예약과 현장예매는 정원을 따로 센다(V49). 어느 쪽 자리를 반납할지는 예약 유형이 정한다 -
+        // 결제 전(PENDING_PAYMENT) 현장예매는 사용자가 직접 취소할 수 있어서 여기로도 들어온다.
         if (ADVANCE.equals(reservation.getReservationType())) {
             capacityMapper.release(reservation.getFairId(), reservation.getVisitDate());
+        } else if (ONSITE_DIRECT.equals(reservation.getReservationType())) {
+            capacityMapper.releaseOnsite(reservation.getFairId(), reservation.getVisitDate());
         }
 
         eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
@@ -496,7 +503,7 @@ public class ReservationCancellationService {
         }
 
         int deadlineHours = reservation.getCancelDeadlineHours() == null
-                ? DEFAULT_CANCEL_DEADLINE_HOURS
+                ? ReservationDeadlinePolicy.DEFAULT_CANCEL_DEADLINE_HOURS
                 : reservation.getCancelDeadlineHours();
         if (deadlineHours < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);

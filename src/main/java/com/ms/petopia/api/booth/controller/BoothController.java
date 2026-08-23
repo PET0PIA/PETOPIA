@@ -47,6 +47,18 @@ public class BoothController {
 
     }
 
+    // 부스 관리자용 방문 통계 (본인 소유 부스만)
+    @GetMapping("/booths/{boothId}/stats")
+    public ResponseEntity<ApiResponse<BoothStatsResponse>> getBoothStats(
+            @AuthenticationPrincipal Long callerId,
+            @PathVariable Long boothId
+    ) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success(boothService.getBoothStats(callerId, boothId)));
+
+    }
+
     // 내가 소유한 부스 목록 조회
     @GetMapping("/booths/me")
     public ResponseEntity<ApiResponse<List<BoothFavoriteResponse>>> getMyBooths(

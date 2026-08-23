@@ -82,6 +82,7 @@ import { FairPaymentSettlementPage } from "../pages/fair-admin/FairPaymentSettle
 import { CancelRequestReviewPage } from "../pages/fair-admin/CancelRequestReviewPage";
 import { BoothDetailPage } from "../pages/booth/BoothDetailPage";
 import { BoothEditPage } from "../pages/booth/BoothEditPage";
+import { BoothStatsPage } from "../pages/booth/BoothStatsPage";
 import { BoothFavoritesPage } from "../pages/booth/BoothFavoritesPage";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { BusinessesByFairPage } from "../pages/business/BusinessesByFairPage";
@@ -159,6 +160,7 @@ export function AppRouter() {
             <Route path="/mypage/pets/new" element={<PetFormPage />} />
             <Route path="/mypage/pets/:petId" element={<PetDetailPage />} />
             <Route path="/booths/:boothId/edit" element={<BoothEditPage />} />
+            <Route path="/booths/:boothId/stats" element={<BoothStatsPage />} />
             {/* 옛 경로는 마이페이지 안의 새 위치로 리다이렉트(북마크·내부 링크 호환). */}
             <Route path="/booths/favorites/me" element={<Navigate to="/mypage/favorites" replace />} />
             <Route path="/booths/visited/me" element={<Navigate to="/mypage/booths/visited" replace />} />

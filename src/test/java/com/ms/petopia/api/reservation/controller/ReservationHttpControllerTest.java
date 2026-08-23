@@ -269,13 +269,14 @@ class ReservationHttpControllerTest {
 
     @Test
     void getsReservationAvailabilityForBookingScreen() throws Exception {
-        given(reservationAvailabilityService.getAvailability(10L)).willReturn(
+        given(reservationAvailabilityService.getAvailability(10L, null)).willReturn(
                 new ReservationAvailabilityResponse(
                         10L,
                         10_000,
                         true,
                         List.of(new ReservationAvailabilityDateResponse(
-                                LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0), 35, true
+                                LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0), 35, true,
+                                null, null
                         ))
                 )
         );
@@ -285,9 +286,33 @@ class ReservationHttpControllerTest {
                 .andExpect(jsonPath("$.petAllowed").value(true))
                 .andExpect(jsonPath("$.reservationFee").value(10_000))
                 .andExpect(jsonPath("$.dates[0].remainingCapacity").value(35))
-                .andExpect(jsonPath("$.dates[0].available").value(true));
+                .andExpect(jsonPath("$.dates[0].available").value(true))
+                .andExpect(jsonPath("$.dates[0].myReservationId").doesNotExist());
 
-        verify(reservationAvailabilityService).getAvailability(10L);
+        verify(reservationAvailabilityService).getAvailability(10L, null);
+    }
+
+    @Test
+    void passesLoggedInUserToReservationAvailabilitySoAlreadyReservedDatesAreMarked() throws Exception {
+        given(reservationAvailabilityService.getAvailability(10L, 20L)).willReturn(
+                new ReservationAvailabilityResponse(
+                        10L,
+                        10_000,
+                        true,
+                        List.of(new ReservationAvailabilityDateResponse(
+                                LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0), 35, true,
+                                77L, "PENDING_PAYMENT"
+                        ))
+                )
+        );
+
+        mockMvc.perform(get("/api/v1/fairs/10/reservation-availability")
+                        .with(authenticatedAs(20L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dates[0].myReservationId").value(77))
+                .andExpect(jsonPath("$.dates[0].myReservationStatus").value("PENDING_PAYMENT"));
+
+        verify(reservationAvailabilityService).getAvailability(10L, 20L);
     }
 
     @Test
@@ -297,16 +322,16 @@ class ReservationHttpControllerTest {
                         new ReservationListItemResponse(
                                 30L, "서울 펫페어", null,
                                 LocalDate.of(2026, 8, 2), LocalTime.of(10, 0), LocalTime.of(18, 0),
-                                "CONFIRMED", false, true, false, 10_000,
-                                LocalDateTime.of(2026, 8, 1, 9, 0), null, null
+                                "CONFIRMED", false, true, false, null, 10_000,
+                                LocalDateTime.of(2026, 8, 1, 9, 0), null, null, false
                         ),
                         // 환불까지 끝난 취소 건. 목록 카드가 "취소됨" 배지만으로는 결제 전 취소와
                         // 구분할 수 없어서 refundStatus를 함께 내려준다(금액줄 표시가 갈린다).
                         new ReservationListItemResponse(
                                 31L, "부산 펫페어", null,
                                 LocalDate.of(2026, 8, 3), LocalTime.of(10, 0), LocalTime.of(18, 0),
-                                "CANCELED", false, false, false, 10_000,
-                                LocalDateTime.of(2026, 8, 1, 9, 30), null, "COMPLETED"
+                                "CANCELED", false, false, false, null, 10_000,
+                                LocalDateTime.of(2026, 8, 1, 9, 30), null, "COMPLETED", false
                         )
                 ), 1, 10, 11, 2, false)
         );
@@ -451,7 +476,7 @@ class ReservationHttpControllerTest {
         given(policyService.save(any(), any(), any(), any())).willReturn(
                 new OnsiteSalesPolicyResponse(
                         10L, 11L, LocalDate.of(2026, 8, 1),
-                        12_000, "OPEN", 0, LocalDateTime.of(2026, 8, 1, 9, 0)
+                        12_000, 50, 7, "OPEN", 0, LocalDateTime.of(2026, 8, 1, 9, 0)
                 )
         );
 
@@ -459,7 +484,7 @@ class ReservationHttpControllerTest {
                         .with(authenticatedAs(20L))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"price":12000,"status":"OPEN","expectedVersion":null}
+                                {"price":12000,"capacity":50,"status":"OPEN","expectedVersion":null}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OPEN"));
@@ -470,7 +495,7 @@ class ReservationHttpControllerTest {
         given(policyService.get(10L, 11L, 20L)).willReturn(
                 new OnsiteSalesPolicyResponse(
                         10L, 11L, LocalDate.of(2026, 8, 1),
-                        12_000, "OPEN", 3, LocalDateTime.of(2026, 8, 1, 9, 0)
+                        12_000, 50, 7, "OPEN", 3, LocalDateTime.of(2026, 8, 1, 9, 0)
                 )
         );
 
