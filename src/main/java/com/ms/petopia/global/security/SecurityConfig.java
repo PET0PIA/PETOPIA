@@ -163,6 +163,8 @@ public class SecurityConfig {
                         // Review 도메인 - 행사관리자 통계(카테고리별 태그 TOP5 등)는 그 행사 담당
                         // EVENT_ADMIN 또는 SUPER_ADMIN만 - FairAdminAccessGuard가 서비스 계층에서 확인한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/stats", "/api/fairs/*/reviews/stats/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
+                        // Review 도메인 - 내 리뷰 목록 조회는 로그인한 본인 것만.
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/me").authenticated()
                         // FeedbackTag 도메인 - 태그 마스터 활성 목록 조회는 누구나(리뷰 마법사에서 사용).
                         // 등록·수정·사용현황 조회는 SUPER_ADMIN만.
                         .requestMatchers(HttpMethod.GET, "/api/feedback-tags").permitAll()

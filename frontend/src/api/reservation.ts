@@ -61,6 +61,15 @@ export interface ReservationListItem {
   /** 최초 입장시각(ISO). 입장 전이면 null */
   checkedInAt: string | null;
   /**
+   * 예약금 환불 상태. 환불이 없으면 null.
+   *
+   * "취소됨" 배지만으로는 환불받은 취소·결제 전 취소·무료 예약 취소가 구분되지 않아서
+   * 목록 카드의 금액줄 표시를 이 값으로 가른다. 지금 백엔드는 모의 환불이라 접수와 동시에
+   * COMPLETED가 되므로 REQUESTED는 실제로 오지 않지만, 실 PG 연동이 붙으면 생기는 상태라
+   * 타입에 남겨 둔다.
+   */
+  refundStatus: "REQUESTED" | "COMPLETED" | "REJECTED" | null;
+  /**
    * 주최측 행사 취소로 자동 취소된 예약인지.
    * 내가 직접 취소한 건과 구분해서 안내 문구를 다르게 보여준다.
    */
@@ -82,8 +91,13 @@ export interface ReservationListResponse {
  * 목록 필드 + reservationNo·reservationType + 케밥 제어 플래그 2개 + 취소·변경 마감 시각.
  * canChangeVisitDate·canCancel에는 마감까지 반영돼 있지만, 화면을 열어둔 채 마감을 넘기면
  * 여전히 R018/R019가 올 수 있으니 응답 처리는 그대로 해야 한다.
+ *
+ * refundStatus만 상속에서 뺀다 - 목록 카드가 금액줄 표시를 가르려고 쓰는 값이라
+ * 상세 응답(ReservationDetailResponse)에는 없다. 상세 화면은 결제 레코드를 따로 조회해
+ * 환불 상태·금액·사유·시각을 "환불 정보" 블록에 전부 보여주므로 이 값이 필요 없다.
+ * 상속에 남겨두면 타입은 non-null이라고 하는데 실제로는 undefined가 오는 함정이 된다.
  */
-export interface ReservationDetail extends ReservationListItem {
+export interface ReservationDetail extends Omit<ReservationListItem, "refundStatus"> {
   /** 예약번호(사람이 읽는 식별자) */
   reservationNo: string;
   /** 방문일 변경 다이얼로그에서 예약 가능 날짜를 조회할 때 쓴다. */
@@ -388,6 +402,24 @@ export function cancelReservation(reservationId: number, reason?: string) {
   );
 }
 
+/**
+ * 관리자(EVENT_ADMIN/SUPER_ADMIN)가 관람객 대신 예약을 취소한다(대행 취소).
+ *
+ * 본인 취소(cancelReservation)와 달리 취소 마감이 지났어도, 현장예매 건이어도 처리된다.
+ * 대신 사유가 필수다 - 예약 이력·감사 로그·관람객 알림에 그대로 실린다.
+ * 유료 확정 예약이면 전액 환불이 함께 나간다.
+ *
+ * 실패 코드: A002 담당 행사 아님 / R010 예약 없음 / R013 취소 불가 상태(이미 입장·취소·만료) /
+ * R020 환불할 결제 없음 / R021 결제 진행 중(일시적 - 잠시 후 재시도).
+ */
+export function cancelReservationByAdmin(fairId: number, reservationId: number, reason: string) {
+  return apiClient.patch<CancelReservationResult>(
+    `/api/v1/admin/fairs/${fairId}/reservations/${reservationId}/cancel`,
+    { reason },
+    { headers: authHeaders() },
+  );
+}
+
 // ── 관리자용 예약자 목록(fair-admin 콘솔) ─────────────────────────────────────
 
 /** 관리자용 예약자 목록 한 건. 백엔드 AdminReservationItemResponse에 맞춘다. */
@@ -402,8 +434,11 @@ export interface AdminReservationItem {
   entryEndTime: string;
   reservationStatus: ReservationStatus;
   amount: number;
-  /** 예약일시(ISO) */
-  reservedAt: string;
+  /**
+   * 예약 확정 시각(ISO). **null일 수 있다** - reservations.reserved_at은 "확정" 시각이라
+   * 결제 대기·만료·결제 전 취소 건은 비어 있다(스키마도 NULL 허용).
+   */
+  reservedAt: string | null;
 }
 
 /** 관리자용 예약자 목록 응답(페이징). 백엔드 AdminReservationListResponse에 맞춘다. */

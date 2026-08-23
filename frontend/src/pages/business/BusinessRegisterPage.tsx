@@ -11,6 +11,7 @@ import { ApiError } from "../../api/client";
 import { registerBusiness, type BusinessRegisterRequest } from "../../api/business";
 import { useAuth } from "../../contexts/AuthContext";
 import { BusinessTermsAgreement } from "../../components/business/BusinessTermsAgreement";
+import { DateInput } from "../../components/ui/DateInput";
 
 interface FormState {
   name: string;
@@ -176,7 +177,8 @@ export function BusinessRegisterPage() {
               </div>
               <div>
                 {label("개업일자", true)}
-                <Input type="date" value={form.startDate} onChange={(event) => update("startDate", event.target.value)} required />
+                <DateInput value={form.startDate} onChange={(value) => update("startDate", value)} required />
+                <p className="mt-1 text-xs text-muted">숫자만 입력하면 자동으로 - 가 붙어요.</p>
               </div>
               <div>
                 {label("연락처", true)}

@@ -46,6 +46,7 @@ export const refundReasonLabels: Record<string, string> = {
   VENDOR_CANCEL: "참가업체 자진취소",
   FAIR_CANCEL_VENDOR: "행사취소로 인한 참가업체 환불",
   OPENING_FEE_MANUAL: "행사 개설비 환불(관리자 수동)",
+  ADMIN_CANCEL: "관리자 대행 예약취소",
 };
 
 export const refundRequestedByDomainLabels: Record<string, string> = {
