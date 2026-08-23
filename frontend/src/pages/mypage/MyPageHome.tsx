@@ -265,7 +265,6 @@ function NotificationCard() {
                     <span className={`block truncate text-sm ${item.isRead ? "text-muted" : "font-bold text-ink"}`}>
                       {item.title}
                     </span>
-                    <span className="mt-0.5 block truncate text-sm text-muted">{item.body}</span>
                   </span>
                   <span className="shrink-0 text-xs text-muted">{formatNotifiedAt(item.createdAt)}</span>
                 </button>

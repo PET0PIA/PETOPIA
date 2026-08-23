@@ -7,8 +7,10 @@ import com.ms.petopia.api.booth.dto.request.BoothItemUpdateRequest;
 import com.ms.petopia.api.booth.dto.request.BoothUpdateRequest;
 import com.ms.petopia.api.booth.dto.response.*;
 import com.ms.petopia.api.booth.mapper.BoothMapper;
+import com.ms.petopia.api.booth.mapper.BoothStatsMapper;
 import com.ms.petopia.api.business.domain.Business;
 import com.ms.petopia.api.business.mapper.BusinessMapper;
+import com.ms.petopia.api.statistics.dto.LabelCountDto;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.storage.StorageService;
 import com.ms.petopia.global.storage.UploadPolicy;
@@ -21,6 +23,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +43,9 @@ class BoothServiceTest {
 
     @Mock
     private BoothMapper boothMapper;
+
+    @Mock
+    private BoothStatsMapper boothStatsMapper;
 
     @Mock
     private BusinessMapper businessMapper;
@@ -448,6 +454,127 @@ class BoothServiceTest {
 
             // 상품 자체가 없으니, 삭제 쿼리는 시도되면 안 됨
             verify(boothMapper, never()).deleteBoothItem(any());
+
+        }
+
+    }
+
+    @Nested
+    @DisplayName("부스 관리자용 방문 통계 조회")
+    class GetBoothStats {
+
+        @Test
+        @DisplayName("본인 소유 부스면 방문자·재방문·리뷰/찜 전환율을 계산해서 반환한다")
+        void returnsStatsSuccessfully() {
+
+            // given: 소유자 본인이 방문자 4명(그 중 재방문 1명, 리뷰 2명, 찜 1명) 부스를 조회하는 상황
+            Long callerId = 1L;
+            Long boothId = 1L;
+            Long businessId = 1L;
+
+            BoothStatsSummaryRow summary = new BoothStatsSummaryRow();
+            summary.setUniqueVisitorCount(4);
+            summary.setTotalScanCount(5);
+            summary.setRevisitCount(1);
+            summary.setReviewedVisitorCount(2);
+            summary.setFavoritedVisitorCount(1);
+
+            BoothDailyVisitRow day = new BoothDailyVisitRow();
+            day.setVisitDate(LocalDate.of(2026, 8, 5));
+            day.setVisitorCount(3);
+
+            LabelCountDto species = new LabelCountDto();
+            species.setLabel("DOG");
+            species.setCount(3);
+
+            LabelCountDto allergy = new LabelCountDto();
+            allergy.setLabel("닭고기");
+            allergy.setCount(1);
+
+            given(boothMapper.selectById(boothId)).willReturn(createBooth(boothId, businessId));
+            given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, callerId));
+            given(boothStatsMapper.selectSummary(boothId)).willReturn(summary);
+            given(boothStatsMapper.selectDailyVisitCounts(boothId)).willReturn(List.of(day));
+            given(boothStatsMapper.selectPetSpeciesBreakdown(boothId)).willReturn(List.of(species));
+            given(boothStatsMapper.selectAvgPetAge(boothId)).willReturn(5.5);
+            given(boothStatsMapper.selectPetAllergyBreakdown(boothId)).willReturn(List.of(allergy));
+
+            // when
+            BoothStatsResponse result = boothService.getBoothStats(callerId, boothId);
+
+            // then: 전환율은 (해당 인원 / 고유 방문자) * 100을 소수 첫째자리까지 반올림한 값
+            assertThat(result.getUniqueVisitorCount()).isEqualTo(4);
+            assertThat(result.getRevisitRate()).isEqualTo(25.0);
+            assertThat(result.getReviewConversionRate()).isEqualTo(50.0);
+            assertThat(result.getFavoriteConversionRate()).isEqualTo(25.0);
+            assertThat(result.getDailyVisits()).hasSize(1);
+            assertThat(result.getDailyVisits().get(0).getVisitorCount()).isEqualTo(3);
+            assertThat(result.getPetSpeciesBreakdown()).hasSize(1);
+            assertThat(result.getAvgPetAge()).isEqualTo(5.5);
+            assertThat(result.getPetAllergyBreakdown()).hasSize(1);
+
+        }
+
+        @Test
+        @DisplayName("본인 소유가 아니면 예외를 던지고 통계 조회를 시도하지 않는다")
+        void throwsWhenNotOwner() {
+
+            // given: 부스는 owner=1L 소유인데, 요청자는 2L인 상황
+            Long callerId = 2L;
+            Long boothId = 1L;
+            Long businessId = 1L;
+
+            given(boothMapper.selectById(boothId)).willReturn(createBooth(boothId, businessId));
+            given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, 1L));
+
+            // when & then
+            assertThatThrownBy(() -> boothService.getBoothStats(callerId, boothId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("본인 소유의 부스만");
+
+            verify(boothStatsMapper, never()).selectSummary(any());
+
+        }
+
+        @Test
+        @DisplayName("부스가 없으면 예외를 던진다")
+        void throwsWhenBoothNotFound() {
+
+            // given: 존재하지 않는 boothId
+            Long callerId = 1L;
+            Long boothId = 999L;
+
+            given(boothMapper.selectById(boothId)).willReturn(null);
+
+            // when & then
+            assertThatThrownBy(() -> boothService.getBoothStats(callerId, boothId))
+                    .isInstanceOf(CommonException.class)
+                    .hasMessageContaining("부스를 찾을 수 없습니다");
+
+        }
+
+        @Test
+        @DisplayName("방문자가 0명이면 전환율은 0.0으로 나온다(0으로 나누기 방지)")
+        void returnsZeroRateWhenNoVisitors() {
+
+            // given: 방문 기록이 아예 없는 부스(집계 쿼리라 값이 전부 0인 행이 옴)
+            Long callerId = 1L;
+            Long boothId = 1L;
+            Long businessId = 1L;
+
+            given(boothMapper.selectById(boothId)).willReturn(createBooth(boothId, businessId));
+            given(businessMapper.selectById(businessId)).willReturn(createBusiness(businessId, callerId));
+            given(boothStatsMapper.selectSummary(boothId)).willReturn(new BoothStatsSummaryRow());
+            given(boothStatsMapper.selectDailyVisitCounts(boothId)).willReturn(List.of());
+
+            // when
+            BoothStatsResponse result = boothService.getBoothStats(callerId, boothId);
+
+            // then
+            assertThat(result.getUniqueVisitorCount()).isZero();
+            assertThat(result.getRevisitRate()).isZero();
+            assertThat(result.getReviewConversionRate()).isZero();
+            assertThat(result.getFavoriteConversionRate()).isZero();
 
         }
 

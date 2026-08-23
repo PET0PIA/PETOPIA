@@ -271,6 +271,47 @@ class BoothControllerTest {
 
     }
 
+    // GET /api/booths/{boothId}/stats - 정상 조회
+    @Test
+    void getsBoothStats() throws Exception {
+
+        given(boothService.getBoothStats(1L, 1L)).willReturn(
+                BoothStatsResponse.builder()
+                        .boothId(1L)
+                        .uniqueVisitorCount(4)
+                        .totalScanCount(5)
+                        .revisitCount(1)
+                        .revisitRate(25.0)
+                        .reviewedVisitorCount(2)
+                        .reviewConversionRate(50.0)
+                        .favoritedVisitorCount(1)
+                        .favoriteConversionRate(25.0)
+                        .dailyVisits(List.of())
+                        .build());
+
+        mockMvc.perform(get("/api/booths/1/stats")
+                        .with(authenticatedAs(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.uniqueVisitorCount").value(4))
+                .andExpect(jsonPath("$.data.reviewConversionRate").value(50.0))
+                .andExpect(jsonPath("$.data.favoriteConversionRate").value(25.0));
+
+    }
+
+    // GET /api/booths/{boothId}/stats - 본인 소유가 아님 -> 403 + V026
+    @Test
+    void returns403WhenNotOwnerForStats() throws Exception {
+
+        willThrow(new CommonException(ErrorCode.BOOTH_ACCESS_DENIED))
+                .given(boothService).getBoothStats(2L, 1L);
+
+        mockMvc.perform(get("/api/booths/1/stats")
+                        .with(authenticatedAs(2L)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("V026"));
+
+    }
+
     // GET /api/booths/me - 정상 조회
     @Test
     void getsMyBooths() throws Exception {
