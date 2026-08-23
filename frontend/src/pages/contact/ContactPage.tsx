@@ -32,7 +32,7 @@ const mailHref = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(mailSubje
 const selfServeLinks = [
   { icon: CreditCard, label: "예약 확인·취소·환불", desc: "내 예약에서 상태를 확인하고 취소를 신청할 수 있어요.", to: "/mypage/reservations" },
   { icon: KeyRound, label: "계정·비밀번호", desc: "이메일·비밀번호 변경과 로그인 관련 설정이 모여 있어요.", to: "/mypage/account" },
-  { icon: CalendarDays, label: "박람회 개최 신청", desc: "행사를 열고 싶다면 개최 신청서를 접수해 주세요.", to: "/fair-applications/new" },
+  { icon: CalendarDays, label: "행사 개최 신청", desc: "행사를 열고 싶다면 개최 신청서를 접수해 주세요.", to: "/fair-applications/new" },
   { icon: Store, label: "부스 참가 신청", desc: "참가업체로 부스를 열려면 모집 중인 행사에 신청하세요.", to: "/participations/new" },
   { icon: Megaphone, label: "광고 문의", desc: "홈 배너·팝업 광고는 광고 문의 창구로 안내해요.", to: "/advertising" },
   { icon: ShieldCheck, label: "개인정보 열람·삭제", desc: "처리방침에서 수집 항목과 요청 방법을 확인할 수 있어요.", to: "/privacy" },

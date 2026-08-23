@@ -148,7 +148,7 @@ public interface PaymentMapper {
             @Param("updatedAt") LocalDateTime updatedAt);
 
     /**
-     * 정산 집계용 — 특정 행사·업체의 완료된 참가비(VENDOR_FEE) 결제 전체를 조회한다.
+     * 정산 집계용 — 특정 행사·사업자의 완료된 참가비(VENDOR_FEE) 결제 전체를 조회한다.
      * 정산대상은 "결제완료된 참가비"만이라 status/paymentType을 XML에서 고정한다.
      */
     List<PaymentRow> selectCompletedVendorFeePayments(
@@ -156,7 +156,7 @@ public interface PaymentMapper {
 
     /**
      * 행사별 최종정산 집계용(2026-08-22) — 위와 같은 조건이지만 businessId 없이 그 행사에
-     * 참가한 모든 업체의 완료된 참가비(VENDOR_FEE) 결제를 합쳐서 조회한다.
+     * 참가한 모든 사업자의 완료된 참가비(VENDOR_FEE) 결제를 합쳐서 조회한다.
      */
     List<PaymentRow> selectCompletedVendorFeePaymentsByFair(@Param("fairId") Long fairId);
 

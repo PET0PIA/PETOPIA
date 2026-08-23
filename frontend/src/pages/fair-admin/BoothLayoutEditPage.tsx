@@ -291,7 +291,7 @@ export function BoothLayoutEditPage() {
       </Link>
 
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title={hall ? `${hall.name} 부스 배치 편집` : "부스 배치 편집"}
         description="슬롯을 드래그해 위치를 옮기고, 우측 하단 손잡이로 크기를 조절해요. 자물쇠 아이콘이 붙은 슬롯은 이미 참가 신청이 걸려 있어 위치·크기·번호·가격을 바꿀 수 없어요."
         action={

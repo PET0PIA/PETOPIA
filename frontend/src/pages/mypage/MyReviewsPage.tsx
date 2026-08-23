@@ -32,7 +32,7 @@ function formatReviewDate(iso: string): string {
 /**
  * 마이페이지 - 내 리뷰. 여러 행사에 걸쳐 내가 쓴 태그 기반 통합 리뷰(V39)를 최신순으로
  * 보여준다. 조회 전용이다 - 수정·삭제 API는 없다("행사당 1건만 새로 작성" 정책,
- * petopia-review-feature-plan 스킬 참고). 부적절한 리뷰 삭제는 행사관리자/최고관리자만
+ * petopia-review-feature-plan 스킬 참고). 부적절한 리뷰 삭제는 행사 관리자/최고관리자만
  * 할 수 있다.
  */
 export function MyReviewsPage() {

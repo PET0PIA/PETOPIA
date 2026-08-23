@@ -52,7 +52,7 @@ function consoleEntryForRole(role: UserRole | null): { label: string; path: stri
     case "SUPER_ADMIN":
       return { label: "관리자 콘솔", path: "/admin" };
     case "EVENT_ADMIN":
-      return { label: "박람회 관리", path: "/fair-admin" };
+      return { label: "행사 관리", path: "/fair-admin" };
     case "VENDOR":
       return { label: "부스 관리", path: "/vendor" };
     default:

@@ -106,7 +106,7 @@ export function MyReservationsPage() {
       <PageHeader
         eyebrow="내 예약"
         title="내 예약 목록"
-        description="예매한 행사를 눌러 방문일·입장 정보와 입장 QR을 확인하고, 예약을 변경하거나 취소할 수 있어요."
+        description="예약한 행사를 눌러 방문일·입장 정보와 입장 QR을 확인하고, 예약을 변경하거나 취소할 수 있어요."
       />
 
       {loading ? (
@@ -116,9 +116,9 @@ export function MyReservationsPage() {
       ) : reservations.length === 0 ? (
         <EmptyState
           title="아직 예약한 행사가 없어요."
-          description="티켓 예매에서 관심 있는 행사를 예약하면 이곳에서 확인할 수 있어요."
+          description="티켓 예약에서 관심 있는 행사를 예약하면 이곳에서 확인할 수 있어요."
           actionTo="/fairs/upcoming"
-          actionLabel="티켓 예매하러 가기"
+          actionLabel="티켓 예약하러 가기"
         />
       ) : (
         <ul className="flex flex-col gap-3">

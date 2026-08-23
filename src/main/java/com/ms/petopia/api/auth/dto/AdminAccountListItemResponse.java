@@ -2,7 +2,7 @@ package com.ms.petopia.api.auth.dto;
 
 import java.time.LocalDate;
 
-//관리자 목록 조회(페어와 관리자 목록) - 화면에 보여줄 데이터
+//관리자 목록 조회(행사와 관리자 목록) - 화면에 보여줄 데이터
 public record AdminAccountListItemResponse(
         Long userId,
         String email,

@@ -163,7 +163,7 @@ public class WaitingRoomPolicyService {
 
     private void validateRequest(UpdateWaitingRoomPolicyRequest request) {
         // 상한은 DB CHECK 제약과 같은 값으로 맞춘다. 0 이하면 아무도 통과하지 못해
-        // 예매가 완전히 멈추므로 실수로라도 들어가면 안 된다.
+        // 예약이 완전히 멈추므로 실수로라도 들어가면 안 된다.
         if (request == null
                 || request.enabled() == null
                 || request.activeLimit() == null

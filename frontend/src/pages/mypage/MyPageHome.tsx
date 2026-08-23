@@ -90,7 +90,7 @@ function ReservationCard() {
       ) : items.length === 0 ? (
         <CardNote>
           아직 예약한 행사가 없어요.{" "}
-          <Link to="/fairs/upcoming" className="rounded-button font-bold text-ink underline transition hover:bg-surface-alt">티켓 예매하러 가기</Link>
+          <Link to="/fairs/upcoming" className="rounded-button font-bold text-ink underline transition hover:bg-surface-alt">티켓 예약하러 가기</Link>
         </CardNote>
       ) : (
         <ul className="flex flex-col gap-3">

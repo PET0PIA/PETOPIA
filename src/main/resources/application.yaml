@@ -38,6 +38,9 @@ spring:
 # graceful shutdown 활성화 (spring.lifecycle.timeout-per-shutdown-phase 와 짝).
 server:
   shutdown: graceful
+  # X-Forwarded-For를 remoteAddr로 신뢰하지 않는다. framework/native로 바꾸면
+  # SecurityConfig의 /internal/** 루프백 검사가 XFF 위조로 우회되므로 켜지 말 것.
+  forward-headers-strategy: none
 
 # ALB/ECS 헬스체크용 actuator. 운영에서는 관리포트를 8081로 분리한다(application-release.yaml).
 management:

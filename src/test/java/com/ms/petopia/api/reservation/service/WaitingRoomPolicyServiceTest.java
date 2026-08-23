@@ -197,7 +197,7 @@ class WaitingRoomPolicyServiceTest {
         );
     }
 
-    /** 0 이하면 아무도 통과하지 못해 예매가 완전히 멈춘다. */
+    /** 0 이하면 아무도 통과하지 못해 예약이 완전히 멈춘다. */
     @Test
     @DisplayName("통과 인원이 1 미만이거나 상한을 넘으면 거절한다")
     void save_통과인원범위밖_거절한다() {

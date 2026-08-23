@@ -89,7 +89,7 @@
     </insert>
 
     <!--
-        reserved_count 는 여기서 절대 건드리지 않는다. 판매 중인 자리 수는 예매·취소가
+        reserved_count 는 여기서 절대 건드리지 않는다. 판매 중인 자리 수는 예약·취소가
         움직이는 값이라, 관리자 저장이 덮어쓰면 팔린 자리가 통째로 사라진다.
     -->
     <update id="updatePolicy">

@@ -19,19 +19,19 @@ export interface SettlementResponse {
   confirmedByUserId: number | null;
 }
 
-/** 행사 하나에 속한 정산 목록 조회(박람회관리자/전체관리자). */
+/** 행사 하나에 속한 정산 목록 조회(행사 관리자/전체관리자). */
 export function getSettlementsByFair(fairId: number) {
   return apiClient.get<SettlementResponse[]>(`/api/fairs/${fairId}/settlements`);
 }
 
-/** 특정 행사·업체 조합의 정산 단건 상세 조회(참가업체 본인 조회용). */
+/** 특정 행사·사업자 조합의 정산 단건 상세 조회(참가업체 본인 조회용). */
 export function getVendorSettlement(fairId: number, businessId: number) {
   return apiClient.get<SettlementResponse>(`/api/fairs/${fairId}/vendors/${businessId}/settlement`);
 }
 
 /**
  * 정산 통합검색(SUPER_ADMIN 전용). fairId·businessId 둘 다 선택적이고 최소 하나는 필요하다 -
- * 행사만 넘기면 그 행사 전체 업체 정산, 업체만 넘기면 그 업체가 참가한 모든 행사의 정산,
+ * 행사만 넘기면 그 행사 전체 사업자 정산, 사업자만 넘기면 그 사업자가 참가한 모든 행사의 정산,
  * 둘 다 넘기면 그 조합 하나만 나온다.
  */
 export function getSettlementsByFilter(fairId?: number, businessId?: number) {
@@ -42,7 +42,7 @@ export function getSettlementsByFilter(fairId?: number, businessId?: number) {
 }
 
 /**
- * 특정 행사·업체의 정산을 계산해서 PENDING으로 만든다. 같은 조합으로 이미 계산된 정산이
+ * 특정 행사·사업자의 정산을 계산해서 PENDING으로 만든다. 같은 조합으로 이미 계산된 정산이
  * 있으면 409(SETTLEMENT_ALREADY_EXISTS)가 온다.
  */
 export function calculateSettlement(fairId: number, businessId: number) {
@@ -75,7 +75,7 @@ export function reopenSettlement(settlementId: number) {
 
 /**
  * 행사별 매출 요약 한 행(SUPER_ADMIN 정산·수수료 화면 전용). 위 SettlementResponse(정산 1건 =
- * 행사·업체 조합, 참가비만, 저장됨)와 별개 - 행사 전체를 티켓예매+참가비 합쳐서 조회 시점에
+ * 행사·사업자 조합, 참가비만, 저장됨)와 별개 - 행사 전체를 예약금+참가비 합쳐서 조회 시점에
  * 다시 집계해 보여준다. 저장하지 않으므로 settlementId·status 같은 게 없다.
  */
 export interface FairRevenueSummaryResponse {

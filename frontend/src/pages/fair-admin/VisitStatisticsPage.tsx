@@ -62,9 +62,9 @@ export function VisitStatisticsPage() {
         </Link>
       )}
       <PageHeader
-        eyebrow={fromAdminDashboard ? "전체 운영" : "박람회 관리자"}
+        eyebrow={fromAdminDashboard ? "전체 운영" : "행사 관리자"}
         title="방문 통계"
-        description="운영일별 시간대 입장 추이와 부스별 고유 방문객 수를 확인해요."
+        description="운영일별 시간대 입장 추이와 부스별 고유 관람객 수를 확인해요."
         action={
           fairId !== null && (
             <Button type="button" variant="outline" onClick={handleExport} disabled={exporting}>

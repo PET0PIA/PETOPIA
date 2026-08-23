@@ -17,7 +17,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * 행사관리자 통계 페이지 중 리뷰(태그) 데이터 기반 부분(Phase 6). 예약·입장 데이터 기반
+ * 행사 관리자 통계 페이지 중 리뷰(태그) 데이터 기반 부분(Phase 6). 예약·입장 데이터 기반
  * 부분(총방문자/실입장자/총예약자/시간대별·일자별 추이/방문 부스 수 분포 등)은 이미
  * meltingujin이 만든 {@code com.ms.petopia.api.statistics} 도메인(/api/fairs/{fairId}/
  * visit-stats, /hourly-entry-trend, /reservation-dashboard, /booth-visit-pattern 등)이

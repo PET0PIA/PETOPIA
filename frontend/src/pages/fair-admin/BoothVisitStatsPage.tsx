@@ -42,9 +42,9 @@ export function BoothVisitStatsPage() {
       </Link>
 
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title="부스별 방문 통계"
-        description="부스 QR을 스캔한 고유 방문객 수 기준으로, 행사 전 기간을 합산한 전체 순위예요."
+        description="부스 QR을 스캔한 고유 관람객 수 기준으로, 행사 전 기간을 합산한 전체 순위예요."
       />
 
       {!Number.isInteger(fairId) || fairId <= 0 ? (

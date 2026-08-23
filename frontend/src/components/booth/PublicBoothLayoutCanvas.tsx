@@ -73,7 +73,7 @@ interface PublicBoothLayoutCanvasProps {
 }
 
 /**
- * 일반 방문객용 부스 배치도(읽기 전용). 관리자용 BoothCanvas(fair-admin)와 달리 드래그·
+ * 일반 관람객용 부스 배치도(읽기 전용). 관리자용 BoothCanvas(fair-admin)와 달리 드래그·
  * 리사이즈가 없고, 이미 공개(permitAll) API인 GET /api/fairs/{fairId}/confirmed-booths
  * (Booth 도메인, kimchaerin9670 파트)만 그대로 사용한다 - 백엔드 변경이 필요 없다
  * (petopia-booth-public-view-idea 스킬 참고).

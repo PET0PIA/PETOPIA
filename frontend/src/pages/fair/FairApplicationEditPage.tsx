@@ -382,7 +382,7 @@ function FairApplicationEditContent({ id }: { id: number }) {
                 </div>
                 <div>
                   {label("noticeText", "관람 안내사항")}
-                  <Textarea id="noticeText" value={form.noticeText} onChange={(event) => update("noticeText", event.target.value)} placeholder="방문객이 꼭 알아야 할 관람 안내사항을 입력해 주세요." />
+                  <Textarea id="noticeText" value={form.noticeText} onChange={(event) => update("noticeText", event.target.value)} placeholder="관람객이 꼭 알아야 할 관람 안내사항을 입력해 주세요." />
                 </div>
               </div>
             </div>
@@ -452,7 +452,7 @@ function FairApplicationEditContent({ id }: { id: number }) {
             <SectionHeader title="예약 정책" help="관람객 예약금과 취소·변경 가능 기한이에요." icon={<Ticket size={18} aria-hidden="true" />} />
             <Card className="space-y-5 p-6">
               <div>
-                {label("reservationFee", "예약금(원)", false, "관람객이 예매 때 내는 예약금이에요. 무료면 0.")}
+                {label("reservationFee", "예약금(원)", false, "관람객이 예약 때 내는 예약금이에요. 무료면 0.")}
                 <Input id="reservationFee" type="number" min={0} value={form.reservationFee} onChange={(event) => update("reservationFee", event.target.value)} placeholder="0" />
               </div>
               <div className="grid gap-5 sm:grid-cols-2">

@@ -9,7 +9,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 행사별 최종정산(플랫폼 ↔ 행사) API(2026-08-22). 기존 SettlementController(업체별 정산,
+ * 행사별 최종정산(플랫폼 ↔ 행사) API(2026-08-22). 기존 SettlementController(사업자별 정산,
  * {@code /fairs/{fairId}/vendors/{businessId}/settlements} 등)는 그대로 두고 건드리지 않는다.
  */
 @RestController
