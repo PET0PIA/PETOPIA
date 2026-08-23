@@ -11,8 +11,6 @@ interface DateInputProps {
   type?: DateInputType;
   required?: boolean;
   disabled?: boolean;
-  min?: string;
-  max?: string;
   className?: string;
   "aria-label"?: string;
 }
@@ -122,8 +120,6 @@ export function DateInput({
   type = "date",
   required,
   disabled,
-  min,
-  max,
   className = "",
   "aria-label": ariaLabel,
 }: DateInputProps) {
@@ -357,10 +353,12 @@ export function DateInput({
           <CalendarDays size={18} aria-hidden="true" />
         </button>
         {/* 
-          필수 입력 검증(required)은 부모 폼(BusinessRegisterPage/RecruitNoticeFormPage)의
-          validate()가 담당한다 - 이 숨겨진 input에 required를 걸면 화면에 안 보이는
-          엘리먼트가 네이티브 폼 검증을 막아버려서 사용자가 뭐가 문제인지 알 수 없다
-          (코드래빗 리뷰 반영, 2026-08-23). 이 input은 달력 아이콘용으로만 쓴다.
+          필수 입력 검증(required)과 범위 제한(min/max)은 이 input에 절대 걸지 않는다 -
+          화면에 안 보이는 엘리먼트에 네이티브 제약을 걸면 브라우저가 폼 submit 이벤트
+          자체를 막아버려서(부모 handleSubmit도 안 불림) 사용자가 원인을 알 방법이
+          없다(코드래빗 리뷰 반영, 2026-08-23). 이 input은 달력 아이콘 클릭 시
+          showPicker()를 여는 용도로만 쓴다. 범위 검증이 필요해지면 부모 폼의
+          validate()나 이 컴포넌트의 가시적 에러 표시(invalidDate 참고)로 처리한다.
         */}
         <input
           ref={nativeRef}
@@ -370,8 +368,6 @@ export function DateInput({
             pendingRef.current = null;
             commit(toSegments(event.target.value, type));
           }}
-          min={min}
-          max={max}
           disabled={disabled}
           tabIndex={-1}
           aria-hidden="true"
