@@ -116,16 +116,18 @@ public class MailService {
      * 행사 반려 사유도 다른 인증 메일과 동일한 PETOPIA HTML 디자인으로 발송한다.
      */
     public void sendFairRejectionEmail(String to, String fairName, String rejectReason) {
+        String safeFairName = fairName == null || fairName.isBlank() ? "-" : fairName;
         String content = """
             <p style="margin:0 0 20px;color:#4b5563;font-size:15px;line-height:1.7;">
               제출하신 행사 신청이 검토 결과 반려되었습니다.<br>
               아래 사유를 확인한 뒤 신청 내용을 보완해 주세요.
             </p>
             <div style="margin:22px 0;padding:18px 20px;border:1px solid #eadfd4;border-radius:14px;background:#faf7f3;">
+              <div style="margin-bottom:8px;color:#6b7280;font-size:13px;">행사명 <strong style="float:right;color:#111827;">%s</strong></div>
               <div style="margin-bottom:7px;color:#9ca3af;font-size:12px;font-weight:700;">반려 사유</div>
               <div style="color:#374151;font-size:14px;line-height:1.7;white-space:pre-wrap;">%s</div>
             </div>
-            """.formatted(escape(rejectReason));
+            """.formatted(escape(safeFairName), escape(rejectReason));
 
         sendHtmlEmail(to, "[PETOPIA] " + fairNamePrefix(fairName) + "행사 신청이 반려되었습니다",
                 "FAIR APPLICATION REJECTED", "행사 신청 반려 안내", content);
