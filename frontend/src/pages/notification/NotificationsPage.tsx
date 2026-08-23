@@ -9,6 +9,7 @@ import { Card } from "../../components/ui/Card";
 import { ApiError } from "../../api/client";
 import {
   getMyNotifications,
+  getUnreadNotificationCount,
   markAllNotificationsAsRead,
   markNotificationAsRead,
   type NotificationListItem,
@@ -21,20 +22,27 @@ function formatCreatedAt(value: string) {
 export function NotificationsPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState<NotificationListItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [page, setPage] = useState(0);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 재시도 버튼이 눌렸을 때 무엇을 다시 실행할지. load() 실패 후엔 null(재시도=load 그대로),
+  // loadMore() 실패 후엔 loadMore 자체를 담아둬서 "실패한 그 페이지"를 다시 불러오게 한다
+  // (이전엔 항상 load()를 불러 이미 쌓아둔 다음 페이지들까지 page 0으로 되돌려버렸다).
+  const [retryAction, setRetryAction] = useState<(() => void) | null>(null);
 
   async function load() {
     setLoading(true);
     setError(null);
+    setRetryAction(null);
     try {
-      const response = await getMyNotifications(0);
+      const [response, unread] = await Promise.all([getMyNotifications(0), getUnreadNotificationCount()]);
       setItems(response.items);
       setPage(response.page);
       setHasNext(response.hasNext);
+      setUnreadCount(unread);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "알림을 불러오지 못했어요.");
     } finally {
@@ -50,8 +58,11 @@ export function NotificationsPage() {
       setItems((previous) => [...previous, ...response.items]);
       setPage(response.page);
       setHasNext(response.hasNext);
+      setError(null);
+      setRetryAction(null);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "이전 알림을 더 불러오지 못했어요.");
+      setRetryAction(() => loadMore);
     } finally {
       setLoadingMore(false);
     }
@@ -68,6 +79,7 @@ export function NotificationsPage() {
         setItems((previous) =>
           previous.map((row) => (row.notificationId === item.notificationId ? { ...row, isRead: true } : row)),
         );
+        setUnreadCount((count) => Math.max(0, count - 1));
       } catch {
         // 읽음 처리 실패는 화면 진입을 막지 않는다.
       }
@@ -79,12 +91,15 @@ export function NotificationsPage() {
     try {
       await markAllNotificationsAsRead();
       setItems((previous) => previous.map((row) => ({ ...row, isRead: true })));
+      setUnreadCount(0);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "모두 읽음 처리에 실패했어요.");
     }
   }
 
-  const hasUnread = items.some((item) => !item.isRead);
+  // 지금까지 불러온 페이지가 아니라 서버가 주는 전체 안읽음 개수 기준 - 아직 안 불러온
+  // 뒷페이지에 안읽은 알림이 있어도 "모두 읽음 처리" 버튼이 잘못 비활성화되지 않게 한다.
+  const hasUnread = unreadCount > 0;
 
   return (
     <PageContainer className="py-10">
@@ -103,7 +118,7 @@ export function NotificationsPage() {
       {error && (
         <div className="surface mb-6 flex items-center justify-between border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
           {error}
-          <button type="button" className="ml-4 shrink-0 underline" onClick={load}>다시 시도</button>
+          <button type="button" className="ml-4 shrink-0 underline" onClick={() => (retryAction ?? load)()}>다시 시도</button>
         </div>
       )}
 
