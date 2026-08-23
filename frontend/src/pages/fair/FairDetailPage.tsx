@@ -18,7 +18,7 @@ const INDOOR_OUTDOOR_LABELS: Record<string, string> = { INDOOR: "실내", OUTDOO
 // 사이트 상단 헤더(PublicHeader)의 높이(px). 스크롤 고정 바를 이 아래에 붙이고, 등장 판정 기준선도 여기로 맞춘다.
 const SITE_HEADER_PX = 72;
 
-// 관람료: 0이면 무료, 그 외엔 "N원". reservationFee는 예매 창이 열렸을 때만 온다.
+// 관람료: 0이면 무료, 그 외엔 "N원". reservationFee는 예약 창이 열렸을 때만 온다.
 function formatFee(fee: number): string {
   return fee > 0 ? `${fee.toLocaleString()}원` : "무료";
 }
@@ -29,14 +29,14 @@ function formatTime(time: string): string {
 }
 
 /**
- * 공개 행사 상세. getFairPublicSummary로 정보를, getReservationAvailability로 예매 정보(관람료·운영일정)를 가져온다.
- * 예매 정보 조회는 "예매 창이 열렸을 때만" 성공한다(백엔드 validateReservableFair: 예매기간 밖·미공개·취소면 R003).
- * 그래서 실패(R003 등)는 페이지 에러가 아니라 "예매 준비 중"으로만 처리하고, 관람료·운영일정은 성공했을 때만 보여준다.
+ * 공개 행사 상세. getFairPublicSummary로 정보를, getReservationAvailability로 예약 정보(관람료·운영일정)를 가져온다.
+ * 예약 정보 조회는 "예약 창이 열렸을 때만" 성공한다(백엔드 validateReservableFair: 예약기간 밖·미공개·취소면 R003).
+ * 그래서 실패(R003 등)는 페이지 에러가 아니라 "예약 준비 중"으로만 처리하고, 관람료·운영일정은 성공했을 때만 보여준다.
  */
 export function FairDetailPage() {
   const { fairId } = useParams();
   // 라우트는 /fairs/:fairId가 바뀌어도 같은 엘리먼트를 재사용한다(remount 안 됨).
-  // key로 행사마다 통째로 remount시켜 이전 행사의 상태(정보·예매·notFound·에러)가 새 행사로 새지 않게 하고,
+  // key로 행사마다 통째로 remount시켜 이전 행사의 상태(정보·예약·notFound·에러)가 새 행사로 새지 않게 하고,
   // 자식(FairReviews 등)도 함께 새 인스턴스로 만들어 이전 행사의 늦은 응답이 섞이지 않게 한다.
   return <FairDetailView key={fairId ?? ""} fairId={fairId} />;
 }
@@ -68,7 +68,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
         setAvailability(availRes.value);
       } else {
         const err = availRes.reason;
-        setAvailabilityError(err instanceof ApiError ? err.message : "지금은 예매할 수 없어요.");
+        setAvailabilityError(err instanceof ApiError ? err.message : "지금은 예약할 수 없어요.");
       }
       setLoading(false);
     });
@@ -122,10 +122,10 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
   const endedByDate = !!fair.operationEndDate && fair.operationEndDate < todayInSeoul();
   const ended = fair.status === "ENDED" ? true : fair.status === "IN_PROGRESS" ? false : endedByDate;
   const indoorOutdoor = fair.indoorOutdoor ? INDOOR_OUTDOOR_LABELS[fair.indoorOutdoor] ?? null : null;
-  // 예매 가능 = 예매 창이 열려(availability 성공) 잔여석 있는 날짜가 하나라도 있음.
+  // 예약 가능 = 예약 창이 열려(availability 성공) 잔여석 있는 날짜가 하나라도 있음.
   const reservable = !ended && !!availability && availability.dates.some((date) => date.available);
   // 운영 중인 행사. 사전예약이 닫혔어도(reservable=false) 현장예매는 열려 있을 수 있으므로
-  // 버튼을 비활성으로 막지 않고 예매 화면으로 보낸다 - 그 화면이 사전예약과 현장예매를 둘 다
+  // 버튼을 비활성으로 막지 않고 예약 화면으로 보낸다 - 그 화면이 사전예약과 현장예매를 둘 다
   // 다루고, 판매 상태·입장 마감 같은 최종 판정은 백엔드가 한다.
   // 위 ended가 status를 먼저 보므로 진행 중이면 ended는 반드시 false다(!ended는 불필요).
   // status가 비었을 때 운영기간으로 판정하는 폴백은 ended와 같은 규칙을 쓴다(isFairInProgress).
@@ -134,7 +134,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
 
   return (
     <PageContainer className="py-7 sm:py-10">
-      {/* 스크롤로 상단 헤더가 사라지면 나타나는 얇은 고정 바(행사명 + 예매 CTA). fixed라 화면 기준 배치다. */}
+      {/* 스크롤로 상단 헤더가 사라지면 나타나는 얇은 고정 바(행사명 + 예약 CTA). fixed라 화면 기준 배치다. */}
       <div
         inert={!showCompact}
         style={{ top: SITE_HEADER_PX }}
@@ -202,7 +202,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
             )}
           </div>
 
-          {/* 관람료 + 예매 CTA (관람료는 예매 창이 열렸을 때만 온다) */}
+          {/* 관람료 + 예약 CTA (관람료는 예약 창이 열렸을 때만 온다) */}
           <div className="flex flex-col gap-3">
             {availability && (
               <p className="text-sm">
@@ -238,7 +238,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
         </div>
       </div>
 
-      {/* 운영 일정: 오늘 이후 운영일의 입장시간·잔여석. 예매 창이 열렸을 때만 내려온다. */}
+      {/* 운영 일정: 오늘 이후 운영일의 입장시간·잔여석. 예약 창이 열렸을 때만 내려온다. */}
       {schedule.length > 0 && (
         <section className="mt-10">
           <h2 className="text-lg font-extrabold">운영 일정</h2>
@@ -266,7 +266,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
         </section>
       )}
 
-      {/* 참가기업 (섹션 자체가 비면 컴포넌트가 null을 반환해 안 보인다) */}
+      {/* 참가업체 (섹션 자체가 비면 컴포넌트가 null을 반환해 안 보인다) */}
       <FairParticipatingBooths fairId={fair.fairId} />
 
       {/* 관람 안내 */}
@@ -283,7 +283,7 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
   );
 }
 
-/** 예매 CTA. 상단 헤더(size="lg")와 스크롤 고정 바(size="sm")가 같은 상태 판정을 공유한다. */
+/** 예약 CTA. 상단 헤더(size="lg")와 스크롤 고정 바(size="sm")가 같은 상태 판정을 공유한다. */
 function ReserveButton({
   reservable,
   ended,
@@ -298,9 +298,9 @@ function ReserveButton({
   size: "lg" | "sm";
 }) {
   const sizeClass = size === "lg" ? "min-h-12 px-8 text-base" : "min-h-10 px-5 text-sm";
-  // 예매 화면은 사전예약·현장예매를 둘 다 다루므로, 둘 중 하나라도 가능성이 있으면 링크를 준다.
+  // 예약 화면은 사전예약·현장예매를 둘 다 다루므로, 둘 중 하나라도 가능성이 있으면 링크를 준다.
   // 운영 중인데 사전예약만 닫힌 행사를 비활성 버튼으로 막으면 현장예매 입구까지 사라진다.
-  const actionLabel = reservable ? "예매하기" : inProgress ? "현장예매" : null;
+  const actionLabel = reservable ? "예약하기" : inProgress ? "현장예매" : null;
   if (actionLabel) {
     return (
       <Link
@@ -317,7 +317,7 @@ function ReserveButton({
       className={`inline-flex cursor-not-allowed items-center justify-center rounded-button bg-surface-alt font-bold text-muted ${sizeClass}`}
       aria-disabled="true"
     >
-      {ended ? "종료된 행사" : "예매 준비 중"}
+      {ended ? "종료된 행사" : "예약 준비 중"}
     </span>
   );
 }

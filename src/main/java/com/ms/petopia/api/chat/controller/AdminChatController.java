@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 관리자 상담 콘솔 API.
  *
  * <p>접근 권한은 {@code SecurityConfig}의 {@code /api/admin/**} → SUPER_ADMIN 규칙에 걸린다.
- * 박람회 관리자에게도 열어주려면 그 규칙보다 <b>위에</b> 별도 매처를 놓아야 한다(아래에 두면
+ * 행사 관리자에게도 열어주려면 그 규칙보다 <b>위에</b> 별도 매처를 놓아야 한다(아래에 두면
  * 먼저 잡혀 도달하지 못한다).
  */
 @RestController

@@ -10,7 +10,7 @@ import { Card } from "../../components/ui/Card";
 
 const roleLabels: Record<"SUPER_ADMIN" | "EVENT_ADMIN", string> = {
   SUPER_ADMIN: "최고 관리자",
-  EVENT_ADMIN: "박람회 관리자",
+  EVENT_ADMIN: "행사 관리자",
 };
 
 export function AdminAccountSettingsPage() {

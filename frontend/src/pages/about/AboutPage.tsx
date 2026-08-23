@@ -12,9 +12,9 @@ import { Card } from "../../components/ui/Card";
  */
 
 const features = [
-  { icon: CalendarDays, title: "펫페어 일정 한눈에", desc: "전국에서 열리는 반려동물 박람회 일정과 장소를 모아 봅니다.", path: "/fairs/upcoming" },
+  { icon: CalendarDays, title: "행사 일정 한눈에", desc: "전국에서 열리는 반려동물 행사 일정과 장소를 모아 봅니다.", path: "/fairs/upcoming" },
   { icon: Ticket, title: "사전 예약과 결제", desc: "현장에서 줄 서지 않도록 미리 티켓을 예약하고 결제할 수 있어요.", path: "/fairs/upcoming" },
-  { icon: Store, title: "참여 부스 미리보기", desc: "어떤 브랜드가 나오는지 먼저 살펴보고 관심 부스를 찜해 둡니다.", path: "/businesses" },
+  { icon: Store, title: "참가 부스 미리보기", desc: "어떤 브랜드가 나오는지 먼저 살펴보고 관심 부스를 찜해 둡니다.", path: "/businesses" },
   { icon: Newspaper, title: "소식과 이벤트", desc: "공지와 진행 중인 이벤트를 확인하고, 다녀온 행사의 후기도 남겨요.", path: "/news" },
 ] as const;
 
@@ -22,13 +22,13 @@ const steps = [
   { icon: CalendarDays, title: "행사 고르기", desc: "일정·지역·주제를 보고 갈 만한 행사를 정해요." },
   { icon: Ticket, title: "예약·결제", desc: "인원과 반려동물 정보를 넣고 티켓을 예약해요." },
   { icon: QrCode, title: "현장 입장", desc: "예약에 담긴 QR로 입구에서 바로 입장해요." },
-  { icon: Heart, title: "후기 남기기", desc: "다녀온 부스에 대한 후기를 남겨 다음 방문객에게 알려줘요." },
+  { icon: Heart, title: "후기 남기기", desc: "다녀온 부스에 대한 후기를 남겨 다음 관람객에게 알려줘요." },
 ] as const;
 
 const audiences = [
   { icon: UsersRound, label: "관람객", desc: "가고 싶은 행사를 찾아 예약하고, 다녀온 부스와 후기를 모아 봅니다.", to: "/fairs/upcoming", cta: "행사 둘러보기" },
-  { icon: CalendarDays, label: "박람회 주최자", desc: "행사 개최를 신청하고, 승인 후 예약·부스·현장 운영을 관리합니다.", to: "/fair-applications/new", cta: "개최 신청하기" },
-  { icon: Store, label: "참가업체", desc: "부스 참가를 신청하고, 우리 브랜드와 상품을 방문객에게 소개합니다.", to: "/participations/new", cta: "부스 참가 신청" },
+  { icon: CalendarDays, label: "행사 관리자", desc: "행사 개최를 신청하고, 승인 후 예약·부스·현장 운영을 관리합니다.", to: "/fair-applications/new", cta: "개최 신청하기" },
+  { icon: Store, label: "참가업체", desc: "부스 참가를 신청하고, 우리 브랜드와 상품을 관람객에게 소개합니다.", to: "/participations/new", cta: "부스 참가 신청" },
   { icon: Megaphone, label: "광고주", desc: "홈 배너·팝업으로 반려동물 가족이 모인 곳에 브랜드를 알립니다.", to: "/advertising", cta: "광고 문의하기" },
 ] as const;
 
@@ -38,7 +38,7 @@ export function AboutPage() {
       <PageHeader
         eyebrow="PETOPIA 소개"
         title="반려동물과 사람이 함께 행복한 순간을 만듭니다."
-        description="PETOPIA는 전국의 반려동물 박람회를 찾고, 예약하고, 다녀온 기록까지 남기는 서비스예요. 행사를 여는 주최자와 부스로 참여하는 업체도 같은 곳에서 신청하고 운영합니다."
+        description="PETOPIA는 전국의 반려동물 행사를 찾고, 예약하고, 다녀온 기록까지 남기는 서비스예요. 행사를 여는 주최측과 부스로 참여하는 참가업체도 같은 곳에서 신청하고 운영합니다."
       />
 
       {/* 1. 무엇을 할 수 있나 */}
@@ -96,7 +96,7 @@ export function AboutPage() {
       {/* 4. 마무리 */}
       <section className="surface flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
-          <h2 className="text-lg font-extrabold text-ink">가까운 펫페어부터 확인해 보세요.</h2>
+          <h2 className="text-lg font-extrabold text-ink">가까운 행사부터 확인해 보세요.</h2>
           <p className="mt-1.5 text-sm leading-6 text-muted">궁금한 점이 있으면 문의 페이지에서 상담을 남기거나 메일로 알려주세요.</p>
         </div>
         <div className="flex flex-wrap gap-3">

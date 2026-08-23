@@ -4,7 +4,7 @@ interface BoothVisitRankingProps {
   data: BoothVisitStat[];
 }
 
-/** 부스별 고유 방문객 수 랭킹. booth-visit-stats는 서버에서 이미 uniqueVisitorCount DESC로 정렬해 내려온다. */
+/** 부스별 고유 관람객 수 랭킹. booth-visit-stats는 서버에서 이미 uniqueVisitorCount DESC로 정렬해 내려온다. */
 export function BoothVisitRanking({ data }: BoothVisitRankingProps) {
   const max = Math.max(1, ...data.map((row) => row.uniqueVisitorCount));
 

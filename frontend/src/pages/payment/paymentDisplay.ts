@@ -20,7 +20,7 @@ export const statusTone: Record<PaymentStatus, "leaf" | "sun" | "neutral" | "pri
 };
 
 export const paymentTypeLabels: Record<PaymentType, string> = {
-  RESERVATION_DEPOSIT: "예약 예약금",
+  RESERVATION_DEPOSIT: "관람객 예약금",
   VENDOR_FEE: "참가업체 참가비",
   FAIR_OPENING_FEE: "행사 개설비",
 };
@@ -52,7 +52,7 @@ export const refundReasonLabels: Record<string, string> = {
 export const refundRequestedByDomainLabels: Record<string, string> = {
   RESERVATION: "예약 도메인",
   FAIR: "행사 도메인",
-  VENDOR: "참여업체 도메인",
+  VENDOR: "참가업체 도메인",
   PAYMENT_ADMIN: "결제 관리자",
 };
 

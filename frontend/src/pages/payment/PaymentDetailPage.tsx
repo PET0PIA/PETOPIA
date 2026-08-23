@@ -143,7 +143,7 @@ export function PaymentDetailPage() {
             <h3 className="text-sm font-extrabold text-muted">연관 정보</h3>
             <dl className="grid gap-4 sm:grid-cols-3">
               <Field label="결제자 사용자 ID" value={detail.payerUserId !== null ? `#${detail.payerUserId}` : "-"} />
-              <Field label="참가업체(사업자) ID" value={detail.businessId !== null ? `#${detail.businessId}` : "-"} />
+              <Field label="사업자 ID" value={detail.businessId !== null ? `#${detail.businessId}` : "-"} />
               <Field label="예약 ID" value={detail.reservationId !== null ? `#${detail.reservationId}` : "-"} />
               <Field label="참가신청 ID" value={detail.applicationId !== null ? `#${detail.applicationId}` : "-"} />
             </dl>

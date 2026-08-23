@@ -17,7 +17,7 @@ function FairScopedOutlet() {
 export function FairAdminLayout() {
   return (
     <FairSelectorProvider>
-      <ConsoleChrome navigation={fairAdminNavigation} consoleLabel="박람회 관리자">
+      <ConsoleChrome navigation={fairAdminNavigation} consoleLabel="행사 관리자">
         <FairScopedOutlet />
       </ConsoleChrome>
     </FairSelectorProvider>

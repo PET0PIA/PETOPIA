@@ -5,7 +5,7 @@ import { SectionHeader } from "../common/SectionHeader";
 export function FairReviewSection() {
   return (
     <section>
-      <SectionHeader title="박람회 리뷰" description="다녀온 반려인들의 생생한 후기" centered />
+      <SectionHeader title="행사 리뷰" description="다녀온 반려인들의 생생한 후기" centered />
       <div className="grid gap-5 md:grid-cols-3">
         {fairReviews.map((review) => (
           <article key={review.id} className="flex flex-col overflow-hidden rounded-card bg-card ring-1 ring-line">

@@ -2,8 +2,8 @@ import { apiClient } from "./client";
 import { type SettlementStatus } from "./settlement";
 
 /**
- * 행사별 최종정산(플랫폼 ↔ 행사, 2026-08-22) - 업체 구분 없이 그 행사에 참가한 모든 업체의
- * 참가비를 합쳐 행사 하나당 1건만 갖는다. 기존 settlement.ts(업체별 정산)와는 완전히 별개
+ * 행사별 최종정산(플랫폼 ↔ 행사, 2026-08-22) - 사업자 구분 없이 그 행사에 참가한 모든 사업자의
+ * 참가비를 합쳐 행사 하나당 1건만 갖는다. 기존 settlement.ts(사업자별 정산)와는 완전히 별개
  * API - 그쪽은 백엔드에 그대로 남아있지만 화면에서는 안 쓴다(2026-08-22 팀 결정).
  */
 export interface FairSettlementResponse {

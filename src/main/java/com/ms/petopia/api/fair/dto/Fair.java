@@ -37,7 +37,7 @@ public class Fair {
     /**
      * 반려동물 동반 가능 여부(NOT NULL, 기본값 TRUE).
      *
-     * <p>category(DOG/CAT/ETC)는 행사의 *주제*일 뿐이라 "강아지 박람회지만 동반은 금지"를
+     * <p>category(DOG/CAT/ETC)는 행사의 *주제*일 뿐이라 "강아지 행사지만 동반은 금지"를
      * 구분하지 못한다 - 그 판단을 코드가 할 수 있게 별도 컬럼으로 둔다(정책 P1).
      */
     private Boolean petAllowed;
@@ -98,11 +98,11 @@ public class Fair {
     // ===== 조회 계산 값(테이블 컬럼 아님) =====
     /**
      * 공개 목록 조회({@link com.ms.petopia.api.fair.mapper.FairMapper#selectPublicFairs}) 전용 계산 값.
-     * 사전예약 가능(예매 기간 안 + 정원 남은 미래 운영일 존재)이면 true. 다른 조회에서는 null이다.
+     * 사전예약 가능(예약 기간 안 + 정원 남은 미래 운영일 존재)이면 true. 다른 조회에서는 null이다.
      */
     private Boolean reservable;
     /**
-     * 공개 목록 조회 전용 계산 값. 참가기업 부스 모집중(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯
+     * 공개 목록 조회 전용 계산 값. 참가업체 부스 모집중(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯
      * 존재)이면 true. 다른 조회에서는 null이다.
      */
     private Boolean recruiting;

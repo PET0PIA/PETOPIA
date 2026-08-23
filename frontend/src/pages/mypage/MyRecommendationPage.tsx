@@ -45,7 +45,7 @@ export function MyRecommendationPage() {
         setSelectedFairId((previous) => previous ?? nextFairs[0]?.fairId ?? null);
       })
       .catch((reason: unknown) => {
-        if (alive) setError(reason instanceof ApiError ? reason.message : "예매한 행사 목록을 불러오지 못했어요.");
+        if (alive) setError(reason instanceof ApiError ? reason.message : "예약한 행사 목록을 불러오지 못했어요.");
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -58,14 +58,14 @@ export function MyRecommendationPage() {
 
   return (
     <div className="mx-auto max-w-3xl py-2">
-      <PageHeader eyebrow="AI 추천" title="내 예매 행사 부스 추천" description="예매한 행사 중 아직 종료되지 않은 행사를 골라 맞춤 부스를 추천받아 보세요." />
+      <PageHeader eyebrow="AI 추천" title="내 예약 행사 부스 추천" description="예약한 행사 중 아직 종료되지 않은 행사를 골라 맞춤 부스를 추천받아 보세요." />
 
       {loading ? (
-        <p className="py-16 text-center text-sm text-muted">예매한 행사 목록을 불러오는 중이에요…</p>
+        <p className="py-16 text-center text-sm text-muted">예약한 행사 목록을 불러오는 중이에요…</p>
       ) : error ? (
         <EmptyState title="행사 목록을 불러올 수 없어요." description={error} />
       ) : fairs.length === 0 ? (
-        <EmptyState title="추천받을 수 있는 예매 행사가 없어요." description="예매가 확정된 행사 중 아직 종료되지 않은 행사가 있어야 추천받을 수 있어요." actionTo="/fairs/upcoming" actionLabel="행사 둘러보기" />
+        <EmptyState title="추천받을 수 있는 예약 행사가 없어요." description="예약이 확정된 행사 중 아직 종료되지 않은 행사가 있어야 추천받을 수 있어요." actionTo="/fairs/upcoming" actionLabel="행사 둘러보기" />
       ) : (
         <Card className="mt-6 p-6">
           <label htmlFor="recommendation-fair" className="mb-2 block text-sm font-bold text-ink">행사 선택</label>

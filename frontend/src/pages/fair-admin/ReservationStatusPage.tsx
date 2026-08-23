@@ -9,7 +9,7 @@ export function ReservationStatusPage() {
   return (
     <div className="mx-auto max-w-6xl py-2">
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title="예약 현황"
         description={RESERVATION_STATUS_DESCRIPTION}
       />

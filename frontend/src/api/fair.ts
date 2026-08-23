@@ -122,7 +122,7 @@ export interface FairApplicationDetail {
 
 // 백엔드 SecurityConfig 기준 SUPER_ADMIN 전용(관리자 검토 화면). 신청자 본인 조회는
 // getMyApplications/getMyApplicationDetail을 쓴다. 로그인 여부와 무관하게 누구나 볼 수
-// 있어야 하는 화면(티켓 예매 등)은 getFairPublicSummary를 쓴다 - SUPER_ADMIN이 아닌
+// 있어야 하는 화면(티켓 예약 등)은 getFairPublicSummary를 쓴다 - SUPER_ADMIN이 아닌
 // 일반 사용자가 이 함수를 부르면 403이 난다.
 export function getFairApplication(fairId: number) {
   return apiClient.get<FairApplicationDetail>(`/api/fairs/${fairId}`);
@@ -231,7 +231,7 @@ export interface FairPublicSummary {
 }
 
 /**
- * 공개(publish)된 행사의 요약 정보를 인증 없이 조회한다(티켓 예매 화면 등). managerPhone/
+ * 공개(publish)된 행사의 요약 정보를 인증 없이 조회한다(티켓 예약 화면 등). managerPhone/
  * managerEmail 같은 PII는 응답에 없다 - getFairApplication과 달리 로그인 여부와 무관하게
  * 누구나 호출할 수 있다. 공개되지 않은 행사는 404로 응답한다.
  */
@@ -251,9 +251,9 @@ export interface FairPublicListItem {
   operationEndDate: string | null;
   /** 반려동물 동반 가능 여부. "반려동물 동반" 배지에 쓴다. */
   petAllowed: boolean;
-  /** 사전예약 가능 여부(예매 기간 안 + 정원 남은 미래 운영일 존재). "사전예약중" 배지에 쓴다. */
+  /** 사전예약 가능 여부(예약 기간 안 + 정원 남은 미래 운영일 존재). "사전예약중" 배지에 쓴다. */
   reservable: boolean;
-  /** 참가기업 부스 모집중 여부(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯). "참가기업 모집중" 배지에 쓴다. */
+  /** 참가업체 부스 모집중 여부(모집공고 마감 전 + 행사 종료 아님 + 빈 슬롯). "참가업체 모집중" 배지에 쓴다. */
   recruiting: boolean;
   /**
    * 행사 생애주기 상태(서버 시계 기준). 카드 문구를 "오픈 예정"과 "진행 중"으로 가르는 데 쓴다 -

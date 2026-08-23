@@ -154,7 +154,7 @@ export function OnsiteSalesPolicyPage() {
   return (
     <div className="mx-auto max-w-5xl py-2">
       <PageHeader
-        eyebrow="박람회 관리자"
+        eyebrow="행사 관리자"
         title="현장예매 설정"
         description="운영일마다 현장 직접예매의 가격·정원·판매 상태(판매중·일시중지·마감)를 관리해요. 판매중이 아니면 현장예매를 받지 않아요. 정원은 사전예약 정원과 별개로 셉니다."
       />
@@ -259,7 +259,7 @@ export function OnsiteSalesPolicyPage() {
               && Number(formCapacity) < editing.policy.reservedCount && (
               <p className="mt-1 text-xs font-bold text-primary-strong">
                 이미 판매된 {editing.policy.reservedCount}건보다 적은 정원이에요. 저장하면 기존
-                예매는 그대로 두고 추가 판매만 멈춰요.
+                예약은 그대로 두고 추가 판매만 멈춰요.
               </p>
             )}
           </div>

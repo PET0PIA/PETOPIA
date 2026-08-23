@@ -53,7 +53,7 @@ public class BoothVisitService {
     public BoothScanResponse scan(Long boothId, Long actorUserId, String qrToken) {
         validateRequest(boothId, actorUserId, qrToken);
 
-        // 이 부스가 스캔하는 VENDOR의 소유인지 확인하고 행사·업체 식별자를 얻는다.
+        // 이 부스가 스캔하는 VENDOR의 소유인지 확인하고 행사·사업자 식별자를 얻는다.
         BoothScanContext booth = boothVisitMapper.selectBoothForVendor(boothId, actorUserId);
         if (booth == null) {
             throw new CommonException(ErrorCode.ACCESS_DENIED);
@@ -100,7 +100,7 @@ public class BoothVisitService {
     }
 
     /**
-     * 부스 방문(최초 스캔)이 기록됐음을 QR 주인(방문객) 본인에게 알린다. 재스캔(재방문)은
+     * 부스 방문(최초 스캔)이 기록됐음을 QR 주인(관람객) 본인에게 알린다. 재스캔(재방문)은
      * 알리지 않는다 - 스탬프 투어처럼 같은 부스를 여러 번 스캔하는 경우 매번 알림이 오면
      * 시끄러워서, 첫 방문 확인 용도로만 쓴다.
      */

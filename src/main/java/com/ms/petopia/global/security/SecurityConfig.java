@@ -83,9 +83,9 @@ public class SecurityConfig {
                         // AuditLogController, AdminDashboardController가 여기 해당한다.
                         //
                         // 상담 콘솔(AdminChatController, /api/admin/chat/**)도 이 규칙에 걸려 SUPER_ADMIN
-                        // 전용이다. 박람회 관리자에게도 상담 답변을 열어주려면 그 규칙을 이 줄 "위에"
+                        // 전용이다. 행사 관리자에게도 상담 답변을 열어주려면 그 규칙을 이 줄 "위에"
                         // 놓아야 한다 - 아래에 두면 이 매처가 먼저 잡아 도달하지 못한다.
-                        // (박람회 관리자 허용 여부는 미정. 열어줄 때 chat_conversation.fair_id로
+                        // (행사 관리자 허용 여부는 미정. 열어줄 때 chat_conversation.fair_id로
                         //  "자기 행사 문의만" 스코프를 함께 걸어야 한다.)
                         .requestMatchers("/api/admin/**")
                         .hasRole("SUPER_ADMIN")
@@ -119,7 +119,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/fairs").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/fairs/mine", "/api/fairs/*/mine").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/fairs/*").authenticated()
-                        // Fair 도메인 - 공개된 행사 요약 조회는 인증 없이 허용(티켓 예매 화면 등).
+                        // Fair 도메인 - 공개된 행사 요약 조회는 인증 없이 허용(티켓 예약 화면 등).
                         // "/api/fairs/*"(SUPER_ADMIN 전용, 아래)와 세그먼트 수가 달라 원래도 안 겹치지만
                         // (Ant *는 세그먼트 하나만 매치), 의도를 명시하려고 따로 적어둔다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/public").permitAll()
@@ -180,7 +180,7 @@ public class SecurityConfig {
                         // Review 도메인 - 공개 리뷰 목록·요약 조회는 인증 불필요.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/summary").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews").permitAll()
-                        // Review 도메인 - 행사관리자 통계(카테고리별 태그 TOP5 등)는 그 행사 담당
+                        // Review 도메인 - 행사 관리자 통계(카테고리별 태그 TOP5 등)는 그 행사 담당
                         // EVENT_ADMIN 또는 SUPER_ADMIN만 - FairAdminAccessGuard가 서비스 계층에서 확인한다.
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/reviews/stats", "/api/fairs/*/reviews/stats/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         // Review 도메인 - 내 리뷰 목록 조회는 로그인한 본인 것만.
@@ -235,7 +235,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/settlements/*/reopen").hasRole("SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/vendors/*/settlement", "/api/fairs/*/settlements").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/fairs/*/settlements/export").hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
-                        // 행사별 최종정산(플랫폼↔행사, 업체 구분 없음, 2026-08-22) - 계산/조회는 그 행사
+                        // 행사별 최종정산(플랫폼↔행사, 사업자 구분 없음, 2026-08-22) - 계산/조회는 그 행사
                         // 담당 EVENT_ADMIN 또는 SUPER_ADMIN(FairSettlementService가 FairAdminAccessGuard로
                         // 한 번 더 확인). 재계산·확정·되돌리기는 "최고관리자 업무"로 판단해 담당
                         // EVENT_ADMIN도 제외하고 SUPER_ADMIN만 허용한다(2026-08-22 재조정).

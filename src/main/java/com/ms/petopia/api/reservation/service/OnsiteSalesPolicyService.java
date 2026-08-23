@@ -147,7 +147,7 @@ public class OnsiteSalesPolicyService {
         }
         // 정원은 생략(null)하면 "제한 없음"이다. 값을 줬다면 음수만 막는다.
         // 이미 팔린 수보다 작게 줄이는 것은 막지 않는다 - 판매를 중간에 조일 수 있어야 하고,
-        // 이미 발행된 예약을 무효로 만들지도 않는다(새 예매만 매진 처리된다).
+        // 이미 발행된 예약을 무효로 만들지도 않는다(새 예약만 매진 처리된다).
         if (request.capacity() != null && request.capacity() < 0) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }

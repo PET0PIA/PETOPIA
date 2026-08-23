@@ -171,7 +171,7 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
 
       <div className="mt-4">
         <PageHeader
-          eyebrow="참여 기업"
+          eyebrow="참가업체"
           title="확정 참가 부스"
         />
       </div>

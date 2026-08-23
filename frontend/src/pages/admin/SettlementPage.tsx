@@ -149,7 +149,7 @@ export function SettlementPage() {
     }
   }
 
-  // ── 행사별 매출 요약(티켓예매+참가비 합산, WBS 5.6) ──
+  // ── 행사별 매출 요약(예약금+참가비 합산, WBS 5.6) ──
   const [revenueSummaries, setRevenueSummaries] = useState<FairRevenueSummaryResponse[] | null>(null);
   const [revenueLoading, setRevenueLoading] = useState(true);
   const [revenueError, setRevenueError] = useState<string | null>(null);
@@ -177,9 +177,9 @@ export function SettlementPage() {
     }
   }
 
-  // ── 정산 조회/계산(업체별 정산, 구) ──
+  // ── 정산 조회/계산(사업자별 정산, 구) ──
   // 2026-08-22: 화면에서 이 블록 전부 제거하고 아래 "행사비 조회·정산·확정(신규)" 블록으로
-  // 대체함 — "업체가 100개면 확정을 100번 해야 하냐"는 지적으로 정산 단위를 업체별에서
+  // 대체함 — "사업자가 100개면 확정을 100번 해야 하냐"는 지적으로 정산 단위를 사업자별에서
   // 행사별로 바꾸기로 함. 이 블록(상태·핸들러)과 뒤에 이어지는 handleCalcSubmit~toggleDetail은
   // 백엔드(settlement 도메인)까지 완전히 지우지는 않기로 한 팀 결정 때문에 코드에 그대로
   // 남겨둠 - 아무 데서도 렌더링되지 않는다.
@@ -272,7 +272,7 @@ export function SettlementPage() {
       setListError(fair.error);
       return;
     }
-    const business = parseOptionalId(businessIdInput, "업체 ID");
+    const business = parseOptionalId(businessIdInput, "사업자 ID");
     if (business.error) {
       setListError(business.error);
       return;
@@ -290,7 +290,7 @@ export function SettlementPage() {
 
     const parsed = Number(calcBusinessIdInput);
     if (!Number.isInteger(parsed) || parsed <= 0) {
-      setCalcError("업체 ID는 1 이상의 숫자로 입력해 주세요.");
+      setCalcError("사업자 ID는 1 이상의 숫자로 입력해 주세요.");
       return;
     }
 
@@ -322,7 +322,7 @@ export function SettlementPage() {
     const version = fairContextVersionRef.current;
     const ok = await confirm({
       title: "정산 확정",
-      description: `업체 #${settlement.businessId} 정산(${formatWon(settlement.netAmount)})을 확정할까요?\n확정 이후에는 금액을 되돌릴 수 없어요.`,
+      description: `사업자 # 정산(${formatWon(settlement.netAmount)})을 확정할까요?\n확정 이후에는 금액을 되돌릴 수 없어요.`,
       confirmLabel: "확정",
     });
     if (!ok || fairContextVersionRef.current !== version) return;
@@ -365,7 +365,7 @@ export function SettlementPage() {
     const version = fairContextVersionRef.current;
     const ok = await confirm({
       title: "정산 확정 되돌리기",
-      description: `업체 #${settlement.businessId} 정산(${formatWon(settlement.netAmount)})을 확정 전 상태로 되돌릴까요?\n되돌린 뒤엔 재계산으로 최신 금액을 반영하고 다시 확정해야 해요.`,
+      description: `사업자 # 정산(${formatWon(settlement.netAmount)})을 확정 전 상태로 되돌릴까요?\n되돌린 뒤엔 재계산으로 최신 금액을 반영하고 다시 확정해야 해요.`,
       confirmLabel: "되돌리기",
     });
     if (!ok || fairContextVersionRef.current !== version) return;
@@ -393,7 +393,7 @@ export function SettlementPage() {
   }
 
   // ── 행사비 조회·정산·확정(신규, 2026-08-22) ──
-  // 업체 구분 없이 행사 하나당 최종정산 1건 - 그 행사에 참가한 모든 업체의 참가비를 합쳐
+  // 사업자 구분 없이 행사 하나당 최종정산 1건 - 그 행사에 참가한 모든 사업자의 참가비를 합쳐
   // 계산·재계산·확정·되돌리기까지 한 카드에서 처리한다(플랫폼 ↔ 행사 정산).
   const [finalFairIdInput, setFinalFairIdInput] = useState("");
   const [finalSearchedFairId, setFinalSearchedFairId] = useState<number | null>(null);
@@ -403,7 +403,7 @@ export function SettlementPage() {
   const [finalError, setFinalError] = useState<string | null>(null);
   const [finalCalcSubmitting, setFinalCalcSubmitting] = useState(false);
   const [finalActioning, setFinalActioning] = useState(false);
-  // "상세" 클릭 시 확정 시각·확정한 관리자를 그 행 바로 아래에 펼쳐 보여준다(구 업체별
+  // "상세" 클릭 시 확정 시각·확정한 관리자를 그 행 바로 아래에 펼쳐 보여준다(구 사업자별
   // 정산 목록의 상세 토글과 동일한 상호작용, 2026-08-22 재구현).
   const [finalDetailExpanded, setFinalDetailExpanded] = useState(false);
   // 수수료율 변경이력(재계산 시 요율이 실제로 바뀐 것만 감사로그에 남는다, SETTLEMENT_RATE_CHANGED
@@ -560,7 +560,7 @@ export function SettlementPage() {
 
       <section className="mb-10">
         <div className="mb-4 flex items-center justify-between gap-2">
-          <SectionHeader title="행사별 매출 요약" description="행사마다 티켓예매 수익과 참가비 수익을 합산해서, 지금 적용 중인 수수료율대로 행사업체 몫과 플랫폼 몫을 나눠 보여줘요." />
+          <SectionHeader title="행사별 매출 요약" description="행사마다 예약금 수익과 참가비 수익을 합산해서, 지금 적용 중인 수수료율대로 주최측 몫과 플랫폼 몫을 나눠 보여줘요." />
           <Button type="button" variant="outline" onClick={handleRevenueExport} disabled={revenueExporting || revenueLoading || !revenueSummaries?.length}>
             <Download size={16} />
             {revenueExporting ? "내보내는 중..." : "엑셀로 내보내기"}
@@ -586,10 +586,10 @@ export function SettlementPage() {
             <thead>
               <tr className="border-b border-line bg-page text-xs font-bold text-muted">
                 <th className="px-4 py-3">행사</th>
-                <th className="px-4 py-3">티켓예매 총금액</th>
-                <th className="px-4 py-3">참가비용 총금액</th>
+                <th className="px-4 py-3">예약금 총금액</th>
+                <th className="px-4 py-3">참가비 총금액</th>
                 <th className="px-4 py-3">전체금액</th>
-                <th className="px-4 py-3">행사업체금액</th>
+                <th className="px-4 py-3">주최측금액</th>
                 <th className="px-4 py-3">플랫폼금액</th>
               </tr>
             </thead>
@@ -701,7 +701,7 @@ export function SettlementPage() {
             {fairSettlement === null && (
               <Card className="p-5">
                 <h3 className="mb-3 text-sm font-extrabold text-muted">행사 #{finalSearchedFairId} 정산 계산</h3>
-                <p className="mb-3 text-sm text-muted">아직 계산된 정산이 없어요. 그 행사에 참가한 모든 업체의 완료된 참가비를 합산해서 계산해요.</p>
+                <p className="mb-3 text-sm text-muted">아직 계산된 정산이 없어요. 그 행사에 참가한 모든 사업자의 완료된 참가비를 합산해서 계산해요.</p>
                 <Button type="button" variant="outline" onClick={handleFinalCalculate} disabled={finalCalcSubmitting}>
                   <Calculator size={16} />
                   {finalCalcSubmitting ? "계산 중..." : "정산 계산"}

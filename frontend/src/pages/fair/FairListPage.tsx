@@ -34,7 +34,7 @@ const TABS: { key: TabKey; label: string }[] = [
 // 탭별 빈 목록 안내 문구.
 const EMPTY_BY_TAB: Record<TabKey, { title: string; description: string }> = {
   ALL: { title: "등록된 행사가 아직 없어요.", description: "새 행사가 공개되면 이곳에서 확인할 수 있어요." },
-  RESERVABLE: { title: "지금 사전예약 중인 행사가 없어요.", description: "예매가 열리면 여기에 표시돼요." },
+  RESERVABLE: { title: "지금 사전예약 중인 행사가 없어요.", description: "예약이 열리면 여기에 표시돼요." },
   IN_PROGRESS: { title: "지금 진행 중인 행사가 없어요.", description: "행사가 시작되면 이곳에 표시돼요." },
   UPCOMING: { title: "오픈 예정인 행사가 없어요.", description: "새 행사가 공개되면 이곳에서 확인할 수 있어요." },
   ENDED: { title: "종료된 행사가 없어요.", description: "지난 행사가 이곳에 쌓여요." },
@@ -46,15 +46,15 @@ function inProgress(fair: FairPublicListItem): boolean {
 }
 
 /*
- * 목록 카드 하단 버튼. 예매 화면(/tickets/:fairId)은 사전예약과 현장예매를 **둘 다** 다루므로,
+ * 목록 카드 하단 버튼. 예약 화면(/tickets/:fairId)은 사전예약과 현장예매를 **둘 다** 다루므로,
  * 둘 중 하나라도 가능성이 있으면 비활성 버튼이 아니라 링크를 준다.
  *
- * - reservable: 사전예약 가능(예매 기간 안 + 자리 남은 운영일 존재) → "예매하기"
+ * - reservable: 사전예약 가능(예약 기간 안 + 자리 남은 운영일 존재) → "예약하기"
  * - IN_PROGRESS: 운영 중인 행사 → "현장예매". 사전예약이 닫혔어도 현장예매는 열려 있을 수
  *   있고, 그 화면은 오늘이 운영기간 안이면 현장예매 폼을 띄운다(TicketReservationPage).
  *
  * reservable을 먼저 보는 이유: 여러 날 열리는 행사는 운영 중에도 남은 날짜 사전예약이 열려
- * 있다. 그 화면은 두 유형을 함께 보여주므로 더 넓은 쪽인 "예매하기"로 부르는 게 맞다.
+ * 있다. 그 화면은 두 유형을 함께 보여주므로 더 넓은 쪽인 "예약하기"로 부르는 게 맞다.
  *
  * 진행 중을 비활성으로 두면 안 되는 이유: 현장예매 입구가 이 버튼뿐이라, 회색 버튼으로
  * 막으면 실제로 가능한 현장예매까지 차단된다. 판매 상태(OPEN/PAUSED/CLOSED)·입장 마감 시각
@@ -62,7 +62,7 @@ function inProgress(fair: FairPublicListItem): boolean {
  */
 function reserveCta(fair: FairPublicListItem, ended: boolean): { to?: string; label: string } {
   if (ended) return { label: "종료" };
-  if (fair.reservable) return { to: `/tickets/${fair.fairId}`, label: "예매하기" };
+  if (fair.reservable) return { to: `/tickets/${fair.fairId}`, label: "예약하기" };
   if (inProgress(fair)) return { to: `/tickets/${fair.fairId}`, label: "현장예매" };
   return { label: "오픈 예정" };
 }
@@ -74,8 +74,8 @@ function reserveCta(fair: FairPublicListItem, ended: boolean): { to?: string; la
  * 행사가 양쪽에 함께 나올 수 있다 - 여러 날 행사는 운영 중에도 남은 날짜 사전예약이 열려
  * 있기 때문이다. 배타적으로 나누면 그 행사를 어느 한쪽에서 잃는다.
  *
- * 여기서 "오픈"은 행사 개막이 아니라 **예매 오픈**을 뜻한다(카드 버튼의 "오픈 예정"과 같은
- * 기준). 그래서 예매가 열렸거나 이미 진행 중인 행사는 이 탭에서 빠진다.
+ * 여기서 "오픈"은 행사 개막이 아니라 **예약 오픈**을 뜻한다(카드 버튼의 "오픈 예정"과 같은
+ * 기준). 그래서 예약이 열렸거나 이미 진행 중인 행사는 이 탭에서 빠진다.
  */
 function filterByTab(entries: FairListEntry[], tab: TabKey): FairListEntry[] {
   switch (tab) {

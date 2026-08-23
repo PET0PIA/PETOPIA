@@ -109,7 +109,7 @@ export function VisitStatsSection({ fairId }: VisitStatsSectionProps) {
         <Card className="p-6">
           <div className="mb-5">
             <h2 className="text-lg font-extrabold text-ink">방문 요약</h2>
-            <p className="mt-1 text-sm text-muted">행사 전 기간을 합산한 실입장 방문객 지표예요.</p>
+            <p className="mt-1 text-sm text-muted">행사 전 기간을 합산한 실입장 관람객 지표예요.</p>
           </div>
           <VisitStatsOverview stats={visitStats} />
         </Card>
@@ -174,7 +174,7 @@ export function VisitStatsSection({ fairId }: VisitStatsSectionProps) {
           <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-extrabold text-ink">부스별 방문 통계</h2>
-              <p className="mt-1 text-sm text-muted">부스 QR을 스캔한 고유 방문객 수 기준으로, 행사 전 기간을 합산한 상위 {BOOTH_RANKING_PREVIEW_COUNT}개예요.</p>
+              <p className="mt-1 text-sm text-muted">부스 QR을 스캔한 고유 관람객 수 기준으로, 행사 전 기간을 합산한 상위 {BOOTH_RANKING_PREVIEW_COUNT}개예요.</p>
             </div>
             {boothStats.length > 0 && (
               <Link to={`/fair-admin/statistics/booths/${fairId}`} className="shrink-0 text-sm font-bold text-primary-strong hover:underline">
@@ -193,7 +193,7 @@ export function VisitStatsSection({ fairId }: VisitStatsSectionProps) {
         <Card className="min-w-0 p-6">
           <div className="mb-5">
             <h2 className="text-lg font-extrabold text-ink">방문 부스 수 분포</h2>
-            <p className="mt-1 text-sm text-muted">방문객이 이번 행사에서 몇 개의 부스를 방문했는지 분포예요.</p>
+            <p className="mt-1 text-sm text-muted">관람객이 이번 행사에서 몇 개의 부스를 방문했는지 분포예요.</p>
           </div>
           <DonutChart data={boothVisitPattern} unit="명" />
         </Card>
@@ -202,8 +202,8 @@ export function VisitStatsSection({ fairId }: VisitStatsSectionProps) {
       {visitStats && (
         <Card className="p-6">
           <div className="mb-5">
-            <h2 className="text-lg font-extrabold text-ink">방문객 분포</h2>
-            <p className="mt-1 text-sm text-muted">실입장 방문객 기준 채널·성별·연령대·반려동물 종 분포예요.</p>
+            <h2 className="text-lg font-extrabold text-ink">관람객 분포</h2>
+            <p className="mt-1 text-sm text-muted">실입장 관람객 기준 채널·성별·연령대·반려동물 종 분포예요.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">

@@ -47,7 +47,7 @@ const accountGroup: MyPageNavGroup = {
 /** USER는 배지를 안 붙인다(일반 회원이 기본값이라 알려줄 정보가 없다). */
 const roleBadgeLabel: Partial<Record<UserMe["role"], string>> = {
   VENDOR: "참가업체",
-  EVENT_ADMIN: "박람회 관리자",
+  EVENT_ADMIN: "행사 관리자",
   SUPER_ADMIN: "최고 관리자",
 };
 

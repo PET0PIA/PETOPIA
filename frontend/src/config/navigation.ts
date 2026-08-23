@@ -12,16 +12,16 @@ export interface NavigationItem {
 }
 
 export const publicNavigation: NavigationItem[] = [
-  // 관람객 구역: 행사를 둘러보고 예매까지 한 목록에서. 예전엔 '행사 목록'+'티켓 예매'로 나눴지만,
-  // 티켓 예매 목록이 행사 목록과 중복이라(목록의 '사전예약 중' 탭이 그 역할) 하나로 합쳤다.
+  // 관람객 구역: 행사를 둘러보고 예약까지 한 목록에서. 예전엔 '행사 목록'+'티켓 예약'으로 나눴지만,
+  // 티켓 예약 목록이 행사 목록과 중복이라(목록의 '사전예약 중' 탭이 그 역할) 하나로 합쳤다.
   { label: "행사", path: "/fairs/upcoming" },
   { label: "소식·이벤트", path: "/news" },
   {
-    // 비즈니스 구역: "일하러 온 사람"(주최자·업체·광고주)의 신청/문의 창구 3개.
+    // 비즈니스 구역: "일하러 온 사람"(주최측·참가업체·광고주)의 신청/문의 창구 3개.
     // 사업자(참가업체) 등록은 메뉴에 두지 않고, "부스 참가 신청" 흐름에서 미등록 시 등록으로 유도한다.
     label: "비즈니스",
     children: [
-      { label: "박람회 개최 신청", path: "/fair-applications/new" },
+      { label: "행사 개최 신청", path: "/fair-applications/new" },
       { label: "부스 참가 신청", path: "/participations/new" },
       { label: "광고 문의", path: "/advertising" },
     ],
@@ -125,7 +125,7 @@ export const fairAdminNavigation: NavigationItem[] = [
   },
 ];
 
-// 부스(참여기업) 콘솔 - VENDOR 역할. 흩어져 있던 참가업체 기능을 한 콘솔로 모은다.
+// 부스(참가업체) 콘솔 - VENDOR 역할. 흩어져 있던 참가업체 기능을 한 콘솔로 모은다.
 // "새 부스 참가 신청"은 공개 신청 퍼널(/participations/new)로 연결한다(콘솔 밖 공용 화면).
 export const vendorNavigation: NavigationItem[] = [
   { label: "내 사업자", path: "/vendor/businesses", icon: Building2 },
