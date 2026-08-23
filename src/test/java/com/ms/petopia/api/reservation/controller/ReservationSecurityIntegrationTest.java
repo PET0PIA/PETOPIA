@@ -3,12 +3,15 @@ package com.ms.petopia.api.reservation.controller;
 import com.ms.petopia.api.reservation.dto.CreateReservationResponse;
 import com.ms.petopia.api.reservation.dto.OnsiteSalesPolicyResponse;
 import com.ms.petopia.api.reservation.dto.ReservationListResponse;
+import com.ms.petopia.api.reservation.dto.ReservationPaymentContextResponse;
 import com.ms.petopia.api.reservation.service.EntryQrService;
 import com.ms.petopia.api.reservation.service.GateEntryService;
 import com.ms.petopia.api.reservation.service.OnsiteReservationService;
 import com.ms.petopia.api.reservation.service.OnsiteSalesPolicyService;
 import com.ms.petopia.api.reservation.service.ReservationAvailabilityService;
 import com.ms.petopia.api.reservation.service.ReservationCancellationService;
+import com.ms.petopia.api.reservation.service.ReservationPaymentCompletionService;
+import com.ms.petopia.api.reservation.service.ReservationPaymentContextService;
 import com.ms.petopia.api.reservation.service.ReservationQueryService;
 import com.ms.petopia.api.reservation.service.ReservationService;
 import com.ms.petopia.api.reservation.service.ReservationVisitDateChangeService;
@@ -22,6 +25,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -38,7 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(
-        controllers = {ReservationController.class, OnsiteSalesAdminController.class, GateEntryController.class},
+        controllers = {ReservationController.class, OnsiteSalesAdminController.class,
+                GateEntryController.class, ReservationPaymentContractController.class},
         properties = {
                 "jwt.secret=c2VjdXJlLXRlc3Qta2V5LXRlc3Qta2V5LXRlc3Qta2V5LXRlc3Qta2V5",
                 "jwt.access-token-expiration=3600000",
@@ -72,6 +77,10 @@ class ReservationSecurityIntegrationTest {
     private OnsiteSalesPolicyService policyService;
     @MockitoBean
     private GateEntryService gateEntryService;
+    @MockitoBean
+    private ReservationPaymentContextService paymentContextService;
+    @MockitoBean
+    private ReservationPaymentCompletionService paymentCompletionService;
 
     @Test
     void unauthenticatedReservationRequestReturns401() throws Exception {
@@ -142,7 +151,67 @@ class ReservationSecurityIntegrationTest {
         verify(policyService).get(10L, 11L, 20L);
     }
 
+    /**
+     * 내부 계약 API(/internal/**)는 같은 컨테이너 안에서 자기 자신을 부르는 호출만 통과한다.
+     * MockMvc의 기본 remoteAddr가 127.0.0.1이므로 별도 설정 없이 루프백 경로가 된다.
+     */
+    @Test
+    void internalContractApiAllowsLoopbackCall() throws Exception {
+        given(paymentContextService.getPayableContext(30L)).willReturn(
+                new ReservationPaymentContextResponse(
+                        30L, 10L, 20L, "ADVANCE", 10_000, LocalDateTime.of(2026, 8, 1, 10, 10)
+                )
+        );
+
+        mockMvc.perform(get("/internal/api/v1/reservations/30/payment-context")
+                        .header(TemporaryAuthHeaders.INTERNAL_CALLER, TemporaryAuthHeaders.PAYMENT_CALLER))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.payerUserId").value(20L));
+
+        verify(paymentContextService).getPayableContext(30L);
+    }
+
+    /**
+     * 루프백이 아닌 곳에서 온 요청은 X-Internal-Caller 헤더가 맞아도 막힌다.
+     * 이 헤더값은 고정 문자열("PAYMENT")이라, 예전엔 이것만 붙이면 외부에서도 남의 예약
+     * 결제정보를 읽을 수 있었다 - 그 구멍을 막았는지 확인하는 테스트다.
+     */
+    @Test
+    void internalContractApiRejectsRemoteCallEvenWithCallerHeader() throws Exception {
+        mockMvc.perform(get("/internal/api/v1/reservations/30/payment-context")
+                        .header(TemporaryAuthHeaders.INTERNAL_CALLER, TemporaryAuthHeaders.PAYMENT_CALLER)
+                        .with(remoteAddr("203.0.113.9")))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(paymentContextService);
+    }
+
+    /**
+     * 로그인해도 외부에서는 못 들어온다 - 일반 회원 토큰이 내부 API 우회 경로가 되지 않는지 확인.
+     * (익명은 401, 인증된 사용자는 403으로 갈린다)
+     */
+    @Test
+    void internalContractApiRejectsRemoteCallFromLoggedInUser() throws Exception {
+        mockMvc.perform(post("/internal/api/v1/reservation-payment-completions")
+                        .header("Authorization", bearerToken(20L, "USER"))
+                        .header(TemporaryAuthHeaders.INTERNAL_CALLER, TemporaryAuthHeaders.PAYMENT_CALLER)
+                        .with(remoteAddr("203.0.113.9"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(paymentCompletionService);
+    }
+
     private String bearerToken(Long userId, String role) {
         return "Bearer " + jwtTokenProvider.generateAccessToken(userId, role);
+    }
+
+    /** 요청이 루프백이 아닌 곳에서 온 것처럼 remoteAddr을 바꾼다. */
+    private static RequestPostProcessor remoteAddr(String ip) {
+        return request -> {
+            request.setRemoteAddr(ip);
+            return request;
+        };
     }
 }
