@@ -36,6 +36,7 @@ import { PetCompanionPicker } from "../../components/reservation/PetCompanionPic
 import {
   formatEntryTime,
   formatRemaining,
+  parseServerDateTime,
   formatVisitDateDow,
   reservationStatusLabels,
   reservationTypeLabels,
@@ -280,8 +281,8 @@ export function TicketReservationPage() {
   // 현재 백엔드 confirmPayment는 만료를 검증하지 않는다. 만료 후 결제하면 결제는 승인되고
   // 예약 통지만 거절당해 돈만 나가므로, 이 가드가 지금은 유일한 방어선이다.
   // 단, 파싱 불가한 값은 '만료'가 아니라 잘못된 데이터이므로 결제를 막지 않는다(영구 잠금 방지).
-  const expiresAtMs = expiresAt !== null ? new Date(expiresAt).getTime() : null;
-  const expired = expiresAtMs !== null && !Number.isNaN(expiresAtMs) && expiresAtMs - now <= 0;
+  const expiresAtMs = parseServerDateTime(expiresAt);
+  const expired = expiresAtMs !== null && expiresAtMs - now <= 0;
 
   function switchType(next: ReservationType) {
     setType(next);

@@ -1,5 +1,5 @@
 import { ChevronRight, Ticket } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -25,6 +25,9 @@ export function MyReservationsPage() {
 
   // 결제 대기 건이 하나도 없으면 시계를 돌리지 않는다 - 목록 전체를 1초마다 리렌더할 이유가 없다.
   const hasPendingPayment = reservations.some((item) => item.paymentAvailable && item.paymentExpiresAt);
+  // 마감을 보고 목록을 이미 다시 불러온 예약. 서버 시계가 몇 초 뒤라 여전히 결제 가능으로
+  // 응답할 수 있어서, 예약 한 건당 한 번만 재조회한다(1초마다 재조회가 도는 것을 막는다).
+  const refetchedOnExpiry = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     let alive = true;
@@ -49,6 +52,33 @@ export function MyReservationsPage() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [hasPendingPayment]);
+
+  // 카운트다운이 0에 닿은 예약은 응답에 실려 온 paymentAvailable이 이미 낡았다. 목록을 다시
+  // 불러와 상태·플래그를 서버 기준으로 맞춘다 - 그러면 만료 배치가 돌기 전에도 "결제 대기"
+  // 배지와 결제 안내가 서로 어긋나지 않는다. 실패는 조용히 넘긴다(표시는 이미 잠갔다).
+  useEffect(() => {
+    const expired = reservations.filter(
+      (item) =>
+        item.paymentAvailable
+        && formatRemaining(item.paymentExpiresAt, now) === null
+        && !refetchedOnExpiry.current.has(item.reservationId),
+    );
+    if (expired.length === 0) return;
+    for (const item of expired) {
+      refetchedOnExpiry.current.add(item.reservationId);
+    }
+    let alive = true;
+    getMyReservations()
+      .then((res) => {
+        if (alive) setReservations(res.items);
+      })
+      .catch(() => {
+        // 조용히 넘긴다.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [reservations, now]);
 
   return (
     <div className="mx-auto max-w-3xl py-2">
@@ -75,6 +105,9 @@ export function MyReservationsPage() {
             const inactive = inactiveReservationStatuses.includes(item.reservationStatus);
             // 결제 마감까지 남은 시간. 지났으면 null이고, 곧 만료 배치가 상태를 정리한다.
             const remaining = item.paymentAvailable ? formatRemaining(item.paymentExpiresAt, now) : null;
+            // 결제로 넘어갈 수 있는지는 "지금" 기준으로 다시 판단한다. paymentAvailable은 응답을
+            // 만든 시점의 값이라, 화면을 열어둔 채 마감을 넘기면 서버가 거절하는 결제로 유도한다.
+            const payable = item.paymentAvailable && remaining !== null;
             return (
               <li key={item.reservationId}>
                 <Link
@@ -116,14 +149,16 @@ export function MyReservationsPage() {
                     {/* 결제 대기 예약: 카드를 누르면 상세에서 결제를 이어갈 수 있음을 알린다.
                         남은 시간을 같이 보여준다 - "결제 대기" 배지만으로는 언제까지 결제해야
                         하는지 알 수 없어, 그냥 두면 자동 만료되는 걸 모른 채 지나친다. */}
-                    {item.paymentAvailable && (
+                    {payable ? (
                       <span className="mt-0.5 text-sm font-bold text-primary-strong">
                         결제 계속하기 ›
-                        {remaining && (
-                          <span className="ml-2 font-normal text-muted">결제 마감까지 {remaining} 남음</span>
-                        )}
+                        <span className="ml-2 font-normal text-muted">결제 마감까지 {remaining} 남음</span>
                       </span>
-                    )}
+                    ) : item.reservationStatus === "PENDING_PAYMENT" ? (
+                      // 마감이 지나면 paymentAvailable이 false로 내려온다. 그 플래그로 안내까지
+                      // 감추면 "결제 대기" 배지만 남아 무엇을 해야 하는지 알 수 없다.
+                      <span className="mt-0.5 text-sm text-muted">결제 제한시각이 지나 곧 자동으로 만료돼요.</span>
+                    ) : null}
                   </div>
 
                   <ChevronRight size={18} className="shrink-0 text-muted" aria-hidden="true" />

@@ -49,8 +49,12 @@ import java.util.List;
  *   <tr><td>CONFIRMED, 예약금 &gt; 0원</td><td>전액 환불({@link RefundService#refund})</td></tr>
  * </table>
  *
- * <p>현장예매(ONSITE_DIRECT)는 자진취소 대상이 아니다 — 당일 현장에서 결제·입장하는 건이라
- * 취소 마감(입장 12시간 전) 규칙을 적용하면 사실상 항상 마감 초과다. 현장 관리자 처리로 남긴다.
+ * <p><b>현장예매(ONSITE_DIRECT)</b>는 예약 상태에 따라 갈린다. 확정(CONFIRMED)된 현장예매는
+ * 자진취소 대상이 아니다 — 당일 현장에서 결제·입장하는 건이라 취소 마감(입장 12시간 전) 규칙을
+ * 적용하면 사실상 항상 마감 초과다. 현장 관리자 처리로 남긴다. 반면 결제 전(PENDING_PAYMENT)
+ * 현장예매는 사용자가 직접 취소할 수 있다 — 아직 받은 돈이 없어 마감을 볼 이유가 없고, 취소하지
+ * 않으면 같은 날짜로 다시 예약할 수 없기 때문이다. 이때 점유했던 현장 정원
+ * ({@code onsite_sales_policies.reserved_count})을 반납한다.
  *
  * <p><b>왜 한 트랜잭션으로 묶는가</b>: 환불 MVP는 외부 PG 호출이 없는 "모의 환불"이라
  * ({@link RefundService} 참고) 환불이 결국 같은 DB에 REFUND 행 하나 쓰는 일이다. 그래서 예약

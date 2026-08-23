@@ -1,5 +1,5 @@
 import { ChevronLeft, CreditCard, PawPrint, QrCode } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { Badge } from "../../components/ui/Badge";
@@ -230,13 +230,42 @@ export function ReservationDetailPage() {
     };
   }, [id, qrAvailable]);
 
-  // 결제 대기 예약에서만 카운트다운을 돌린다 - 확정된 예약을 1초마다 리렌더할 이유가 없다.
+  // 결제 마감까지 남은 시간. 지났거나 값이 없으면 null이고, 만료 배치가 곧 상태를 정리한다.
+  // 렌더보다 앞에서 구해 두는 이유는 카운트다운을 멈추는 조건으로도 쓰기 때문이다.
   const paymentAvailable = reservation?.paymentAvailable ?? false;
+  const paymentRemaining = paymentAvailable
+    ? formatRemaining(reservation?.paymentExpiresAt ?? null, now)
+    : null;
+  // 결제로 넘어갈 수 있는지는 "지금" 기준으로 다시 판단한다. paymentAvailable은 응답을 만든
+  // 시점의 값이라, 화면을 열어둔 채 마감을 넘기면 서버가 거절하는 결제창을 열게 된다.
+  const paymentPayable = paymentAvailable && paymentRemaining !== null;
+
+  // 결제 대기 예약에서만 카운트다운을 돌린다 - 확정된 예약을 1초마다 리렌더할 이유가 없다.
+  // 마감에 닿으면 멈춘다. 남은 시간이 계속 null이라 다시 켜지지도 않는다.
   useEffect(() => {
-    if (!paymentAvailable) return;
+    if (!paymentPayable) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [paymentAvailable]);
+  }, [paymentPayable]);
+
+  // 마감에 닿은 순간 상세를 한 번 다시 읽어 서버 기준 상태로 맞춘다. 예약 한 건당 한 번만 -
+  // 서버 시계가 몇 초 뒤라 여전히 결제 가능으로 응답하면 매초 재조회가 돈다.
+  const refetchedOnExpiry = useRef(false);
+  useEffect(() => {
+    if (!paymentAvailable || paymentRemaining !== null || refetchedOnExpiry.current) return;
+    refetchedOnExpiry.current = true;
+    let alive = true;
+    getReservationDetail(id)
+      .then((res) => {
+        if (alive) setReservation(res);
+      })
+      .catch(() => {
+        // 조용히 넘긴다 - 결제 진입은 이미 잠갔고, 안내 문구도 만료를 알린다.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, paymentAvailable, paymentRemaining]);
 
   if (!idValid) {
     return (
@@ -291,6 +320,12 @@ export function ReservationDetailPage() {
    */
   const handleResumePayment = async () => {
     if (paying) return;
+    // 버튼을 그린 뒤 클릭까지의 사이에 마감을 넘길 수 있다. 서버가 거절할 결제창을 여느니
+    // 여기서 막는다 - 결제창까지 갔다가 승인만 되고 예약이 거절되면 돈만 나간다.
+    if (!paymentPayable) {
+      setPayError("결제 제한시각이 지났어요. 이 예약은 곧 자동으로 만료돼요.");
+      return;
+    }
     if (!user) {
       setPayError("로그인이 풀렸어요. 다시 로그인한 뒤 결제를 이어가 주세요.");
       return;
@@ -424,11 +459,6 @@ export function ReservationDetailPage() {
     }
   };
 
-  // 결제 마감까지 남은 시간. 지났으면 null이고, 만료 배치가 곧 상태를 정리한다.
-  const paymentRemaining = reservation.paymentAvailable
-    ? formatRemaining(reservation.paymentExpiresAt, now)
-    : null;
-
   // 취소·변경 기한은 사전예약이 확정된 동안에만 의미가 있다. 결제 대기 예약의 취소에는
   // 마감이 없고(서버도 마감을 보지 않는다), 끝난·취소된 예약에 기한을 보여주면 혼란만 준다.
   const deadlinesApply =
@@ -499,10 +529,13 @@ export function ReservationDetailPage() {
         </p>
       )}
 
-      {/* 결제 이어가기: 결제 대기 예약에서만(paymentAvailable) 뜬다. 결제를 마쳐야 예약이 확정된다.
+      {/* 결제 이어가기: 결제 대기 예약에서 뜬다. 결제를 마쳐야 예약이 확정된다.
           이 카드가 화면 맨 위에 오는 이유를 한 줄로 밝혀 둔다 - QA에서 "티켓 확인하려고 눌렀는데
-          왜 결제 화면이 뜨냐"는 지적이 나왔다. 아직 안 끝난 일이 무엇인지부터 알려주는 게 맞다. */}
-      {reservation.paymentAvailable && (
+          왜 결제 화면이 뜨냐"는 지적이 나왔다. 아직 안 끝난 일이 무엇인지부터 알려주는 게 맞다.
+          조건을 paymentAvailable이 아니라 예약 상태로 두는 이유: 마감이 지나면 그 플래그가
+          false로 내려오는데, 그때 카드까지 사라지면 "결제하려고 들어왔는데 아무 설명이 없는"
+          화면이 된다. 카드는 남겨 두고 안에서 결제 진입만 잠근다. */}
+      {reservation.reservationStatus === "PENDING_PAYMENT" && (
         <Card className="mb-4 p-6">
           <div className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
             <CreditCard size={16} />
@@ -518,7 +551,15 @@ export function ReservationDetailPage() {
             <p className="text-sm text-muted">결제를 마쳐야 예약이 확정돼요.</p>
             <p className="shrink-0 text-lg font-extrabold text-ink">{reservation.amount.toLocaleString()}원</p>
           </div>
-          {isTossConfigured() ? (
+          {!paymentPayable ? (
+            <div className="mt-4 grid place-items-center gap-1 rounded-button border border-dashed border-line bg-page py-8 text-center text-sm text-muted">
+              <p className="font-bold text-ink">결제 제한시각이 지났어요</p>
+              <p>
+                이제는 결제를 진행할 수 없어요. 같은 날짜로 다시 예약하려면 위 &lsquo;관리&rsquo; 메뉴에서
+                이 예약을 취소해 주세요.
+              </p>
+            </div>
+          ) : isTossConfigured() ? (
             <div className="mt-4">
               <PaymentMethodPicker
                 value={paymentMethod}
@@ -607,6 +648,7 @@ export function ReservationDetailPage() {
           <p className="mt-4 rounded-card bg-sun-soft px-4 py-3 text-sm leading-6 text-ink">
             {deadlineNotice}
           </p>
+        )}
 
         {/* 환불 정보는 맨 밑에 별도 블록으로 - 환불이 있을 때만(refund !== null) 보여준다.
             PaymentDetailPage.tsx(관리자용)의 "환불 정보" 블록과 같은 필드 구성. */}
@@ -679,7 +721,10 @@ export function ReservationDetailPage() {
                 const isThisReservation = date.myReservationId === reservation.reservationId;
                 // 다른 예약이 이미 잡고 있는 날짜로는 옮길 수 없다(한 행사·한 날짜에 한 건).
                 const takenByOther = date.myReservationId !== null && !isThisReservation;
-                const soldOut = !date.available || date.remainingCapacity === 0;
+                // 내 예약이 마지막 자리를 쓰고 있으면 잔여가 0이다. 그 이유로 자기 날짜를
+                // 잠그면 날짜를 그대로 두고 반려동물만 바꾸는 저장이 막힌다(이 경로는 정원을
+                // 새로 잡지 않으므로 잔여와 무관하다).
+                const soldOut = !isThisReservation && (!date.available || date.remainingCapacity === 0);
                 const blocked = takenByOther || soldOut;
                 const selected = date.visitDate === selectedNewDate;
                 return (

@@ -59,6 +59,24 @@ class ReservationFairCancelMapperSqlContractTest {
         assertThat(sql).contains("rf.status = 'COMPLETED'");
     }
 
+    @Test
+    @DisplayName("건너뛸 예약은 LIMIT 앞에서 걸러낸다 - 보류 건이 배치를 막지 않게")
+    void filtersDeferredReservationsBeforeApplyingLimit() throws IOException {
+        String sql = extract(SELECT_LIVE);
+
+        // 돈이 움직이는 중인 결제와 환불이 안 끝난 결제는 서비스가 건너뛴다. 그 판정이 LIMIT
+        // 뒤에만 있으면, 앞쪽 limit건이 전부 보류일 때 매 주기 같은 행만 집어오고 뒤쪽 취소
+        // 가능 예약은 차례가 오지 않는다. 그래서 조회에서 먼저 제외해야 한다.
+        String inFlight = "p.status NOT IN ('PENDING', 'WAITING_FOR_DEPOSIT', 'PROCESSING')";
+        String refundPending = "p.status <> 'COMPLETED' OR rf.status = 'COMPLETED'";
+        assertThat(sql).contains(inFlight);
+        assertThat(sql).contains(refundPending);
+        assertThat(sql.indexOf(inFlight)).isLessThan(sql.indexOf("LIMIT"));
+        assertThat(sql.indexOf(refundPending)).isLessThan(sql.indexOf("LIMIT"));
+        // 결제 행이 없는 무료 예약은 두 조건 모두에서 살아남아야 한다(LEFT JOIN이라 NULL).
+        assertThat(sql).contains("p.status IS NULL");
+    }
+
     private String extract(Pattern pattern) throws IOException {
         Matcher matcher = pattern.matcher(readMapperXml());
         assertThat(matcher.find()).isTrue();

@@ -18,6 +18,13 @@
         구동 테이블은 옵티마이저가 고른다. reservations에는 (fair_id, status, visit_date)와
         (status, payment_expires_at) 두 인덱스가 있어 어느 쪽에서 들어와도 인덱스를 탄다
         (fairs.canceled_at에는 인덱스가 없지만 행사 수가 적어 문제되지 않는다).
+
+        LIMIT은 "지금 취소할 수 있는" 예약에만 걸어야 한다. 돈이 움직이는 중이거나 환불이
+        아직 안 끝난 건은 서비스가 건너뛰는데, 그 판정을 LIMIT 뒤에 두면 앞쪽 limit건이 전부
+        보류 상태일 때 매 주기 같은 행만 집어오고 뒤쪽 취소 가능 예약은 영원히 차례가 오지
+        않는다(정원·상태가 계속 낡은 채로 남는다). 그래서 건너뛸 조건을 여기서 먼저 제외한다.
+        서비스 쪽 판정은 그대로 남긴다 - payment·refund는 잠그지 않으니 조회와 갱신 사이에
+        상태가 바뀔 수 있고, 그때는 이번 회차를 건너뛰어야 한다.
     -->
     <select id="selectLiveReservationsOfCanceledFairsForUpdate" resultType="CanceledFairReservationRow">
         SELECT r.reservation_id
@@ -42,6 +49,14 @@
            <!-- CHECKED_IN은 제외한다 - 이미 입장한 예약을 취소로 되돌리면 입장 이력과 어긋난다.
                 EXPIRED·CANCELED는 이미 끝난 예약이라 손댈 게 없다. -->
            AND r.status IN ('PENDING_PAYMENT', 'CONFIRMED')
+           <!-- 돈이 움직이는 중인 결제(PENDING·WAITING_FOR_DEPOSIT·PROCESSING)는 건너뛴다.
+                결제창을 띄워둔 사용자가 결제를 마칠 수 있는 상태에서 예약만 취소하면
+                취소된 예약에 돈이 들어온다. -->
+           AND (p.status IS NULL OR p.status NOT IN ('PENDING', 'WAITING_FOR_DEPOSIT', 'PROCESSING'))
+           <!-- 결제가 COMPLETED면 환불이 COMPLETED로 남았을 때만 대상이다 - "취소됨"이 곧
+                "환불 끝"을 뜻하도록 맞춘다. 환불이 끝내 실패로 남은 건은 여기서 계속 빠지고
+                CONFIRMED로 남아 운영자 수동 처리 대상이 된다(서비스 Javadoc 참고). -->
+           AND (p.status IS NULL OR p.status &lt;&gt; 'COMPLETED' OR rf.status = 'COMPLETED')
          ORDER BY r.reservation_id
          LIMIT #{limit}
          FOR UPDATE OF r SKIP LOCKED
