@@ -13,7 +13,8 @@ export type ActionType =
   | "SETTLEMENT_CONFIRM"
   | "SETTLEMENT_REOPEN"
   | "SETTLEMENT_RATE_CHANGED"
-  | "COMMISSION_RATE_UPDATE";
+  | "COMMISSION_RATE_UPDATE"
+  | "RESERVATION_ADMIN_CANCEL";
 
 export interface AuditLogRow {
   auditId: number;

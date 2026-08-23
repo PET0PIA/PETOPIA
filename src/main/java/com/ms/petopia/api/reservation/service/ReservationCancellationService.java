@@ -2,6 +2,10 @@ package com.ms.petopia.api.reservation.service;
 
 import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
 import com.ms.petopia.api.auth.service.MailService;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
@@ -16,6 +20,8 @@ import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.RecipientType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
+import com.ms.petopia.api.reservation.dto.AdminCancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
@@ -27,17 +33,25 @@ import com.ms.petopia.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher; // 실시간 통계 확인용
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 /**
- * 관람객 본인의 예약 취소를 처리한다. 예약 상태에 따라 결제 쪽 후처리가 갈린다.
+ * 예약 취소를 처리한다. 진입점이 둘이다 — 관람객 본인 취소({@link #cancel})와 관리자 대행
+ * 취소({@link #cancelByAdmin}). 상태 전이·환불·정원 반납·알림은 완전히 같은 경로를 타고,
+ * "누가 눌렀는지"와 "어디까지 허용하는지"만 다르다.
+ *
+ * <p>예약 상태에 따라 결제 쪽 후처리가 갈린다.
  *
  * <table>
  *   <caption>상태별 결제 후처리</caption>
@@ -51,10 +65,10 @@ import java.util.List;
  *
  * <p><b>현장예매(ONSITE_DIRECT)</b>는 예약 상태에 따라 갈린다. 확정(CONFIRMED)된 현장예매는
  * 자진취소 대상이 아니다 — 당일 현장에서 결제·입장하는 건이라 취소 마감(입장 12시간 전) 규칙을
- * 적용하면 사실상 항상 마감 초과다. 현장 관리자 처리로 남긴다. 반면 결제 전(PENDING_PAYMENT)
- * 현장예매는 사용자가 직접 취소할 수 있다 — 아직 받은 돈이 없어 마감을 볼 이유가 없고, 취소하지
- * 않으면 같은 날짜로 다시 예약할 수 없기 때문이다. 이때 점유했던 현장 정원
- * ({@code onsite_sales_policies.reserved_count})을 반납한다.
+ * 적용하면 사실상 항상 마감 초과다. 대신 관리자 대행 취소({@link #cancelByAdmin})로는 취소할 수
+ * 있다. 반면 결제 전(PENDING_PAYMENT) 현장예매는 사용자가 직접 취소할 수 있다 — 아직 받은 돈이
+ * 없어 마감을 볼 이유가 없고, 취소하지 않으면 같은 날짜로 다시 예약할 수 없기 때문이다. 어느
+ * 경로로 취소되든 점유했던 현장 정원({@code onsite_sales_policies.reserved_count})을 반납한다.
  *
  * <p><b>왜 한 트랜잭션으로 묶는가</b>: 환불 MVP는 외부 PG 호출이 없는 "모의 환불"이라
  * ({@link RefundService} 참고) 환불이 결국 같은 DB에 REFUND 행 하나 쓰는 일이다. 그래서 예약
@@ -81,6 +95,14 @@ public class ReservationCancellationService {
     private static final String ADVANCE = "ADVANCE";
     private static final String ONSITE_DIRECT = "ONSITE_DIRECT";
     private static final String CANCELED = "CANCELED";
+
+    /** reservation_histories.actor_type 값. DB CHECK가 USER/ADMIN/SYSTEM/PAYMENT만 허용한다. */
+    private static final String ACTOR_USER = "USER";
+    private static final String ACTOR_ADMIN = "ADMIN";
+    private static final String SUPER_ADMIN_AUTHORITY = "ROLE_SUPER_ADMIN";
+    /** 관리자 대행 취소를 허용하는 예약 상태. 입장 완료(CHECKED_IN)·이미 취소·만료는 대상이 아니다. */
+    private static final List<String> ADMIN_CANCELABLE_STATUSES = List.of(PENDING_PAYMENT, CONFIRMED);
+    private static final int MAX_REASON_LENGTH = 500;
 
     /**
      * {@link PaymentService#cancelPayment}가 "이 도메인이 건드려도 되는 결제유형인지" 검증할 때 쓰는
@@ -110,6 +132,8 @@ public class ReservationCancellationService {
     private final NotificationService notificationService;
     private final AuthMapper authMapper;
     private final MailService mailService;
+    private final FairAdminAccessGuard fairAdminAccessGuard;
+    private final AuditLogService auditLogService;
 
     /** 결제 전 예약, 무료 사전예약, 결제까지 끝난 유료 사전예약(전액 환불)을 취소한다. */
     @Transactional
@@ -135,14 +159,135 @@ public class ReservationCancellationService {
         // 예약 상태를 바꾸기 전에 결제 쪽을 먼저 정리한다. 환불이 거부될 수 있는 케이스
         // (이미 확정된 정산에 포함된 결제 등)에서 예약 상태만 앞서 나가지 않도록 순서를 이렇게
         // 잡았다 — 한 트랜잭션이라 최종 결과는 같지만 흐름이 읽기 쉽다.
-        RefundResponse refund = settlePaymentSide(reservation, userId);
+        RefundResponse refund = settlePaymentSide(reservation, userId, RefundReason.USER_CANCEL);
 
         String reason = normalizeReason(request == null ? null : request.reason());
+        return applyCancellation(
+                reservation,
+                reason,
+                userId,
+                ACTOR_USER,
+                false,
+                refund,
+                now,
+                "예약이 취소되었습니다",
+                "예약이 정상적으로 취소 처리되었습니다."
+        );
+    }
+
+    /**
+     * 관리자(EVENT_ADMIN/SUPER_ADMIN)가 관람객 대신 예약을 취소한다. 민원 접수, 중복 예약 정리
+     * 처럼 본인이 직접 못 지우는 상황을 운영자가 처리하라고 여는 경로다.
+     *
+     * <p><b>본인 취소와 다른 점</b>
+     * <ul>
+     *   <li><b>취소 마감(입장 12시간 전)을 적용하지 않는다</b> — 민원은 대부분 마감이 지난 뒤에
+     *       들어오므로, 마감을 걸면 이 기능이 존재할 이유가 없어진다.</li>
+     *   <li><b>확정(CONFIRMED)된 현장예매(ONSITE_DIRECT)도 취소할 수 있다</b> — 본인 취소가
+     *       막아두는 그 건을 정리하는 경로가 바로 여기다. 취소하면 사전예약 정원이 아니라 현장
+     *       정원({@code onsite_sales_policies.reserved_count})이 반납된다.</li>
+     *   <li>사유가 필수고, 이력의 actor_type이 ADMIN으로 남으며 감사 로그까지 함께 쌓인다.</li>
+     * </ul>
+     *
+     * <p>다만 <b>돈 흐름은 본인 취소와 완전히 같다</b> — 결제 전이면 결제 정리, 유료 확정이면
+     * 전액 환불. 부분 환불(위약금 공제) 규칙은 아직 서비스 어디에도 없어서 여기서만 새로 만들지
+     * 않았다. 환불 원장에는 {@link RefundReason#ADMIN_CANCEL}로 구분해 남는다.
+     *
+     * @param fairId       경로의 행사 PK. 이 행사 담당자인지 확인하고, 예약이 정말 이 행사 건인지도 대조한다.
+     * @param adminUserId  취소를 실행한 관리자. 예약의 canceled_by와 감사 로그 행위자로 남는다.
+     * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때(SUPER_ADMIN은 통과)
+     * @throws CommonException {@link ErrorCode#RESERVATION_NOT_FOUND} 예약이 없거나 경로의 행사 소속이 아닐 때
+     * @throws CommonException {@link ErrorCode#RESERVATION_STATUS_CONFLICT} 이미 입장·취소·만료된 예약일 때
+     */
+    @Transactional
+    public CancelReservationResponse cancelByAdmin(
+            Long fairId,
+            Long reservationId,
+            Long adminUserId,
+            AdminCancelReservationRequest request
+    ) {
+        String reason = validateAdminRequest(fairId, reservationId, adminUserId, request);
+        fairAdminAccessGuard.checkAssigned(fairId);
+
+        ReservationCancellationContext reservation =
+                cancellationMapper.selectCancellationContextForUpdate(reservationId);
+        // 경로의 행사와 예약의 행사가 다르면 없는 예약처럼 취급한다 — 담당 행사 검사를 통과한
+        // 관리자가 reservationId만 바꿔 남의 행사 예약을 취소하는 걸 막는다.
+        if (reservation == null || !fairId.equals(reservation.getFairId())) {
+            throw new CommonException(ErrorCode.RESERVATION_NOT_FOUND);
+        }
+        if (!ADMIN_CANCELABLE_STATUSES.contains(reservation.getStatus())) {
+            throw new CommonException(ErrorCode.RESERVATION_STATUS_CONFLICT);
+        }
+
+        LocalDateTime now = timeProvider.now();
+        String previousStatus = reservation.getStatus();
+
+        // 본인 취소와 같은 이유로 결제 정리를 먼저 한다(위 cancel() 주석 참고).
+        RefundResponse refund = settlePaymentSide(reservation, adminUserId, RefundReason.ADMIN_CANCEL);
+
+        CancelReservationResponse response = applyCancellation(
+                reservation,
+                reason,
+                adminUserId,
+                ACTOR_ADMIN,
+                true,
+                refund,
+                now,
+                "관리자가 예약을 취소했습니다",
+                "관리자에 의해 예약이 취소되었습니다. 사유: " + reason
+        );
+
+        // 남의 예약을 지운 행위라 감사 로그를 남긴다. 같은 트랜잭션이라 취소가 롤백되면
+        // 감사 로그도 함께 사라진다("취소되지 않은 취소 기록"이 남지 않는다).
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("status", previousStatus);
+        before.put("fairId", reservation.getFairId());
+        before.put("reserverUserId", reservation.getUserId());
+        before.put("visitDate", String.valueOf(reservation.getVisitDate()));
+        before.put("reservationAmount", reservation.getReservationAmount());
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("status", CANCELED);
+        after.put("reason", reason);
+        after.put("refunded", response.refunded());
+        after.put("refundId", response.refundId());
+        after.put("refundAmount", response.refundAmount());
+        auditLogService.record(
+                adminUserId,
+                ActorType.ADMIN,
+                currentActorRole(),
+                ActionType.RESERVATION_ADMIN_CANCEL,
+                TargetType.RESERVATION,
+                reservationId,
+                before,
+                after
+        );
+
+        return response;
+    }
+
+    /**
+     * 본인 취소와 관리자 대행 취소가 공유하는 마무리 처리 — 상태 전이(CAS), 이력, 정원 반납,
+     * 실시간 통계 이벤트, 커밋 후 알림까지. 여기 들어오는 시점엔 "취소해도 되는 예약인지"와
+     * 결제/환불 정리가 이미 끝나 있어야 한다.
+     */
+    private CancelReservationResponse applyCancellation(
+            ReservationCancellationContext reservation,
+            String reason,
+            Long actorUserId,
+            String actorType,
+            boolean adminAction,
+            RefundResponse refund,
+            LocalDateTime now,
+            String notificationTitle,
+            String notificationContent
+    ) {
+        Long reservationId = reservation.getReservationId();
         int updated = cancellationMapper.cancelReservation(
                 reservationId,
                 reservation.getStatus(),
                 reason,
-                userId,
+                actorUserId,
                 now
         );
         if (updated != 1) {
@@ -152,7 +297,9 @@ public class ReservationCancellationService {
                 reservationId,
                 reservation.getStatus(),
                 reason,
-                userId,
+                actorUserId,
+                actorType,
+                adminAction,
                 refund == null ? null : refund.refundId(),
                 refund == null ? null : refund.refundAmount(),
                 now
@@ -171,8 +318,32 @@ public class ReservationCancellationService {
 
         eventPublisher.publishEvent(new ReservationStatusChangedEvent(reservation.getFairId())); // 실시간 통계 확인용
 
-        // 알림은 커밋 뒤에 저장한다 — 취소가 롤백되면 "취소됐다"는 알림만 남는 걸 막는다.
-        // 유료 취소면 RefundService가 REFUND_COMPLETED 알림을 따로 보내므로 여기선 취소 사실만 알린다.
+        registerCancelNotification(reservation, notificationTitle, notificationContent);
+
+        if (refund == null) {
+            return new CancelReservationResponse(reservationId, CANCELED, now, false, null, null, null);
+        }
+        return new CancelReservationResponse(
+                reservationId,
+                CANCELED,
+                now,
+                true,
+                refund.refundId(),
+                refund.refundAmount(),
+                refund.status()
+        );
+    }
+
+    /**
+     * 알림은 커밋 뒤에 저장한다 — 취소가 롤백되면 "취소됐다"는 알림만 남는 걸 막는다.
+     * 유료 취소면 RefundService가 REFUND_COMPLETED 알림을 따로 보내므로 여기선 취소 사실만 알린다.
+     */
+    private void registerCancelNotification(
+            ReservationCancellationContext reservation,
+            String title,
+            String content
+    ) {
+        Long reservationId = reservation.getReservationId();
         Long notifyUserId = reservation.getUserId();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -182,8 +353,8 @@ public class ReservationCancellationService {
                             notifyUserId,
                             RecipientType.USER,
                             NotificationType.RESERVATION_CANCELED,
-                            "예약이 취소되었습니다",
-                            "예약이 정상적으로 취소 처리되었습니다.",
+                            title,
+                            content,
                             "/reservations/me/" + reservationId,
                             List.of(DeliveryChannel.IN_APP),
                             null
@@ -203,27 +374,19 @@ public class ReservationCancellationService {
                 }
             }
         });
-
-        if (refund == null) {
-            return new CancelReservationResponse(reservationId, CANCELED, now, false, null, null, null);
-        }
-        return new CancelReservationResponse(
-                reservationId,
-                CANCELED,
-                now,
-                true,
-                refund.refundId(),
-                refund.refundAmount(),
-                refund.status()
-        );
     }
 
     /**
      * 취소되는 예약에 딸린 결제를 정리한다.
      *
+     * @param refundReason 환불 원장에 남길 사유. 본인 취소면 USER_CANCEL, 관리자 대행이면 ADMIN_CANCEL.
      * @return 환불을 처리했으면 그 환불, 환불 대상이 아니면 null
      */
-    private RefundResponse settlePaymentSide(ReservationCancellationContext reservation, Long userId) {
+    private RefundResponse settlePaymentSide(
+            ReservationCancellationContext reservation,
+            Long actingUserId,
+            RefundReason refundReason
+    ) {
         if (PENDING_PAYMENT.equals(reservation.getStatus())) {
             cancelPendingPayment(reservation);
             return null;
@@ -231,7 +394,7 @@ public class ReservationCancellationService {
         if (reservation.getReservationAmount() <= 0) {
             return null;
         }
-        return refundDeposit(reservation, userId);
+        return refundDeposit(reservation, actingUserId, refundReason);
     }
 
     /**
@@ -279,23 +442,54 @@ public class ReservationCancellationService {
      * <p>결제가 COMPLETED인지, 정산에 묶여 환불 불가인지도 같은 잠금 구간 안에서 판단된다
      * (REFUND_TARGET_NOT_REFUNDABLE). 여기서 미리 검사하면 잠금 없이 읽는 셈이라 부정확하다.
      */
-    private RefundResponse refundDeposit(ReservationCancellationContext reservation, Long userId) {
+    private RefundResponse refundDeposit(
+            ReservationCancellationContext reservation,
+            Long actingUserId,
+            RefundReason refundReason
+    ) {
         PaymentRow payment = paymentMapper.selectByReservationId(reservation.getReservationId());
         if (payment == null) {
             throw new CommonException(ErrorCode.RESERVATION_REFUND_PAYMENT_NOT_FOUND);
         }
         return refundService.refundOrReuse(
                 payment.getPaymentId(),
-                userId,
-                new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.RESERVATION)
+                actingUserId,
+                new RefundRequest(refundReason, RequestedByDomain.RESERVATION)
         );
     }
 
     private void validateRequest(Long reservationId, Long userId, CancelReservationRequest request) {
         if (reservationId == null || reservationId <= 0 || userId == null || userId <= 0
-                || (request != null && request.reason() != null && request.reason().length() > 500)) {
+                || (request != null && request.reason() != null && request.reason().length() > MAX_REASON_LENGTH)) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
         }
+    }
+
+    /**
+     * 관리자 대행 취소 요청을 검증하고, 정리된 사유 문자열을 돌려준다. 본인 취소와 달리 사유가
+     * 비어 있으면 거부한다 — 이 값이 나중에 "왜 취소됐는지"를 설명할 유일한 근거라서다.
+     */
+    private String validateAdminRequest(
+            Long fairId,
+            Long reservationId,
+            Long adminUserId,
+            AdminCancelReservationRequest request
+    ) {
+        if (fairId == null || fairId <= 0 || reservationId == null || reservationId <= 0
+                || adminUserId == null || adminUserId <= 0
+                || request == null || request.reason() == null || request.reason().isBlank()
+                || request.reason().length() > MAX_REASON_LENGTH) {
+            throw new CommonException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        return request.reason().trim();
+    }
+
+    /** 감사 로그에 남길 관리자 역할. SecurityConfig가 두 역할만 들여보내므로 둘 중 하나다. */
+    private String currentActorRole() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean superAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> SUPER_ADMIN_AUTHORITY.equals(authority.getAuthority()));
+        return superAdmin ? "SUPER_ADMIN" : "EVENT_ADMIN";
     }
 
     private void validateCancelable(ReservationCancellationContext reservation, LocalDateTime now) {

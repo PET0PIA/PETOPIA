@@ -1,5 +1,10 @@
 package com.ms.petopia.api.reservation.service;
 
+import com.ms.petopia.api.audit.model.ActionType;
+import com.ms.petopia.api.audit.model.ActorType;
+import com.ms.petopia.api.audit.model.TargetType;
+import com.ms.petopia.api.audit.service.AuditLogService;
+import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.payment.dto.PaymentRow;
 import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.payment.service.PaymentService;
@@ -12,6 +17,7 @@ import com.ms.petopia.api.refund.service.RefundService;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.reservation.dto.AdminCancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationRequest;
 import com.ms.petopia.api.reservation.dto.CancelReservationResponse;
 import com.ms.petopia.api.reservation.dto.ReservationCancellationContext;
@@ -30,14 +36,19 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -51,6 +62,7 @@ class ReservationCancellationServiceTest {
     private static final Long RESERVATION_ID = 30L;
     private static final Long USER_ID = 20L;
     private static final Long PAYMENT_ID = 40L;
+    private static final Long ADMIN_ID = 70L;
     private static final Long REFUND_ID = 50L;
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 8, 4, 21, 0);
 
@@ -70,6 +82,10 @@ class ReservationCancellationServiceTest {
     private RefundService refundService;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private FairAdminAccessGuard fairAdminAccessGuard;
+    @Mock
+    private AuditLogService auditLogService;
     @InjectMocks
     private ReservationCancellationService service;
 
@@ -81,6 +97,7 @@ class ReservationCancellationServiceTest {
     @AfterEach
     void tearDown() {
         TransactionSynchronizationManager.clearSynchronization();
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -100,7 +117,7 @@ class ReservationCancellationServiceTest {
         assertThat(response.reservationStatus()).isEqualTo("CANCELED");
         assertThat(response.refunded()).isFalse();
         verify(cancellationMapper).insertCanceledHistory(
-                RESERVATION_ID, "PENDING_PAYMENT", "일정 변경", USER_ID, null, null, NOW
+                RESERVATION_ID, "PENDING_PAYMENT", "일정 변경", USER_ID, "USER", false, null, null, NOW
         );
 
         TransactionSynchronizationManager.getSynchronizations()
@@ -219,7 +236,7 @@ class ReservationCancellationServiceTest {
                 new RefundRequest(RefundReason.USER_CANCEL, RequestedByDomain.RESERVATION)
         );
         verify(cancellationMapper).insertCanceledHistory(
-                RESERVATION_ID, "CONFIRMED", null, USER_ID, REFUND_ID, 10_000L, NOW
+                RESERVATION_ID, "CONFIRMED", null, USER_ID, "USER", false, REFUND_ID, 10_000L, NOW
         );
     }
 
@@ -268,7 +285,7 @@ class ReservationCancellationServiceTest {
         assertThat(response.refundId()).isEqualTo(REFUND_ID);
         // 취소 이력에도 재사용된 환불이 그대로 기록된다.
         verify(cancellationMapper).insertCanceledHistory(
-                RESERVATION_ID, "CONFIRMED", null, USER_ID, REFUND_ID, 10_000L, NOW
+                RESERVATION_ID, "CONFIRMED", null, USER_ID, "USER", false, REFUND_ID, 10_000L, NOW
         );
     }
 
@@ -290,7 +307,7 @@ class ReservationCancellationServiceTest {
 
         verify(cancellationMapper, never()).cancelReservation(any(), any(), any(), any(), any());
         verify(cancellationMapper, never()).insertCanceledHistory(
-                any(), any(), any(), any(), any(), any(), any()
+                any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any()
         );
     }
 
@@ -331,7 +348,7 @@ class ReservationCancellationServiceTest {
                 any(), any(), any(), any(), any()
         );
         verify(cancellationMapper, never()).insertCanceledHistory(
-                any(), any(), any(), any(), any(), any(), any()
+                any(), any(), any(), any(), any(), anyBoolean(), any(), any(), any()
         );
     }
 
@@ -389,6 +406,149 @@ class ReservationCancellationServiceTest {
         verify(capacityMapper, never()).release(FAIR_ID, LocalDate.of(2026, 8, 5));
     }
 
+    // ── 관리자 대행 취소(cancelByAdmin) ───────────────────────────────────────
+
+    @Test
+    void adminCancelRefundsPaidReservationInFullAndMarksHistoryAsAdminAction() {
+        givenSuperAdminAuthenticated();
+        ReservationCancellationContext context = context("CONFIRMED", "ADVANCE", 10_000);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+        given(timeProvider.now()).willReturn(NOW);
+        given(paymentMapper.selectByReservationId(RESERVATION_ID)).willReturn(payment("COMPLETED"));
+        given(refundService.refundOrReuse(eq(PAYMENT_ID), eq(ADMIN_ID), any())).willReturn(refundResponse());
+        given(cancellationMapper.cancelReservation(
+                RESERVATION_ID, "CONFIRMED", "중복 예약 정리", ADMIN_ID, NOW
+        )).willReturn(1);
+
+        CancelReservationResponse response = service.cancelByAdmin(
+                FAIR_ID, RESERVATION_ID, ADMIN_ID, new AdminCancelReservationRequest("중복 예약 정리")
+        );
+
+        assertThat(response.reservationStatus()).isEqualTo("CANCELED");
+        assertThat(response.refunded()).isTrue();
+        assertThat(response.refundAmount()).isEqualTo(10_000L);
+
+        verify(fairAdminAccessGuard).checkAssigned(FAIR_ID);
+        // 돈 흐름은 본인 취소와 같지만 환불 원장에는 관리자 대행으로 구분해 남는다.
+        verify(refundService).refundOrReuse(
+                PAYMENT_ID, ADMIN_ID,
+                new RefundRequest(RefundReason.ADMIN_CANCEL, RequestedByDomain.RESERVATION)
+        );
+        // 이력의 행위자는 관리자다 - 본인 취소였다면 ("USER", false)로 남는 자리.
+        verify(cancellationMapper).insertCanceledHistory(
+                RESERVATION_ID, "CONFIRMED", "중복 예약 정리", ADMIN_ID, "ADMIN", true, REFUND_ID, 10_000L, NOW
+        );
+        verify(capacityMapper).release(FAIR_ID, context.getVisitDate());
+        verify(auditLogService).record(
+                eq(ADMIN_ID), eq(ActorType.ADMIN), eq("SUPER_ADMIN"),
+                eq(ActionType.RESERVATION_ADMIN_CANCEL), eq(TargetType.RESERVATION), eq(RESERVATION_ID),
+                any(), any()
+        );
+
+        // 관람객에게는 "관리자가 취소했다"는 사실과 사유가 함께 전달돼야 한다.
+        TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit);
+        ArgumentCaptor<SaveNotificationDto.Request> notifCaptor =
+                ArgumentCaptor.forClass(SaveNotificationDto.Request.class);
+        verify(notificationService).save(notifCaptor.capture());
+        assertThat(notifCaptor.getValue().userId()).isEqualTo(USER_ID);
+        assertThat(notifCaptor.getValue().body()).contains("관리자", "중복 예약 정리");
+    }
+
+    /**
+     * 이 기능의 존재 이유 - 민원은 대부분 취소 마감(입장 12시간 전)이 지난 뒤에 들어온다.
+     * 같은 예약을 본인이 취소하면 R019로 막히는 시점인데(rejectsFreeAdvanceCancellationAfterDeadline),
+     * 관리자 대행은 통과해야 한다.
+     */
+    @Test
+    void adminCancelIgnoresTheUserCancelDeadline() {
+        givenSuperAdminAuthenticated();
+        LocalDateTime afterDeadline = LocalDateTime.of(2026, 8, 5, 9, 0);
+        ReservationCancellationContext context = context("CONFIRMED", "ADVANCE", 0);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+        given(timeProvider.now()).willReturn(afterDeadline);
+        given(cancellationMapper.cancelReservation(
+                RESERVATION_ID, "CONFIRMED", "현장 민원 처리", ADMIN_ID, afterDeadline
+        )).willReturn(1);
+
+        CancelReservationResponse response = service.cancelByAdmin(
+                FAIR_ID, RESERVATION_ID, ADMIN_ID, new AdminCancelReservationRequest("현장 민원 처리")
+        );
+
+        assertThat(response.reservationStatus()).isEqualTo("CANCELED");
+        assertThat(response.refunded()).isFalse();
+        verifyNoInteractions(refundService);
+    }
+
+    /** 본인 취소는 거부하는 확정 현장예매(rejectsOnsiteReservation)도 관리자 대행으로는 취소된다. */
+    @Test
+    void adminCancelReleasesOnsiteCapacityForOnsiteReservation() {
+        givenSuperAdminAuthenticated();
+        ReservationCancellationContext context = context("CONFIRMED", "ONSITE_DIRECT", 0);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+        given(timeProvider.now()).willReturn(NOW);
+        given(cancellationMapper.cancelReservation(
+                RESERVATION_ID, "CONFIRMED", "현장 착오 발권", ADMIN_ID, NOW
+        )).willReturn(1);
+
+        CancelReservationResponse response = service.cancelByAdmin(
+                FAIR_ID, RESERVATION_ID, ADMIN_ID, new AdminCancelReservationRequest("현장 착오 발권")
+        );
+
+        assertThat(response.reservationStatus()).isEqualTo("CANCELED");
+        // 현장예매는 사전예약과 정원을 따로 센다(V49). 반납도 현장 정원 쪽으로 가야 한다 -
+        // 사전예약 정원에 돌려주면 없던 사전예약 자리가 하나 생긴다.
+        verify(capacityMapper).releaseOnsite(FAIR_ID, LocalDate.of(2026, 8, 5));
+        verify(capacityMapper, never()).release(FAIR_ID, LocalDate.of(2026, 8, 5));
+    }
+
+    @Test
+    void rejectsAdminCancelForAlreadyCheckedInReservation() {
+        givenSuperAdminAuthenticated();
+        ReservationCancellationContext context = context("CHECKED_IN", "ADVANCE", 10_000);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+
+        assertError(
+                () -> service.cancelByAdmin(FAIR_ID, RESERVATION_ID, ADMIN_ID,
+                        new AdminCancelReservationRequest("착오 취소")),
+                ErrorCode.RESERVATION_STATUS_CONFLICT
+        );
+
+        verify(cancellationMapper, never()).cancelReservation(any(), any(), any(), any(), any());
+        verifyNoInteractions(refundService, auditLogService);
+    }
+
+    /**
+     * 담당 행사 검사를 통과한 관리자가 reservationId만 바꿔 다른 행사의 예약을 취소하는 걸 막는다.
+     * 경로의 행사와 예약의 행사가 다르면 없는 예약처럼 응답한다.
+     */
+    @Test
+    void rejectsAdminCancelWhenReservationBelongsToAnotherFair() {
+        Long otherFairId = FAIR_ID + 1;
+        ReservationCancellationContext context = context("CONFIRMED", "ADVANCE", 10_000);
+        given(cancellationMapper.selectCancellationContextForUpdate(RESERVATION_ID)).willReturn(context);
+
+        assertError(
+                () -> service.cancelByAdmin(otherFairId, RESERVATION_ID, ADMIN_ID,
+                        new AdminCancelReservationRequest("착오 취소")),
+                ErrorCode.RESERVATION_NOT_FOUND
+        );
+
+        verify(cancellationMapper, never()).cancelReservation(any(), any(), any(), any(), any());
+    }
+
+    /** 남의 예약을 지우는 동작이라 사유가 없으면 조회조차 하지 않고 거부한다. */
+    @Test
+    void rejectsAdminCancelWithoutReason() {
+        assertError(
+                () -> service.cancelByAdmin(FAIR_ID, RESERVATION_ID, ADMIN_ID,
+                        new AdminCancelReservationRequest("   ")),
+                ErrorCode.INVALID_INPUT_VALUE
+        );
+
+        verifyNoInteractions(fairAdminAccessGuard, cancellationMapper);
+    }
+
     private ReservationCancellationContext context(String status, String reservationType, long amount) {
         ReservationCancellationContext context = new ReservationCancellationContext();
         context.setReservationId(RESERVATION_ID);
@@ -437,6 +597,13 @@ class ReservationCancellationServiceTest {
         row.setRefundReason(RefundReason.FAIR_CANCEL_USER.name());
         row.setRequestedByDomain(RequestedByDomain.FAIR.name());
         return RefundResponse.from(row);
+    }
+
+    /** cancelByAdmin이 감사 로그에 남길 역할을 SecurityContext에서 읽으므로 인증 정보를 심어둔다. */
+    private void givenSuperAdminAuthenticated() {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                ADMIN_ID, null, List.of(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))
+        ));
     }
 
     private void assertError(Runnable action, ErrorCode errorCode) {

@@ -22,6 +22,7 @@ const targetTypeLabels: Record<TargetType, string> = {
   FAIR: "행사",
   RESERVATION: "예약",
   SETTLEMENT: "정산",
+  FAIR_SETTLEMENT: "행사 정산",
   COMMISSION_RATE: "수수료율",
 };
 
@@ -32,6 +33,7 @@ const targetIdHints: Record<TargetType, string> = {
   FAIR: "행사 ID. 행사 상세 화면 URL에서 확인",
   RESERVATION: "예약 ID",
   SETTLEMENT: "정산 ID. 정산 목록에서 확인",
+  FAIR_SETTLEMENT: "행사 정산 ID. 행사별 정산 목록에서 확인",
   COMMISSION_RATE: "수수료율 ID",
 };
 
@@ -44,7 +46,10 @@ const actionTypeLabels: Record<ActionType, string> = {
   FAIR_CANCEL_APPROVE: "행사 취소 승인",
   PAYMENT_COMPLETION_RECEIVED: "결제 완료 수신",
   SETTLEMENT_CONFIRM: "정산 확정",
+  SETTLEMENT_REOPEN: "정산 재오픈",
+  SETTLEMENT_RATE_CHANGED: "정산 수수료율 변동",
   COMMISSION_RATE_UPDATE: "수수료율 변경",
+  RESERVATION_ADMIN_CANCEL: "예약 대행 취소",
 };
 
 const actorTypeLabels: Record<ActorType, string> = {

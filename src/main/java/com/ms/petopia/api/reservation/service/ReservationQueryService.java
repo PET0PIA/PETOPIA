@@ -121,6 +121,7 @@ public class ReservationQueryService {
                 row.getAmount(),
                 row.getReservedAt(),
                 row.getCheckedInAt(),
+                row.getRefundStatus(),
                 isCanceledByFairCancellation(row)
         );
     }

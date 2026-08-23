@@ -24,6 +24,9 @@ public enum ActionType {
     SETTLEMENT_RATE_CHANGED,
 
     // 콘텐츠 관리
-    REVIEW_DELETE
+    REVIEW_DELETE,
+
+    // 운영 대행 - 관리자가 관람객 대신 처리한 건
+    RESERVATION_ADMIN_CANCEL
 
 }
