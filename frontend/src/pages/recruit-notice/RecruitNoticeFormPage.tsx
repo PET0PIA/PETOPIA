@@ -14,6 +14,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { EmptyState } from "../../components/common/EmptyState";
 import { useFairSelector } from "../../contexts/FairSelectorContext";
 import { useConfirm } from "../../components/ui/useConfirm";
+import { DateInput } from "../../components/ui/DateInput";
 
 interface FormState {
   title: string;
@@ -209,7 +210,8 @@ export function RecruitNoticeFormPage() {
               </div>
               <div>
                 {label("모집 마감일시", true)}
-                <Input type="datetime-local" value={form.recruitDeadline} onChange={(event) => update("recruitDeadline", event.target.value)} required />
+                <DateInput type="datetime-local" value={form.recruitDeadline} onChange={(value) => update("recruitDeadline", value)} required />
+                <p className="mt-1 text-xs text-muted">날짜(YYYY-MM-DD)와 시간(HH:mm)까지 숫자만 입력하면 자동으로 - : 가 붙어요.</p>
               </div>
               <ImageUploadField
                 key={fairId}
