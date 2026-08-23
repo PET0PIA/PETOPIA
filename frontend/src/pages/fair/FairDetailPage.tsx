@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, ChevronRight, ImageOff, MapPin, PawPrint, Store } from "lucide-react";
+import { CalendarDays, ChevronRight, ImageOff, MapPin, PawPrint, Sparkles, Store } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { KakaoMap } from "../../components/map/KakaoMap";
@@ -219,6 +219,13 @@ function FairDetailView({ fairId }: { fairId: string | undefined }) {
                 >
                   <Store size={18} aria-hidden="true" />
                   참가 부스 보기
+                </Link>
+                <Link
+                  to={`/fairs/${fair.fairId}/booth-recommendations`}
+                  className="inline-flex min-h-12 items-center justify-center gap-1 rounded-button border border-line bg-card px-6 text-base font-bold text-ink transition hover:bg-page"
+                >
+                  <Sparkles size={18} aria-hidden="true" />
+                  AI 부스 추천
                 </Link>
               </div>
               {/* 사전예약 조회 실패 사유(R003 등)는 할 수 있는 행동이 없을 때만 띄운다 -

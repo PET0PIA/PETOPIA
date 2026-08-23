@@ -1,5 +1,6 @@
 package com.ms.petopia.api.reservation.mapper;
 
+import com.ms.petopia.api.reservation.dto.AdminReservationRow;
 import com.ms.petopia.api.reservation.dto.ReservationCreationContext;
 import com.ms.petopia.api.reservation.dto.ReservationAvailabilityDateRow;
 import com.ms.petopia.api.reservation.dto.ReservationMyActiveDateRow;
@@ -65,6 +66,20 @@ public interface ReservationMapper {
     boolean isAssignedEventAdmin(
             @Param("fairId") Long fairId,
             @Param("adminUserId") Long adminUserId
+    );
+
+    List<AdminReservationRow> selectByFairForAdmin(
+            @Param("fairId") Long fairId,
+            @Param("visitDate") LocalDate visitDate,
+            @Param("status") String status,
+            @Param("offset") long offset,
+            @Param("limit") int limit
+    );
+
+    long countByFairForAdmin(
+            @Param("fairId") Long fairId,
+            @Param("visitDate") LocalDate visitDate,
+            @Param("status") String status
     );
 
     int insertReservation(ReservationInsertRow row);

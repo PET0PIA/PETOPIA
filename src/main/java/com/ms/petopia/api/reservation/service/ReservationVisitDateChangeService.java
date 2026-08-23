@@ -178,7 +178,7 @@ public class ReservationVisitDateChangeService {
                             NotificationType.RESERVATION_CHANGED,
                             "예약 날짜가 변경되었습니다",
                             "방문 날짜가 " + request.visitDate() + "(으)로 변경되었습니다.",
-                            null,
+                            "/reservations/me/" + reservationId,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));

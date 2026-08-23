@@ -395,7 +395,7 @@ public class SettlementService {
                         NotificationType.SETTLEMENT_COMPLETED,
                         "정산이 확정되었습니다",
                         "행사 정산(ID: " + settlementId + ")이 확정 처리되었습니다.",
-                        null,
+                        "/fair-admin/payments?fairId=" + fairId,
                         List.of(DeliveryChannel.IN_APP),
                         null
                 ));
@@ -409,7 +409,8 @@ public class SettlementService {
             notificationService.notifySuperAdmins(
                     NotificationType.SETTLEMENT_COMPLETED,
                     "정산이 확정되었습니다",
-                    "행사 정산(ID: " + settlementId + ", fairId=" + fairId + ")이 확정 처리되었습니다."
+                    "행사 정산(ID: " + settlementId + ", fairId=" + fairId + ")이 확정 처리되었습니다.",
+                    "/admin/settlements"
             );
         } catch (Exception e) {
             log.error("정산 확정 SUPER_ADMIN 알림 저장 실패. fairId={}, settlementId={}", fairId, settlementId, e);
@@ -422,10 +423,28 @@ public class SettlementService {
             if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
                 return;
             }
-            mailService.sendSettlementCompletedEmail(user.getEmail(), "정산", row.getSettlementId(),
-                    row.getGrossAmount(), row.getRefundAmount(), row.getCommissionAmount(), row.getNetAmount());
+            mailService.sendSettlementCompletedEmail(user.getEmail(), resolveFairName(row.getFairId()), "정산",
+                    row.getSettlementId(), row.getGrossAmount(), row.getRefundAmount(),
+                    row.getCommissionAmount(), row.getNetAmount());
         } catch (Exception e) {
             log.error("정산 확정 이메일 발송 실패. fairId={}, settlementId={}", row.getFairId(), row.getSettlementId(), e);
+        }
+    }
+
+    /**
+     * 정산 확정 이메일에 행사명을 표시하기 위한 조회. 행사 도메인을 직접 자바로 참조하지
+     * 않고, 이미 주입된 PaymentMapper가 fairs를 조인해 온다(selectFairRevenueSummary와
+     * 동일 패턴). 조회 실패해도 이메일 자체는 이름 없이 보내는 편이 나아서 null로 흡수한다.
+     */
+    private String resolveFairName(Long fairId) {
+        if (fairId == null) {
+            return null;
+        }
+        try {
+            return paymentMapper.selectFairNameById(fairId);
+        } catch (Exception e) {
+            log.warn("정산 확정 이메일용 행사명 조회 실패. fairId={}", fairId, e);
+            return null;
         }
     }
 

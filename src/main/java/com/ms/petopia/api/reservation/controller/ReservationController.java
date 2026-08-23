@@ -1,5 +1,6 @@
 package com.ms.petopia.api.reservation.controller;
 
+import com.ms.petopia.api.reservation.dto.AdminReservationListResponse;
 import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationRequest;
 import com.ms.petopia.api.reservation.dto.CreateOnsiteReservationResponse;
 import com.ms.petopia.api.reservation.dto.CreateReservationRequest;
@@ -31,6 +32,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/v1")
@@ -90,6 +93,18 @@ public class ReservationController {
             @RequestBody(required = false) CancelReservationRequest request
     ) {
         return cancellationService.cancel(reservationId, userId, request);
+    }
+
+    /** 관리자(EVENT_ADMIN/SUPER_ADMIN)용 행사별 예약자 목록. */
+    @GetMapping("/fairs/{fairId}/reservations")
+    public AdminReservationListResponse getFairReservationsForAdmin(
+            @PathVariable Long fairId,
+            @RequestParam(required = false) LocalDate visitDate,
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return reservationQueryService.getFairReservationsForAdmin(fairId, visitDate, status, page, size);
     }
 
     @PostMapping("/fairs/{fairId}/reservations")

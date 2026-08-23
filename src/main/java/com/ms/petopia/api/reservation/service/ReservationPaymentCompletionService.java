@@ -163,14 +163,24 @@ public class ReservationPaymentCompletionService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                // 알림 제목·이메일이 둘 다 행사명을 필요로 하므로 한 번만 조회해서 같이 쓴다.
+                ReservationListRow row = null;
+                try {
+                    row = reservationMapper.selectReservationForOwner(reservationId, notifyUserId);
+                } catch (Exception e) {
+                    log.warn("예약 확정 알림/이메일용 예약 정보 조회 실패. userId={}, reservationId={}",
+                            notifyUserId, reservationId, e);
+                }
+                String fairName = row == null ? null : row.getFairName();
                 try {
                     notificationService.save(new SaveNotificationDto.Request(
                             notifyUserId,
                             RecipientType.USER,
                             NotificationType.RESERVATION_CONFIRMED,
-                            "예약이 확정되었습니다",
+                            fairName == null || fairName.isBlank()
+                                    ? "예약이 확정되었습니다" : "'" + fairName + "' 예약이 확정되었습니다",
                             "결제가 완료되어 예약이 확정되었습니다.",
-                            null,
+                            "/reservations/me/" + reservationId,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));
@@ -178,7 +188,7 @@ public class ReservationPaymentCompletionService {
                     log.error("예약 확정 알림 저장 실패. userId={}, reservationId={}",
                             notifyUserId, reservationId, e);
                 }
-                submitConfirmationEmail(notifyUserId, reservationId, qrToken);
+                submitConfirmationEmail(notifyUserId, reservationId, qrToken, row);
             }
         });
 
@@ -200,10 +210,16 @@ public class ReservationPaymentCompletionService {
      * <p><b>{@code @Async}를 쓰지 않는 이유</b>는 {@code ChatAiAnswerListener}와 같다 — 큐가
      * 넘쳤을 때 거부 사실이 호출부에 전달되지 않는다. 이 메일에는 입장 QR이 들어 있고 재시도
      * 장치가 없어서, 유실됐다면 최소한 그 사실이 로그에 남아야 한다.
+     *
+     * <p>{@code row}는 호출부가 알림 제목용으로 이미 조회해둔 것을 그대로 넘겨받아 워커까지
+     * 전달한다. 조회는 어차피 요청 스레드에서 한 번 일어나야 하므로 여기서 다시 하지 않는다.
+     * 조회 뒤로는 아무도 이 객체를 고치지 않고, {@code execute}가 happens-before를 보장하므로
+     * 다른 스레드에서 읽어도 안전하다.
      */
-    private void submitConfirmationEmail(Long userId, Long reservationId, String qrToken) {
+    private void submitConfirmationEmail(Long userId, Long reservationId, String qrToken,
+                                         ReservationListRow row) {
         try {
-            mailExecutor.execute(() -> sendConfirmationEmail(userId, reservationId, qrToken));
+            mailExecutor.execute(() -> sendConfirmationEmail(userId, reservationId, qrToken, row));
         } catch (RejectedExecutionException e) {
             // 큐가 찼거나 애플리케이션이 종료 중이다. 예약 확정은 이미 커밋됐으니 되돌릴 것은
             // 없다. 사용자가 QR 메일을 받지 못했다는 사실만 남긴다.
@@ -214,15 +230,18 @@ public class ReservationPaymentCompletionService {
         }
     }
 
-    /** 예약확정 HTML 이메일(QR 이미지 포함)을 보낸다. 실패해도 예약 확정 처리에는 영향 없음. */
-    private void sendConfirmationEmail(Long userId, Long reservationId, String qrToken) {
+    /**
+     * 예약확정 HTML 이메일(QR 이미지 포함)을 보낸다. 실패해도 예약 확정 처리에는 영향 없음.
+     * row는 afterCommit 콜백이 알림 제목용으로 이미 조회해둔 것을 그대로 받는다(중복 조회 방지) -
+     * 그 조회 자체가 실패했으면 null로 넘어온다.
+     */
+    private void sendConfirmationEmail(Long userId, Long reservationId, String qrToken, ReservationListRow row) {
         try {
             User user = authMapper.selectUserById(userId);
             if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
                 log.warn("예약확정 이메일 발송 스킵 — 이메일 주소 없음. userId={}, reservationId={}", userId, reservationId);
                 return;
             }
-            ReservationListRow row = reservationMapper.selectReservationForOwner(reservationId, userId);
             if (row == null) {
                 log.warn("예약확정 이메일 발송 스킵 — 예약 조회 실패. userId={}, reservationId={}", userId, reservationId);
                 return;

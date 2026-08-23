@@ -41,6 +41,11 @@ public class SecurityConfig {
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .authorizeHttpRequests(auth -> auth
+                        // GET "/api/v1/fairs/*/reservations"(관리자용 예약자 목록)는 같은 경로의
+                        // POST(사전예약 생성, 아래 authenticated 규칙)보다 좁게 관리자 롤만 허용해야
+                        // 해서, 메서드를 명시하지 않는 바로 아래 규칙보다 반드시 먼저 와야 한다.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/fairs/*/reservations")
+                        .hasAnyRole("EVENT_ADMIN", "SUPER_ADMIN")
                         .requestMatchers(
                                 "/api/v1/reservations/**",
                                 "/api/v1/fairs/*/reservations",
