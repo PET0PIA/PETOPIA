@@ -50,7 +50,7 @@ export function BoothRecommendationPage() {
   return <BoothRecommendationContent key={id} fairId={id} />;
 }
 
-function BoothRecommendationContent({ fairId }: { fairId: number }) {
+export function BoothRecommendationContent({ fairId, embedded = false }: { fairId: number; embedded?: boolean }) {
   const { status } = useAuth();
   const loggedIn = status === "authenticated";
 
@@ -153,15 +153,18 @@ function BoothRecommendationContent({ fairId }: { fairId: number }) {
 
 
   return (
-    <PageContainer className="py-7 sm:py-10">
-      <Link to={`/fairs/${fairId}/booths`} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-muted hover:text-ink">
-        <ChevronLeft size={16} />
-        확정 참가 부스
-      </Link>
-
-      <div className="mt-4">
-        <PageHeader eyebrow="AI 추천" title="부스·동선 추천" description="반려동물이나 필요한 것을 알려주시면 어울리는 부스와 동선을 추천해 드려요." />
-      </div>
+    <PageContainer className={embedded ? "p-0" : "py-7 sm:py-10"}>
+      {!embedded && (
+        <>
+          <Link to={`/fairs/${fairId}/booths`} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-muted hover:text-ink">
+            <ChevronLeft size={16} />
+            확정 참가 부스
+          </Link>
+          <div className="mt-4">
+            <PageHeader eyebrow="AI 추천" title="부스·동선 추천" description="반려동물이나 필요한 것을 알려주시면 어울리는 부스와 동선을 추천해 드려요." />
+          </div>
+        </>
+      )}
 
       <Card className="mt-6 p-8">
         <form onSubmit={handleSubmit} className="space-y-5">

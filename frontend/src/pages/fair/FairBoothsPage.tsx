@@ -1,10 +1,9 @@
-import { ChevronLeft, ChevronRight, ImageOff, Sparkles, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageOff, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageContainer } from "../../components/common/PageContainer";
 import { PageHeader } from "../../components/common/PageHeader";
-import { Button } from "../../components/ui/Button";
 import { ApiError } from "../../api/client";
 import { Badge } from "../../components/ui/Badge";
 import {
@@ -174,12 +173,6 @@ function FairBoothsContent({ fairId }: { fairId: number }) {
         <PageHeader
           eyebrow="참여 기업"
           title="확정 참가 부스"
-          action={
-            <Button variant="outline" onClick={() => navigate(`/fairs/${fairId}/booth-recommendations`)}>
-              <Sparkles size={16} />
-              부스 추천받기
-            </Button>
-          }
         />
       </div>
 
