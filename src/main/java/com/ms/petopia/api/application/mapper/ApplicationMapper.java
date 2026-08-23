@@ -24,6 +24,9 @@ public interface ApplicationMapper {
     // application_form 저장 (application과 1:1)
     void insertApplicationForm(ApplicationForm applicationForm);
 
+    // 승인/반려/취소 알림 이메일 발송 대상 결정용 - 신청서에 담당자 이메일이 없으면 null
+    String selectManagerEmailByApplicationId(@Param("applicationId") Long applicationId);
+
     // application_slot 저장 (선택한 슬롯 개수만큼 반복 호출)
     void insertApplicationSlot(ApplicationSlot applicationSlot);
 
