@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "../../components/common/EmptyState";
 import { PageHeader } from "../../components/common/PageHeader";
+import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { ApiError } from "../../api/client";
@@ -16,6 +17,16 @@ import {
   type PaymentMethodOption,
 } from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
+import {
+  formatAmount,
+  formatDateTime,
+  paymentStatusLabel,
+  paymentStatusTone,
+  paymentTypeLabels,
+  refundReasonLabels,
+  refundRequestedByDomainLabels,
+  refundStatusLabels,
+} from "./paymentDisplay";
 
 // PAYMENT_PENDING이면서 결제 가능(payable)한 상태가 아닐 때 보여줄 안내. PAYMENT_PENDING인데
 // 기한이 지난 경우는 별도로 판단해서 이 맵 밖에서 처리한다(배치가 아직 EXPIRED로 안 돌렸을 수 있어서).
@@ -27,6 +38,70 @@ const STATUS_MESSAGE: Partial<Record<FairOpeningFeeSummary["status"], string>> =
   IN_PROGRESS: "이미 개설비 결제가 완료된 행사예요.",
   ENDED: "이미 종료된 행사예요.",
 };
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-bold text-muted">{label}</dt>
+      <dd className="mt-1 text-sm text-ink">{value}</dd>
+    </div>
+  );
+}
+
+// 개설비 결제가 완료된 후엔 /admin/payments?id= 결제 상세 화면과 같은 구성(결제정보·환불정보·
+// 연관정보)으로 보여준다(2026-08-23) - 완료된 결제는 "결제하기" 흐름이 아니라 "무엇을 얼마에
+// 언제 냈는지 확인하는" 화면이라 관리자 결제상세 페이지와 같은 정보가 필요하다고 판단해서다.
+function PaidOpeningFeeDetail({ detail }: { detail: PaymentDetail }) {
+  return (
+    <div className="space-y-4">
+      <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-extrabold">{paymentTypeLabels[detail.paymentType] ?? detail.paymentType}</h2>
+            <Badge tone={paymentStatusTone(detail.status, detail.refundStatus)}>{paymentStatusLabel(detail.status, detail.refundStatus)}</Badge>
+          </div>
+        </div>
+        <p className="text-2xl font-extrabold text-ink">{formatAmount(detail.amount)}</p>
+      </Card>
+
+      <Card className="space-y-4 p-6">
+        <h3 className="text-sm font-extrabold text-muted">결제 정보</h3>
+        <dl className="grid gap-4 sm:grid-cols-3">
+          <Field label="결제 ID" value={`#${detail.paymentId}`} />
+          <Field label="결제 금액" value={formatAmount(detail.amount)} />
+          <Field label="결제 수단" value={detail.method} />
+          <Field label="결제 요청 시각" value={formatDateTime(detail.createdAt)} />
+          <Field label="결제 완료 시각" value={formatDateTime(detail.paidAt)} />
+        </dl>
+
+        {detail.refundId !== null && (
+          <>
+            <h3 className="pt-2 text-sm font-extrabold text-muted">환불 정보</h3>
+            <dl className="grid gap-4 sm:grid-cols-3">
+              <Field label="환불 ID" value={`#${detail.refundId}`} />
+              <Field label="환불 상태" value={refundStatusLabels[detail.refundStatus ?? ""] ?? detail.refundStatus ?? "-"} />
+              <Field label="환불 금액" value={detail.refundAmount !== null ? formatAmount(detail.refundAmount) : "-"} />
+              <Field label="환불 사유" value={refundReasonLabels[detail.refundReason ?? ""] ?? detail.refundReason ?? "-"} />
+              <Field label="요청 도메인" value={refundRequestedByDomainLabels[detail.refundRequestedByDomain ?? ""] ?? detail.refundRequestedByDomain ?? "-"} />
+              <Field label="환불 요청 시각" value={formatDateTime(detail.refundRequestedAt)} />
+              <Field label="환불 처리 완료 시각" value={formatDateTime(detail.refundProcessedAt)} />
+            </dl>
+          </>
+        )}
+      </Card>
+
+      <Card className="space-y-4 p-6">
+        <h3 className="text-sm font-extrabold text-muted">연관 정보</h3>
+        <dl className="grid gap-4 sm:grid-cols-3">
+          <Field label="행사ID · 행사명" value={`#${detail.fairId} · ${detail.fairName}`} />
+          <Field label="행사 담당자" value={detail.fairManagerName} />
+          <Field label="행사 담당자 연락처" value={detail.fairManagerPhone ?? "-"} />
+          <Field label="행사 담당자 이메일" value={detail.fairManagerEmail} />
+        </dl>
+      </Card>
+    </div>
+  );
+}
 
 function formatDueAt(dueAt: string) {
   // 백엔드가 LocalDateTime을 오프셋 없이 내려주는데, 서버·DB·컨테이너가 전부 Asia/Seoul로
@@ -124,18 +199,25 @@ export function FairOpeningFeePaymentPage() {
   }
 
   const tossReady = isTossConfigured();
+  // 취소 승인(FairCancelRequestService#review)은 status를 안 바꾸고 canceledAt만 채운다 -
+  // status만 보면 취소된 행사도 여전히 PAYMENT_PENDING 등으로 보여서 결제 가능한 것처럼
+  // 나온다(2026-08-23, MyFairApplicationDetailPage의 resolveDisplayStatus와 같은 이유).
+  const canceled = summary.canceledAt !== null;
   const dueAtMs = summary.paymentDueAt ? new Date(summary.paymentDueAt).getTime() : null;
   const dueExpired = dueAtMs !== null && !Number.isNaN(dueAtMs) && dueAtMs <= now;
-  const payable = summary.status === "PAYMENT_PENDING" && summary.openingFeeAmount !== null && summary.paymentDueAt !== null && !dueExpired;
+  const payable = !canceled && summary.status === "PAYMENT_PENDING" && summary.openingFeeAmount !== null && summary.paymentDueAt !== null && !dueExpired;
 
   const nonPayableMessage = payable
     ? null
-    : summary.status === "PAYMENT_PENDING" && dueExpired
-      ? "결제 기한이 지났어요. 곧 신청이 만료될 예정이니 관리자에게 문의해 주세요."
-      : (STATUS_MESSAGE[summary.status] ?? "지금은 개설비를 결제할 수 없는 상태예요.");
-  // 개설비 결제가 이미 끝난 행사(PREPARING/IN_PROGRESS)는 결제 기한이 더 이상 의미가
-  // 없으니 카드 자체를 뺀다(2026-08-22).
-  const paidCompleted = summary.status === "PREPARING" || summary.status === "IN_PROGRESS";
+    : canceled
+      ? null
+      : summary.status === "PAYMENT_PENDING" && dueExpired
+        ? "결제 기한이 지났어요. 곧 신청이 만료될 예정이니 관리자에게 문의해 주세요."
+        : (STATUS_MESSAGE[summary.status] ?? "지금은 개설비를 결제할 수 없는 상태예요.");
+  // 개설비 결제가 이미 끝난 행사(PREPARING/IN_PROGRESS)이거나 취소된 행사는 결제 기한이 더
+  // 이상 의미가 없으니 카드 자체를 뺀다(2026-08-22, 취소는 2026-08-23 추가) - 취소된 행사는
+  // 결제 완료 여부와 무관하게 관리자 결제상세와 같은 "조회" 화면으로만 보여준다.
+  const paidCompleted = summary.status === "PREPARING" || summary.status === "IN_PROGRESS" || canceled;
   // 결제가 실제로 완료된 경우에만 안내 문구를 숨긴다 - 실패/만료 등 미완료 결제 시도가
   // 있어도 결제 불가 안내는 그대로 보여줘야 한다(2026-08-22 코드레빗 리뷰 반영, PR #230).
   const showNonPayableMessage = nonPayableMessage !== null && !paidCompleted;
@@ -169,10 +251,27 @@ export function FairOpeningFeePaymentPage() {
   return (
     <div className="mx-auto max-w-3xl py-2">
       <PageHeader
-        eyebrow="개설비 결제"
+        eyebrow={paidCompleted ? "개설비 결제 상세" : "개설비 결제"}
         title={summary.name}
-        description="행사를 개설하려면 개설비 결제를 마쳐야 해요."
+        description={paidCompleted ? undefined : "행사를 개설하려면 개설비 결제를 마쳐야 해요."}
       />
+
+      {canceled && (
+        <Card className="mb-4 flex items-start gap-2 p-4 text-sm">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-muted" />
+          <span className="text-muted">이 행사는 {formatDueAt(summary.canceledAt!)}에 취소가 확정됐어요.</span>
+        </Card>
+      )}
+
+      {/* 결제 완료된 행사는 "결제하기" 흐름이 필요 없으니, 관리자 결제상세(/admin/payments?id=)와
+          같은 구성으로 무엇을 얼마에 냈는지 보여준다(2026-08-23). payments[0]이 최신 결제
+          시도(getPayments가 created_at DESC로 내려줌) - FAIR_OPENING_FEE는 재시도가 거의
+          없어 사실상 그 행사의 결제 그 자체다. 취소된 행사인데 결제 시도 이력조차 없으면
+          (RECEIVED/PAYMENT_PENDING 상태에서 그대로 취소된 경우) 보여줄 결제 정보가 없다. */}
+      {paidCompleted && payments.length > 0 && <PaidOpeningFeeDetail detail={payments[0]} />}
+      {paidCompleted && payments.length === 0 && canceled && (
+        <EmptyState title="결제 이력이 없어요." description="개설비를 결제하기 전에 취소된 행사예요." />
+      )}
 
       {!paidCompleted && (
         <Card className="mb-4 p-5">
@@ -185,14 +284,10 @@ export function FairOpeningFeePaymentPage() {
         </Card>
       )}
 
-      {/* 결제 기한 + 결제ID를 한 카드에 같이 보여준다(2026-08-22) - 결제 상세 표는 굳이
-          필요 없다고 판단해서 뺐고, 결제ID만 이 카드 오른쪽에 짧게 붙여둔다. payments[0]이
-          최신 시도(getPayments가 created_at DESC로 내려줌). 결제 완료 후엔 기한 표시가
-          없어지니(paidCompleted) 그땐 오른쪽 결제ID만 남는다. */}
-      {((summary.paymentDueAt && !paidCompleted) || payments.length > 0) && (
+      {!paidCompleted && (summary.paymentDueAt || payments.length > 0) && (
         <Card className="mb-4 flex items-center justify-between gap-2 p-4 text-sm">
           <span className="flex items-center gap-2 text-muted">
-            {summary.paymentDueAt && !paidCompleted && (
+            {summary.paymentDueAt && (
               <>
                 <CalendarClock size={16} className="shrink-0" />
                 결제 기한 <b className="text-ink">{formatDueAt(summary.paymentDueAt)}</b>까지

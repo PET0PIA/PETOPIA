@@ -33,7 +33,17 @@ export interface PaymentDetail {
   paidAt: string | null;
   createdAt: string;
   fairId: number;
+  fairName: string;
+  // 행사 등록 신청 시 입력한 담당자 정보. manager_phone만 원래 선택 입력이라 null일 수 있다.
+  fairManagerName: string;
+  fairManagerPhone: string | null;
+  fairManagerEmail: string;
   businessId: number | null;
+  businessName: string | null;
+  // 부스(참가) 신청서 작성 시 입력한 담당자 정보. VENDOR_FEE 결제가 아니면 전부 null.
+  applicationManagerName: string | null;
+  applicationManagerPhone: string | null;
+  applicationManagerEmail: string | null;
   payerUserId: number | null;
   reservationId: number | null;
   applicationId: number | null;

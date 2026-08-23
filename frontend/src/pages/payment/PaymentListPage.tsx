@@ -24,7 +24,9 @@ function PaymentTable({ result }: { result: PaymentListResult }) {
     <Table>
       <thead>
         <tr className="border-b border-line bg-page text-xs font-bold text-muted">
-          <th className="px-4 py-3">결제</th>
+          <th className="px-4 py-3">결제ID</th>
+          <th className="px-4 py-3">행사이름</th>
+          <th className="px-4 py-3">참가업체 이름</th>
           <th className="px-4 py-3">유형</th>
           <th className="px-4 py-3">금액</th>
           <th className="px-4 py-3">상태</th>
@@ -36,6 +38,8 @@ function PaymentTable({ result }: { result: PaymentListResult }) {
         {result.content.map((row: PaymentDetail) => (
           <tr key={row.paymentId} className="border-b border-line last:border-b-0">
             <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.paymentId}</td>
+            <td className="whitespace-nowrap px-4 py-3 text-ink">{row.fairName}</td>
+            <td className="whitespace-nowrap px-4 py-3 text-ink">{row.businessName ?? "-"}</td>
             <td className="whitespace-nowrap px-4 py-3 text-ink">{paymentTypeLabels[row.paymentType]}</td>
             <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatAmount(row.amount)}</td>
             <td className="whitespace-nowrap px-4 py-3">

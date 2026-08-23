@@ -31,6 +31,7 @@ const OPENING_FEE_STATUS_TONES: Record<FairStatus, "sun" | "leaf" | "neutral" | 
 
 interface FairWithStatus extends AssignedFairSummary {
   status: FairStatus | null;
+  canceledAt: string | null;
 }
 
 /**
@@ -55,9 +56,9 @@ export function FairOpeningFeeSelectPage() {
           res.map(async (fair): Promise<FairWithStatus> => {
             try {
               const summary = await getFairOpeningFeeSummary(fair.fairId);
-              return { ...fair, status: summary.status };
+              return { ...fair, status: summary.status, canceledAt: summary.canceledAt };
             } catch {
-              return { ...fair, status: null };
+              return { ...fair, status: null, canceledAt: null };
             }
           }),
         );
@@ -109,8 +110,15 @@ export function FairOpeningFeeSelectPage() {
             <Card className="flex items-center justify-between p-4 hover:bg-page">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-ink">{fair.name}</span>
-                {fair.status && (
-                  <Badge tone={OPENING_FEE_STATUS_TONES[fair.status]}>{OPENING_FEE_STATUS_LABELS[fair.status]}</Badge>
+                {/* 취소된 행사는 승인대기/결제대기 같은 기존 상태 배지 대신 취소 배지만
+                    보여준다(2026-08-23) - status는 취소 승인 후에도 그대로라 같이 보여주면
+                    "결제 대기"인데 취소된 것처럼 헷갈린다. */}
+                {fair.canceledAt ? (
+                  <Badge tone="neutral">행사취소</Badge>
+                ) : (
+                  fair.status && (
+                    <Badge tone={OPENING_FEE_STATUS_TONES[fair.status]}>{OPENING_FEE_STATUS_LABELS[fair.status]}</Badge>
+                  )
                 )}
               </div>
               <ChevronRight size={18} className="text-muted" />

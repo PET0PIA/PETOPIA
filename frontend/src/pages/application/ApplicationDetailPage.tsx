@@ -20,6 +20,7 @@ import {
   type PaymentMethodOption,
 } from "../../payments/toss";
 import { PaymentMethodPicker } from "../../components/payment/PaymentMethodPicker";
+import { formatAmount, refundReasonLabels, refundRequestedByDomainLabels, refundStatusLabels } from "../payment/paymentDisplay";
 
 const statusLabels: Record<ApplicationStatus, string> = {
   PENDING_REVIEW: "심사 대기",
@@ -109,6 +110,10 @@ function ApplicationDetailContent({ id }: { id: number }) {
   // (2026-08-22 발견). ApplicationDetail에는 결제 정보가 없어서(applicationId만으로 단건
   // 조회하는 API가 없음), 신청자 본인 결제 목록(getMyPayments)에서 이 신청서 것만 걸러 찾는다.
   const [pendingVirtualAccount, setPendingVirtualAccount] = useState<PaymentRecord | null>(null);
+  // 확정(CONFIRMED)된 신청서의 결제 완료 내역 - 아래 completedPayment 조회와 같은 목록에서 같이
+  // 찾는다(2026-08-23, 관리자 결제상세/개설비 결제상세와 같은 구성의 결제정보·연관정보를
+  // 보여주는 데 쓴다). 못 찾으면(과거 데이터 등) 기존처럼 담당자 정보 카드만 보여준다.
+  const [completedPayment, setCompletedPayment] = useState<PaymentRecord | null>(null);
 
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -143,6 +148,8 @@ function ApplicationDetailContent({ id }: { id: number }) {
         if (!alive) return;
         const waiting = res.content.find((p) => p.applicationId === id && p.status === "WAITING_FOR_DEPOSIT");
         setPendingVirtualAccount(waiting ?? null);
+        const completed = res.content.find((p) => p.applicationId === id && p.status === "COMPLETED");
+        setCompletedPayment(completed ?? null);
       })
       .catch(() => {
         // 부가 정보라 실패해도 신청서 화면 자체는 그대로 보여준다 - 못 찾으면 그냥 기존
@@ -389,14 +396,62 @@ function ApplicationDetailContent({ id }: { id: number }) {
           </dl>
         </Card>
 
-        <Card className="space-y-4 p-6">
-          <h3 className="text-sm font-extrabold text-muted">담당자 정보</h3>
-          <dl className="grid gap-4 sm:grid-cols-3">
-            <Field label="이름" value={detail.managerName} />
-            <Field label="연락처" value={detail.managerPhone} />
-            <Field label="이메일" value={detail.managerEmail} />
-          </dl>
-        </Card>
+        {/* 확정된 신청서는 담당자 정보 카드 대신 관리자 결제상세/개설비 결제상세와 같은 구성으로
+            결제정보·연관정보를 보여준다(2026-08-23) - 담당자 정보는 연관정보 안에 같이 들어가서
+            따로 둘 필요가 없다. completedPayment를 못 찾은 경우(과거 데이터 등)엔 기존처럼
+            담당자 정보 카드만 보여준다. */}
+        {detail.status === "CONFIRMED" && completedPayment ? (
+          <>
+            <Card className="space-y-4 p-6">
+              <h3 className="text-sm font-extrabold text-muted">결제 정보</h3>
+              <dl className="grid gap-4 sm:grid-cols-3">
+                <Field label="결제 ID" value={`#${completedPayment.paymentId}`} />
+                <Field label="결제 금액" value={formatAmount(completedPayment.amount)} />
+                <Field label="결제 수단" value={completedPayment.method} />
+                <Field label="결제 요청 시각" value={formatDateTime(completedPayment.createdAt)} />
+                <Field label="결제 완료 시각" value={formatDateTime(completedPayment.paidAt)} />
+              </dl>
+
+              {completedPayment.refundId !== null && (
+                <>
+                  <h3 className="pt-2 text-sm font-extrabold text-muted">환불 정보</h3>
+                  <dl className="grid gap-4 sm:grid-cols-3">
+                    <Field label="환불 ID" value={`#${completedPayment.refundId}`} />
+                    <Field label="환불 상태" value={refundStatusLabels[completedPayment.refundStatus ?? ""] ?? completedPayment.refundStatus ?? "-"} />
+                    <Field label="환불 금액" value={completedPayment.refundAmount !== null ? formatAmount(completedPayment.refundAmount) : "-"} />
+                    <Field label="환불 사유" value={refundReasonLabels[completedPayment.refundReason ?? ""] ?? completedPayment.refundReason ?? "-"} />
+                    <Field label="요청 도메인" value={refundRequestedByDomainLabels[completedPayment.refundRequestedByDomain ?? ""] ?? completedPayment.refundRequestedByDomain ?? "-"} />
+                    <Field label="환불 요청 시각" value={formatDateTime(completedPayment.refundRequestedAt)} />
+                    <Field label="환불 처리 완료 시각" value={formatDateTime(completedPayment.refundProcessedAt)} />
+                  </dl>
+                </>
+              )}
+            </Card>
+
+            <Card className="space-y-4 p-6">
+              <h3 className="text-sm font-extrabold text-muted">연관 정보</h3>
+              <dl className="grid gap-4 sm:grid-cols-3">
+                <Field label="행사ID · 행사명" value={`#${completedPayment.fairId} · ${completedPayment.fairName}`} />
+                <Field
+                  label="참가ID · 참가명"
+                  value={completedPayment.applicationId !== null ? `#${completedPayment.applicationId} · ${completedPayment.businessName ?? detail.businessName}` : "-"}
+                />
+                <Field label="부스신청 담당자" value={completedPayment.applicationManagerName ?? detail.managerName} />
+                <Field label="부스신청 담당자 연락처" value={completedPayment.applicationManagerPhone ?? detail.managerPhone} />
+                <Field label="부스신청 담당자 이메일" value={completedPayment.applicationManagerEmail ?? detail.managerEmail} />
+              </dl>
+            </Card>
+          </>
+        ) : (
+          <Card className="space-y-4 p-6">
+            <h3 className="text-sm font-extrabold text-muted">담당자 정보</h3>
+            <dl className="grid gap-4 sm:grid-cols-3">
+              <Field label="이름" value={detail.managerName} />
+              <Field label="연락처" value={detail.managerPhone} />
+              <Field label="이메일" value={detail.managerEmail} />
+            </dl>
+          </Card>
+        )}
 
         <Card className="space-y-4 p-6">
           <h3 className="text-sm font-extrabold text-muted">진행 이력</h3>

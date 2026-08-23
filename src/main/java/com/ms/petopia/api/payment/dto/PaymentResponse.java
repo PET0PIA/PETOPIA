@@ -34,6 +34,15 @@ import java.time.LocalDateTime;
  * @param refundRequestedByDomain 환불을 촉발한 도메인
  * @param refundRequestedAt      환불 요청 시각
  * @param refundProcessedAt      환불 처리 완료 시각. 아직 처리 전(REQUESTED)이면 null
+ * @param fairName     행사 이름 (2026-08-23 추가 - 기존 필드 사이에 안 끼우고 끝에 붙였다,
+ *                     테스트가 이 record를 위치 기반 인자로 직접 생성하는 곳이 많아서다)
+ * @param businessName 참가업체(사업자) 이름, 관람객 예약금 결제일 땐 null
+ * @param fairManagerName  행사 담당자 이름 (행사 등록 신청 시 입력)
+ * @param fairManagerPhone 행사 담당자 연락처. 원래 선택 입력이라 null일 수 있음
+ * @param fairManagerEmail 행사 담당자 이메일
+ * @param applicationManagerName  부스(참가) 신청 담당자 이름. VENDOR_FEE 결제가 아니면 null
+ * @param applicationManagerPhone 부스(참가) 신청 담당자 연락처. VENDOR_FEE 결제가 아니면 null
+ * @param applicationManagerEmail 부스(참가) 신청 담당자 이메일. VENDOR_FEE 결제가 아니면 null
  */
 public record PaymentResponse(
         Long paymentId,
@@ -59,7 +68,15 @@ public record PaymentResponse(
         String refundReason,
         String refundRequestedByDomain,
         LocalDateTime refundRequestedAt,
-        LocalDateTime refundProcessedAt
+        LocalDateTime refundProcessedAt,
+        String fairName,
+        String businessName,
+        String fairManagerName,
+        String fairManagerPhone,
+        String fairManagerEmail,
+        String applicationManagerName,
+        String applicationManagerPhone,
+        String applicationManagerEmail
 ) {
 
     /**
@@ -91,7 +108,15 @@ public record PaymentResponse(
                 row.getRefundReason(),
                 row.getRefundRequestedByDomain(),
                 row.getRefundRequestedAt(),
-                row.getRefundProcessedAt()
+                row.getRefundProcessedAt(),
+                row.getFairName(),
+                row.getBusinessName(),
+                row.getFairManagerName(),
+                row.getFairManagerPhone(),
+                row.getFairManagerEmail(),
+                row.getApplicationManagerName(),
+                row.getApplicationManagerPhone(),
+                row.getApplicationManagerEmail()
         );
     }
 }

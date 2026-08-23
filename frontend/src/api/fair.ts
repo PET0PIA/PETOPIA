@@ -31,6 +31,9 @@ export interface FairOpeningFeeSummary {
   openingFeeAmount: number | null;
   /** 개설비 결제 기한. 승인 전이면 null. */
   paymentDueAt: string | null;
+  /** 행사 취소가 확정된 시각. 취소 안 됐으면 null - 취소 승인은 status를 안 바꾸고 이 필드만
+   * 채우므로, status만으로는 취소 여부를 판단할 수 없다. */
+  canceledAt: string | null;
 }
 
 /**

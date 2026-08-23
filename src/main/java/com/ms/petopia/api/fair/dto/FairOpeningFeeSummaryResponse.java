@@ -12,12 +12,16 @@ import java.time.LocalDateTime;
  *                         상태라는 걸 화면이 이 값으로 판단해 적절한 안내를 보여준다.
  * @param openingFeeAmount 승인 시 확정된 개설비 금액(원). 승인 전이면 null.
  * @param paymentDueAt     개설비 결제 기한. 승인 전이면 null.
+ * @param canceledAt       행사 취소가 확정된 시각. 취소 안 됐으면 null(2026-08-23 추가) - 취소 승인은
+ *                         status를 안 바꾸고 이 필드만 채우므로(FairCancelRequestService#review),
+ *                         화면이 결제 가능 여부·취소 배지를 판단하려면 status만으로는 부족하다.
  */
 public record FairOpeningFeeSummaryResponse(
         Long fairId,
         String name,
         String status,
         Long openingFeeAmount,
-        LocalDateTime paymentDueAt
+        LocalDateTime paymentDueAt,
+        LocalDateTime canceledAt
 ) {
 }
