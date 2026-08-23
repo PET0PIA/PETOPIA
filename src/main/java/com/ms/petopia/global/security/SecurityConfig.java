@@ -74,11 +74,16 @@ public class SecurityConfig {
                         .hasRole("VENDOR")
                         // Notification 도메인 - JWT로 전환됨(@AuthenticationPrincipal). 미인증 요청이
                         // permitAll로 통과하면 userId가 null이 되어 조회/처리가 깨지므로 로그인만 요구한다.
-                        // POST(다른 도메인 이벤트로 알림을 생성)는 사용자 인증 대상이 아니라 여기서 제외한다.
                         .requestMatchers(HttpMethod.GET, "/api/notifications", "/api/notifications/unread-count")
                         .authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/notifications/*/read", "/api/notifications/read-all")
                         .authenticated()
+                        // POST(임의의 userId로 알림 생성)는 실제로는 전부 서비스 계층 간 직접 호출
+                        // (NotificationService.save())로 이뤄져 이 HTTP 엔드포인트를 거치지 않는다.
+                        // 예전엔 "사용자 인증 대상이 아니다"로 보고 규칙에서 아예 뺐는데, 그러면
+                        // anyRequest().permitAll()로 떨어져 누구나 로그인 없이 남의 userId로 알림을
+                        // 만들 수 있는 구멍이었다 - SUPER_ADMIN 전용으로 잠근다(2026-08-23).
+                        .requestMatchers(HttpMethod.POST, "/api/notifications").hasRole("SUPER_ADMIN")
                         //로그인한 본인만 비밀번호 변경 가능 - anyRequest().permitAll()보다 먼저 와야 함
                         .requestMatchers(HttpMethod.PATCH, "/api/auth/password/change").authenticated()
                         //로그인한 본인만 내 프로필 조회/수정 가능
