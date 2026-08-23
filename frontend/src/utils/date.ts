@@ -54,4 +54,27 @@ export function todayInSeoul(): string {
 export function formatShortDate(value: string): string {
   return value.slice(0, 10).replace(/-/g, ".");
 }
+
+/** "2026-09-18" 또는 "2026-09-18T10:00:00" -> 그 날짜의 UTC 자정(ms). 형식이 어긋나면 null. */
+function ymdToUtcMillis(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const matched = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!matched) return null;
+  return Date.UTC(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3]));
+}
+
+/**
+ * 오늘(Asia/Seoul)부터 그 날짜까지 남은 일수. 오늘이면 0, 이미 지났으면 음수, 형식이
+ * 어긋나거나 날짜가 없으면 null. 홈의 "D-12" 배지처럼 남은 날짜를 세는 데 쓴다.
+ *
+ * 두 날짜를 UTC 자정으로 환산해서 빼는 이유: 로컬 Date끼리 빼면 서머타임이 있는 지역에서
+ * 하루가 23시간·25시간이 되는 구간에 결과가 하루 밀린다. 기준일도 브라우저 로컬이 아니라
+ * {@link todayInSeoul}을 쓴다(해외 기기에서 자정 근처에 하루 밀리는 것 방지).
+ */
+export function daysUntilInSeoul(value: string | null | undefined): number | null {
+  const target = ymdToUtcMillis(value);
+  const today = ymdToUtcMillis(todayInSeoul());
+  if (target === null || today === null) return null;
+  return Math.round((target - today) / 86_400_000);
+}
 import type { KeyboardEvent } from "react";

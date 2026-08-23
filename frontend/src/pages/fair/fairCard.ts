@@ -1,4 +1,4 @@
-import type { FairStatus } from "../../api/fair";
+import type { FairPublicListItem, FairStatus } from "../../api/fair";
 import { todayInSeoul } from "../../utils/date";
 
 export const fairCategoryLabels: Record<string, string> = { DOG: "강아지", CAT: "고양이", ETC: "기타" };
@@ -53,4 +53,31 @@ export function formatFairPeriodDow(start: string | null, end: string | null) {
   if (!e) return startText;
   const endText = s.month === e.month ? `${e.day}(${WEEKDAY_LABELS[e.dow]})` : `${e.month}.${e.day}(${WEEKDAY_LABELS[e.dow]})`;
   return `${startText} - ${endText}`;
+}
+
+/*
+ * 행사 카드 하단 버튼. 예매 화면(/tickets/:fairId)은 사전예약과 현장예매를 **둘 다** 다루므로,
+ * 둘 중 하나라도 가능성이 있으면 비활성 버튼이 아니라 링크를 준다.
+ *
+ * - reservable: 사전예약 가능(예매 기간 안 + 자리 남은 운영일 존재) → "예매하기"
+ * - IN_PROGRESS: 운영 중인 행사 → "현장예매". 사전예약이 닫혔어도 현장예매는 열려 있을 수
+ *   있고, 그 화면은 오늘이 운영기간 안이면 현장예매 폼을 띄운다(TicketReservationPage).
+ *
+ * reservable을 먼저 보는 이유: 여러 날 열리는 행사는 운영 중에도 남은 날짜 사전예약이 열려
+ * 있다. 그 화면은 두 유형을 함께 보여주므로 더 넓은 쪽인 "예매하기"로 부르는 게 맞다.
+ *
+ * 진행 중을 비활성으로 두면 안 되는 이유: 현장예매 입구가 이 버튼뿐이라, 회색 버튼으로
+ * 막으면 실제로 가능한 현장예매까지 차단된다. 판매 상태(OPEN/PAUSED/CLOSED)·입장 마감 시각
+ * 같은 최종 판정은 백엔드 OnsiteReservationService가 하므로 여기서 미리 닫지 않는다.
+ *
+ * 행사 목록(FairListPage)과 홈의 "다가오는 행사"가 이 함수를 함께 쓴다 - 같은 행사가 화면에
+ * 따라 다른 버튼으로 보이면 안 되기 때문에, 복사하지 않고 이 한 곳만 고친다.
+ */
+export function reserveCta(fair: FairPublicListItem, ended: boolean): { to?: string; label: string } {
+  if (ended) return { label: "종료" };
+  if (fair.reservable) return { to: `/tickets/${fair.fairId}`, label: "예매하기" };
+  if (isFairInProgress(fair.status, fair.operationStartDate, fair.operationEndDate)) {
+    return { to: `/tickets/${fair.fairId}`, label: "현장예매" };
+  }
+  return { label: "오픈 예정" };
 }
