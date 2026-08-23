@@ -93,10 +93,10 @@ function PaidOpeningFeeDetail({ detail }: { detail: PaymentDetail }) {
       <Card className="space-y-4 p-6">
         <h3 className="text-sm font-extrabold text-muted">연관 정보</h3>
         <dl className="grid gap-4 sm:grid-cols-3">
-          <Field label="행사ID · 행사명" value={`#${detail.fairId} · ${detail.fairName}`} />
-          <Field label="행사 담당자" value={detail.fairManagerName} />
+          <Field label="행사ID · 행사명" value={`#${detail.fairId} · ${detail.fairName ?? "-"}`} />
+          <Field label="행사 담당자" value={detail.fairManagerName ?? "-"} />
           <Field label="행사 담당자 연락처" value={detail.fairManagerPhone ?? "-"} />
-          <Field label="행사 담당자 이메일" value={detail.fairManagerEmail} />
+          <Field label="행사 담당자 이메일" value={detail.fairManagerEmail ?? "-"} />
         </dl>
       </Card>
     </div>

@@ -38,7 +38,7 @@ function PaymentTable({ result }: { result: PaymentListResult }) {
         {result.content.map((row: PaymentDetail) => (
           <tr key={row.paymentId} className="border-b border-line last:border-b-0">
             <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.paymentId}</td>
-            <td className="whitespace-nowrap px-4 py-3 text-ink">{row.fairName}</td>
+            <td className="whitespace-nowrap px-4 py-3 text-ink">{row.fairName ?? "-"}</td>
             <td className="whitespace-nowrap px-4 py-3 text-ink">{row.businessName ?? "-"}</td>
             <td className="whitespace-nowrap px-4 py-3 text-ink">{paymentTypeLabels[row.paymentType]}</td>
             <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatAmount(row.amount)}</td>

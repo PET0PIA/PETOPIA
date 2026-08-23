@@ -431,7 +431,7 @@ function ApplicationDetailContent({ id }: { id: number }) {
             <Card className="space-y-4 p-6">
               <h3 className="text-sm font-extrabold text-muted">연관 정보</h3>
               <dl className="grid gap-4 sm:grid-cols-3">
-                <Field label="행사ID · 행사명" value={`#${completedPayment.fairId} · ${completedPayment.fairName}`} />
+                <Field label="행사ID · 행사명" value={`#${completedPayment.fairId} · ${completedPayment.fairName ?? "-"}`} />
                 <Field
                   label="참가ID · 참가명"
                   value={completedPayment.applicationId !== null ? `#${completedPayment.applicationId} · ${completedPayment.businessName ?? detail.businessName}` : "-"}

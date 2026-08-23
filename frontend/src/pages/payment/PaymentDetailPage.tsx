@@ -59,7 +59,16 @@ export function PaymentDetailPage() {
   // 마이크로태스크로 한 틱 미룬다(react-hooks/set-state-in-effect).
   useEffect(() => {
     const idParam = Number(searchParams.get("id"));
-    if (!Number.isInteger(idParam) || idParam <= 0) return;
+    if (!Number.isInteger(idParam) || idParam <= 0) {
+      // id가 없어지거나 잘못된 값이 되면(URL 직접 수정 등) 이전 결제의 detail이 화면에 그대로
+      // 남지 않도록 비운다 - 진행 중이던 요청의 응답도 무시하게 요청 순번을 먼저 무효화한다
+      // (CodeRabbit 지적, PR #258).
+      latestRequestIdRef.current++;
+      setDetail(null);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
     queueMicrotask(() => loadPayment(idParam));
   }, [loadPayment, searchParams]);
 
@@ -126,15 +135,15 @@ export function PaymentDetailPage() {
                   별도 스펙이 없어서 기존 필드 그대로 둔다. */}
               {detail.paymentType === "FAIR_OPENING_FEE" && (
                 <>
-                  <Field label="행사ID · 행사명" value={`#${detail.fairId} · ${detail.fairName}`} />
-                  <Field label="행사 담당자" value={detail.fairManagerName} />
+                  <Field label="행사ID · 행사명" value={`#${detail.fairId} · ${detail.fairName ?? "-"}`} />
+                  <Field label="행사 담당자" value={detail.fairManagerName ?? "-"} />
                   <Field label="행사 담당자 연락처" value={detail.fairManagerPhone ?? "-"} />
-                  <Field label="행사 담당자 이메일" value={detail.fairManagerEmail} />
+                  <Field label="행사 담당자 이메일" value={detail.fairManagerEmail ?? "-"} />
                 </>
               )}
               {detail.paymentType === "VENDOR_FEE" && (
                 <>
-                  <Field label="행사ID · 행사명" value={`#${detail.fairId} · ${detail.fairName}`} />
+                  <Field label="행사ID · 행사명" value={`#${detail.fairId} · ${detail.fairName ?? "-"}`} />
                   <Field
                     label="참가ID · 참가명"
                     value={detail.applicationId !== null ? `#${detail.applicationId} · ${detail.businessName ?? "-"}` : "-"}
@@ -146,7 +155,7 @@ export function PaymentDetailPage() {
               )}
               {detail.paymentType === "RESERVATION_DEPOSIT" && (
                 <>
-                  <Field label="행사 이름" value={detail.fairName} />
+                  <Field label="행사 이름" value={detail.fairName ?? "-"} />
                   <Field label="결제자 사용자 ID" value={detail.payerUserId !== null ? `#${detail.payerUserId}` : "-"} />
                   <Field label="예약 ID" value={detail.reservationId !== null ? `#${detail.reservationId}` : "-"} />
                 </>

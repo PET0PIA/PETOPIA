@@ -33,11 +33,17 @@ export interface PaymentDetail {
   paidAt: string | null;
   createdAt: string;
   fairId: number;
-  fairName: string;
+  // 아래 fairName·fairManager*·businessName·applicationManager*는 fairs/business/
+  // application_form을 LEFT JOIN해서 채운다 - refund* 7개와 동일한 이유로 getPayments/
+  // getMyPayments(목록)와 getPayment(상세)만 채워준다. 그 외 결제 생성/확정 응답(createXxxPayment/
+  // confirmPayment)에는 이 JOIN이 없어서 전부 null로 온다 - CodeRabbit 지적(PR #258),
+  // 실제로는 null일 수 있는데 fairName/fairManagerName/fairManagerEmail을 non-null로
+  // 잘못 선언해뒀었다.
+  fairName: string | null;
   // 행사 등록 신청 시 입력한 담당자 정보. manager_phone만 원래 선택 입력이라 null일 수 있다.
-  fairManagerName: string;
+  fairManagerName: string | null;
   fairManagerPhone: string | null;
-  fairManagerEmail: string;
+  fairManagerEmail: string | null;
   businessId: number | null;
   businessName: string | null;
   // 부스(참가) 신청서 작성 시 입력한 담당자 정보. VENDOR_FEE 결제가 아니면 전부 null.
