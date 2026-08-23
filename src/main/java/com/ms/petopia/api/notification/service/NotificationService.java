@@ -1,6 +1,5 @@
 package com.ms.petopia.api.notification.service;
 
-import com.ms.petopia.api.auth.domain.User;
 import com.ms.petopia.api.auth.mapper.AuthMapper;
 import com.ms.petopia.api.notification.dto.SaveNotificationDto;
 import com.ms.petopia.api.notification.dto.DeliveryChannel;
@@ -33,19 +32,21 @@ public class NotificationService {
 
     private final NotificationMapper notificationMapper;
     private final NotificationDeliveryMapper notificationDeliveryMapper;
-    private final EmailSenderService emailSenderService;
     private final AuthMapper authMapper;
     private final PlatformTransactionManager transactionManager;
 
+    /**
+     * IN_APP만 실제로 배달한다. 예전엔 EMAIL 채널이 오면 EmailSenderService로 일반 텍스트
+     * 메일을 직접 보냈는데, PETOPIA 스타일 HTML 메일(MailService)과 디자인이 달라 문제였고
+     * (2026-08-23), 실제로 그 경로를 쓰던 호출부도 전부 MailService 템플릿으로 옮기거나
+     * 아예 없앴다 - 이메일이 필요하면 호출자가 MailService를 직접 쓴다. channels에 IN_APP
+     * 외의 값이 와도 예외 없이 조용히 무시한다(과거 EMAIL 요청과의 하위 호환).
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public SaveNotificationDto.Response save(SaveNotificationDto.Request request) {
         if (request.channels().size() != new HashSet<>(request.channels()).size()) {
             throw new CommonException(ErrorCode.INVALID_INPUT_VALUE, "channels에 중복된 값이 있습니다");
         }
-
-        // EMAIL 채널 요청 시 recipientContact가 없으면 userId로 이메일을 자동 조회한다.
-        // 명시적으로 전달된 값이 있으면 그것을 우선 사용한다.
-        String resolvedContact = resolveRecipientContact(request);
 
         Notification notification = Notification.builder()
                 .userId(request.userId())
@@ -58,59 +59,18 @@ public class NotificationService {
         notificationMapper.insert(notification);
 
         for (DeliveryChannel channel : request.channels()) {
-            // 이메일 주소를 끝내 구하지 못한 경우 EMAIL 채널은 건너뜀
-            if (channel == DeliveryChannel.EMAIL && (resolvedContact == null || resolvedContact.isBlank())) {
+            if (channel != DeliveryChannel.IN_APP) {
                 continue;
             }
             NotificationDelivery delivery = NotificationDelivery.builder()
                     .notificationId(notification.getNotificationId())
                     .channel(channel)
                     .status(DeliveryStatus.PENDING)
-                    .recipientContact(channel == DeliveryChannel.IN_APP ? null : resolvedContact)
+                    .recipientContact(null)
                     .build();
             notificationDeliveryMapper.insert(delivery);
-
-            if (channel == DeliveryChannel.EMAIL) {
-                sendEmail(delivery, request);
-            }
         }
         return new SaveNotificationDto.Response(notification.getNotificationId());
-    }
-
-    /**
-     * EMAIL 채널이 없으면 요청에 담긴 값을 그대로 반환한다.
-     * EMAIL 채널이 있고 recipientContact가 명시됐으면 그 값을 쓴다.
-     * EMAIL 채널이 있고 recipientContact가 없으면 userId로 회원 이메일을 조회한다.
-     * 조회 결과도 없으면 EMAIL 채널은 건너뛰도록 예외 대신 null을 반환한다.
-     */
-    private String resolveRecipientContact(SaveNotificationDto.Request request) {
-        if (!request.channels().contains(DeliveryChannel.EMAIL)) {
-            return request.recipientContact();
-        }
-        if (request.recipientContact() != null && !request.recipientContact().isBlank()) {
-            return request.recipientContact();
-        }
-        User user = authMapper.selectUserById(request.userId());
-        if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
-            log.warn("EMAIL 채널 요청이나 이메일 주소를 찾을 수 없음. userId={}", request.userId());
-            return null;
-        }
-        return user.getEmail();
-    }
-
-    private void sendEmail(NotificationDelivery delivery, SaveNotificationDto.Request request) {
-        try {
-            emailSenderService.send(delivery.getRecipientContact(), request.title(), request.body());
-        } catch (Exception e) {
-            notificationDeliveryMapper.updateStatus(delivery.getDeliveryId(), DeliveryStatus.FAILED, null, e.getMessage());
-            return;
-        }
-        // 발송 성공 — 상태 기록 실패 시 FAILED로 덮어쓰지 않고 PENDING으로 남긴다.
-        try {
-            notificationDeliveryMapper.updateStatus(delivery.getDeliveryId(), DeliveryStatus.SENT, LocalDateTime.now(), null);
-        } catch (Exception e) {
-            log.warn("이메일 발송 성공했으나 상태 갱신 실패. deliveryId={}", delivery.getDeliveryId(), e);
-        }
     }
 
     @Transactional

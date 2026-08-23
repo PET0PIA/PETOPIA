@@ -771,7 +771,8 @@ public class PaymentService {
             if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
                 return;
             }
-            mailService.sendPaymentCompletedEmail(user.getEmail(), row.getAmount(), row.getMethod(), row.getPaidAt());
+            String fairName = row.getFairId() == null ? null : paymentMapper.selectFairNameById(row.getFairId());
+            mailService.sendPaymentCompletedEmail(user.getEmail(), fairName, row.getAmount(), row.getMethod(), row.getPaidAt());
         } catch (Exception e) {
             log.error("결제 완료 이메일 발송 실패. paymentId={}, userId={}",
                     row.getPaymentId(), row.getPayerUserId(), e);

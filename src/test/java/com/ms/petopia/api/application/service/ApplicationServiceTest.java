@@ -14,6 +14,7 @@ import com.ms.petopia.api.fair.service.BoothSlotService;
 import com.ms.petopia.api.fair.service.FairAdminAccessGuard;
 import com.ms.petopia.api.notification.dto.NotificationType;
 import com.ms.petopia.api.notification.service.NotificationService;
+import com.ms.petopia.api.payment.mapper.PaymentMapper;
 import com.ms.petopia.api.recruitnotice.domain.FairStatusInfo;
 import com.ms.petopia.api.recruitnotice.domain.RecruitNotice;
 import com.ms.petopia.api.recruitnotice.mapper.RecruitNoticeMapper;
@@ -89,6 +90,9 @@ class ApplicationServiceTest {
 
     @Mock
     private FairAdminAccessGuard fairAdminAccessGuard;
+
+    @Mock
+    private PaymentMapper paymentMapper;
 
     @InjectMocks
     private ApplicationService applicationService;

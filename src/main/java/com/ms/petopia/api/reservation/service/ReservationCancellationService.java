@@ -194,7 +194,8 @@ public class ReservationCancellationService {
                 try {
                     User user = authMapper.selectUserById(notifyUserId);
                     if (user != null && user.getEmail() != null && !user.getEmail().isBlank()) {
-                        mailService.sendReservationCanceledEmail(user.getEmail(), reservation.getVisitDate(),
+                        String fairName = paymentMapper.selectFairNameById(reservation.getFairId());
+                        mailService.sendReservationCanceledEmail(user.getEmail(), fairName, reservation.getVisitDate(),
                                 reservation.getReservationAmount());
                     }
                 } catch (Exception e) {

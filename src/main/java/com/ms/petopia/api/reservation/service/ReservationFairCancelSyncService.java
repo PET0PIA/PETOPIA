@@ -172,6 +172,10 @@ public class ReservationFairCancelSyncService {
     /**
      * 취소 알림은 커밋 뒤에 저장한다 - 배치가 롤백되면 "취소됐다"는 알림만 남는 걸 막는다.
      * 알림 저장 실패가 이미 끝난 취소를 되돌리면 안 되므로 건별로 예외를 삼킨다.
+     *
+     * <p>IN_APP만 보낸다 - 이 시점 사용자는 이미 FAIR_CANCELED, REFUND_COMPLETED 이메일을
+     * 받은 뒤라 "예약이 취소되었습니다" 이메일까지 더하면 중복 안내다. 알림함/마이페이지에서
+     * 개별 예약 상태 변경을 확인할 수 있도록 IN_APP 기록만 남긴다.
      */
     private void registerCancelNotifications(List<Long> userIds) {
         if (userIds.isEmpty()) {
@@ -190,7 +194,7 @@ public class ReservationFairCancelSyncService {
                                 "예약이 취소되었습니다",
                                 "행사가 취소되어 예약이 자동으로 취소되었습니다.",
                                 null,
-                                List.of(DeliveryChannel.IN_APP, DeliveryChannel.EMAIL),
+                                List.of(DeliveryChannel.IN_APP),
                                 null
                         ));
                     } catch (Exception e) {
