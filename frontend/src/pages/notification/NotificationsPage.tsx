@@ -21,19 +21,39 @@ function formatCreatedAt(value: string) {
 export function NotificationsPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState<NotificationListItem[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const response = await getMyNotifications();
+      const response = await getMyNotifications(0);
       setItems(response.items);
+      setPage(response.page);
+      setHasNext(response.hasNext);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "알림을 불러오지 못했어요.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // "더 보기" - 다음 페이지를 이어붙인다(기존 목록 교체 아님).
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const response = await getMyNotifications(page + 1);
+      setItems((previous) => [...previous, ...response.items]);
+      setPage(response.page);
+      setHasNext(response.hasNext);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "이전 알림을 더 불러오지 못했어요.");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -119,6 +139,14 @@ export function NotificationsPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {!loading && hasNext && (
+        <div className="mt-6 flex justify-center">
+          <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? "불러오는 중..." : "이전 알림 더 보기"}
+          </Button>
+        </div>
       )}
     </PageContainer>
   );
