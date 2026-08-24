@@ -726,7 +726,7 @@ export function TicketReservationPage() {
                   : "같은 날짜는 한 번만 예약할 수 있어요. 방문일을 바꾸려면 내 예약에서 '방문일 변경'을 이용해 주세요."}
               </p>
               <Link
-                to={myPendingDate ? `/reservations/me/${myPendingDate.myReservationId}` : "/reservations/me"}
+                to={myPendingDate ? `/mypage/reservations/${myPendingDate.myReservationId}` : "/mypage/reservations"}
                 className="mt-2 inline-flex min-h-11 items-center font-bold text-primary-strong hover:underline"
               >
                 {myPendingDate ? "결제 이어서 하기 ›" : "내 예약 보기 ›"}

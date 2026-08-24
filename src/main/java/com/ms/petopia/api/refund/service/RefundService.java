@@ -289,7 +289,9 @@ public class RefundService {
     /** 결제 유형별로 환불받은 결제자가 확인해야 할 상세 화면을 가리킨다. */
     private String refundDetailLinkUrl(PaymentRow payment) {
         if ("RESERVATION_DEPOSIT".equals(payment.getPaymentType()) && payment.getReservationId() != null) {
-            return "/reservations/me/" + payment.getReservationId();
+            // 2026-08-24: 예약 상세 화면이 마이페이지 사이드바 아래로 옮겨져 경로가 바뀌었다.
+            // 옛 경로("/reservations/me/{id}")는 프론트 라우터가 리다이렉트로 받아준다.
+            return "/mypage/reservations/" + payment.getReservationId();
         }
         if ("VENDOR_FEE".equals(payment.getPaymentType()) && payment.getApplicationId() != null) {
             return "/participations/me/" + payment.getApplicationId();

@@ -98,7 +98,7 @@ export function FairOpeningFeeSelectPage() {
   }
 
   if (fairs.length === 1) {
-    return <Navigate to={`/payments/fair-opening-fee/${fairs[0].fairId}`} replace />;
+    return <Navigate to={`/fair-admin/payments/fair-opening-fee/${fairs[0].fairId}`} replace />;
   }
 
   return (
@@ -106,7 +106,7 @@ export function FairOpeningFeeSelectPage() {
       <PageHeader eyebrow="개설비 결제" title="담당 행사 선택" description="개설비를 결제할 행사를 골라 주세요." />
       <div className="flex flex-col gap-3">
         {fairs.map((fair) => (
-          <Link key={fair.fairId} to={`/payments/fair-opening-fee/${fair.fairId}`}>
+          <Link key={fair.fairId} to={`/fair-admin/payments/fair-opening-fee/${fair.fairId}`}>
             <Card className="flex items-center justify-between p-4 hover:bg-page">
               <div className="flex items-center gap-2">
                 <span className="font-bold text-ink">{fair.name}</span>

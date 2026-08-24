@@ -51,6 +51,9 @@ export interface PaymentDetail {
   applicationManagerPhone: string | null;
   applicationManagerEmail: string | null;
   payerUserId: number | null;
+  // 결제자(payerUserId) 닉네임. 결제유형과 무관하게 payerUserId가 있으면 채워진다(2026-08-24,
+  // "예약티켓예매결제현황" 화면의 예약자명 표시용). getPayments/getPayment(상세)만 채워준다.
+  payerNickname: string | null;
   reservationId: number | null;
   applicationId: number | null;
   // 간편결제(네이버페이 등)로 결제했을 때만 값이 있다. 일반 카드/계좌이체 등이면 null.

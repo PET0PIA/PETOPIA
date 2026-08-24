@@ -279,7 +279,7 @@ function MyFairApplicationDetailContent({ id }: { id: number }) {
 
         {!detail.canceledAt && detail.status === "PAYMENT_PENDING" && (
           <Link
-            to={`/payments/fair-opening-fee/${detail.fairId}`}
+            to={`/fair-admin/payments/fair-opening-fee/${detail.fairId}`}
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-button bg-primary-strong px-4 text-sm font-bold text-white transition hover:opacity-90"
           >
             <CreditCard size={16} />결제하러가기
