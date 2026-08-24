@@ -180,7 +180,8 @@ public class ReservationVisitDateChangeService {
                             NotificationType.RESERVATION_CHANGED,
                             "예약 날짜가 변경되었습니다",
                             "방문 날짜가 " + request.visitDate() + "(으)로 변경되었습니다.",
-                            "/reservations/me/" + reservationId,
+                            // 2026-08-24: 예약 상세 경로 변경(마이페이지 사이드바 아래로) - 옛 경로는 리다이렉트됨.
+                            "/mypage/reservations/" + reservationId,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));

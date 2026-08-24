@@ -180,7 +180,8 @@ public class ReservationPaymentCompletionService {
                             fairName == null || fairName.isBlank()
                                     ? "예약이 확정되었습니다" : "'" + fairName + "' 예약이 확정되었습니다",
                             "결제가 완료되어 예약이 확정되었습니다.",
-                            "/reservations/me/" + reservationId,
+                            // 2026-08-24: 예약 상세 경로 변경(마이페이지 사이드바 아래로) - 옛 경로는 리다이렉트됨.
+                            "/mypage/reservations/" + reservationId,
                             List.of(DeliveryChannel.IN_APP),
                             null
                     ));

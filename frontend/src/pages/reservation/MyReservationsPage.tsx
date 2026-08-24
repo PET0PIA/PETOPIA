@@ -133,7 +133,7 @@ export function MyReservationsPage() {
             return (
               <li key={item.reservationId}>
                 <Link
-                  to={`/reservations/me/${item.reservationId}`}
+                  to={`/mypage/reservations/${item.reservationId}`}
                   aria-label={`${item.fairName} 예약 상세 보기`}
                   className={`surface flex items-center gap-4 p-4 transition-colors hover:border-muted ${inactive ? "opacity-60" : ""}`}
                 >

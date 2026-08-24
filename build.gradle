@@ -67,6 +67,10 @@ dependencies {
     implementation 'com.google.zxing:core:3.5.3'
     implementation 'com.google.zxing:javase:3.5.3'
 
+    // 로컬 개발용 자동 재시작(코드 저장 시 재컴파일 감지해 앱을 자동으로 다시 띄움).
+    // developmentOnly라 배포용 아티팩트(bootJar)에는 포함되지 않는다.
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
 }
 
 tasks.named('test') {

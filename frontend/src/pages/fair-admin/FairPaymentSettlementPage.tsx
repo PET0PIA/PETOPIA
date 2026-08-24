@@ -1,11 +1,12 @@
-import { AlertCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { AlertCircle, Search } from "lucide-react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../../api/client";
-import { getPayments, type PaymentDetail, type PaymentListResult, type PaymentStatus } from "../../api/payment";
+import { getPayment, getPayments, type PaymentDetail, type PaymentListResult, type PaymentStatus } from "../../api/payment";
 import { getFairRevenueSummary, type FairRevenueSummaryResponse } from "../../api/settlement";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Table } from "../../components/ui/Table";
 import { PageHeader } from "../../components/common/PageHeader";
@@ -21,23 +22,142 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
-// 담당 행사의 참가비 결제 현황(참가업체 결제 목록, VENDOR_FEE 고정). 행사 전환 시 자동으로 다시 조회한다.
+/**
+ * 참가비 결제 현황·예약티켓 예매결제 현황이 공유하는 검색 폼(2026-08-24). 세 칸(연관ID/결제상태/
+ * 결제ID)을 동시에 보여주고 전부 선택 입력이다 - 비워두고 조회하면 그 칸은 필터에서 빠져서
+ * 전체 조회가 된다. admin/SettlementPage.tsx의 "행사비 조회" 폼과 레이아웃을 맞췄다.
+ */
+function PaymentSearchForm({
+  idLabel,
+  idPlaceholder,
+  idValue,
+  onIdChange,
+  statusValue,
+  onStatusChange,
+  // 참가비 결제만 가상계좌를 쓸 수 있어서 "입금 대기"는 그쪽 드롭다운에만 넣는다(2026-08-24) -
+  // 예약금 결제는 가상계좌 자체가 안 되니(ReservationPaymentMethod 주석 참고) 이 상태가 나올 수 없다.
+  includeWaitingForDeposit,
+  paymentIdValue,
+  onPaymentIdChange,
+  loading,
+  onSubmit,
+}: {
+  idLabel: string;
+  idPlaceholder: string;
+  idValue: string;
+  onIdChange: (value: string) => void;
+  statusValue: PaymentStatus | "";
+  onStatusChange: (value: PaymentStatus | "") => void;
+  includeWaitingForDeposit?: boolean;
+  paymentIdValue: string;
+  onPaymentIdChange: (value: string) => void;
+  loading: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="surface mb-6 flex flex-col gap-3 sm:flex-row sm:items-end p-5">
+      <div className="flex-1">
+        <label className="mb-1.5 block text-sm font-bold text-ink">{idLabel}</label>
+        <Input
+          className="input-no-spinner"
+          type="number"
+          min={1}
+          value={idValue}
+          onChange={(event) => onIdChange(event.target.value)}
+          placeholder={idPlaceholder}
+        />
+      </div>
+      <div className="flex-1">
+        <label className="mb-1.5 block text-sm font-bold text-ink">결제상태</label>
+        <Select aria-label="결제 상태" value={statusValue} onChange={(event) => onStatusChange(event.target.value as PaymentStatus | "")}>
+          <option value="">전체</option>
+          <option value="PENDING">결제 대기</option>
+          {includeWaitingForDeposit && <option value="WAITING_FOR_DEPOSIT">입금 대기</option>}
+          <option value="COMPLETED">결제 완료</option>
+          <option value="FAILED">결제 실패</option>
+          <option value="CANCELED">결제 취소</option>
+          <option value="EXPIRED">만료됨</option>
+        </Select>
+      </div>
+      <div className="flex-1">
+        <label className="mb-1.5 block text-sm font-bold text-ink">결제ID</label>
+        <Input
+          className="input-no-spinner"
+          type="number"
+          min={1}
+          value={paymentIdValue}
+          onChange={(event) => onPaymentIdChange(event.target.value)}
+          placeholder="예: 10"
+        />
+      </div>
+      {/* Button 기본 높이(min-h-11=44px)가 Input/Select 높이(h-12=48px)보다 낮아서 나란히 두면
+          어긋나 보였다(2026-08-24, admin/SettlementPage.tsx의 "행사비 조회"와 같은 문제) - h-12로 맞춘다. */}
+      <Button type="submit" variant="outline" className="h-12" disabled={loading}>
+        <Search size={16} />
+        조회
+      </Button>
+    </form>
+  );
+}
+
+/** 선택 입력 숫자 필드 파싱 - 빈 값이면 필터 없음(null), 잘못된 값이면 "invalid". */
+function parseOptionalId(raw: string): number | null | "invalid" {
+  if (!raw.trim()) return null;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) return "invalid";
+  return parsed;
+}
+
+// 담당 행사의 참가비 결제 현황(참가업체 결제 목록, VENDOR_FEE 고정). "전체상태" 필터 대신
+// 참가업체ID/결제상태/결제ID 세 칸을 동시에 두고 필요한 칸만 채워 조회한다(2026-08-24) -
+// 전부 비워두면 결제ID만 없다는 뜻이라 businessId/status 없이 그대로 전체 조회로 이어진다.
 function VendorPaymentSection({ fairId }: { fairId: number }) {
+  const [businessIdInput, setBusinessIdInput] = useState("");
   const [status, setStatus] = useState<PaymentStatus | "">("");
+  const [paymentIdInput, setPaymentIdInput] = useState("");
+  const [searched, setSearched] = useState(false);
   const [result, setResult] = useState<PaymentListResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 행사 전환·상태 필터 변경이 겹쳐 일어날 수 있어서, 먼저 시작했지만 나중에 끝난 요청이
-  // 최신 화면을 덮어쓰지 않도록 요청 순번을 추적한다.
+  // 검색이 겹쳐 일어날 수 있어서, 먼저 시작했지만 나중에 끝난 요청이 최신 화면을
+  // 덮어쓰지 않도록 요청 순번을 추적한다.
   const requestIdRef = useRef(0);
 
-  async function load(page: number) {
+  async function search(page: number) {
     const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
-      const data = await getPayments({ fairId, paymentType: "VENDOR_FEE", status: status || undefined, page });
+      const paymentIdParsed = parseOptionalId(paymentIdInput);
+      if (paymentIdParsed === "invalid") {
+        setError("결제 ID는 1 이상의 숫자로 입력해 주세요.");
+        setResult(null);
+        return;
+      }
+      // 결제ID가 있으면 그 결제 하나만 단건 조회한다 - 참가업체ID/상태는 결제ID와 같이
+      // 좁혀 쓸 이유가 없어서(결제ID 자체가 이미 유일 식별자) 무시한다.
+      if (paymentIdParsed !== null) {
+        const detail = await getPayment(paymentIdParsed);
+        if (requestIdRef.current !== requestId) return;
+        const matches = detail.fairId === fairId && detail.paymentType === "VENDOR_FEE";
+        setResult({ content: matches ? [detail] : [], page: 0, size: 1, totalElements: matches ? 1 : 0, totalPages: matches ? 1 : 0 });
+        return;
+      }
+
+      const businessIdParsed = parseOptionalId(businessIdInput);
+      if (businessIdParsed === "invalid") {
+        setError("참가업체 ID는 1 이상의 숫자로 입력해 주세요.");
+        setResult(null);
+        return;
+      }
+      const data = await getPayments({
+        fairId,
+        paymentType: "VENDOR_FEE",
+        businessId: businessIdParsed ?? undefined,
+        status: status || undefined,
+        page,
+      });
       if (requestIdRef.current !== requestId) return;
       setResult(data);
     } catch (err) {
@@ -49,26 +169,39 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
     }
   }
 
+  // 행사를 바꾸면 이전 행사 기준 검색 결과가 그대로 남아 헷갈리니 초기화한다.
   useEffect(() => {
-    void load(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fairId, status]);
+    setBusinessIdInput("");
+    setStatus("");
+    setPaymentIdInput("");
+    setSearched(false);
+    setResult(null);
+    setError(null);
+  }, [fairId]);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearched(true);
+    void search(0);
+  }
 
   return (
     <section>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted">담당 행사의 참가업체 참가비 결제 현황이에요.</p>
-        <div className="w-44">
-          <Select aria-label="결제 상태 필터" value={status} onChange={(event) => setStatus(event.target.value as PaymentStatus | "")}>
-            <option value="">전체 상태</option>
-            <option value="PENDING">결제 대기</option>
-            <option value="COMPLETED">결제 완료</option>
-            <option value="FAILED">결제 실패</option>
-            <option value="CANCELED">결제 취소</option>
-            <option value="EXPIRED">만료됨</option>
-          </Select>
-        </div>
-      </div>
+      <p className="mb-4 text-sm text-muted">담당 행사의 참가업체 참가비 결제 현황이에요. 조건을 입력하고 조회해 주세요 - 모두 비워두면 전체가 조회돼요.</p>
+
+      <PaymentSearchForm
+        idLabel="참가업체ID"
+        idPlaceholder="예: 1"
+        idValue={businessIdInput}
+        onIdChange={setBusinessIdInput}
+        statusValue={status}
+        onStatusChange={setStatus}
+        includeWaitingForDeposit
+        paymentIdValue={paymentIdInput}
+        onPaymentIdChange={setPaymentIdInput}
+        loading={loading}
+        onSubmit={handleSubmit}
+      />
 
       {error && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -77,10 +210,14 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
         </div>
       )}
 
+      {!searched && !loading && !error && (
+        <EmptyState title="조회해 주세요" description="참가업체ID, 결제상태, 결제ID로 좁혀 찾을 수 있고, 모두 비워두면 전체 참가비 결제가 조회돼요." />
+      )}
+
       {loading && <div className="surface grid min-h-32 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
 
-      {!loading && !error && result && result.content.length === 0 && (
-        <EmptyState title="참가비 결제 내역이 없어요" description="아직 이 행사의 참가업체 결제가 없어요." />
+      {searched && !loading && !error && result && result.content.length === 0 && (
+        <EmptyState title="검색 결과가 없어요" description="입력한 조건에 맞는 참가비 결제가 없어요." />
       )}
 
       {!loading && result && result.content.length > 0 && (
@@ -88,7 +225,7 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
           <Table>
             <thead>
               <tr className="border-b border-line bg-page text-xs font-bold text-muted">
-                <th className="px-4 py-3">참가업체</th>
+                <th className="px-4 py-3">참가업체ID · 참가업체명</th>
                 <th className="px-4 py-3">결제</th>
                 <th className="px-4 py-3">금액</th>
                 <th className="px-4 py-3">상태</th>
@@ -100,13 +237,7 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
               {result.content.map((row: PaymentDetail) => (
                 <tr key={row.paymentId} className="border-b border-line last:border-b-0">
                   <td className="whitespace-nowrap px-4 py-3 text-ink">
-                    {row.businessId !== null ? (
-                      <>
-                        {row.businessName ?? "-"} <span className="text-muted">#{row.businessId}</span>
-                      </>
-                    ) : (
-                      "-"
-                    )}
+                    {row.businessId !== null ? `#${row.businessId}·${row.businessName ?? "-"}` : "-"}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-ink">#{row.paymentId}</td>
                   <td className="whitespace-nowrap px-4 py-3 font-bold text-ink">{formatAmount(row.amount)}</td>
@@ -132,8 +263,8 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
             <div className="flex items-center justify-between text-sm text-muted">
               <span>{result.totalElements}건 중 {result.page + 1} / {result.totalPages} 페이지</span>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => load(result.page - 1)} disabled={result.page <= 0}>이전</Button>
-                <Button variant="outline" onClick={() => load(result.page + 1)} disabled={result.page + 1 >= result.totalPages}>다음</Button>
+                <Button variant="outline" onClick={() => search(result.page - 1)} disabled={result.page <= 0}>이전</Button>
+                <Button variant="outline" onClick={() => search(result.page + 1)} disabled={result.page + 1 >= result.totalPages}>다음</Button>
               </div>
             </div>
           )}
@@ -143,53 +274,94 @@ function VendorPaymentSection({ fairId }: { fairId: number }) {
   );
 }
 
-// 담당 행사의 예약티켓 예매결제 현황(예약금 결제 목록, RESERVATION_DEPOSIT 고정, 2026-08-24).
-// VendorPaymentSection과 같은 구조 - "참가비 결제 현황"과 "정산 내역" 사이에 넣는다.
+// 담당 행사의 예매결제 현황(예약금 결제 목록, RESERVATION_DEPOSIT 고정, 2026-08-24).
+// VendorPaymentSection과 같은 검색 구조(예약ID/결제상태/결제ID) - "참가비 결제 현황"과
+// "정산 내역" 사이에 넣는다.
 function ReservationPaymentSection({ fairId }: { fairId: number }) {
+  const [reservationIdInput, setReservationIdInput] = useState("");
   const [status, setStatus] = useState<PaymentStatus | "">("");
+  const [paymentIdInput, setPaymentIdInput] = useState("");
+  const [searched, setSearched] = useState(false);
   const [result, setResult] = useState<PaymentListResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const requestIdRef = useRef(0);
 
-  async function load(page: number) {
+  async function search(page: number) {
     const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
-      const data = await getPayments({ fairId, paymentType: "RESERVATION_DEPOSIT", status: status || undefined, page });
+      const paymentIdParsed = parseOptionalId(paymentIdInput);
+      if (paymentIdParsed === "invalid") {
+        setError("결제 ID는 1 이상의 숫자로 입력해 주세요.");
+        setResult(null);
+        return;
+      }
+      if (paymentIdParsed !== null) {
+        const detail = await getPayment(paymentIdParsed);
+        if (requestIdRef.current !== requestId) return;
+        const matches = detail.fairId === fairId && detail.paymentType === "RESERVATION_DEPOSIT";
+        setResult({ content: matches ? [detail] : [], page: 0, size: 1, totalElements: matches ? 1 : 0, totalPages: matches ? 1 : 0 });
+        return;
+      }
+
+      const reservationIdParsed = parseOptionalId(reservationIdInput);
+      if (reservationIdParsed === "invalid") {
+        setError("예약 ID는 1 이상의 숫자로 입력해 주세요.");
+        setResult(null);
+        return;
+      }
+      const data = await getPayments({
+        fairId,
+        paymentType: "RESERVATION_DEPOSIT",
+        reservationId: reservationIdParsed ?? undefined,
+        status: status || undefined,
+        page,
+      });
       if (requestIdRef.current !== requestId) return;
       setResult(data);
     } catch (err) {
       if (requestIdRef.current !== requestId) return;
       setResult(null);
-      setError(errorMessage(err, "예약티켓 예매결제 현황을 불러오지 못했어요."));
+      setError(errorMessage(err, "예매결제 현황을 불러오지 못했어요."));
     } finally {
       if (requestIdRef.current === requestId) setLoading(false);
     }
   }
 
   useEffect(() => {
-    void load(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fairId, status]);
+    setReservationIdInput("");
+    setStatus("");
+    setPaymentIdInput("");
+    setSearched(false);
+    setResult(null);
+    setError(null);
+  }, [fairId]);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearched(true);
+    void search(0);
+  }
 
   return (
     <section>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted">담당 행사의 예약티켓 예매결제 현황이에요.</p>
-        <div className="w-44">
-          <Select aria-label="결제 상태 필터" value={status} onChange={(event) => setStatus(event.target.value as PaymentStatus | "")}>
-            <option value="">전체 상태</option>
-            <option value="PENDING">결제 대기</option>
-            <option value="COMPLETED">결제 완료</option>
-            <option value="FAILED">결제 실패</option>
-            <option value="CANCELED">결제 취소</option>
-            <option value="EXPIRED">만료됨</option>
-          </Select>
-        </div>
-      </div>
+      <p className="mb-4 text-sm text-muted">담당 행사의 예매결제 현황이에요. 조건을 입력하고 조회해 주세요 - 모두 비워두면 전체가 조회돼요.</p>
+
+      <PaymentSearchForm
+        idLabel="예약ID"
+        idPlaceholder="예: 1"
+        idValue={reservationIdInput}
+        onIdChange={setReservationIdInput}
+        statusValue={status}
+        onStatusChange={setStatus}
+        paymentIdValue={paymentIdInput}
+        onPaymentIdChange={setPaymentIdInput}
+        loading={loading}
+        onSubmit={handleSubmit}
+      />
 
       {error && (
         <div className="surface mb-6 flex items-start gap-3 border-primary-strong/30 bg-primary-soft p-4 text-sm text-primary-strong">
@@ -198,10 +370,14 @@ function ReservationPaymentSection({ fairId }: { fairId: number }) {
         </div>
       )}
 
+      {!searched && !loading && !error && (
+        <EmptyState title="조회해 주세요" description="예약ID, 결제상태, 결제ID로 좁혀 찾을 수 있고, 모두 비워두면 전체 예매결제가 조회돼요." />
+      )}
+
       {loading && <div className="surface grid min-h-32 place-items-center text-sm text-muted">불러오는 중이에요...</div>}
 
-      {!loading && !error && result && result.content.length === 0 && (
-        <EmptyState title="예약티켓 예매결제 내역이 없어요" description="아직 이 행사의 예약금 결제가 없어요." />
+      {searched && !loading && !error && result && result.content.length === 0 && (
+        <EmptyState title="검색 결과가 없어요" description="입력한 조건에 맞는 예매결제가 없어요." />
       )}
 
       {!loading && result && result.content.length > 0 && (
@@ -209,12 +385,13 @@ function ReservationPaymentSection({ fairId }: { fairId: number }) {
           <Table>
             <thead>
               <tr className="border-b border-line bg-page text-xs font-bold text-muted">
-                <th className="px-4 py-3">예약</th>
-                <th className="px-4 py-3">예약자</th>
+                <th className="px-4 py-3">예약ID</th>
+                <th className="px-4 py-3">예약자명</th>
                 <th className="px-4 py-3">행사</th>
                 <th className="px-4 py-3">예약금액</th>
                 <th className="px-4 py-3">상태</th>
                 <th className="px-4 py-3">결제완료 시각</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -228,6 +405,11 @@ function ReservationPaymentSection({ fairId }: { fairId: number }) {
                     <Badge tone={statusTone[row.status]}>{statusLabels[row.status]}</Badge>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-muted">{row.paidAt ? formatDateTime(row.paidAt) : "-"}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <Link to={`/fair-admin/payment-detail?id=${row.paymentId}`} className="text-sm font-bold text-primary-strong hover:underline">
+                      상세
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -237,8 +419,8 @@ function ReservationPaymentSection({ fairId }: { fairId: number }) {
             <div className="flex items-center justify-between text-sm text-muted">
               <span>{result.totalElements}건 중 {result.page + 1} / {result.totalPages} 페이지</span>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => load(result.page - 1)} disabled={result.page <= 0}>이전</Button>
-                <Button variant="outline" onClick={() => load(result.page + 1)} disabled={result.page + 1 >= result.totalPages}>다음</Button>
+                <Button variant="outline" onClick={() => search(result.page - 1)} disabled={result.page <= 0}>이전</Button>
+                <Button variant="outline" onClick={() => search(result.page + 1)} disabled={result.page + 1 >= result.totalPages}>다음</Button>
               </div>
             </div>
           )}
@@ -290,7 +472,7 @@ function RevenueSummarySection({ fairId }: { fairId: number }) {
       <Table>
         <thead>
           <tr className="border-b border-line bg-page text-xs font-bold text-muted">
-            <th className="px-4 py-3">행사</th>
+            <th className="px-4 py-3">행사ID·행사명</th>
             <th className="px-4 py-3">예약금 총금액</th>
             <th className="px-4 py-3">참가비 총금액</th>
             <th className="px-4 py-3">전체금액</th>
@@ -337,7 +519,7 @@ export function FairPaymentSettlementPage() {
         <>
           <div className="mb-6 flex gap-2">
             <Button variant={tab === "payment" ? "primary" : "outline"} onClick={() => setTab("payment")}>참가비 결제 현황</Button>
-            <Button variant={tab === "reservation" ? "primary" : "outline"} onClick={() => setTab("reservation")}>예약티켓 예매결제 현황</Button>
+            <Button variant={tab === "reservation" ? "primary" : "outline"} onClick={() => setTab("reservation")}>예매결제현황</Button>
             <Button variant={tab === "settlement" ? "primary" : "outline"} onClick={() => setTab("settlement")}>정산 내역</Button>
           </div>
           {tab === "payment" && <VendorPaymentSection fairId={fairId} />}

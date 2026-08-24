@@ -117,6 +117,13 @@ function FairOpeningFeeLegacyRedirect() {
   return <Navigate to={`/fair-admin/payments/fair-opening-fee/${fairId}`} replace />;
 }
 
+// 예약 상세(옛 경로 "/reservations/me/:reservationId")의 리다이렉트 전용 - 위와 같은 이유로
+// :reservationId를 읽어 새 경로("/mypage/reservations/:reservationId")로 넘겨준다.
+function ReservationDetailLegacyRedirect() {
+  const { reservationId } = useParams();
+  return <Navigate to={`/mypage/reservations/${reservationId}`} replace />;
+}
+
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -153,6 +160,10 @@ export function AppRouter() {
             <Route path="/mypage" element={<MyPageLayout />}>
               <Route index element={<MyPageHome />} />
               <Route path="reservations" element={<MyReservationsPage />} />
+              {/* 예약 상세도 사이드바 안에 둔다(2026-08-24, 개설비 결제 화면과 같은 문제 -
+                  사이드바 밖에 있어서 예약 목록에서 들어가면 사이드바가 사라져 보였다).
+                  옛 경로("/reservations/me/:reservationId")는 아래 리다이렉트로 받는다. */}
+              <Route path="reservations/:reservationId" element={<ReservationDetailPage />} />
               <Route path="booths/visited" element={<MyVisitedBoothsPage />} />
               <Route path="recommendation" element={<MyRecommendationPage />} />
               <Route path="favorites" element={<BoothFavoritesPage />} />
@@ -175,10 +186,10 @@ export function AppRouter() {
             <Route path="/booths/me" element={<Navigate to="/vendor/booths" replace />} />
           </Route>
           <Route path="/reservations/me" element={<Navigate to="/mypage/reservations" replace />} />
-          {/* 예약 상세는 내 예약만 보이는 화면이라 로그인 필수(QR·환불 정보가 들어 있다). */}
-          <Route element={<ProtectedRoute />}>
-            <Route path="/reservations/me/:reservationId" element={<ReservationDetailPage />} />
-          </Route>
+          {/* 예약 상세는 /mypage/reservations/:reservationId로 옮겨졌다(2026-08-24) - 옛 경로는
+              이미 발송된 알림·이메일 링크가 깨지지 않도록 리다이렉트만 남긴다. 로그인 필수는
+              /mypage 블록(위 ProtectedRoute)이 그대로 담당한다. */}
+          <Route path="/reservations/me/:reservationId" element={<ReservationDetailLegacyRedirect />} />
           {/* 행사 목록은 예정·진행·종료를 상태 배지로 구분하는 통합 목록 하나뿐이다.
               옛 "지난 행사" 경로(북마크·외부 링크)로 들어와도 같은 목록으로 넘긴다. */}
           <Route path="/fairs/upcoming" element={<FairListPage />} />
