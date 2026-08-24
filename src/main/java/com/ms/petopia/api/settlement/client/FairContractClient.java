@@ -4,6 +4,7 @@ import com.ms.petopia.api.settlement.dto.FairCancellationStatus;
 import com.ms.petopia.global.exception.CommonException;
 import com.ms.petopia.global.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -45,14 +46,16 @@ public class FairContractClient {
     /**
      * 행사 취소 여부를 조회한다. 정산 계산·확정 직전, 그리고 존재하지 않는 행사 ID를 걸러내는
      * 용도로도 호출한다(2026-08-24, getByFairId 조회에서 "행사 없음"과 "정산 미계산"을
-     * 구분하려고 추가) - 이 내부 엔드포인트의 유일한 4xx 실패 사유가 FAIR_NOT_FOUND라
-     * ReservationPaymentContractClient와 같은 패턴으로 하나의 에러코드로 통일한다.
+     * 구분하려고 추가) - 404만 FAIR_NOT_FOUND로 번역한다(CodeRabbit 지적, 2026-08-24 수정:
+     * 처음엔 RestClientResponseException을 4xx/5xx 구분 없이 다 FAIR_NOT_FOUND로 묶었는데,
+     * 그러면 행사 도메인이 500을 던진 진짜 장애 상황까지 "존재하지 않는 행사"로 잘못
+     * 보고해서 calculate()/confirm()이 실제 장애를 숨기게 된다).
      *
-     * <p>호출 실패(네트워크/타임아웃/5xx 등)는 그대로 전파한다 - 실패를 "취소 안 됨"으로
+     * <p>404가 아닌 실패(네트워크/타임아웃/5xx 등)는 그대로 전파한다 - 실패를 "취소 안 됨"으로
      * 임의 간주해버리면 실제로 취소된 행사인데 정산이 진행될 위험이 있어서, 조용히
      * 삼키지 않고 요청 자체를 실패시키는 쪽이 더 안전한 기본값이다.
      *
-     * @throws CommonException {@link ErrorCode#FAIR_NOT_FOUND} 존재하지 않는 행사 ID일 때
+     * @throws CommonException {@link ErrorCode#FAIR_NOT_FOUND} 존재하지 않는 행사 ID일 때(404)
      */
     public FairCancellationStatus getCancellationStatus(Long fairId) {
         try {
@@ -61,7 +64,10 @@ public class FairContractClient {
                     .retrieve()
                     .body(FairCancellationStatus.class);
         } catch (RestClientResponseException e) {
-            throw new CommonException(ErrorCode.FAIR_NOT_FOUND, e);
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                throw new CommonException(ErrorCode.FAIR_NOT_FOUND, e);
+            }
+            throw e;
         }
     }
 }
