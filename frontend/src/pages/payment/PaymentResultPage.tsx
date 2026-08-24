@@ -404,7 +404,7 @@ export function PaymentFailPage() {
         title="결제가 완료되지 않았어요"
         actions={
           <>
-            <PrimaryLink to={`/payments/fair-opening-fee/${fairId}`}>다시 결제하기</PrimaryLink>
+            <PrimaryLink to={`/fair-admin/payments/fair-opening-fee/${fairId}`}>다시 결제하기</PrimaryLink>
             <SecondaryLink to="/">홈으로</SecondaryLink>
           </>
         }

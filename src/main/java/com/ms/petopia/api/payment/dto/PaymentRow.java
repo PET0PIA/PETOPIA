@@ -48,6 +48,13 @@ public class PaymentRow {
     private String applicationManagerPhone;
     private String applicationManagerEmail;
     private Long payerUserId;
+    /**
+     * users를 payerUserId로 LEFT JOIN해서 채운다(selectByIdWithRefund/selectByFilter 전용,
+     * applicationManagerName과 동일한 이유). payerUserId는 결제유형(RESERVATION_DEPOSIT/
+     * VENDOR_FEE/FAIR_OPENING_FEE) 상관없이 다 채워지므로 이 값도 다 채워진다 - "예약티켓예매결제현황"
+     * 화면이 예약자명으로 쓰려고 2026-08-24에 추가했다.
+     */
+    private String payerNickname;
     private Long reservationId;
     private Long applicationId;
 

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { fairAdminNavigation, superAdminNavigation, vendorNavigation, flattenNavigation } from "../config/navigation";
 import { ConsoleHome } from "../components/layout/ConsoleHome";
 import { FairAdminLayout } from "../layouts/FairAdminLayout";
@@ -110,6 +110,13 @@ function AdminFallback({ kind }: { kind: "fair" | "super" }) {
   return <PlaceholderPage title={title} admin />;
 }
 
+// 개설비 결제 상세(옛 경로 "/payments/fair-opening-fee/:fairId")의 리다이렉트 전용 - Navigate는
+// :fairId를 직접 못 채우므로 fairId를 읽어 새 경로("/fair-admin/payments/fair-opening-fee/:fairId")로 넘겨준다.
+function FairOpeningFeeLegacyRedirect() {
+  const { fairId } = useParams();
+  return <Navigate to={`/fair-admin/payments/fair-opening-fee/${fairId}`} replace />;
+}
+
 export function AppRouter() {
   return (
     <BrowserRouter>
@@ -196,10 +203,14 @@ export function AppRouter() {
           {/* 토스 결제창이 돌아오는 착지 경로. src/payments/toss.ts의 successUrl·failUrl과 일치해야 한다. */}
           <Route path="/payments/success" element={<PaymentSuccessPage />} />
           <Route path="/payments/fail" element={<PaymentFailPage />} />
-          <Route element={<ProtectedRoute roles={["EVENT_ADMIN", "SUPER_ADMIN"]} />}>
-            <Route path="/payments/fair-opening-fee" element={<FairOpeningFeeSelectPage />} />
-            <Route path="/payments/fair-opening-fee/:fairId" element={<FairOpeningFeePaymentPage />} />
-          </Route>
+          {/* 개설비 결제는 fair-admin 콘솔(사이드바 포함) 아래로 옮겼다(2026-08-24, 메뉴에서
+              눌러 들어가면 사이드바가 사라지던 문제). 옛 경로는 이미 발송된 알림·이메일 링크가
+              깨지지 않도록 리다이렉트만 남긴다. */}
+          <Route path="/payments/fair-opening-fee" element={<Navigate to="/fair-admin/payments/fair-opening-fee" replace />} />
+          <Route
+            path="/payments/fair-opening-fee/:fairId"
+            element={<FairOpeningFeeLegacyRedirect />}
+          />
           <Route path="/booths/scan" element={<Navigate to="/vendor/scan" replace />} />
           <Route path="/businesses" element={<BusinessesByFairPage />} />
           <Route path="/fairs/:fairId/booths" element={<FairBoothsPage />} />
@@ -258,6 +269,11 @@ export function AppRouter() {
             {/* 예약자별 상세 목록은 통계 화면(위)에 합쳤다 - 옛 링크가 죽지 않도록 리다이렉트만 남긴다. */}
             <Route path="reservations/list" element={<Navigate to="/fair-admin/reservations" replace />} />
             <Route path="payments" element={<FairPaymentSettlementPage />} />
+            {/* 참가비 결제 목록의 "상세" 링크 전용(2026-08-24) - 최고관리자 결제상세(admin/payments)와
+                같은 PaymentDetailPage를 그대로 재사용한다. */}
+            <Route path="payment-detail" element={<PaymentDetailPage />} />
+            <Route path="payments/fair-opening-fee" element={<FairOpeningFeeSelectPage />} />
+            <Route path="payments/fair-opening-fee/:fairId" element={<FairOpeningFeePaymentPage />} />
             {/* 리뷰 통계는 방문 통계와 합쳐졌다 - 옛 북마크/링크가 죽지 않도록 리다이렉트만 남긴다. */}
             <Route path="reviews" element={<Navigate to="/fair-admin/statistics" replace />} />
             <Route path="reviews/manage" element={<ReviewDeletionPage />} />
