@@ -428,10 +428,17 @@ public class FairSettlementService {
      * 행사 하나의 최종정산 단건 조회(EVENT_ADMIN/SUPER_ADMIN). 계산된 적이 없으면 null을
      * 반환한다(에러로 취급하지 않는다 - 화면이 "아직 계산 안 됨" 상태를 그대로 보여줄 수 있게).
      *
+     * <p>존재하지 않는 fairId도 selectByFairId 입장에서는 "계산된 적 없음"과 똑같이 결과가 없어서,
+     * 그대로 두면 화면에 "정산 계산" 버튼이 뜨는 게 잘못된 안내였다(2026-08-24) - fairId 존재
+     * 확인을 추가해 구분한다. 접근 검증(checkAssigned)을 먼저 하는 이유는 getOpeningFeeSummary와
+     * 동일(행사 ID 존재 여부가 미배정 사용자에게 새어나가지 않도록).
+     *
      * @throws CommonException {@link ErrorCode#ACCESS_DENIED} 그 행사 담당 관리자가 아닐 때
+     * @throws CommonException {@link ErrorCode#FAIR_NOT_FOUND} 존재하지 않는 행사 ID일 때
      */
     public FairSettlementResponse getByFairId(Long fairId) {
         fairAdminAccessGuard.checkAssigned(fairId);
+        fairContractClient.getCancellationStatus(fairId);
         FairSettlementRow row = fairSettlementMapper.selectByFairId(fairId);
         return row == null ? null : FairSettlementResponse.from(row);
     }

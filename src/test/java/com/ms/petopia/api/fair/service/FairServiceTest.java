@@ -1054,7 +1054,7 @@ class FairServiceTest {
         assertThat(notifCaptor.getValue().type()).isEqualTo(NotificationType.FAIR_APPLICATION_APPROVED);
         assertThat(notifCaptor.getValue().channels())
                 .containsExactly(DeliveryChannel.IN_APP);
-        assertThat(notifCaptor.getValue().linkUrl()).isEqualTo("/payments/fair-opening-fee/" + FAIR_ID);
+        assertThat(notifCaptor.getValue().linkUrl()).isEqualTo("/fair-admin/payments/fair-opening-fee/" + FAIR_ID);
         assertThat(notifCaptor.getValue().body())
                 .isEqualTo("개설비를 2026-08-08까지 결제해 주세요.");
         verify(mailService).sendFairApprovalEmail(
@@ -1062,7 +1062,7 @@ class FairServiceTest {
                 "2026 서울 펫페어",
                 500_000L,
                 NOW.plusDays(7),
-                "https://petopia-kappa.vercel.app/payments/fair-opening-fee/" + FAIR_ID
+                "https://petopia-kappa.vercel.app/fair-admin/payments/fair-opening-fee/" + FAIR_ID
         );
     }
 

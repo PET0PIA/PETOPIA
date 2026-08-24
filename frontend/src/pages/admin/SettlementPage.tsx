@@ -677,7 +677,9 @@ export function SettlementPage() {
             <label htmlFor="final-fair-id" className="mb-1.5 block text-sm font-bold text-ink">행사 ID</label>
             <Input id="final-fair-id" className="input-no-spinner" type="number" min={1} value={finalFairIdInput} onChange={(event) => setFinalFairIdInput(event.target.value)} placeholder="예: 1" />
           </div>
-          <Button type="submit" variant="outline" disabled={finalLoading}>
+          {/* Button 기본 높이(min-h-11=44px)가 Input 높이(h-12=48px)보다 낮아서 나란히 두면
+              어긋나 보였다(2026-08-24) - h-12로 맞춘다. */}
+          <Button type="submit" variant="outline" className="h-12" disabled={finalLoading}>
             <Search size={16} />
             조회
           </Button>

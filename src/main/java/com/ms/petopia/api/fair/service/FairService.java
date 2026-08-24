@@ -657,7 +657,9 @@ public class FairService {
         }
         String applicantEmail = applicant.getEmail();
         if (approved) {
-            String paymentPath = "/payments/fair-opening-fee/" + fairId;
+            // 2026-08-24: 개설비 결제 화면이 fair-admin 콘솔(사이드바 포함) 아래로 옮겨져 경로가 바뀌었다.
+            // 옛 경로("/payments/fair-opening-fee/{fairId}")는 프론트 라우터가 리다이렉트로 받아준다.
+            String paymentPath = "/fair-admin/payments/fair-opening-fee/" + fairId;
             notifyFairReviewAfterCommit(applicantUserId, NotificationType.FAIR_APPLICATION_APPROVED,
                     "행사 신청이 승인되었습니다",
                     "개설비를 " + update.getPaymentDueAt().toLocalDate() + "까지 결제해 주세요.",

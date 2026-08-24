@@ -87,6 +87,12 @@
       , af.manager_email AS application_manager_email
     </sql>
 
+    <!-- users LEFT JOIN 전용 컬럼(2026-08-24, "예약티켓예매결제현황" 화면의 예약자명 표시용).
+         payerUserId는 결제유형과 무관하게 채워지므로 applicationManagerColumns와 달리 항상 값이 있다. -->
+    <sql id="payerNicknameColumn">
+        u.nickname AS payer_nickname
+    </sql>
+
     <select id="selectById" resultType="PaymentRow">
         SELECT <include refid="paymentColumns"/>
           FROM payment
@@ -97,11 +103,13 @@
         SELECT <include refid="paymentColumnsQualified"/>
              , <include refid="fairBusinessNameColumns"/>
              , <include refid="applicationManagerColumns"/>
+             , <include refid="payerNicknameColumn"/>
              , <include refid="refundColumns"/>
           FROM payment p
           LEFT JOIN fairs f ON f.fair_id = p.fair_id
           LEFT JOIN business b ON b.business_id = p.business_id
           LEFT JOIN application_form af ON af.application_id = p.application_id
+          LEFT JOIN users u ON u.user_id = p.payer_user_id
           LEFT JOIN refund r ON r.payment_id = p.payment_id
          WHERE p.payment_id = #{paymentId}
     </select>
@@ -322,11 +330,13 @@
         SELECT <include refid="paymentColumnsQualified"/>
              , <include refid="fairBusinessNameColumns"/>
              , <include refid="applicationManagerColumns"/>
+             , <include refid="payerNicknameColumn"/>
              , <include refid="refundColumns"/>
           FROM payment p
           LEFT JOIN fairs f ON f.fair_id = p.fair_id
           LEFT JOIN business b ON b.business_id = p.business_id
           LEFT JOIN application_form af ON af.application_id = p.application_id
+          LEFT JOIN users u ON u.user_id = p.payer_user_id
           LEFT JOIN refund r ON r.payment_id = p.payment_id
         <include refid="filterConditions"/>
          ORDER BY p.created_at DESC, p.payment_id DESC

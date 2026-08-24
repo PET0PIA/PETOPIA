@@ -97,7 +97,7 @@ function ReservationCard() {
           {items.map((item) => (
             <li key={item.reservationId}>
               <Link
-                to={`/reservations/me/${item.reservationId}`}
+                to={`/mypage/reservations/${item.reservationId}`}
                 aria-label={`${item.fairName} 예약 상세 보기`}
                 className="flex items-center gap-4 rounded-card border border-line p-3 transition-colors hover:border-muted hover:bg-surface-alt"
               >

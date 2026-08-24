@@ -74,8 +74,11 @@ export const ALL_PAYMENT_METHODS: readonly PaymentMethodOption[] = ["CARD", "NAV
 /**
  * 예약금 결제(사전예약·현장예매)가 쓰는 목록 — 가상계좌를 뺐다.
  * 이유는 {@link ReservationPaymentMethod} 주석 참고.
+ *
+ * NAVER_PAY는 별도로 노출하지 않는다(2026-08-24) - "카드·간편결제"(CARD) 통합결제창 안에서도
+ * 네이버페이를 간편결제 수단으로 고를 수 있어서, 밖에 따로 버튼을 두면 같은 선택지가 중복 노출된다.
  */
-export const RESERVATION_PAYMENT_METHODS: readonly ReservationPaymentMethod[] = ["CARD", "NAVER_PAY"];
+export const RESERVATION_PAYMENT_METHODS: readonly ReservationPaymentMethod[] = ["CARD"];
 
 interface CheckoutParams {
   method: PaymentMethodOption;

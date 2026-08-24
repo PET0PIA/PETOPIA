@@ -43,6 +43,8 @@ import java.time.LocalDateTime;
  * @param applicationManagerName  부스(참가) 신청 담당자 이름. VENDOR_FEE 결제가 아니면 null
  * @param applicationManagerPhone 부스(참가) 신청 담당자 연락처. VENDOR_FEE 결제가 아니면 null
  * @param applicationManagerEmail 부스(참가) 신청 담당자 이메일. VENDOR_FEE 결제가 아니면 null
+ * @param payerNickname 결제자(payerUserId) 닉네임 (2026-08-24 추가 - "예약티켓예매결제현황"
+ *                      화면의 예약자명 표시용. 결제유형과 무관하게 payerUserId가 있으면 채워진다)
  */
 public record PaymentResponse(
         Long paymentId,
@@ -76,7 +78,8 @@ public record PaymentResponse(
         String fairManagerEmail,
         String applicationManagerName,
         String applicationManagerPhone,
-        String applicationManagerEmail
+        String applicationManagerEmail,
+        String payerNickname
 ) {
 
     /**
@@ -116,7 +119,8 @@ public record PaymentResponse(
                 row.getFairManagerEmail(),
                 row.getApplicationManagerName(),
                 row.getApplicationManagerPhone(),
-                row.getApplicationManagerEmail()
+                row.getApplicationManagerEmail(),
+                row.getPayerNickname()
         );
     }
 }
